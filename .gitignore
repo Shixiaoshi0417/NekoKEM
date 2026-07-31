@@ -1,0 +1,49 @@
+# =========================
+# Build artifacts
+# =========================
+*.o
+*.d
+nekokem
+*.a
+*.so
+
+# =========================
+# Keep directory, ignore contents
+# =========================
+keys/*
+!keys/.gitkeep
+
+plaintext/*
+!plaintext/.gitkeep
+
+encrypted/*
+!encrypted/.gitkeep
+
+# =========================
+# Fuzz
+# =========================
+fuzz/out/
+fuzz/findings/
+fuzz/bin/
+
+# =========================
+# Temporary files
+# =========================
+tmp/
+*.tmp
+*.log
+
+# =========================
+# IDE
+# =========================
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# =========================
+# OS
+# =========================
+.DS_Store
+Thumbs.db
+Desktop.ini
