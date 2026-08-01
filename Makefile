@@ -1,5 +1,7 @@
 CC = /usr/bin/gcc
-CPPFLAGS = -D_POSIX_C_SOURCE=200809L -D_FORTIFY_SOURCE=3
+AR = /usr/bin/ar
+CPPFLAGS = -D_POSIX_C_SOURCE=200809L -D_FORTIFY_SOURCE=3 \
+	-Inekokem_core/include -Isrc
 CFLAGS = -std=c17 -O2 -Wall -Wextra -Wpedantic -Wconversion -Wshadow \
 	-Wformat=2 -Wstrict-prototypes -Werror -fstack-protector-strong -fPIE
 LDFLAGS = -pie
@@ -13,26 +15,39 @@ FUZZ_CFLAGS = -std=c17 -O1 -g -Wall -Wextra -Wpedantic -Wconversion \
 FUZZ_LDFLAGS = -fsanitize=undefined
 
 TARGET = nekokem
-SOURCES = src/main.c src/kem.c src/hybrid.c src/aes.c src/file.c \
-	src/secure_mem.c src/private_key.c
-OBJECTS = $(SOURCES:.c=.o)
+CORE_LIBRARY = libnekokem_core.a
+CORE_SOURCES = nekokem_core/src/nekokem.c \
+	nekokem_core/src/key_management.c \
+	nekokem_core/src/nekokem_v3.c src/kem.c src/hybrid.c \
+	src/aes.c src/file.c src/file_v3.c src/secure_mem.c src/private_key.c
+CLI_SOURCES = src/main.c src/cli.c
+SOURCES = $(CLI_SOURCES) $(CORE_SOURCES)
+CORE_OBJECTS = $(CORE_SOURCES:.c=.o)
+CLI_OBJECTS = $(CLI_SOURCES:.c=.o)
+OBJECTS = $(CLI_OBJECTS) $(CORE_OBJECTS)
 DEPS = $(OBJECTS:.o=.d)
 
-.PHONY: all clean test analyze test-ubsan test-parser fuzz-seeds \
-	fuzz-build
+.PHONY: all core clean test analyze test-ubsan test-parser test-version fuzz-seeds \
+	fuzz-build test-key-management test-progress test-progress-large
 
 all: $(TARGET)
 
-$(TARGET): $(OBJECTS)
-	$(CC) $(CFLAGS) $(LDFLAGS) $(OBJECTS) $(LDLIBS) -o $@
+core: $(CORE_LIBRARY)
 
-src/%.o: src/%.c
+$(CORE_LIBRARY): $(CORE_OBJECTS)
+	$(AR) rcs $@ $(CORE_OBJECTS)
+
+$(TARGET): $(CLI_OBJECTS) $(CORE_LIBRARY)
+	$(CC) $(CFLAGS) $(LDFLAGS) $(CLI_OBJECTS) $(CORE_LIBRARY) \
+		$(LDLIBS) -o $@
+
+%.o: %.c
 	$(CC) $(CPPFLAGS) $(CFLAGS) -MMD -MP -c $< -o $@
 
 analyze:
 	$(CC) $(CPPFLAGS) $(CFLAGS) -O1 -fanalyzer -fsyntax-only $(SOURCES)
 	$(CC) $(CPPFLAGS) $(CFLAGS) -O1 -fanalyzer -fsyntax-only \
-		tests/parser_tests.c src/file.c src/private_key.c \
+		tests/parser_tests.c src/file.c src/file_v3.c src/private_key.c \
 		src/secure_mem.c
 
 test-ubsan:
@@ -54,7 +69,7 @@ test-parser:
 	trap cleanup_parser EXIT INT TERM; \
 	$(CC) $(CPPFLAGS) $(CFLAGS) -O1 \
 		-fsanitize=undefined -fno-sanitize-recover=undefined \
-		$(LDFLAGS) tests/parser_tests.c src/file.c \
+		$(LDFLAGS) tests/parser_tests.c src/file.c src/file_v3.c \
 		src/private_key.c src/secure_mem.c $(LDLIBS) \
 		-fsanitize=undefined -o "$$parser_binary"; \
 	UBSAN_OPTIONS=halt_on_error=1:print_stacktrace=1 \
@@ -70,14 +85,50 @@ fuzz-build: fuzz-seeds
 	}
 	mkdir -p fuzz/bin
 	$(AFL_CC) $(FUZZ_CPPFLAGS) $(FUZZ_CFLAGS) \
-		fuzz/fuzz_nkem.c src/file.c src/secure_mem.c \
+		fuzz/fuzz_nkem.c src/file.c src/file_v3.c src/secure_mem.c \
 		$(FUZZ_LDFLAGS) $(LDLIBS) -o fuzz/bin/fuzz_nkem
 	$(AFL_CC) $(FUZZ_CPPFLAGS) $(FUZZ_CFLAGS) \
-		fuzz/fuzz_nkpr.c src/private_key.c src/file.c \
+		fuzz/fuzz_nkpr.c src/private_key.c src/file.c src/file_v3.c \
 		src/secure_mem.c $(FUZZ_LDFLAGS) $(LDLIBS) \
 		-o fuzz/bin/fuzz_nkpr
 
-test: $(TARGET) analyze test-ubsan test-parser
+test-version: $(CORE_LIBRARY)
+	@set -eu; \
+	version_binary=$$(mktemp /tmp/nekokem-version-tests.XXXXXX); \
+	cleanup_version() { rm -f "$$version_binary"; }; \
+	trap cleanup_version EXIT INT TERM; \
+	$(CC) $(CPPFLAGS) $(CFLAGS) $(LDFLAGS) \
+		tests/version_compat_tests.c $(CORE_LIBRARY) $(LDLIBS) \
+		-o "$$version_binary"; \
+	"$$version_binary"
+
+test-key-management: $(CORE_LIBRARY)
+	@set -eu; \
+	key_binary=$$(mktemp /tmp/nekokem-key-management-tests.XXXXXX); \
+	cleanup_key() { rm -f "$$key_binary"; }; \
+	trap cleanup_key EXIT INT TERM; \
+	$(CC) $(CPPFLAGS) $(CFLAGS) $(LDFLAGS) \
+		tests/key_management_tests.c $(CORE_LIBRARY) $(LDLIBS) \
+		-o "$$key_binary"; \
+	"$$key_binary"
+
+test-progress test-progress-large: $(CORE_LIBRARY)
+	@set -eu; \
+	progress_binary=$$(mktemp /tmp/nekokem-progress-tests.XXXXXX); \
+	cleanup_progress() { rm -f "$$progress_binary"; }; \
+	trap cleanup_progress EXIT INT TERM; \
+	$(CC) $(CPPFLAGS) $(CFLAGS) $(LDFLAGS) \
+		tests/progress_tests.c $(CORE_LIBRARY) $(LDLIBS) \
+		-o "$$progress_binary"; \
+	if [ "$@" = "test-progress-large" ]; then \
+		NEKOKEM_PROGRESS_TEST_BYTES=3221225472 \
+			"$$progress_binary"; \
+	else \
+		"$$progress_binary"; \
+	fi
+
+test: $(TARGET) analyze test-ubsan test-parser test-version \
+	test-key-management test-progress
 	@set -eu; \
 	test_dir=$$(mktemp -d); \
 	cleanup() { \
@@ -244,10 +295,10 @@ test: $(TARGET) analyze test-ubsan test-parser
 	test "$$(stat -c %a password-echo-check.log)" = 600; \
 	test -z "$$(find . -type f -name '*.tmp.*' -print -quit)"; \
 	test -z "$$(find . -type f -name 'private.key' -print -quit)"; \
-	echo "NekoKEM v1, v2 hybrid, NKPR, and interactive CLI tests passed"
+	echo "NekoKEM v1, v2/v3 hybrid, NKPR, and interactive CLI tests passed"
 
 clean:
-	rm -f $(TARGET) $(OBJECTS) $(DEPS)
+	rm -f $(TARGET) $(CORE_LIBRARY) $(OBJECTS) $(DEPS)
 	rm -f fuzz/bin/fuzz_nkem fuzz/bin/fuzz_nkpr
 
 -include $(DEPS)

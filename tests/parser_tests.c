@@ -13,6 +13,11 @@
 #define V2_TEST_SIZE \
     (NKEM_V2_HEADER_SIZE + NKEM_X448_EPHEMERAL_PUBLIC_SIZE + \
      V2_KEM_TEST_SIZE + NKEM_NONCE_SIZE + NKEM_TAG_SIZE)
+#define V3_KEM_TEST_SIZE 1U
+#define V3_TEST_SIZE \
+    (NKEM_V3_HEADER_SIZE + NKEM_X448_EPHEMERAL_PUBLIC_SIZE + \
+     V3_KEM_TEST_SIZE + NKEM_V3_SALT_SIZE + NKEM_NONCE_SIZE + \
+     NKEM_TAG_SIZE)
 #define NKPR_TEST_CIPHERTEXT_SIZE 1U
 #define NKPR_TEST_SIZE \
     (NKPR_HEADER_SIZE + NKPR_SALT_SIZE + NKPR_NONCE_SIZE + \
@@ -88,10 +93,12 @@ static int expect_nkpr_invalid(const char *name,
 static int test_valid_inputs(
     const unsigned char v1[V1_TEST_SIZE],
     const unsigned char v2[V2_TEST_SIZE],
+    const unsigned char v3[V3_TEST_SIZE],
     const unsigned char nkpr[NKPR_TEST_SIZE])
 {
     if (nkem_container_parse(v1, V1_TEST_SIZE) == 0 ||
         nkem_container_parse(v2, V2_TEST_SIZE) == 0 ||
+        nkem_container_parse(v3, V3_TEST_SIZE) == 0 ||
         protected_private_key_container_parse(
             nkpr, NKPR_TEST_SIZE) == 0) {
         fprintf(stderr, "A minimal valid parser fixture was rejected\n");
@@ -103,6 +110,7 @@ static int test_valid_inputs(
 static int test_truncation(
     const unsigned char v1[V1_TEST_SIZE],
     const unsigned char v2[V2_TEST_SIZE],
+    const unsigned char v3[V3_TEST_SIZE],
     const unsigned char nkpr[NKPR_TEST_SIZE])
 {
     size_t length;
@@ -117,6 +125,11 @@ static int test_truncation(
             return 0;
         }
     }
+    for (length = 0U; length < V3_TEST_SIZE; ++length) {
+        if (!expect_nkem_invalid("truncated v3", v3, length)) {
+            return 0;
+        }
+    }
     for (length = 0U; length < NKPR_TEST_SIZE; ++length) {
         if (!expect_nkpr_invalid("truncated", nkpr, length)) {
             return 0;
@@ -127,9 +140,11 @@ static int test_truncation(
 
 static int test_mutated_fields(
     const unsigned char v2[V2_TEST_SIZE],
+    const unsigned char v3[V3_TEST_SIZE],
     const unsigned char nkpr[NKPR_TEST_SIZE])
 {
     unsigned char mutated_nkem[V2_TEST_SIZE];
+    unsigned char mutated_v3[V3_TEST_SIZE];
     unsigned char mutated_nkpr[NKPR_TEST_SIZE];
 
     memcpy(mutated_nkem, v2, sizeof(mutated_nkem));
@@ -161,6 +176,38 @@ static int test_mutated_fields(
     put_u64_be(mutated_nkem + 16U, UINT64_MAX);
     if (!expect_nkem_invalid("overflowing length", mutated_nkem,
                              sizeof(mutated_nkem))) {
+        return 0;
+    }
+
+    memcpy(mutated_v3, v3, sizeof(mutated_v3));
+    mutated_v3[5] = 0x7fU;
+    if (!expect_nkem_invalid("v3 illegal algorithm", mutated_v3,
+                             sizeof(mutated_v3))) {
+        return 0;
+    }
+    memcpy(mutated_v3, v3, sizeof(mutated_v3));
+    mutated_v3[24] = 0x7fU;
+    if (!expect_nkem_invalid("v3 illegal salt length", mutated_v3,
+                             sizeof(mutated_v3))) {
+        return 0;
+    }
+    memcpy(mutated_v3, v3, sizeof(mutated_v3));
+    mutated_v3[25] = 0x7fU;
+    if (!expect_nkem_invalid("v3 illegal nonce length", mutated_v3,
+                             sizeof(mutated_v3))) {
+        return 0;
+    }
+    memcpy(mutated_v3, v3, sizeof(mutated_v3));
+    put_u32_be(mutated_v3 + 12U,
+               NKEM_MAX_KEM_CIPHERTEXT_SIZE + 1U);
+    if (!expect_nkem_invalid("v3 oversized KEM field", mutated_v3,
+                             sizeof(mutated_v3))) {
+        return 0;
+    }
+    memcpy(mutated_v3, v3, sizeof(mutated_v3));
+    put_u64_be(mutated_v3 + 16U, UINT64_MAX);
+    if (!expect_nkem_invalid("v3 overflowing length", mutated_v3,
+                             sizeof(mutated_v3))) {
         return 0;
     }
 
@@ -230,23 +277,49 @@ static int test_random_inputs(void)
     return 1;
 }
 
+static int test_version_separation(
+    const unsigned char v3[V3_TEST_SIZE])
+{
+    NkemHeader v1_header;
+    NkemV2Header v2_header;
+
+    if (nkem_header_decode(v3, &v1_header) != 0 ||
+        nkem_v2_header_decode(v3, &v2_header) != 0) {
+        fprintf(stderr,
+                "NKEM v3 header was accepted by a legacy decoder\n");
+        return 0;
+    }
+    if (nkem_container_parse(v3, V3_TEST_SIZE) == 0) {
+        fprintf(stderr, "NKEM v3 dispatcher rejected a valid container\n");
+        return 0;
+    }
+    return 1;
+}
+
 int main(void)
 {
     unsigned char valid_v1[V1_TEST_SIZE] = {0};
     unsigned char valid_v2[V2_TEST_SIZE] = {0};
+    unsigned char valid_v3[V3_TEST_SIZE] = {0};
     unsigned char valid_nkpr[NKPR_TEST_SIZE];
 
     nkem_header_encode(valid_v1, V1_KEM_TEST_SIZE, 0U);
     nkem_v2_header_encode(valid_v2,
                           NKEM_X448_EPHEMERAL_PUBLIC_SIZE,
                           V2_KEM_TEST_SIZE, 0U);
+    nkem_v3_header_encode(valid_v3,
+                          NKEM_X448_EPHEMERAL_PUBLIC_SIZE,
+                          V3_KEM_TEST_SIZE, 0U);
     build_valid_nkpr(valid_nkpr);
 
-    if (!test_valid_inputs(valid_v1, valid_v2, valid_nkpr) ||
+    if (!test_valid_inputs(valid_v1, valid_v2, valid_v3,
+                           valid_nkpr) ||
         !expect_nkem_invalid("null input", NULL, 0U) ||
         !expect_nkpr_invalid("null input", NULL, 0U) ||
-        !test_truncation(valid_v1, valid_v2, valid_nkpr) ||
-        !test_mutated_fields(valid_v2, valid_nkpr) ||
+        !test_truncation(valid_v1, valid_v2, valid_v3,
+                         valid_nkpr) ||
+        !test_mutated_fields(valid_v2, valid_v3, valid_nkpr) ||
+        !test_version_separation(valid_v3) ||
         !test_random_inputs()) {
         return 1;
     }

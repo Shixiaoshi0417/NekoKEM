@@ -1,49 +1,109 @@
-# =========================
-# Build artifacts
-# =========================
+# Native C build products
 *.o
+*.obj
 *.d
-nekokem
 *.a
 *.so
+*.dylib
+*.dll
+/nekokem
 
-# =========================
-# Keep directory, ignore contents
-# =========================
-keys/*
-!keys/.gitkeep
+# Android and Gradle build products
+**/build/
+**/.gradle/
+**/.cxx/
+**/.externalNativeBuild/
+**/externalNativeBuild/
+**/captures/
+**/local.properties
+*.apk
+*.aab
+**/mapping/
+mapping.txt
+*.hprof
+*.prof
+*.profm
+*.trace
 
-plaintext/*
-!plaintext/.gitkeep
-
-encrypted/*
-!encrypted/.gitkeep
-
-# =========================
-# Fuzz
-# =========================
-fuzz/out/
-fuzz/findings/
-fuzz/bin/
-
-# =========================
-# Temporary files
-# =========================
-tmp/
-*.tmp
-*.log
-
-# =========================
-# IDE
-# =========================
+# Android Studio and other IDE metadata
+**/.idea/
+*.iml
 .vscode/
-.idea/
 *.swp
 *.swo
 
-# =========================
-# OS
-# =========================
+# Locally compiled Android OpenSSL prefix; rebuild with the checked-in script
+/NekoKEM-Android/app/src/main/cpp/third_party/openssl/
+
+# Runtime keys and sensitive key/certificate containers
+*.nkpr
+*.nkpr.enc
+*.key
+*.key.enc
+*.pem
+*.der
+*.p12
+*.pfx
+*.keystore
+*.jks
+*.pk8
+*.csr
+*.crt
+
+# Keep runtime directories, never their contents
+/keys/*
+!/keys/.gitkeep
+/plaintext/*
+!/plaintext/.gitkeep
+/encrypted/*
+!/encrypted/.gitkeep
+
+# Fuzz, crash, benchmark, and generated corpus output
+/fuzz/bin/
+/fuzz/out/
+/fuzz/findings/
+/fuzz/crashes/
+/fuzz/hangs/
+/fuzz/queue/
+/fuzz/seeds/nkem/valid-v3
+**/crash-*
+**/id:*
+**/benchmark/
+**/benchmarks/
+**/benchmark-results/
+
+# Personal test data
+**/test-data/
+**/testdata/
+**/personal-test-data/
+/*.jpg
+/*.jpeg
+/*.png
+/*.gif
+/*.webp
+/*.mp4
+/*.mov
+/*.mkv
+/*.avi
+/*.pdf
+/*.doc
+/*.docx
+
+# Temporary files, logs, caches, and local work products
+**/out/
+**/tmp/
+**/temp/
+**/logs/
+*.tmp
+*.log
+*.orig
+*.rej
+*.patch
+*~
+.codex/
+.agents/
+
+# Operating-system metadata
 .DS_Store
 Thumbs.db
 Desktop.ini

@@ -1,11 +1,12 @@
 # NekoKEM
 
-NekoKEM 是一个用于学习 OpenSSL 3.5 EVP API 的实验性后量子文件加密工具。直接运行 `./nekokem` 时，默认且唯一的交互模式是 v2 Hybrid；v1 仅保留在参数化命令中，供开发与兼容使用。
+NekoKEM 是一个用于学习 OpenSSL 3.5 EVP API 的实验性后量子文件加密工具。默认 Hybrid 加密生成 NKEM v3；解密按 version 严格分派并兼容 v1/v2。
 
 | 模式 | 密钥建立 | KDF | 文件加密 | 容器 |
 |---|---|---|---|---|
 | v1 | ML-KEM-1024 | HKDF-SHA256 | AES-256-GCM | version 1 / algorithm id 1 |
 | v2 hybrid | X448 + ML-KEM-1024 | HKDF-SHA512 | AES-256-GCM | version 2 / algorithm id 2 |
+| v3 hybrid（默认） | X448 + ML-KEM-1024 | HKDF-SHA512 | AES-256-GCM | version 3 / algorithm id 3 |
 
 本项目不自行实现任何密码算法，也不依赖 liboqs。**它没有经过安全审计，不应被视为生产级软件，也不应用来保护重要或敏感数据。**
 
@@ -72,7 +73,7 @@ keys/
 5. 退出
 ```
 
-交互模式不要求选择 v1 或 v2，所有密钥生成、加密和解密操作均固定使用 v2 Hybrid（X448 + ML-KEM-1024、HKDF-SHA512、AES-256-GCM）。
+交互模式不要求选择版本；加密固定生成 v3 Hybrid，解密自动识别 v1/v2/v3。Hybrid 算法仍为 X448 + ML-KEM-1024、HKDF-SHA512 和 AES-256-GCM。
 
 ### 生成密钥
 
@@ -126,7 +127,7 @@ encrypted/test.jpg.nkem -> plaintext/test.jpg
 - `keys/public.key`：PEM SubjectPublicKeyInfo；
 - `keys/private.key`：未加口令的 PEM 私钥，文件权限强制为 `0600`。
 
-生成 v2 hybrid 密钥：
+生成 Hybrid 密钥：
 
 ```sh
 ./nekokem keygen hybrid
@@ -148,11 +149,11 @@ v1 加密和解密示例：
 ./nekokem decrypt encrypted/test.nkem output.txt keys/private.key
 ```
 
-v2 hybrid 加密和解密：
+默认 v3 hybrid 加密和解密：
 
 ```sh
-./nekokem encrypt hybrid test.txt encrypted/test-v2.nkem keys/public.key
-./nekokem decrypt hybrid encrypted/test-v2.nkem output.txt keys/private.key.enc
+./nekokem encrypt hybrid test.txt encrypted/test-v3.nkem keys/public.key
+./nekokem decrypt hybrid encrypted/test-v3.nkem output.txt keys/private.key.enc
 ```
 
 Hybrid decrypt 看到 `.enc` 后会自动提示一次密码。为兼容已有部署，命令仍接受包含 X448、ML-KEM-1024 两个 PEM 块的旧式明文 `private.key`。
@@ -170,7 +171,7 @@ Hybrid decrypt 看到 `.enc` 后会自动提示一次密码。为兼容已有部
 
 ## NKPR 加密私钥格式
 
-NKPR 是独立于 NKEM 文件容器的私钥存储格式；增加它不会改变 NKEM v1/v2 的任何字节、KDF 或文件加密协议。当前 NKPR version 1 固定使用：
+NKPR 是独立于 NKEM 文件容器的私钥存储格式；NKEM v3 不修改 NKPR version 1。当前 NKPR 固定使用：
 
 - Argon2id：64 MiB（`65536` KiB）、3 次迭代、并行度 4、Argon2 version 1.3；
 - 32 字节随机 salt；
@@ -265,9 +266,13 @@ AES-GCM ciphertext ||
 16-byte authentication tag
 ```
 
-固定头部、X448 临时公钥、ML-KEM 密文和 nonce 全部作为 AES-GCM AAD。解密命令会严格检查 v2 版本、算法 ID、长度和尾随数据，不能用 hybrid CLI 解密 v1 容器，反之亦然。
+固定头部、X448 临时公钥、ML-KEM 密文和 nonce 全部作为 AES-GCM AAD。v2 兼容解码器严格检查版本、算法 ID、长度和尾随数据；默认 Core 解密 API 则先读取 version，再分派到对应的 v1/v2/v3 路径。
 
 NKEM v2 同样是本项目自定义的实验格式，并不是标准 hybrid KEM 协议。
+
+## NKEM v3 hybrid 文件格式
+
+v3 保持 v2 的 X448、ML-KEM-1024、共享秘密组合和 HKDF-SHA512 流程，仅把 HKDF salt 与 AES-GCM nonce 分离。每个文件分别通过 `RAND_bytes` 生成 32 字节 salt 和 12 字节 nonce；两者连同固定头部、X448 临时公钥和 ML-KEM 密文一起纳入 GCM AAD。完整布局见 [`docs/NKEM-v3.md`](docs/NKEM-v3.md)。默认 `nekokem_encrypt_file()` 写出 v3，`nekokem_decrypt_file()` 按 version 严格分派 v1/v2/v3。
 
 ## 安全实现说明
 
@@ -318,6 +323,7 @@ make test
 
 - v1 keygen、加密、解密、SHA-256 和 `cmp`；
 - Hybrid 加密私钥 keygen、正确密码解密、SHA-256 和 `cmp`；
+- 默认 v3 加密/解密回环、v1/v2 旧容器解密，以及 v1/v2 解码器拒绝 v3；
 - 错误密码和篡改 NKPR 必须认证失败，且不能产生目标明文；
 - 检查 Hybrid keygen 不留下明文 `private.key`、PEM 内容或原子临时文件；
 - hybrid 密文修改后必须认证失败，且不能产生目标明文；
@@ -339,7 +345,7 @@ make fuzz-build
 
 该目标使用 `afl-clang-fast` 和 UBSan 构建：
 
-- `fuzz/bin/fuzz_nkem`：仅解析 NKEM v1/v2 header 与容器总长度；
+- `fuzz/bin/fuzz_nkem`：仅解析 NKEM v1/v2/v3 header 与容器总长度；
 - `fuzz/bin/fuzz_nkpr`：仅解析 NKPR header、参数与容器总长度。
 
 两个 harness 都接受一个 `argv[1]` 文件路径，拒绝超过 2 MiB 的输入，不执行密钥解封装、Argon2id、AES-GCM 或明文写出。`fuzz/seeds/` 中的有效样本只是零填充的结构样本，不含密码、私钥或真实敏感数据；同时提供多个截断样本。具体 AFL 命令见 `fuzz/README.md`。

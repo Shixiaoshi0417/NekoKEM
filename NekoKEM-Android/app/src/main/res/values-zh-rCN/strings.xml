@@ -1,0 +1,126 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">NekoKEM</string>
+
+    <string name="navigation_files">文件加解密</string>
+    <string name="navigation_keys">密钥管理</string>
+    <string name="navigation_settings">设置</string>
+    <string name="navigation_about">关于</string>
+    <string name="navigation_open_menu">打开导航菜单</string>
+
+    <string name="native_core_connected">原生核心已连接</string>
+    <string name="native_core_unavailable">原生核心不可用</string>
+    <string name="openssl_version">OpenSSL 版本：%1$s</string>
+    <string name="not_available">不可用</string>
+    <string name="about_description">由可复用 NekoKEM C17 Core 与 OpenSSL EVP 提供密码能力的实验性后量子混合文件加密工具。</string>
+
+    <string name="private_key_exists">私钥：✓ 已存在</string>
+    <string name="private_key_not_found">私钥：未找到</string>
+    <string name="fingerprint_label">SHA-256 公钥指纹</string>
+    <string name="selected_file_label">已选择文件</string>
+    <string name="selected_file_none">尚未选择文件</string>
+
+    <string name="settings_appearance_title">外观与语言</string>
+    <string name="settings_theme_title">主题</string>
+    <string name="settings_theme_system">跟随系统</string>
+    <string name="settings_dynamic_color_title">动态颜色</string>
+    <string name="settings_dynamic_color_system">设备支持时启用</string>
+    <string name="settings_language_title">语言</string>
+    <string name="settings_language_system">跟随系统</string>
+
+    <string name="password_label">私钥密码</string>
+    <string name="password_confirmation_label">确认密码</string>
+    <string name="error_password_empty">密码不能为空</string>
+    <string name="error_passwords_mismatch">两次输入的密码不一致</string>
+    <string name="generate_password_title">保护新私钥</string>
+    <string name="generate_password_message">请输入并确认非空密码。密码仅用于本次密钥生成，不会保存。</string>
+    <string name="check_password_title">验证私钥密码</string>
+    <string name="check_password_message">请输入加密私钥密码，仅执行一次验证。</string>
+    <string name="import_password_title">导入加密私钥</string>
+    <string name="import_password_message">请输入所导入 NKPR 私钥的密码。仅在验证成功后才会替换当前私钥。</string>
+    <string name="decrypt_password_title">解密文件</string>
+    <string name="decrypt_password_message">请输入加密私钥密码。仅在认证成功后才会选择输出位置。</string>
+    <string name="decrypt_password_label">用于解密的私钥密码</string>
+
+    <string name="delete_private_key_title">永久删除私钥？</string>
+    <string name="delete_private_key_message">将删除本地 NKPR 私钥和相关临时缓存。公钥会保留。</string>
+    <string name="replace_private_key_title">替换现有私钥？</string>
+    <string name="replace_private_key_message">仅在加密 NKPR 私钥的格式和密码验证成功后，才会替换当前本地私钥。</string>
+
+    <string name="action_generate_keypair">生成密钥对</string>
+    <string name="action_check_password">验证私钥密码</string>
+    <string name="action_export_public_key">导出公钥</string>
+    <string name="action_export_private_key">导出加密私钥</string>
+    <string name="action_import_public_key">导入公钥</string>
+    <string name="action_import_private_key">导入加密私钥</string>
+    <string name="action_delete_private_key">删除私钥</string>
+    <string name="action_select_file">选择文件</string>
+    <string name="action_encrypt">加密</string>
+    <string name="action_decrypt">解密</string>
+    <string name="action_generate">生成</string>
+    <string name="action_delete">删除</string>
+    <string name="action_replace">替换</string>
+    <string name="action_continue">继续</string>
+    <string name="action_cancel">取消</string>
+    <string name="action_close">关闭</string>
+
+    <string name="progress_title">正在%1$s</string>
+    <string name="progress_percent">%1$d%%</string>
+    <string name="progress_bytes">%1$s / %2$s</string>
+    <string name="progress_speed">速度：%1$s/秒</string>
+    <string name="progress_eta">预计剩余：%1$s</string>
+    <string name="progress_estimating">正在估算…</string>
+    <string name="progress_cancel_requested">正在取消…</string>
+    <string name="size_bytes">%1$d 字节</string>
+    <string name="size_kib">%1$s KiB</string>
+    <string name="size_mib">%1$s MiB</string>
+    <string name="size_gib">%1$s GiB</string>
+    <string name="duration_seconds">%1$d 秒</string>
+    <string name="duration_minutes_seconds">%1$d 分 %2$d 秒</string>
+    <string name="speed_per_second">%1$s/秒</string>
+
+    <string name="completion_title">操作完成</string>
+    <string name="completion_operation">操作类型</string>
+    <string name="completion_file">文件名</string>
+    <string name="completion_elapsed">耗时</string>
+    <string name="completion_average_speed">平均速度</string>
+    <string name="error_dialog_title">操作失败</string>
+    <string name="error_dialog_reason">原因</string>
+    <string name="result_line">%1$s：%2$s</string>
+
+    <string name="snackbar_file_selected">已选择文件</string>
+    <string name="snackbar_output_selection_cancelled">已取消选择输出文件</string>
+    <string name="snackbar_key_selection_cancelled">已取消选择密钥文件</string>
+    <string name="snackbar_operation_cancelled">操作已取消</string>
+    <string name="snackbar_operation_success">%1$s已完成</string>
+
+    <string name="error_select_file_first">请先选择文件</string>
+    <string name="error_public_key_not_found">未找到公钥</string>
+    <string name="error_private_key_not_found">未找到私钥</string>
+    <string name="error_reason_storage">文件提供程序或应用私有存储操作失败。</string>
+    <string name="error_reason_invalid_argument">文件路径、密码或操作参数无效。</string>
+    <string name="error_reason_memory">原生安全内存分配失败。</string>
+    <string name="error_reason_jni">Android 与 Core 之间的调用失败。</string>
+    <string name="error_reason_authentication">密码错误，或加密私钥认证失败。</string>
+    <string name="error_reason_encrypt">无法读取输入文件或公钥，或者加密失败。</string>
+    <string name="error_reason_decrypt">密码或私钥错误、NKEM 文件无效，或者认证失败。</string>
+    <string name="error_reason_public_key">所选公钥无效或不受支持。</string>
+    <string name="error_reason_key_generation">无法生成密钥对或安全保存密钥。</string>
+    <string name="error_reason_export">无法验证或导出所选密钥。</string>
+    <string name="error_reason_delete">无法删除私钥或相关临时缓存。</string>
+    <string name="error_reason_core">NekoKEM Core 拒绝了此操作。</string>
+    <string name="error_reason_unexpected">发生了意外的 Android 操作错误。</string>
+
+    <string name="operation_generate_keypair">生成密钥对</string>
+    <string name="operation_check_password">验证密码</string>
+    <string name="operation_export_public_key">导出公钥</string>
+    <string name="operation_export_private_key">导出加密私钥</string>
+    <string name="operation_import_public_key">导入公钥</string>
+    <string name="operation_import_private_key">导入加密私钥</string>
+    <string name="operation_delete_private_key">删除私钥</string>
+    <string name="operation_encrypt_file">加密文件</string>
+    <string name="operation_decrypt_file">解密文件</string>
+
+    <string name="default_selected_filename">所选文件</string>
+    <string name="default_decrypted_filename">解密文件</string>
+</resources>

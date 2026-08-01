@@ -15,6 +15,13 @@ printf '%s' \
 dd if=/dev/zero bs=1 count=85 status=none \
     >> "$nkem_dir/valid-v2"
 
+# Structurally valid NKEM v3 with synthetic public fields and no file data.
+printf '%s' \
+    '4e4b454d0303002000380000000000010000000000000000200c100000000000' |
+    xxd -r -p > "$nkem_dir/valid-v3"
+dd if=/dev/zero bs=1 count=117 status=none \
+    >> "$nkem_dir/valid-v3"
+
 # Structurally valid NKPR with one synthetic ciphertext byte.
 printf '%s' \
     '4e4b5052010101000001000000000003000000040000001300200c100000000000000001' |

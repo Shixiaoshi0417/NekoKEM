@@ -1,0 +1,126 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">NekoKEM</string>
+
+    <string name="navigation_files">File Encryption</string>
+    <string name="navigation_keys">Key Management</string>
+    <string name="navigation_settings">Settings</string>
+    <string name="navigation_about">About</string>
+    <string name="navigation_open_menu">Open navigation menu</string>
+
+    <string name="native_core_connected">Native core connected</string>
+    <string name="native_core_unavailable">Native core unavailable</string>
+    <string name="openssl_version">OpenSSL version: %1$s</string>
+    <string name="not_available">Not available</string>
+    <string name="about_description">Experimental post-quantum hybrid file encryption powered by the reusable NekoKEM C17 Core and OpenSSL EVP.</string>
+
+    <string name="private_key_exists">Private key: ✓ Exists</string>
+    <string name="private_key_not_found">Private key: Not found</string>
+    <string name="fingerprint_label">SHA-256 public-key fingerprint</string>
+    <string name="selected_file_label">Selected file</string>
+    <string name="selected_file_none">No file selected</string>
+
+    <string name="settings_appearance_title">Appearance and language</string>
+    <string name="settings_theme_title">Theme</string>
+    <string name="settings_theme_system">Follow system</string>
+    <string name="settings_dynamic_color_title">Dynamic color</string>
+    <string name="settings_dynamic_color_system">Enabled when supported</string>
+    <string name="settings_language_title">Language</string>
+    <string name="settings_language_system">Follow system</string>
+
+    <string name="password_label">Private-key password</string>
+    <string name="password_confirmation_label">Confirm password</string>
+    <string name="error_password_empty">Password must not be empty</string>
+    <string name="error_passwords_mismatch">Passwords do not match</string>
+    <string name="generate_password_title">Protect new private key</string>
+    <string name="generate_password_message">Enter and confirm a non-empty password. It is used only for this key-generation operation and is not saved.</string>
+    <string name="check_password_title">Verify private-key password</string>
+    <string name="check_password_message">Enter the encrypted private-key password for one verification attempt.</string>
+    <string name="import_password_title">Import encrypted private key</string>
+    <string name="import_password_message">Enter the imported NKPR private-key password. The current key is replaced only after verification succeeds.</string>
+    <string name="decrypt_password_title">Decrypt file</string>
+    <string name="decrypt_password_message">Enter the encrypted private-key password. The output location is requested only after authentication succeeds.</string>
+    <string name="decrypt_password_label">Private-key password for decryption</string>
+
+    <string name="delete_private_key_title">Delete private key permanently?</string>
+    <string name="delete_private_key_message">The local NKPR private key and related temporary cache will be deleted. The public key is kept.</string>
+    <string name="replace_private_key_title">Replace existing private key?</string>
+    <string name="replace_private_key_message">The imported encrypted NKPR private key will replace the current local private key only after its format and password are verified.</string>
+
+    <string name="action_generate_keypair">Generate Keypair</string>
+    <string name="action_check_password">Verify Private-Key Password</string>
+    <string name="action_export_public_key">Export Public Key</string>
+    <string name="action_export_private_key">Export Encrypted Private Key</string>
+    <string name="action_import_public_key">Import Public Key</string>
+    <string name="action_import_private_key">Import Encrypted Private Key</string>
+    <string name="action_delete_private_key">Delete Private Key</string>
+    <string name="action_select_file">Select File</string>
+    <string name="action_encrypt">Encrypt</string>
+    <string name="action_decrypt">Decrypt</string>
+    <string name="action_generate">Generate</string>
+    <string name="action_delete">Delete</string>
+    <string name="action_replace">Replace</string>
+    <string name="action_continue">Continue</string>
+    <string name="action_cancel">Cancel</string>
+    <string name="action_close">Close</string>
+
+    <string name="progress_title">%1$s in progress</string>
+    <string name="progress_percent">%1$d%%</string>
+    <string name="progress_bytes">%1$s / %2$s</string>
+    <string name="progress_speed">Speed: %1$s/s</string>
+    <string name="progress_eta">Estimated remaining: %1$s</string>
+    <string name="progress_estimating">Estimating…</string>
+    <string name="progress_cancel_requested">Cancellation requested…</string>
+    <string name="size_bytes">%1$d B</string>
+    <string name="size_kib">%1$s KiB</string>
+    <string name="size_mib">%1$s MiB</string>
+    <string name="size_gib">%1$s GiB</string>
+    <string name="duration_seconds">%1$d s</string>
+    <string name="duration_minutes_seconds">%1$d min %2$d s</string>
+    <string name="speed_per_second">%1$s/s</string>
+
+    <string name="completion_title">Operation completed</string>
+    <string name="completion_operation">Operation</string>
+    <string name="completion_file">File</string>
+    <string name="completion_elapsed">Elapsed</string>
+    <string name="completion_average_speed">Average speed</string>
+    <string name="error_dialog_title">Operation failed</string>
+    <string name="error_dialog_reason">Reason</string>
+    <string name="result_line">%1$s: %2$s</string>
+
+    <string name="snackbar_file_selected">File selected</string>
+    <string name="snackbar_output_selection_cancelled">Output selection cancelled</string>
+    <string name="snackbar_key_selection_cancelled">Key selection cancelled</string>
+    <string name="snackbar_operation_cancelled">Operation cancelled</string>
+    <string name="snackbar_operation_success">%1$s completed</string>
+
+    <string name="error_select_file_first">Select a file first</string>
+    <string name="error_public_key_not_found">Public key not found</string>
+    <string name="error_private_key_not_found">Private key not found</string>
+    <string name="error_reason_storage">The file provider or private storage operation failed.</string>
+    <string name="error_reason_invalid_argument">An invalid path, password, or operation argument was supplied.</string>
+    <string name="error_reason_memory">Secure native memory allocation failed.</string>
+    <string name="error_reason_jni">The Android-to-Core call failed.</string>
+    <string name="error_reason_authentication">The password is incorrect or the encrypted private key failed authentication.</string>
+    <string name="error_reason_encrypt">The input or public key could not be read, or encryption failed.</string>
+    <string name="error_reason_decrypt">The password or private key is incorrect, the NKEM file is invalid, or authentication failed.</string>
+    <string name="error_reason_public_key">The selected public key is invalid or unsupported.</string>
+    <string name="error_reason_key_generation">The keypair could not be generated or stored securely.</string>
+    <string name="error_reason_export">The selected key could not be validated or exported.</string>
+    <string name="error_reason_delete">The private key or related temporary cache could not be deleted.</string>
+    <string name="error_reason_core">NekoKEM Core rejected the operation.</string>
+    <string name="error_reason_unexpected">An unexpected Android operation error occurred.</string>
+
+    <string name="operation_generate_keypair">Generate keypair</string>
+    <string name="operation_check_password">Verify password</string>
+    <string name="operation_export_public_key">Export public key</string>
+    <string name="operation_export_private_key">Export encrypted private key</string>
+    <string name="operation_import_public_key">Import public key</string>
+    <string name="operation_import_private_key">Import encrypted private key</string>
+    <string name="operation_delete_private_key">Delete private key</string>
+    <string name="operation_encrypt_file">Encrypt file</string>
+    <string name="operation_decrypt_file">Decrypt file</string>
+
+    <string name="default_selected_filename">selected-file</string>
+    <string name="default_decrypted_filename">decrypted-file</string>
+</resources>

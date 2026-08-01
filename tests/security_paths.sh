@@ -75,10 +75,10 @@ fi
 test ! -e truncated-output.bin
 
 cp encrypted/valid.nkem encrypted/tampered.nkem
-printf '\001' | dd of=encrypted/tampered.nkem bs=1 seek=1664 \
+printf '\001' | dd of=encrypted/tampered.nkem bs=1 seek=1688 \
     count=1 conv=notrunc status=none
 if cmp -s encrypted/valid.nkem encrypted/tampered.nkem; then
-    printf '\377' | dd of=encrypted/tampered.nkem bs=1 seek=1664 \
+    printf '\377' | dd of=encrypted/tampered.nkem bs=1 seek=1688 \
         count=1 conv=notrunc status=none
 fi
 if printf '%s\n' "$key_password" |

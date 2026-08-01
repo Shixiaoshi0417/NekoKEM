@@ -44,21 +44,35 @@ static int add_decrypt_aad(EVP_CIPHER_CTX *context,
     return 1;
 }
 
-int aes_gcm_encrypt_file(FILE *input,
-                         FILE *output,
-                         uint64_t plaintext_len,
-                         const unsigned char key[AES_GCM_KEY_SIZE],
-                         const unsigned char nonce[AES_GCM_NONCE_SIZE],
-                         const unsigned char *aad,
-                         size_t aad_len,
-                         unsigned char tag[AES_GCM_TAG_SIZE])
+static int progress_should_continue(AesProgressCallback callback,
+                                    uint64_t processed_bytes,
+                                    uint64_t total_bytes,
+                                    void *user_data)
+{
+    if (callback == NULL) {
+        return 1;
+    }
+    return callback(processed_bytes, total_bytes, user_data) != 0;
+}
+
+int aes_gcm_encrypt_file_with_progress(
+    FILE *input,
+    FILE *output,
+    uint64_t plaintext_len,
+    const unsigned char key[AES_GCM_KEY_SIZE],
+    const unsigned char nonce[AES_GCM_NONCE_SIZE],
+    const unsigned char *aad,
+    size_t aad_len,
+    unsigned char tag[AES_GCM_TAG_SIZE],
+    AesProgressCallback progress_callback,
+    void *progress_user_data)
 {
     EVP_CIPHER_CTX *context = NULL;
     unsigned char input_buffer[IO_BUFFER_SIZE];
     unsigned char output_buffer[IO_BUFFER_SIZE + EVP_MAX_BLOCK_LENGTH];
     uint64_t remaining = plaintext_len;
     int output_len = 0;
-    int success = 0;
+    int result = AES_GCM_FILE_ERROR;
 
     context = EVP_CIPHER_CTX_new();
     if (context == NULL) {
@@ -74,6 +88,12 @@ int aes_gcm_encrypt_file(FILE *input,
         goto cleanup;
     }
     if (!add_encrypt_aad(context, aad, aad_len)) {
+        goto cleanup;
+    }
+    if (!progress_should_continue(progress_callback, 0U,
+                                  plaintext_len,
+                                  progress_user_data)) {
+        result = AES_GCM_FILE_CANCELLED;
         goto cleanup;
     }
 
@@ -101,6 +121,12 @@ int aes_gcm_encrypt_file(FILE *input,
             goto cleanup;
         }
         remaining -= (uint64_t)count;
+        if (!progress_should_continue(
+                progress_callback, plaintext_len - remaining,
+                plaintext_len, progress_user_data)) {
+            result = AES_GCM_FILE_CANCELLED;
+            goto cleanup;
+        }
     }
 
     if (fgetc(input) != EOF) {
@@ -124,22 +150,39 @@ int aes_gcm_encrypt_file(FILE *input,
         print_openssl_error("Cannot retrieve AES-GCM authentication tag");
         goto cleanup;
     }
-    success = 1;
+    result = AES_GCM_FILE_SUCCESS;
 
 cleanup:
     EVP_CIPHER_CTX_free(context);
     secure_mem_clear(input_buffer, sizeof(input_buffer));
     secure_mem_clear(output_buffer, sizeof(output_buffer));
-    return success;
+    return result;
 }
 
-int aes_gcm_decrypt_file(FILE *input,
+int aes_gcm_encrypt_file(FILE *input,
                          FILE *output,
-                         uint64_t ciphertext_len,
+                         uint64_t plaintext_len,
                          const unsigned char key[AES_GCM_KEY_SIZE],
                          const unsigned char nonce[AES_GCM_NONCE_SIZE],
                          const unsigned char *aad,
-                         size_t aad_len)
+                         size_t aad_len,
+                         unsigned char tag[AES_GCM_TAG_SIZE])
+{
+    return aes_gcm_encrypt_file_with_progress(
+               input, output, plaintext_len, key, nonce, aad, aad_len,
+               tag, NULL, NULL) == AES_GCM_FILE_SUCCESS;
+}
+
+int aes_gcm_decrypt_file_with_progress(
+    FILE *input,
+    FILE *output,
+    uint64_t ciphertext_len,
+    const unsigned char key[AES_GCM_KEY_SIZE],
+    const unsigned char nonce[AES_GCM_NONCE_SIZE],
+    const unsigned char *aad,
+    size_t aad_len,
+    AesProgressCallback progress_callback,
+    void *progress_user_data)
 {
     EVP_CIPHER_CTX *context = NULL;
     unsigned char input_buffer[IO_BUFFER_SIZE];
@@ -147,7 +190,7 @@ int aes_gcm_decrypt_file(FILE *input,
     unsigned char tag[AES_GCM_TAG_SIZE];
     uint64_t remaining = ciphertext_len;
     int output_len = 0;
-    int success = 0;
+    int result = AES_GCM_FILE_ERROR;
 
     context = EVP_CIPHER_CTX_new();
     if (context == NULL) {
@@ -163,6 +206,12 @@ int aes_gcm_decrypt_file(FILE *input,
         goto cleanup;
     }
     if (!add_decrypt_aad(context, aad, aad_len)) {
+        goto cleanup;
+    }
+    if (!progress_should_continue(progress_callback, 0U,
+                                  ciphertext_len,
+                                  progress_user_data)) {
+        result = AES_GCM_FILE_CANCELLED;
         goto cleanup;
     }
 
@@ -184,6 +233,12 @@ int aes_gcm_decrypt_file(FILE *input,
             goto cleanup;
         }
         remaining -= (uint64_t)wanted;
+        if (!progress_should_continue(
+                progress_callback, ciphertext_len - remaining,
+                ciphertext_len, progress_user_data)) {
+            result = AES_GCM_FILE_CANCELLED;
+            goto cleanup;
+        }
     }
 
     if (!file_read_exact(input, tag, sizeof(tag))) {
@@ -203,12 +258,25 @@ int aes_gcm_decrypt_file(FILE *input,
         !file_write_all(output, output_buffer, (size_t)output_len)) {
         goto cleanup;
     }
-    success = 1;
+    result = AES_GCM_FILE_SUCCESS;
 
 cleanup:
     EVP_CIPHER_CTX_free(context);
     secure_mem_clear(input_buffer, sizeof(input_buffer));
     secure_mem_clear(output_buffer, sizeof(output_buffer));
     secure_mem_clear(tag, sizeof(tag));
-    return success;
+    return result;
+}
+
+int aes_gcm_decrypt_file(FILE *input,
+                         FILE *output,
+                         uint64_t ciphertext_len,
+                         const unsigned char key[AES_GCM_KEY_SIZE],
+                         const unsigned char nonce[AES_GCM_NONCE_SIZE],
+                         const unsigned char *aad,
+                         size_t aad_len)
+{
+    return aes_gcm_decrypt_file_with_progress(
+               input, output, ciphertext_len, key, nonce, aad, aad_len,
+               NULL, NULL) == AES_GCM_FILE_SUCCESS;
 }

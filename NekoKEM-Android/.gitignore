@@ -1,0 +1,14 @@
+*.iml
+.gradle/
+.idea/
+.kotlin/
+local.properties
+**/.cxx/
+**/build/
+captures/
+externalNativeBuild/
+
+# The parent C repository ignores any path component named "nekokem" for its
+# CLI binary. Re-include the Android Kotlin package directory explicitly.
+!app/src/main/java/com/nekokem/
+!app/src/main/java/com/nekokem/**

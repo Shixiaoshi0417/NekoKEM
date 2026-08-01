@@ -15,6 +15,10 @@
 #define NKEM_V2_VERSION 2U
 #define NKEM_V2_ALGORITHM_ID 2U
 #define NKEM_X448_EPHEMERAL_PUBLIC_SIZE 56U
+#define NKEM_V3_HEADER_SIZE 32U
+#define NKEM_V3_VERSION 3U
+#define NKEM_V3_ALGORITHM_ID 3U
+#define NKEM_V3_SALT_SIZE 32U
 
 typedef struct {
     uint32_t kem_ciphertext_len;
@@ -30,6 +34,15 @@ typedef struct {
     uint8_t nonce_len;
     uint8_t tag_len;
 } NkemV2Header;
+
+typedef struct {
+    uint16_t x448_ephemeral_len;
+    uint32_t kem_ciphertext_len;
+    uint64_t ciphertext_len;
+    uint8_t salt_len;
+    uint8_t nonce_len;
+    uint8_t tag_len;
+} NkemV3Header;
 
 typedef struct {
     FILE *stream;
@@ -72,8 +85,19 @@ int nkem_v2_header_decode(
 int nkem_v2_container_size_is_valid(const NkemV2Header *header,
                                     uint64_t actual_size);
 
+void nkem_v3_header_encode(unsigned char output[NKEM_V3_HEADER_SIZE],
+                           uint16_t x448_ephemeral_len,
+                           uint32_t kem_ciphertext_len,
+                           uint64_t ciphertext_len);
+int nkem_v3_header_decode(
+    const unsigned char input[NKEM_V3_HEADER_SIZE],
+    NkemV3Header *header);
+int nkem_v3_container_size_is_valid(const NkemV3Header *header,
+                                    uint64_t actual_size);
+int nkem_v3_container_parse(const unsigned char *input, size_t input_len);
+
 /*
- * Parse and validate only the NKEM header and total container structure.
+ * Parse and validate only the NKEM v1/v2/v3 header and total structure.
  * This function is deliberately quiet and performs no cryptographic work.
  */
 int nkem_container_parse(const unsigned char *input, size_t input_len);
