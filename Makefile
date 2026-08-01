@@ -28,7 +28,8 @@ OBJECTS = $(CLI_OBJECTS) $(CORE_OBJECTS)
 DEPS = $(OBJECTS:.o=.d)
 
 .PHONY: all core clean test analyze test-ubsan test-parser test-version fuzz-seeds \
-	fuzz-build test-key-management test-progress test-progress-large
+	fuzz-build test-key-management test-progress test-progress-large \
+	test-file-security
 
 all: $(TARGET)
 
@@ -49,6 +50,9 @@ analyze:
 	$(CC) $(CPPFLAGS) $(CFLAGS) -O1 -fanalyzer -fsyntax-only \
 		tests/parser_tests.c src/file.c src/file_v3.c src/private_key.c \
 		src/secure_mem.c
+	$(CC) $(CPPFLAGS) $(CFLAGS) -O1 -fanalyzer -fsyntax-only \
+		-DNEKOKEM_TEST_FAULT_INJECTION tests/file_security_tests.c \
+		src/file.c src/file_v3.c src/secure_mem.c
 
 test-ubsan:
 	@set -eu; \
@@ -74,6 +78,20 @@ test-parser:
 		-fsanitize=undefined -o "$$parser_binary"; \
 	UBSAN_OPTIONS=halt_on_error=1:print_stacktrace=1 \
 		"$$parser_binary"
+
+test-file-security:
+	@set -eu; \
+	security_binary=$$(mktemp /tmp/nekokem-file-security-tests.XXXXXX); \
+	cleanup_security() { rm -f "$$security_binary"; }; \
+	trap cleanup_security EXIT INT TERM; \
+	$(CC) $(CPPFLAGS) $(CFLAGS) -O1 \
+		-DNEKOKEM_TEST_FAULT_INJECTION \
+		-fsanitize=undefined -fno-sanitize-recover=undefined \
+		$(LDFLAGS) tests/file_security_tests.c src/file.c src/file_v3.c \
+		src/secure_mem.c $(LDLIBS) -fsanitize=undefined \
+		-o "$$security_binary"; \
+	UBSAN_OPTIONS=halt_on_error=1:print_stacktrace=1 \
+		"$$security_binary"
 
 fuzz-seeds:
 	sh fuzz/generate_seeds.sh
@@ -127,8 +145,8 @@ test-progress test-progress-large: $(CORE_LIBRARY)
 		"$$progress_binary"; \
 	fi
 
-test: $(TARGET) analyze test-ubsan test-parser test-version \
-	test-key-management test-progress
+test: $(TARGET) analyze test-ubsan test-parser test-file-security \
+	test-version test-key-management test-progress
 	@set -eu; \
 	test_dir=$$(mktemp -d); \
 	cleanup() { \
@@ -147,6 +165,10 @@ test: $(TARGET) analyze test-ubsan test-parser test-version \
 			"$$test_dir/fingerprint-output.txt" \
 			"$$test_dir/private-echo-check.log" \
 			"$$test_dir/password-echo-check.log" \
+			"$$test_dir/long-input-output.txt" \
+			"$$test_dir/long-input-error.txt" \
+			"$$test_dir/long-paste-output.txt" \
+			"$$test_dir/long-paste-error.txt" \
 			"$$test_dir/encrypted/v1.nkem" \
 			"$$test_dir/encrypted/hybrid.nkem" \
 			"$$test_dir/encrypted/tampered.nkem" \
@@ -164,14 +186,14 @@ test: $(TARGET) analyze test-ubsan test-parser test-version \
 	cd "$$test_dir"; \
 	key_password='test-only-hybrid-password'; \
 	interactive_password='test-only-interactive-password'; \
-	./nekokem keygen; \
+	./nekokem keygen legacy-v1; \
 	./nekokem encrypt test.txt encrypted/v1.nkem keys/public.key; \
 	./nekokem decrypt encrypted/v1.nkem v1-output.txt keys/private.key; \
 	sha256sum test.txt v1-output.txt; \
 	cmp test.txt v1-output.txt; \
 	rm -f keys/private.key; \
 	printf '%s\n%s\n' "$$key_password" "$$key_password" | \
-		./nekokem keygen hybrid; \
+		./nekokem keygen; \
 	test -s keys/public.key; \
 	test -s keys/private.key.enc; \
 	test ! -e keys/private.key; \
@@ -243,6 +265,20 @@ test: $(TARGET) analyze test-ubsan test-parser test-version \
 	grep -Fx '      NekoKEM' menu-output.txt >/dev/null; \
 	grep -Fx '1. 生成密钥' menu-output.txt >/dev/null; \
 	grep -Fx '5. 退出' menu-output.txt >/dev/null; \
+	awk 'BEGIN { for (i = 0; i < 5000; ++i) printf "A"; \
+		printf "\\n5\\n"; }' | ./nekokem >long-input-output.txt \
+		2>long-input-error.txt; \
+	grep -F 'Input exceeds 4096 bytes and was discarded' \
+		long-input-error.txt >/dev/null; \
+	{ printf '2\n2\n'; \
+		awk 'BEGIN { for (i = 0; i < 17000; ++i) printf "A"; \
+			printf "\\n"; }'; \
+		printf '5\n'; \
+	} | ./nekokem >long-paste-output.txt 2>long-paste-error.txt; \
+	grep -F 'Pasted-key line exceeds 16384 bytes and was discarded' \
+		long-paste-error.txt >/dev/null; \
+	test -z "$$(find /tmp -maxdepth 1 -type d \
+		-name 'nekokem-paste.*' -print -quit)"; \
 	printf '1\n%s\n%s\n5\n' "$$interactive_password" \
 		"$$interactive_password" | ./nekokem >/dev/null; \
 	test -s keys/public.key; \

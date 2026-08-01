@@ -57,10 +57,7 @@ int kem_generate_keypair(const char *public_path, const char *private_path)
         print_openssl_error("Cannot write public key");
         goto cleanup;
     }
-    if (!atomic_file_commit(&private_file)) {
-        goto cleanup;
-    }
-    if (!atomic_file_commit(&public_file)) {
+    if (!atomic_file_commit_pair(&private_file, &public_file)) {
         goto cleanup;
     }
     success = 1;
@@ -150,10 +147,16 @@ int kem_encapsulate(EVP_PKEY *public_key,
     unsigned char *local_ciphertext = NULL;
     unsigned char *local_secret = NULL;
     size_t local_ciphertext_len = 0U;
+    size_t local_ciphertext_capacity = 0U;
     size_t local_secret_len = 0U;
     size_t local_secret_capacity = 0U;
     int success = 0;
 
+    if (public_key == NULL || ciphertext == NULL || ciphertext_len == NULL ||
+        shared_secret == NULL || shared_secret_len == NULL) {
+        fprintf(stderr, "Invalid ML-KEM encapsulation request\n");
+        return 0;
+    }
     *ciphertext = NULL;
     *shared_secret = NULL;
     *ciphertext_len = 0U;
@@ -173,15 +176,16 @@ int kem_encapsulate(EVP_PKEY *public_key,
         print_openssl_error("Cannot query ML-KEM encapsulation sizes");
         goto cleanup;
     }
-    if (local_ciphertext_len == 0U ||
+    if (local_ciphertext_len != KEM_CIPHERTEXT_SIZE ||
         local_ciphertext_len > NKEM_MAX_KEM_CIPHERTEXT_SIZE ||
-        local_secret_capacity == 0U ||
+        local_secret_capacity != KEM_SHARED_SECRET_SIZE ||
         local_secret_capacity > KEM_MAX_SHARED_SECRET_SIZE) {
         fprintf(stderr, "OpenSSL returned invalid ML-KEM output sizes\n");
         goto cleanup;
     }
 
-    local_ciphertext = OPENSSL_malloc(local_ciphertext_len);
+    local_ciphertext_capacity = local_ciphertext_len;
+    local_ciphertext = OPENSSL_malloc(local_ciphertext_capacity);
     local_secret = OPENSSL_malloc(local_secret_capacity);
     if (local_ciphertext == NULL || local_secret == NULL) {
         print_openssl_error("Cannot allocate ML-KEM output buffers");
@@ -194,9 +198,11 @@ int kem_encapsulate(EVP_PKEY *public_key,
         print_openssl_error("ML-KEM encapsulation failed");
         goto cleanup;
     }
-    if (local_secret_len == 0U ||
+    if (local_ciphertext_len != KEM_CIPHERTEXT_SIZE ||
+        local_ciphertext_len > local_ciphertext_capacity ||
+        local_secret_len != KEM_SHARED_SECRET_SIZE ||
         local_secret_len > local_secret_capacity) {
-        fprintf(stderr, "OpenSSL returned an invalid ML-KEM secret length\n");
+        fprintf(stderr, "OpenSSL returned invalid ML-KEM output lengths\n");
         goto cleanup;
     }
 
@@ -227,6 +233,12 @@ int kem_decapsulate(EVP_PKEY *private_key,
     size_t local_secret_capacity = 0U;
     int success = 0;
 
+    if (private_key == NULL || ciphertext == NULL ||
+        ciphertext_len != KEM_CIPHERTEXT_SIZE ||
+        shared_secret == NULL || shared_secret_len == NULL) {
+        fprintf(stderr, "Invalid ML-KEM decapsulation request\n");
+        return 0;
+    }
     *shared_secret = NULL;
     *shared_secret_len = 0U;
 
@@ -244,7 +256,7 @@ int kem_decapsulate(EVP_PKEY *private_key,
         print_openssl_error("Cannot query ML-KEM shared-secret size");
         goto cleanup;
     }
-    if (local_secret_capacity == 0U ||
+    if (local_secret_capacity != KEM_SHARED_SECRET_SIZE ||
         local_secret_capacity > KEM_MAX_SHARED_SECRET_SIZE) {
         fprintf(stderr, "OpenSSL returned an invalid shared-secret size\n");
         goto cleanup;
@@ -261,7 +273,7 @@ int kem_decapsulate(EVP_PKEY *private_key,
         print_openssl_error("ML-KEM decapsulation failed");
         goto cleanup;
     }
-    if (local_secret_len == 0U ||
+    if (local_secret_len != KEM_SHARED_SECRET_SIZE ||
         local_secret_len > local_secret_capacity) {
         fprintf(stderr, "OpenSSL returned an invalid ML-KEM secret length\n");
         goto cleanup;
@@ -293,7 +305,17 @@ int derive_aes256_key(const unsigned char *shared_secret,
     OSSL_PARAM *parameter = parameters;
     int success = 0;
 
+    if (output_key == NULL) {
+        fprintf(stderr, "Invalid v1 key-derivation output\n");
+        return 0;
+    }
     secure_mem_clear(output_key, AES256_KEY_SIZE);
+    if (shared_secret == NULL ||
+        shared_secret_len != KEM_SHARED_SECRET_SIZE ||
+        salt == NULL || salt_len == 0U) {
+        fprintf(stderr, "Invalid v1 key-derivation inputs\n");
+        goto cleanup;
+    }
 
     algorithm = EVP_KDF_fetch(NULL, "HKDF", NULL);
     if (algorithm == NULL) {

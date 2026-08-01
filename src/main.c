@@ -14,11 +14,15 @@ int main(int argc, char **argv)
         return cli_run_interactive_menu() ? EXIT_SUCCESS : EXIT_FAILURE;
     }
     if (argc == 2 && strcmp(argv[1], "keygen") == 0) {
-        return cli_run_v1_keygen() ? EXIT_SUCCESS : EXIT_FAILURE;
+        return cli_run_hybrid_keygen() ? EXIT_SUCCESS : EXIT_FAILURE;
     }
     if (argc == 3 && strcmp(argv[1], "keygen") == 0 &&
         strcmp(argv[2], "hybrid") == 0) {
         return cli_run_hybrid_keygen() ? EXIT_SUCCESS : EXIT_FAILURE;
+    }
+    if (argc == 3 && strcmp(argv[1], "keygen") == 0 &&
+        strcmp(argv[2], "legacy-v1") == 0) {
+        return cli_run_v1_keygen() ? EXIT_SUCCESS : EXIT_FAILURE;
     }
     if (argc == 5 && strcmp(argv[1], "encrypt") == 0) {
         return cli_run_v1_encrypt(argv[2], argv[3], argv[4])

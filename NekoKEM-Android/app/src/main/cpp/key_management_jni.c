@@ -47,7 +47,7 @@ static void managed_utf_path_release(JNIEnv *env, ManagedUtfPath *path)
 }
 
 JNIEXPORT jboolean JNICALL
-Java_com_nekokem_android_nativecore_NativeBridge_nativeHasPrivateKey(
+Java_com_shixiaoshi0417_nekokem_nativecore_NativeBridge_nativeHasPrivateKey(
     JNIEnv *env,
     jobject bridge,
     jstring private_key_path)
@@ -70,7 +70,7 @@ cleanup:
 }
 
 JNIEXPORT jint JNICALL
-Java_com_nekokem_android_nativecore_NativeBridge_nativeExportPublicKey(
+Java_com_shixiaoshi0417_nekokem_nativecore_NativeBridge_nativeExportPublicKey(
     JNIEnv *env,
     jobject bridge,
     jstring public_key_path,
@@ -102,7 +102,7 @@ cleanup:
 }
 
 JNIEXPORT jint JNICALL
-Java_com_nekokem_android_nativecore_NativeBridge_nativeDeletePrivateKey(
+Java_com_shixiaoshi0417_nekokem_nativecore_NativeBridge_nativeDeletePrivateKey(
     JNIEnv *env,
     jobject bridge,
     jstring private_key_path)
@@ -126,7 +126,7 @@ cleanup:
 }
 
 JNIEXPORT jstring JNICALL
-Java_com_nekokem_android_nativecore_NativeBridge_nativeGetFingerprint(
+Java_com_shixiaoshi0417_nekokem_nativecore_NativeBridge_nativeGetFingerprint(
     JNIEnv *env,
     jobject bridge,
     jstring public_key_path)

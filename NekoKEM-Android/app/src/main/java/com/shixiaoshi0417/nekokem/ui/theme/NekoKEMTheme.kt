@@ -1,4 +1,4 @@
-package com.nekokem.android.ui.theme
+package com.shixiaoshi0417.nekokem.ui.theme
 
 import android.os.Build
 import androidx.compose.foundation.isSystemInDarkTheme

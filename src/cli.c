@@ -5,6 +5,7 @@
 #include "secure_mem.h"
 
 #include <errno.h>
+#include <fcntl.h>
 #include <openssl/crypto.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -19,6 +20,8 @@
 #define PROTECTED_PRIVATE_KEY_PATH "keys/private.key.enc"
 #define MAX_PASSWORD_SIZE 1024U
 #define MAX_PASTED_KEY_SIZE (1024U * 1024U)
+#define MAX_PROMPT_LINE_SIZE 4096U
+#define MAX_PASTED_KEY_LINE_SIZE 16384U
 
 typedef struct {
     unsigned char *data;
@@ -33,12 +36,14 @@ void cli_print_usage(const char *program)
             "  %s\n"
             "  %s keygen\n"
             "  %s keygen hybrid\n"
+            "  %s keygen legacy-v1\n"
             "  %s encrypt <input_file> <output_file> <public.key>\n"
             "  %s decrypt <input_file> <output_file> <private.key>\n"
             "  %s encrypt hybrid <input_file> <output_file> <public.key>\n"
             "  %s decrypt hybrid <input_file> <output_file> "
             "<private.key|private.key.enc>\n",
-            program, program, program, program, program, program, program);
+            program, program, program, program, program, program, program,
+            program);
 }
 
 static void password_buffer_cleanup(PasswordBuffer *password)
@@ -172,6 +177,9 @@ cleanup:
 
 int cli_run_v1_keygen(void)
 {
+    fprintf(stderr,
+            "WARNING: legacy-v1 writes an unencrypted plaintext private "
+            "key. Use only for explicit compatibility testing.\n");
     if (!ensure_directory("keys", 0700) ||
         !nekokem_generate_v1_keypair(PUBLIC_KEY_PATH,
                                      PRIVATE_KEY_PATH)) {
@@ -279,51 +287,161 @@ cleanup:
 
 static char *read_prompt_line(const char *prompt)
 {
-    char *line = NULL;
-    size_t capacity = 0U;
-    ssize_t length;
+    char *line;
+    size_t length = 0U;
+    int character = EOF;
+    int too_long = 0;
 
     if (fputs(prompt, stdout) == EOF || fflush(stdout) != 0) {
         print_system_error("Cannot display prompt");
         return NULL;
     }
-    errno = 0;
-    length = getline(&line, &capacity, stdin);
-    if (length < 0) {
-        if (ferror(stdin) != 0) {
-            print_system_error("Cannot read input");
+    line = calloc(MAX_PROMPT_LINE_SIZE + 1U, 1U);
+    if (line == NULL) {
+        print_system_error("Cannot allocate input buffer");
+        return NULL;
+    }
+    for (;;) {
+        character = fgetc(stdin);
+        if (character == EOF || character == '\n') {
+            break;
         }
+        if (length < MAX_PROMPT_LINE_SIZE) {
+            line[length++] = (char)character;
+        } else {
+            too_long = 1;
+        }
+    }
+    if (character == EOF && ferror(stdin) != 0) {
+        print_system_error("Cannot read input");
         free(line);
         return NULL;
     }
-    while (length > 0 &&
-           (line[(size_t)length - 1U] == '\n' ||
-            line[(size_t)length - 1U] == '\r')) {
-        line[(size_t)length - 1U] = '\0';
-        --length;
+    if (character == EOF && length == 0U && too_long == 0) {
+        free(line);
+        return NULL;
+    }
+    if (too_long != 0) {
+        fprintf(stderr, "Input exceeds %u bytes and was discarded\n",
+                MAX_PROMPT_LINE_SIZE);
+        line[0] = '\0';
+        return line;
+    }
+    if (length > 0U && line[length - 1U] == '\r') {
+        line[--length] = '\0';
     }
     return line;
+}
+
+static int read_pasted_key_line(char **line,
+                                size_t *line_length,
+                                size_t *line_capacity)
+{
+    char *buffer = NULL;
+    size_t length = 0U;
+    const size_t capacity = MAX_PASTED_KEY_LINE_SIZE + 2U;
+    int character = EOF;
+    int too_long = 0;
+
+    if (line == NULL || line_length == NULL || line_capacity == NULL) {
+        errno = EINVAL;
+        return 0;
+    }
+    *line = NULL;
+    *line_length = 0U;
+    *line_capacity = 0U;
+    buffer = OPENSSL_zalloc(capacity);
+    if (buffer == NULL) {
+        print_openssl_error("Cannot allocate pasted-key line buffer");
+        return 0;
+    }
+    for (;;) {
+        character = fgetc(stdin);
+        if (character == EOF || character == '\n') {
+            break;
+        }
+        if (length < MAX_PASTED_KEY_LINE_SIZE) {
+            buffer[length++] = (char)character;
+        } else {
+            too_long = 1;
+        }
+    }
+    if (character == EOF && ferror(stdin) != 0) {
+        print_system_error("Cannot read pasted key");
+        goto cleanup;
+    }
+    if (character == EOF && length == 0U && too_long == 0) {
+        fprintf(stderr, "Pasted key ended before two PEM blocks\n");
+        goto cleanup;
+    }
+    if (too_long != 0) {
+        fprintf(stderr, "Pasted-key line exceeds %u bytes and was discarded\n",
+                MAX_PASTED_KEY_LINE_SIZE);
+        goto cleanup;
+    }
+    if (character == '\n') {
+        buffer[length++] = '\n';
+    }
+    buffer[length] = '\0';
+    *line = buffer;
+    *line_length = length;
+    *line_capacity = capacity;
+    return 1;
+
+cleanup:
+    secure_free(buffer, capacity);
+    return 0;
 }
 
 static int collect_pasted_key(int private_key, char **temporary_path)
 {
     static const char public_end[] = "-----END PUBLIC KEY-----";
     static const char private_end[] = "-----END PRIVATE KEY-----";
-    char path_template[] = "/tmp/nekokem-pasted-key.XXXXXX";
+    static const char filename[] = "/key.pem";
+    char directory_template[] = "/tmp/nekokem-paste.XXXXXX";
     const char *end_marker = private_key != 0 ? private_end : public_end;
     struct termios original_terminal;
     struct termios hidden_terminal;
     FILE *output = NULL;
     char *line = NULL;
+    char *path = NULL;
+    char *directory = NULL;
     size_t line_capacity = 0U;
+    size_t line_length = 0U;
     size_t total_size = 0U;
     unsigned int end_markers = 0U;
     int descriptor = -1;
+    int path_result;
     int echo_disabled = 0;
     int success = 0;
 
     *temporary_path = NULL;
-    descriptor = mkstemp(path_template);
+    directory = mkdtemp(directory_template);
+    if (directory == NULL) {
+        print_system_error("Cannot create private temporary directory");
+        goto cleanup;
+    }
+    if (!ensure_directory(directory, 0700)) {
+        goto cleanup;
+    }
+    if (strlen(directory) > SIZE_MAX - sizeof(filename)) {
+        fprintf(stderr, "Temporary key path is too long\n");
+        goto cleanup;
+    }
+    path = malloc(strlen(directory) + sizeof(filename));
+    if (path == NULL) {
+        print_system_error("Cannot allocate temporary key path");
+        goto cleanup;
+    }
+    path_result = snprintf(path, strlen(directory) + sizeof(filename),
+                           "%s%s", directory, filename);
+    if (path_result < 0 ||
+        (size_t)path_result >= strlen(directory) + sizeof(filename)) {
+        fprintf(stderr, "Cannot construct temporary key path\n");
+        goto cleanup;
+    }
+    descriptor = open(path, O_WRONLY | O_CREAT | O_EXCL |
+                      O_NOFOLLOW | O_CLOEXEC, 0600);
     if (descriptor < 0) {
         print_system_error("Cannot create temporary key file");
         goto cleanup;
@@ -370,30 +488,25 @@ static int collect_pasted_key(int private_key, char **temporary_path)
     }
 
     while (end_markers < 2U) {
-        ssize_t line_length;
-
-        errno = 0;
-        line_length = getline(&line, &line_capacity, stdin);
-        if (line_length < 0) {
-            if (ferror(stdin) != 0) {
-                print_system_error("Cannot read pasted key");
-            } else {
-                fprintf(stderr,
-                        "Pasted key ended before two PEM blocks\n");
-            }
+        if (!read_pasted_key_line(&line, &line_length,
+                                  &line_capacity)) {
             goto cleanup;
         }
-        if ((size_t)line_length > MAX_PASTED_KEY_SIZE - total_size) {
+        if (line_length > MAX_PASTED_KEY_SIZE - total_size) {
             fprintf(stderr, "Pasted key exceeds the size limit\n");
             goto cleanup;
         }
-        if (!file_write_all(output, line, (size_t)line_length)) {
+        if (!file_write_all(output, line, line_length)) {
             goto cleanup;
         }
-        total_size += (size_t)line_length;
+        total_size += line_length;
         if (strstr(line, end_marker) != NULL) {
             ++end_markers;
         }
+        secure_free(line, line_capacity);
+        line = NULL;
+        line_length = 0U;
+        line_capacity = 0U;
     }
 
     if (echo_disabled != 0) {
@@ -419,7 +532,7 @@ static int collect_pasted_key(int private_key, char **temporary_path)
     }
     output = NULL;
 
-    *temporary_path = strdup(path_template);
+    *temporary_path = strdup(path);
     if (*temporary_path == NULL) {
         print_system_error("Cannot allocate temporary key path");
         goto cleanup;
@@ -435,19 +548,22 @@ cleanup:
         (void)fputc('\n', stdout);
         (void)fflush(stdout);
     }
-    if (line != NULL) {
-        secure_mem_clear(line, line_capacity);
-        free(line);
-    }
+    secure_free(line, line_capacity);
     if (output != NULL) {
         (void)fclose(output);
     } else if (descriptor >= 0) {
         (void)close(descriptor);
     }
     if (success == 0) {
-        (void)unlink(path_template);
+        if (path != NULL) {
+            (void)unlink(path);
+        }
         free(*temporary_path);
         *temporary_path = NULL;
+    }
+    free(path);
+    if (success == 0 && directory != NULL) {
+        (void)rmdir(directory);
     }
     return success;
 }
@@ -499,8 +615,24 @@ static int select_key_input(int private_key,
 
 static void cleanup_key_input(char *key_path, int temporary)
 {
-    if (temporary != 0 && key_path != NULL && unlink(key_path) != 0) {
-        print_system_error("Cannot remove temporary key file");
+    if (temporary != 0 && key_path != NULL) {
+        char *directory = strdup(key_path);
+        char *separator;
+
+        if (unlink(key_path) != 0) {
+            print_system_error("Cannot remove temporary key file");
+        }
+        if (directory != NULL) {
+            separator = strrchr(directory, '/');
+            if (separator != NULL) {
+                *separator = '\0';
+                if (rmdir(directory) != 0) {
+                    print_system_error(
+                        "Cannot remove private temporary directory");
+                }
+            }
+            free(directory);
+        }
     }
     free(key_path);
 }

@@ -1,4 +1,4 @@
-package com.nekokem.android.ui
+package com.shixiaoshi0417.nekokem.ui
 
 import androidx.annotation.StringRes
 import androidx.compose.foundation.layout.Column
@@ -19,7 +19,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
-import com.nekokem.android.R
+import com.shixiaoshi0417.nekokem.R
 import java.security.MessageDigest
 
 @Composable

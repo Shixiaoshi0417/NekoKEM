@@ -72,6 +72,7 @@ int hybrid_generate_keypair(const char *public_path,
 {
     HybridKeys keys = {0};
     AtomicFile public_file = {0};
+    AtomicFile private_file = {0};
     BIO *private_bio = NULL;
     BUF_MEM *private_buffer = NULL;
     int success = 0;
@@ -93,10 +94,11 @@ int hybrid_generate_keypair(const char *public_path,
         print_openssl_error("Cannot serialize hybrid private keys");
         goto cleanup;
     }
-    BIO_get_mem_ptr(private_bio, &private_buffer);
-    if (private_buffer == NULL || private_buffer->data == NULL ||
+    if (BIO_get_mem_ptr(private_bio, &private_buffer) <= 0 ||
+        private_buffer == NULL || private_buffer->data == NULL ||
         private_buffer->length == 0U ||
-        private_buffer->length > NKPR_MAX_PEM_SIZE) {
+        private_buffer->length > NKPR_MAX_PEM_SIZE ||
+        private_buffer->length > (size_t)INT_MAX) {
         fprintf(stderr, "Invalid serialized hybrid private-key length\n");
         goto cleanup;
     }
@@ -108,17 +110,18 @@ int hybrid_generate_keypair(const char *public_path,
         print_openssl_error("Cannot write hybrid public keys");
         goto cleanup;
     }
-    if (!protected_private_key_write(
-            private_path,
+    if (!protected_private_key_stage(
+            &private_file, private_path,
             (const unsigned char *)private_buffer->data,
             private_buffer->length, password, password_len) ||
-        !atomic_file_commit(&public_file)) {
+        !atomic_file_commit_pair(&public_file, &private_file)) {
         goto cleanup;
     }
     success = 1;
 
 cleanup:
     atomic_file_abort(&public_file);
+    atomic_file_abort(&private_file);
     if (private_buffer != NULL && private_buffer->data != NULL) {
         secure_mem_clear(private_buffer->data, private_buffer->max);
     }
@@ -260,6 +263,11 @@ static int x448_derive(EVP_PKEY *private_key,
     size_t secret_len = 0U;
     int success = 0;
 
+    if (shared_secret == NULL || shared_secret_len == NULL ||
+        private_key == NULL || peer_public_key == NULL) {
+        fprintf(stderr, "Invalid X448 derivation request\n");
+        return 0;
+    }
     *shared_secret = NULL;
     *shared_secret_len = 0U;
     context = EVP_PKEY_CTX_new_from_pkey(NULL, private_key, NULL);
@@ -315,6 +323,11 @@ int hybrid_x448_encapsulate(
     size_t public_len = 0U;
     int success = 0;
 
+    if (ephemeral_public == NULL || shared_secret == NULL ||
+        shared_secret_len == NULL) {
+        fprintf(stderr, "Invalid X448 encapsulation output request\n");
+        return 0;
+    }
     if (!validate_key(recipient_public_key, X448_ALGORITHM_NAME,
                       "Hybrid recipient public key")) {
         return 0;
@@ -355,6 +368,11 @@ int hybrid_x448_decapsulate(
     EVP_PKEY *ephemeral_key = NULL;
     int success = 0;
 
+    if (ephemeral_public == NULL || shared_secret == NULL ||
+        shared_secret_len == NULL) {
+        fprintf(stderr, "Invalid X448 decapsulation request\n");
+        return 0;
+    }
     if (!validate_key(recipient_private_key, X448_ALGORITHM_NAME,
                       "Hybrid recipient private key")) {
         return 0;
@@ -401,8 +419,18 @@ int hybrid_derive_aes256_key(
     size_t combined_len;
     int success = 0;
 
+    if (output_key == NULL) {
+        fprintf(stderr, "Invalid hybrid key-derivation output\n");
+        return 0;
+    }
     secure_mem_clear(output_key, AES256_KEY_SIZE);
 
+    if (x448_secret == NULL || mlkem_secret == NULL || salt == NULL ||
+        x448_secret_len != X448_SHARED_SECRET_SIZE ||
+        mlkem_secret_len != KEM_SHARED_SECRET_SIZE || salt_len == 0U) {
+        fprintf(stderr, "Invalid hybrid key-derivation input lengths\n");
+        goto cleanup;
+    }
     if (x448_secret_len > SIZE_MAX - mlkem_secret_len) {
         fprintf(stderr, "Hybrid shared-secret length overflows\n");
         goto cleanup;

@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">NekoKEM</string>
+    <string name="app_version">NekoKEM v3.1</string>
 
     <string name="navigation_files">文件加解密</string>
     <string name="navigation_keys">密钥管理</string>
@@ -27,6 +28,7 @@
     <string name="settings_dynamic_color_system">设备支持时启用</string>
     <string name="settings_language_title">语言</string>
     <string name="settings_language_system">跟随系统</string>
+    <string name="settings_version_title">版本</string>
 
     <string name="password_label">私钥密码</string>
     <string name="password_confirmation_label">确认密码</string>
@@ -41,9 +43,17 @@
     <string name="decrypt_password_title">解密文件</string>
     <string name="decrypt_password_message">请输入加密私钥密码。仅在认证成功后才会选择输出位置。</string>
     <string name="decrypt_password_label">用于解密的私钥密码</string>
+    <string name="select_temporary_private_key_password_title">验证所选私钥</string>
+    <string name="select_temporary_private_key_password_message">请输入此临时 NKPR 私钥的密码。Core 会验证容器并显示其公钥指纹，不会导入或替换默认私钥。</string>
+    <string name="confirm_temporary_public_key_title">使用此公钥？</string>
+    <string name="confirm_temporary_public_key_message">文件：%1$s\n\nSHA-256 指纹：\n%2$s\n\n此密钥仅使用一次，不会替换 App 默认公钥。</string>
 
     <string name="delete_private_key_title">永久删除私钥？</string>
     <string name="delete_private_key_message">将删除本地 NKPR 私钥和相关临时缓存。公钥会保留。</string>
+    <string name="delete_public_key_title">永久删除公钥？</string>
+    <string name="delete_public_key_message">将删除 App 内默认公钥。加密私钥会保留。</string>
+    <string name="delete_keypair_title">永久删除密钥对？</string>
+    <string name="delete_keypair_message">将删除本地公钥、加密 NKPR 私钥和相关临时缓存。</string>
     <string name="replace_private_key_title">替换现有私钥？</string>
     <string name="replace_private_key_message">仅在加密 NKPR 私钥的格式和密码验证成功后，才会替换当前本地私钥。</string>
 
@@ -54,7 +64,10 @@
     <string name="action_import_public_key">导入公钥</string>
     <string name="action_import_private_key">导入加密私钥</string>
     <string name="action_delete_private_key">删除私钥</string>
+    <string name="action_delete_public_key">删除公钥</string>
+    <string name="action_delete_keypair">删除密钥对</string>
     <string name="action_select_file">选择文件</string>
+    <string name="action_clear_selection">清除选择</string>
     <string name="action_encrypt">加密</string>
     <string name="action_decrypt">解密</string>
     <string name="action_generate">生成</string>
@@ -63,6 +76,19 @@
     <string name="action_continue">继续</string>
     <string name="action_cancel">取消</string>
     <string name="action_close">关闭</string>
+    <string name="action_use_key">使用此密钥</string>
+    <string name="action_select_other_public_key">选择其他公钥</string>
+    <string name="action_restore_default_public_key">恢复默认公钥</string>
+    <string name="action_select_other_private_key">选择其他私钥</string>
+    <string name="action_restore_default_private_key">恢复默认私钥</string>
+
+    <string name="encryption_public_key_title">加密公钥</string>
+    <string name="decryption_private_key_title">解密私钥</string>
+    <string name="key_source_app_default">App 内默认密钥</string>
+    <string name="key_source_temporary_saf">SAF 临时选择</string>
+    <string name="key_source_line">来源：%1$s</string>
+    <string name="key_file_line">文件名：%1$s</string>
+    <string name="key_fingerprint_line">指纹：%1$s</string>
 
     <string name="progress_title">正在%1$s</string>
     <string name="progress_percent">%1$d%%</string>
@@ -81,7 +107,11 @@
 
     <string name="completion_title">操作完成</string>
     <string name="completion_operation">操作类型</string>
+    <string name="completion_result">结果</string>
+    <string name="completion_success">成功</string>
     <string name="completion_file">文件名</string>
+    <string name="completion_fingerprint">SHA-256 指纹</string>
+    <string name="completion_keypair_files">%1$s 和 %2$s</string>
     <string name="completion_elapsed">耗时</string>
     <string name="completion_average_speed">平均速度</string>
     <string name="error_dialog_title">操作失败</string>
@@ -93,6 +123,10 @@
     <string name="snackbar_key_selection_cancelled">已取消选择密钥文件</string>
     <string name="snackbar_operation_cancelled">操作已取消</string>
     <string name="snackbar_operation_success">%1$s已完成</string>
+    <string name="snackbar_temporary_public_key_selected">已确认临时公钥</string>
+    <string name="snackbar_temporary_private_key_selected">已验证临时私钥</string>
+    <string name="snackbar_default_public_key_restored">已恢复默认公钥</string>
+    <string name="snackbar_default_private_key_restored">已恢复默认私钥</string>
 
     <string name="error_select_file_first">请先选择文件</string>
     <string name="error_public_key_not_found">未找到公钥</string>
@@ -107,9 +141,16 @@
     <string name="error_reason_public_key">所选公钥无效或不受支持。</string>
     <string name="error_reason_key_generation">无法生成密钥对或安全保存密钥。</string>
     <string name="error_reason_export">无法验证或导出所选密钥。</string>
-    <string name="error_reason_delete">无法删除私钥或相关临时缓存。</string>
+    <string name="error_reason_delete">无法安全删除一个或多个本地密钥文件或相关临时文件。</string>
     <string name="error_reason_core">NekoKEM Core 拒绝了此操作。</string>
     <string name="error_reason_unexpected">发生了意外的 Android 操作错误。</string>
+    <string name="error_reason_fingerprint_mismatch">临时密钥在确认后发生变化，或其指纹已不匹配。</string>
+    <string name="error_reason_public_key_copy">无法完整复制 SAF 公钥数据。</string>
+    <string name="error_reason_public_key_parse">Core 无法解析或验证 Hybrid 公钥的两个组成部分。</string>
+    <string name="error_reason_public_key_normalize">Core 已解析公钥，但无法写出其规范化公钥表示。</string>
+    <string name="error_reason_public_key_permission">规范化公钥候选未通过普通文件、所有者、单链接或 0600 权限复验。</string>
+    <string name="error_reason_public_key_commit">规范化公钥已通过验证，但原子替换 App 默认公钥失败。</string>
+    <string name="error_reason_public_key_integrity">公钥在传输中的长度、SHA-256 或规范指纹发生了意外变化。</string>
 
     <string name="operation_generate_keypair">生成密钥对</string>
     <string name="operation_check_password">验证密码</string>
@@ -118,9 +159,15 @@
     <string name="operation_import_public_key">导入公钥</string>
     <string name="operation_import_private_key">导入加密私钥</string>
     <string name="operation_delete_private_key">删除私钥</string>
+    <string name="operation_delete_public_key">删除公钥</string>
+    <string name="operation_delete_keypair">删除密钥对</string>
     <string name="operation_encrypt_file">加密文件</string>
     <string name="operation_decrypt_file">解密文件</string>
+    <string name="operation_select_temporary_public_key">选择临时公钥</string>
+    <string name="operation_select_temporary_private_key">选择临时私钥</string>
 
     <string name="default_selected_filename">所选文件</string>
     <string name="default_decrypted_filename">解密文件</string>
+    <string name="default_public_key_filename">public.key</string>
+    <string name="default_private_key_filename">private.nkpr.enc</string>
 </resources>

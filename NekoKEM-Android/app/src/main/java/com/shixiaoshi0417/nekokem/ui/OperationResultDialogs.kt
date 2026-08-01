@@ -1,4 +1,4 @@
-package com.nekokem.android.ui
+package com.shixiaoshi0417.nekokem.ui
 
 import androidx.annotation.StringRes
 import androidx.compose.foundation.layout.Column
@@ -11,14 +11,19 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
-import com.nekokem.android.R
-import com.nekokem.android.progress.OperationProgressSnapshot
+import com.shixiaoshi0417.nekokem.R
+import com.shixiaoshi0417.nekokem.progress.OperationProgressSnapshot
+
+data class OperationResultDetail(
+    @StringRes val labelResource: Int,
+    val value: String,
+)
 
 @Composable
 fun OperationCompletedDialog(
     @StringRes operationResource: Int,
-    fileName: String,
-    progress: OperationProgressSnapshot,
+    details: List<OperationResultDetail>,
+    progress: OperationProgressSnapshot?,
     onDismiss: () -> Unit,
 ) {
     val context = LocalContext.current
@@ -33,23 +38,33 @@ fun OperationCompletedDialog(
                     value = stringResource(operationResource),
                 )
                 ResultLine(
-                    label = stringResource(R.string.completion_file),
-                    value = fileName,
+                    label = stringResource(R.string.completion_result),
+                    value = stringResource(R.string.completion_success),
                 )
-                ResultLine(
-                    label = stringResource(R.string.completion_elapsed),
-                    value = formatDuration(context, progress.elapsedMillis),
-                )
-                ResultLine(
-                    label = stringResource(R.string.completion_average_speed),
-                    value = stringResource(
-                        R.string.speed_per_second,
-                        formatByteCount(
-                            context,
-                            averageBytesPerSecond(progress).toLong(),
+                details.forEach { detail ->
+                    ResultLine(
+                        label = stringResource(detail.labelResource),
+                        value = detail.value,
+                    )
+                }
+                progress?.let { snapshot ->
+                    ResultLine(
+                        label = stringResource(R.string.completion_elapsed),
+                        value = formatDuration(context, snapshot.elapsedMillis),
+                    )
+                    ResultLine(
+                        label = stringResource(
+                            R.string.completion_average_speed,
                         ),
-                    ),
-                )
+                        value = stringResource(
+                            R.string.speed_per_second,
+                            formatByteCount(
+                                context,
+                                averageBytesPerSecond(snapshot).toLong(),
+                            ),
+                        ),
+                    )
+                }
             }
         },
         confirmButton = {

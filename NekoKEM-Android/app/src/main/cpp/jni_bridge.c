@@ -6,7 +6,7 @@
 
 #include <stddef.h>
 
-#define JNI_PASSWORD_MAX_SIZE (1024U * 1024U)
+#define JNI_PASSWORD_MAX_SIZE 1024U
 
 enum JniResult {
     JNI_RESULT_CORE_ERROR = 0,
@@ -89,7 +89,7 @@ static int password_copy(JNIEnv *env,
 }
 
 JNIEXPORT jstring JNICALL
-Java_com_nekokem_android_nativecore_NativeBridge_nativeVersion(
+Java_com_shixiaoshi0417_nekokem_nativecore_NativeBridge_nativeVersion(
     JNIEnv *env,
     jobject bridge)
 {
@@ -100,7 +100,7 @@ Java_com_nekokem_android_nativecore_NativeBridge_nativeVersion(
 }
 
 JNIEXPORT jstring JNICALL
-Java_com_nekokem_android_nativecore_NativeBridge_nativeCoreTest(
+Java_com_shixiaoshi0417_nekokem_nativecore_NativeBridge_nativeCoreTest(
     JNIEnv *env,
     jobject bridge)
 {
@@ -117,7 +117,7 @@ Java_com_nekokem_android_nativecore_NativeBridge_nativeCoreTest(
 }
 
 JNIEXPORT jint JNICALL
-Java_com_nekokem_android_nativecore_NativeBridge_nativeGenerateKeypair(
+Java_com_shixiaoshi0417_nekokem_nativecore_NativeBridge_nativeGenerateKeypair(
     JNIEnv *env,
     jobject bridge,
     jstring public_key_path,
@@ -159,7 +159,7 @@ cleanup:
 }
 
 JNIEXPORT jint JNICALL
-Java_com_nekokem_android_nativecore_NativeBridge_nativeEncryptFile(
+Java_com_shixiaoshi0417_nekokem_nativecore_NativeBridge_nativeEncryptFile(
     JNIEnv *env,
     jobject bridge,
     jstring input_path,
@@ -197,7 +197,7 @@ cleanup:
 }
 
 JNIEXPORT jint JNICALL
-Java_com_nekokem_android_nativecore_NativeBridge_nativeDecryptFile(
+Java_com_shixiaoshi0417_nekokem_nativecore_NativeBridge_nativeDecryptFile(
     JNIEnv *env,
     jobject bridge,
     jstring input_path,
@@ -245,7 +245,7 @@ cleanup:
 }
 
 JNIEXPORT jstring JNICALL
-Java_com_nekokem_android_nativecore_NativeBridge_nativePublicKeyFingerprint(
+Java_com_shixiaoshi0417_nekokem_nativecore_NativeBridge_nativePublicKeyFingerprint(
     JNIEnv *env,
     jobject bridge,
     jstring public_key_path)

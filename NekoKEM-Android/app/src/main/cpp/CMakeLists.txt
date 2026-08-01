@@ -92,6 +92,10 @@ add_library(nekokem_jni SHARED jni_bridge.c)
 target_sources(nekokem_jni PRIVATE key_management_jni.c)
 target_sources(nekokem_jni PRIVATE password_jni.c)
 target_sources(nekokem_jni PRIVATE progress_jni.c)
+target_include_directories(
+    nekokem_jni
+    PRIVATE "${NEKOKEM_REPOSITORY_ROOT}/nekokem_core/src"
+)
 
 target_compile_options(
     nekokem_jni

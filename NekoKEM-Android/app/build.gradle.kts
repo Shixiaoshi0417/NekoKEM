@@ -5,16 +5,18 @@ plugins {
 }
 
 android {
-    namespace = "com.nekokem.android"
+    namespace = "com.shixiaoshi0417.nekokem"
     compileSdk = 35
     ndkVersion = "28.2.13676358"
 
     defaultConfig {
-        applicationId = "com.nekokem.android"
+        applicationId = "com.shixiaoshi0417.nekokem"
         minSdk = 26
         targetSdk = 35
-        versionCode = 1
-        versionName = "0.1.0"
+        versionCode = 2
+        versionName = "3.1"
+        testInstrumentationRunner =
+            "com.shixiaoshi0417.nekokem.TemporaryKeyInstrumentation"
 
         ndk {
             abiFilters += "arm64-v8a"

@@ -149,6 +149,10 @@ int nkem_v3_header_decode(
     const unsigned char input[NKEM_V3_HEADER_SIZE],
     NkemV3Header *header)
 {
+    if (input == NULL || header == NULL) {
+        fprintf(stderr, "Invalid NKEM v3 header decode request\n");
+        return 0;
+    }
     return nkem_v3_header_decode_internal(input, header, 1);
 }
 
@@ -191,6 +195,10 @@ static int nkem_v3_container_size_is_valid_internal(
 int nkem_v3_container_size_is_valid(const NkemV3Header *header,
                                     uint64_t actual_size)
 {
+    if (header == NULL) {
+        fprintf(stderr, "Invalid NKEM v3 size validation request\n");
+        return 0;
+    }
     return nkem_v3_container_size_is_valid_internal(
         header, actual_size, 1);
 }

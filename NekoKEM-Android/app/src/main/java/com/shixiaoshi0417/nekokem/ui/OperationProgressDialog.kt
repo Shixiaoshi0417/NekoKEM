@@ -1,4 +1,4 @@
-package com.nekokem.android.ui
+package com.shixiaoshi0417.nekokem.ui
 
 import android.content.Context
 import androidx.annotation.StringRes
@@ -14,8 +14,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
-import com.nekokem.android.R
-import com.nekokem.android.progress.OperationProgressSnapshot
+import com.shixiaoshi0417.nekokem.R
+import com.shixiaoshi0417.nekokem.progress.OperationProgressSnapshot
 import java.util.Locale
 
 @Composable

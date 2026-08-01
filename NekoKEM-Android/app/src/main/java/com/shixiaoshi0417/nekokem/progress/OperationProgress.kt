@@ -1,6 +1,6 @@
-package com.nekokem.android.progress
+package com.shixiaoshi0417.nekokem.progress
 
-import com.nekokem.android.nativecore.NativeProgressCallback
+import com.shixiaoshi0417.nekokem.nativecore.NativeProgressCallback
 import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.math.max
 

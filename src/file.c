@@ -10,6 +10,66 @@
 #include <sys/stat.h>
 #include <unistd.h>
 
+#ifndef O_NOFOLLOW
+#define O_NOFOLLOW 0
+#endif
+
+#ifdef NEKOKEM_TEST_FAULT_INJECTION
+typedef struct {
+    FileTestFault fault;
+    unsigned int fail_on_call;
+    unsigned int call_count;
+} FileTestFaultState;
+
+static FileTestFaultState test_fault;
+
+void file_test_fault_set(FileTestFault fault, unsigned int fail_on_call)
+{
+    test_fault.fault = fault;
+    test_fault.fail_on_call = fail_on_call;
+    test_fault.call_count = 0U;
+}
+
+void file_test_fault_reset(void)
+{
+    test_fault.fault = FILE_TEST_FAULT_NONE;
+    test_fault.fail_on_call = 0U;
+    test_fault.call_count = 0U;
+}
+
+static int test_fault_should_fail(FileTestFault fault)
+{
+    if (test_fault.fault != fault) {
+        return 0;
+    }
+    ++test_fault.call_count;
+    return test_fault.fail_on_call == 0U ||
+           test_fault.call_count == test_fault.fail_on_call;
+}
+#endif
+
+static int file_fsync(int descriptor)
+{
+#ifdef NEKOKEM_TEST_FAULT_INJECTION
+    if (test_fault_should_fail(FILE_TEST_FAULT_FSYNC)) {
+        errno = EIO;
+        return -1;
+    }
+#endif
+    return fsync(descriptor);
+}
+
+static int file_rename(const char *old_path, const char *new_path)
+{
+#ifdef NEKOKEM_TEST_FAULT_INJECTION
+    if (test_fault_should_fail(FILE_TEST_FAULT_RENAME)) {
+        errno = EIO;
+        return -1;
+    }
+#endif
+    return rename(old_path, new_path);
+}
+
 static void put_u16_be(unsigned char *output, uint16_t value)
 {
     output[0] = (unsigned char)(value >> 8);
@@ -77,20 +137,38 @@ void print_system_error(const char *context)
 int ensure_directory(const char *path, mode_t mode)
 {
     struct stat status;
+    mode_t requested_mode = mode & (mode_t)0777;
 
-    if (mkdir(path, mode) == 0) {
-        return 1;
+    if (path == NULL || requested_mode != mode) {
+        errno = EINVAL;
+        print_system_error("Invalid private directory request");
+        return 0;
     }
-    if (errno != EEXIST) {
+    if (mkdir(path, requested_mode) != 0 && errno != EEXIST) {
         print_system_error("Cannot create directory");
         return 0;
     }
-    if (stat(path, &status) != 0) {
+    if (lstat(path, &status) != 0) {
         print_system_error("Cannot inspect directory");
         return 0;
     }
     if (!S_ISDIR(status.st_mode)) {
         fprintf(stderr, "%s exists but is not a directory\n", path);
+        return 0;
+    }
+#ifdef NEKOKEM_TEST_FAULT_INJECTION
+    if (test_fault_should_fail(FILE_TEST_FAULT_FOREIGN_OWNER)) {
+        fprintf(stderr, "%s is not owned by the current user\n", path);
+        return 0;
+    }
+#endif
+    if (status.st_uid != geteuid()) {
+        fprintf(stderr, "%s is not owned by the current user\n", path);
+        return 0;
+    }
+    if ((status.st_mode & (mode_t)0777) != requested_mode) {
+        fprintf(stderr, "%s has unsafe permissions (expected %03o)\n",
+                path, (unsigned int)requested_mode);
         return 0;
     }
     return 1;
@@ -126,6 +204,11 @@ int file_read_exact(FILE *stream, void *buffer, size_t length)
     unsigned char *position = buffer;
     size_t remaining = length;
 
+    if (stream == NULL || (buffer == NULL && length != 0U)) {
+        errno = EINVAL;
+        print_system_error("Invalid input read request");
+        return 0;
+    }
     while (remaining > 0U) {
         size_t count = fread(position, 1U, remaining, stream);
 
@@ -148,10 +231,32 @@ int file_write_all(FILE *stream, const void *buffer, size_t length)
     const unsigned char *position = buffer;
     size_t remaining = length;
 
+    if (stream == NULL || (buffer == NULL && length != 0U)) {
+        errno = EINVAL;
+        print_system_error("Invalid output write request");
+        return 0;
+    }
     while (remaining > 0U) {
-        size_t count = fwrite(position, 1U, remaining, stream);
+        size_t request = remaining;
+        size_t count;
+
+#ifdef NEKOKEM_TEST_FAULT_INJECTION
+        if (test_fault_should_fail(FILE_TEST_FAULT_ENOSPC)) {
+            errno = ENOSPC;
+            print_system_error("Cannot write output file");
+            return 0;
+        }
+        if (test_fault.fault == FILE_TEST_FAULT_SHORT_WRITE &&
+            request > 3U) {
+            request = 3U;
+        }
+#endif
+        count = fwrite(position, 1U, request, stream);
 
         if (count == 0U) {
+            if (ferror(stream) == 0) {
+                errno = EIO;
+            }
             print_system_error("Cannot write output file");
             return 0;
         }
@@ -197,7 +302,7 @@ int file_read_sensitive(const char *path,
     *buffer = NULL;
     *length = 0U;
 
-    descriptor = open(path, O_RDONLY | O_CLOEXEC);
+    descriptor = open(path, O_RDONLY | O_CLOEXEC | O_NOFOLLOW);
     if (descriptor < 0) {
         print_system_error("Cannot open sensitive file");
         goto cleanup;
@@ -208,6 +313,24 @@ int file_read_sensitive(const char *path,
     }
     if (!S_ISREG(status.st_mode) || status.st_size <= 0) {
         fprintf(stderr, "Sensitive input must be a non-empty regular file\n");
+        goto cleanup;
+    }
+#ifdef NEKOKEM_TEST_FAULT_INJECTION
+    if (test_fault_should_fail(FILE_TEST_FAULT_FOREIGN_OWNER)) {
+        fprintf(stderr, "Sensitive input is not owned by the current user\n");
+        goto cleanup;
+    }
+#endif
+    if (status.st_uid != geteuid()) {
+        fprintf(stderr, "Sensitive input is not owned by the current user\n");
+        goto cleanup;
+    }
+    if ((status.st_mode & (mode_t)0777) != (mode_t)0600) {
+        fprintf(stderr, "Sensitive input must have mode 0600\n");
+        goto cleanup;
+    }
+    if (status.st_nlink != (nlink_t)1) {
+        fprintf(stderr, "Sensitive input must have exactly one hard link\n");
         goto cleanup;
     }
     if ((uintmax_t)status.st_size > (uintmax_t)maximum_size ||
@@ -282,9 +405,11 @@ int atomic_file_open(AtomicFile *file, const char *final_path, mode_t mode)
     static const char suffix[] = ".tmp.XXXXXX";
     size_t path_length;
     size_t allocation_size;
-    int descriptor;
+    int descriptor = -1;
+    int flags;
+    int result;
 
-    if (file == NULL || final_path == NULL) {
+    if (file == NULL || final_path == NULL || final_path[0] == '\0') {
         errno = EINVAL;
         print_system_error("Invalid output path");
         return 0;
@@ -301,8 +426,9 @@ int atomic_file_open(AtomicFile *file, const char *final_path, mode_t mode)
         print_system_error("Cannot allocate temporary path");
         return 0;
     }
-    if (snprintf(file->temporary_path, allocation_size, "%s%s",
-                 final_path, suffix) < 0) {
+    result = snprintf(file->temporary_path, allocation_size, "%s%s",
+                      final_path, suffix);
+    if (result < 0 || (size_t)result >= allocation_size) {
         fprintf(stderr, "Cannot construct temporary path\n");
         atomic_file_abort(file);
         return 0;
@@ -311,6 +437,13 @@ int atomic_file_open(AtomicFile *file, const char *final_path, mode_t mode)
     descriptor = mkstemp(file->temporary_path);
     if (descriptor < 0) {
         print_system_error("Cannot create temporary output file");
+        atomic_file_abort(file);
+        return 0;
+    }
+    flags = fcntl(descriptor, F_GETFD);
+    if (flags < 0 || fcntl(descriptor, F_SETFD, flags | FD_CLOEXEC) < 0) {
+        print_system_error("Cannot protect temporary output descriptor");
+        (void)close(descriptor);
         atomic_file_abort(file);
         return 0;
     }
@@ -335,7 +468,7 @@ int atomic_file_open(AtomicFile *file, const char *final_path, mode_t mode)
     return 1;
 }
 
-int atomic_file_commit(AtomicFile *file)
+int atomic_file_prepare(AtomicFile *file)
 {
     int saved_errno = 0;
 
@@ -347,7 +480,7 @@ int atomic_file_commit(AtomicFile *file)
     }
     if (fflush(file->stream) != 0) {
         saved_errno = errno;
-    } else if (fsync(fileno(file->stream)) != 0) {
+    } else if (file_fsync(fileno(file->stream)) != 0) {
         saved_errno = errno;
     }
     if (fclose(file->stream) != 0 && saved_errno == 0) {
@@ -355,24 +488,257 @@ int atomic_file_commit(AtomicFile *file)
     }
     file->stream = NULL;
 
-    if (saved_errno == 0 &&
-        rename(file->temporary_path, file->final_path) != 0) {
-        saved_errno = errno;
-    }
     if (saved_errno != 0) {
-        (void)unlink(file->temporary_path);
-        free(file->temporary_path);
-        file->temporary_path = NULL;
-        file->final_path = NULL;
         errno = saved_errno;
-        print_system_error("Cannot commit output file");
+        print_system_error("Cannot flush temporary output file");
         return 0;
     }
+    return 1;
+}
 
+static char *parent_directory_path(const char *path)
+{
+    const char *separator;
+    char *directory;
+    size_t length;
+
+    if (path == NULL || path[0] == '\0') {
+        errno = EINVAL;
+        return NULL;
+    }
+    separator = strrchr(path, '/');
+    if (separator == NULL) {
+        return strdup(".");
+    }
+    length = separator == path ? 1U : (size_t)(separator - path);
+    if (length == SIZE_MAX) {
+        errno = EOVERFLOW;
+        return NULL;
+    }
+    directory = malloc(length + 1U);
+    if (directory == NULL) {
+        return NULL;
+    }
+    memcpy(directory, path, length);
+    directory[length] = '\0';
+    return directory;
+}
+
+static int fsync_parent_directory(const char *path, int inject_fault)
+{
+    char *directory = NULL;
+    int descriptor = -1;
+    int result = 0;
+    int saved_errno = 0;
+
+    directory = parent_directory_path(path);
+    if (directory == NULL) {
+        goto cleanup;
+    }
+    descriptor = open(directory, O_RDONLY | O_CLOEXEC | O_DIRECTORY);
+    if (descriptor < 0) {
+        goto cleanup;
+    }
+    if ((inject_fault != 0 ? file_fsync(descriptor) : fsync(descriptor)) != 0) {
+        goto cleanup;
+    }
+    result = 1;
+
+cleanup:
+    saved_errno = errno;
+    if (descriptor >= 0 && close(descriptor) != 0 && result != 0) {
+        saved_errno = errno;
+        result = 0;
+    }
+    free(directory);
+    errno = saved_errno;
+    return result;
+}
+
+static char *create_backup_link(const char *final_path, int *existed)
+{
+    static const char suffix[] = ".bak.XXXXXX";
+    struct stat status;
+    char *backup_path = NULL;
+    size_t path_length;
+    size_t allocation_size;
+    int descriptor = -1;
+    int result;
+
+    *existed = 0;
+    if (lstat(final_path, &status) != 0) {
+        if (errno == ENOENT) {
+            return NULL;
+        }
+        *existed = -1;
+        return NULL;
+    }
+    *existed = 1;
+    path_length = strlen(final_path);
+    if (path_length > SIZE_MAX - sizeof(suffix)) {
+        errno = EOVERFLOW;
+        return NULL;
+    }
+    allocation_size = path_length + sizeof(suffix);
+    backup_path = malloc(allocation_size);
+    if (backup_path == NULL) {
+        return NULL;
+    }
+    result = snprintf(backup_path, allocation_size, "%s%s",
+                      final_path, suffix);
+    if (result < 0 || (size_t)result >= allocation_size) {
+        errno = EOVERFLOW;
+        goto cleanup;
+    }
+    descriptor = mkstemp(backup_path);
+    if (descriptor < 0) {
+        goto cleanup;
+    }
+    if (close(descriptor) != 0) {
+        descriptor = -1;
+        goto cleanup;
+    }
+    descriptor = -1;
+    if (unlink(backup_path) != 0 || link(final_path, backup_path) != 0) {
+        goto cleanup;
+    }
+    return backup_path;
+
+cleanup:
+    {
+        int saved_errno = errno;
+        if (descriptor >= 0) {
+            (void)close(descriptor);
+        }
+        if (backup_path != NULL) {
+            (void)unlink(backup_path);
+        }
+        free(backup_path);
+        errno = saved_errno;
+    }
+    return NULL;
+}
+
+static void atomic_file_release(AtomicFile *file)
+{
     free(file->temporary_path);
     file->temporary_path = NULL;
     file->final_path = NULL;
+}
+
+int atomic_file_commit_pair(AtomicFile *first, AtomicFile *second)
+{
+    AtomicFile *files[2] = {first, second};
+    char *backups[2] = {NULL, NULL};
+    int existed[2] = {0, 0};
+    int published[2] = {0, 0};
+    int preserve_backup[2] = {0, 0};
+    size_t count = second == NULL ? 1U : 2U;
+    size_t index;
+    int saved_errno = 0;
+    int success = 0;
+
+    if (first == NULL || first->temporary_path == NULL ||
+        first->final_path == NULL ||
+        (second != NULL &&
+         (first == second || second->temporary_path == NULL ||
+          second->final_path == NULL ||
+          strcmp(first->final_path, second->final_path) == 0))) {
+        errno = EINVAL;
+        print_system_error("Invalid atomic output pair");
+        return 0;
+    }
+    for (index = 0U; index < count; ++index) {
+        if (files[index] == NULL || files[index]->temporary_path == NULL ||
+            files[index]->final_path == NULL ||
+            (files[index]->stream != NULL &&
+             !atomic_file_prepare(files[index]))) {
+            saved_errno = errno != 0 ? errno : EINVAL;
+            goto rollback;
+        }
+    }
+    for (index = 0U; index < count; ++index) {
+        errno = 0;
+        backups[index] = create_backup_link(files[index]->final_path,
+                                             &existed[index]);
+        if (existed[index] < 0 ||
+            (existed[index] != 0 && backups[index] == NULL)) {
+            saved_errno = errno != 0 ? errno : EIO;
+            goto rollback;
+        }
+    }
+    for (index = 0U; index < count; ++index) {
+        if (file_rename(files[index]->temporary_path,
+                        files[index]->final_path) != 0) {
+            saved_errno = errno;
+            goto rollback;
+        }
+        published[index] = 1;
+    }
+    for (index = 0U; index < count; ++index) {
+        if (!fsync_parent_directory(files[index]->final_path, 1)) {
+            saved_errno = errno != 0 ? errno : EIO;
+            goto rollback;
+        }
+    }
+    success = 1;
+
+rollback:
+    if (success == 0) {
+        size_t reverse = count;
+
+        while (reverse > 0U) {
+            --reverse;
+            if (published[reverse] != 0) {
+                if (existed[reverse] != 0 && backups[reverse] != NULL) {
+                    if (rename(backups[reverse],
+                               files[reverse]->final_path) == 0) {
+                        free(backups[reverse]);
+                        backups[reverse] = NULL;
+                    } else {
+                        preserve_backup[reverse] = 1;
+                        print_system_error(
+                            "Cannot restore atomic output backup");
+                    }
+                } else {
+                    (void)unlink(files[reverse]->final_path);
+                }
+            }
+            if (files[reverse] != NULL &&
+                files[reverse]->final_path != NULL) {
+                (void)fsync_parent_directory(
+                    files[reverse]->final_path, 0);
+            }
+        }
+    }
+    for (index = 0U; index < count; ++index) {
+        if (backups[index] != NULL) {
+            if (preserve_backup[index] == 0) {
+                (void)unlink(backups[index]);
+            }
+            free(backups[index]);
+            if (preserve_backup[index] == 0 && files[index] != NULL &&
+                files[index]->final_path != NULL) {
+                (void)fsync_parent_directory(files[index]->final_path, 0);
+            }
+        }
+        if (success != 0) {
+            atomic_file_release(files[index]);
+        } else {
+            atomic_file_abort(files[index]);
+        }
+    }
+    if (success == 0) {
+        errno = saved_errno != 0 ? saved_errno : EIO;
+        print_system_error("Cannot commit atomic output transaction");
+        return 0;
+    }
     return 1;
+}
+
+int atomic_file_commit(AtomicFile *file)
+{
+    return atomic_file_commit_pair(file, NULL);
 }
 
 void atomic_file_abort(AtomicFile *file)
@@ -471,6 +837,10 @@ static int nkem_header_decode_internal(
 int nkem_header_decode(const unsigned char input[NKEM_HEADER_SIZE],
                        NkemHeader *header)
 {
+    if (input == NULL || header == NULL) {
+        fprintf(stderr, "Invalid NKEM v1 header decode request\n");
+        return 0;
+    }
     return nkem_header_decode_internal(input, header, 1);
 }
 
@@ -510,6 +880,10 @@ static int nkem_container_size_is_valid_internal(
 int nkem_container_size_is_valid(const NkemHeader *header,
                                  uint64_t actual_size)
 {
+    if (header == NULL) {
+        fprintf(stderr, "Invalid NKEM v1 size validation request\n");
+        return 0;
+    }
     return nkem_container_size_is_valid_internal(
         header, actual_size, 1);
 }
@@ -608,6 +982,10 @@ int nkem_v2_header_decode(
     const unsigned char input[NKEM_V2_HEADER_SIZE],
     NkemV2Header *header)
 {
+    if (input == NULL || header == NULL) {
+        fprintf(stderr, "Invalid NKEM v2 header decode request\n");
+        return 0;
+    }
     return nkem_v2_header_decode_internal(input, header, 1);
 }
 
@@ -649,6 +1027,10 @@ static int nkem_v2_container_size_is_valid_internal(
 int nkem_v2_container_size_is_valid(const NkemV2Header *header,
                                     uint64_t actual_size)
 {
+    if (header == NULL) {
+        fprintf(stderr, "Invalid NKEM v2 size validation request\n");
+        return 0;
+    }
     return nkem_v2_container_size_is_valid_internal(
         header, actual_size, 1);
 }

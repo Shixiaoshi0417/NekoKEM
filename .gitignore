@@ -80,6 +80,7 @@ mapping.txt
 /*.jpg
 /*.jpeg
 /*.png
+!icon.png
 /*.gif
 /*.webp
 /*.mp4

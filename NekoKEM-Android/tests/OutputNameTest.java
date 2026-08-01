@@ -1,5 +1,5 @@
-import com.nekokem.android.files.SaveDocumentContractKt;
-import com.nekokem.android.files.SaveDocumentRequest;
+import com.shixiaoshi0417.nekokem.files.SaveDocumentContractKt;
+import com.shixiaoshi0417.nekokem.files.SaveDocumentRequest;
 
 public final class OutputNameTest {
     private OutputNameTest() {

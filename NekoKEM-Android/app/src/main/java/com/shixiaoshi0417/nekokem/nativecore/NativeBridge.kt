@@ -1,4 +1,4 @@
-package com.nekokem.android.nativecore
+package com.shixiaoshi0417.nekokem.nativecore
 
 fun interface NativeProgressCallback {
     /** Return false to cancel the active Core operation. */
@@ -42,6 +42,11 @@ object NativeBridge {
         privateKeyPath: String,
         password: ByteArray,
     ): Int
+
+    external fun nativePrivateKeyFingerprint(
+        privateKeyPath: String,
+        password: ByteArray,
+    ): String?
 
     external fun nativeHasPrivateKey(privateKeyPath: String): Boolean
 

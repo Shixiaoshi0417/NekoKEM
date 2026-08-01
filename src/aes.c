@@ -14,7 +14,8 @@ static int add_encrypt_aad(EVP_CIPHER_CTX *context,
 {
     int output_len = 0;
 
-    if (aad_len > (size_t)INT_MAX) {
+    if (context == NULL || (aad == NULL && aad_len != 0U) ||
+        aad_len > (size_t)INT_MAX) {
         fprintf(stderr, "Authenticated metadata is too large\n");
         return 0;
     }
@@ -32,7 +33,8 @@ static int add_decrypt_aad(EVP_CIPHER_CTX *context,
 {
     int output_len = 0;
 
-    if (aad_len > (size_t)INT_MAX) {
+    if (context == NULL || (aad == NULL && aad_len != 0U) ||
+        aad_len > (size_t)INT_MAX) {
         fprintf(stderr, "Authenticated metadata is too large\n");
         return 0;
     }
@@ -74,6 +76,11 @@ int aes_gcm_encrypt_file_with_progress(
     int output_len = 0;
     int result = AES_GCM_FILE_ERROR;
 
+    if (input == NULL || output == NULL || key == NULL || nonce == NULL ||
+        tag == NULL || (aad == NULL && aad_len != 0U)) {
+        fprintf(stderr, "Invalid AES-GCM encryption request\n");
+        goto cleanup;
+    }
     context = EVP_CIPHER_CTX_new();
     if (context == NULL) {
         print_openssl_error("Cannot create AES-GCM encryption context");
@@ -117,6 +124,7 @@ int aes_gcm_encrypt_file_with_progress(
             goto cleanup;
         }
         if (output_len < 0 ||
+            (size_t)output_len > sizeof(output_buffer) ||
             !file_write_all(output, output_buffer, (size_t)output_len)) {
             goto cleanup;
         }
@@ -142,6 +150,7 @@ int aes_gcm_encrypt_file_with_progress(
         goto cleanup;
     }
     if (output_len < 0 ||
+        (size_t)output_len > sizeof(output_buffer) ||
         !file_write_all(output, output_buffer, (size_t)output_len)) {
         goto cleanup;
     }
@@ -192,6 +201,11 @@ int aes_gcm_decrypt_file_with_progress(
     int output_len = 0;
     int result = AES_GCM_FILE_ERROR;
 
+    if (input == NULL || output == NULL || key == NULL || nonce == NULL ||
+        (aad == NULL && aad_len != 0U)) {
+        fprintf(stderr, "Invalid AES-GCM decryption request\n");
+        goto cleanup;
+    }
     context = EVP_CIPHER_CTX_new();
     if (context == NULL) {
         print_openssl_error("Cannot create AES-GCM decryption context");
@@ -229,6 +243,7 @@ int aes_gcm_decrypt_file_with_progress(
             goto cleanup;
         }
         if (output_len < 0 ||
+            (size_t)output_len > sizeof(output_buffer) ||
             !file_write_all(output, output_buffer, (size_t)output_len)) {
             goto cleanup;
         }
@@ -255,6 +270,7 @@ int aes_gcm_decrypt_file_with_progress(
         goto cleanup;
     }
     if (output_len < 0 ||
+        (size_t)output_len > sizeof(output_buffer) ||
         !file_write_all(output, output_buffer, (size_t)output_len)) {
         goto cleanup;
     }

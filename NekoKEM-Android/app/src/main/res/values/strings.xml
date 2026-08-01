@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">NekoKEM</string>
+    <string name="app_version">NekoKEM v3.1</string>
 
     <string name="navigation_files">File Encryption</string>
     <string name="navigation_keys">Key Management</string>
@@ -27,6 +28,7 @@
     <string name="settings_dynamic_color_system">Enabled when supported</string>
     <string name="settings_language_title">Language</string>
     <string name="settings_language_system">Follow system</string>
+    <string name="settings_version_title">Version</string>
 
     <string name="password_label">Private-key password</string>
     <string name="password_confirmation_label">Confirm password</string>
@@ -41,9 +43,17 @@
     <string name="decrypt_password_title">Decrypt file</string>
     <string name="decrypt_password_message">Enter the encrypted private-key password. The output location is requested only after authentication succeeds.</string>
     <string name="decrypt_password_label">Private-key password for decryption</string>
+    <string name="select_temporary_private_key_password_title">Verify selected private key</string>
+    <string name="select_temporary_private_key_password_message">Enter the password for this temporary NKPR key. Core validates the container and shows its public fingerprint without importing it.</string>
+    <string name="confirm_temporary_public_key_title">Use this public key?</string>
+    <string name="confirm_temporary_public_key_message">File: %1$s\n\nSHA-256 fingerprint:\n%2$s\n\nThe key is used once and will not replace the App default.</string>
 
     <string name="delete_private_key_title">Delete private key permanently?</string>
     <string name="delete_private_key_message">The local NKPR private key and related temporary cache will be deleted. The public key is kept.</string>
+    <string name="delete_public_key_title">Delete public key permanently?</string>
+    <string name="delete_public_key_message">The local default public key will be deleted. The encrypted private key is kept.</string>
+    <string name="delete_keypair_title">Delete keypair permanently?</string>
+    <string name="delete_keypair_message">The local public key, encrypted NKPR private key and related temporary cache will be deleted.</string>
     <string name="replace_private_key_title">Replace existing private key?</string>
     <string name="replace_private_key_message">The imported encrypted NKPR private key will replace the current local private key only after its format and password are verified.</string>
 
@@ -54,7 +64,10 @@
     <string name="action_import_public_key">Import Public Key</string>
     <string name="action_import_private_key">Import Encrypted Private Key</string>
     <string name="action_delete_private_key">Delete Private Key</string>
+    <string name="action_delete_public_key">Delete Public Key</string>
+    <string name="action_delete_keypair">Delete Keypair</string>
     <string name="action_select_file">Select File</string>
+    <string name="action_clear_selection">Clear Selection</string>
     <string name="action_encrypt">Encrypt</string>
     <string name="action_decrypt">Decrypt</string>
     <string name="action_generate">Generate</string>
@@ -63,6 +76,19 @@
     <string name="action_continue">Continue</string>
     <string name="action_cancel">Cancel</string>
     <string name="action_close">Close</string>
+    <string name="action_use_key">Use Key</string>
+    <string name="action_select_other_public_key">Select Other Public Key</string>
+    <string name="action_restore_default_public_key">Restore Default Public Key</string>
+    <string name="action_select_other_private_key">Select Other Private Key</string>
+    <string name="action_restore_default_private_key">Restore Default Private Key</string>
+
+    <string name="encryption_public_key_title">Encryption public key</string>
+    <string name="decryption_private_key_title">Decryption private key</string>
+    <string name="key_source_app_default">App default</string>
+    <string name="key_source_temporary_saf">Temporary SAF selection</string>
+    <string name="key_source_line">Source: %1$s</string>
+    <string name="key_file_line">File: %1$s</string>
+    <string name="key_fingerprint_line">Fingerprint: %1$s</string>
 
     <string name="progress_title">%1$s in progress</string>
     <string name="progress_percent">%1$d%%</string>
@@ -81,7 +107,11 @@
 
     <string name="completion_title">Operation completed</string>
     <string name="completion_operation">Operation</string>
+    <string name="completion_result">Result</string>
+    <string name="completion_success">Success</string>
     <string name="completion_file">File</string>
+    <string name="completion_fingerprint">SHA-256 fingerprint</string>
+    <string name="completion_keypair_files">%1$s and %2$s</string>
     <string name="completion_elapsed">Elapsed</string>
     <string name="completion_average_speed">Average speed</string>
     <string name="error_dialog_title">Operation failed</string>
@@ -93,6 +123,10 @@
     <string name="snackbar_key_selection_cancelled">Key selection cancelled</string>
     <string name="snackbar_operation_cancelled">Operation cancelled</string>
     <string name="snackbar_operation_success">%1$s completed</string>
+    <string name="snackbar_temporary_public_key_selected">Temporary public key confirmed</string>
+    <string name="snackbar_temporary_private_key_selected">Temporary private key verified</string>
+    <string name="snackbar_default_public_key_restored">Default public key restored</string>
+    <string name="snackbar_default_private_key_restored">Default private key restored</string>
 
     <string name="error_select_file_first">Select a file first</string>
     <string name="error_public_key_not_found">Public key not found</string>
@@ -107,9 +141,16 @@
     <string name="error_reason_public_key">The selected public key is invalid or unsupported.</string>
     <string name="error_reason_key_generation">The keypair could not be generated or stored securely.</string>
     <string name="error_reason_export">The selected key could not be validated or exported.</string>
-    <string name="error_reason_delete">The private key or related temporary cache could not be deleted.</string>
+    <string name="error_reason_delete">One or more local key files or related temporary files could not be deleted safely.</string>
     <string name="error_reason_core">NekoKEM Core rejected the operation.</string>
     <string name="error_reason_unexpected">An unexpected Android operation error occurred.</string>
+    <string name="error_reason_fingerprint_mismatch">The temporary key changed after confirmation or its fingerprint no longer matches.</string>
+    <string name="error_reason_public_key_copy">The SAF public-key transfer could not be copied completely.</string>
+    <string name="error_reason_public_key_parse">Core could not parse or validate both Hybrid public-key components.</string>
+    <string name="error_reason_public_key_normalize">Core parsed the key, but could not write its canonical public-key representation.</string>
+    <string name="error_reason_public_key_permission">The canonical public-key candidate failed the regular-file, owner, single-link, or 0600 permission check.</string>
+    <string name="error_reason_public_key_commit">The canonical public key passed validation, but atomic replacement of the App default failed.</string>
+    <string name="error_reason_public_key_integrity">The public-key length, SHA-256, or canonical fingerprint changed unexpectedly during transfer.</string>
 
     <string name="operation_generate_keypair">Generate keypair</string>
     <string name="operation_check_password">Verify password</string>
@@ -118,9 +159,15 @@
     <string name="operation_import_public_key">Import public key</string>
     <string name="operation_import_private_key">Import encrypted private key</string>
     <string name="operation_delete_private_key">Delete private key</string>
+    <string name="operation_delete_public_key">Delete public key</string>
+    <string name="operation_delete_keypair">Delete keypair</string>
     <string name="operation_encrypt_file">Encrypt file</string>
     <string name="operation_decrypt_file">Decrypt file</string>
+    <string name="operation_select_temporary_public_key">Select temporary public key</string>
+    <string name="operation_select_temporary_private_key">Select temporary private key</string>
 
     <string name="default_selected_filename">selected-file</string>
     <string name="default_decrypted_filename">decrypted-file</string>
+    <string name="default_public_key_filename">public.key</string>
+    <string name="default_private_key_filename">private.nkpr.enc</string>
 </resources>

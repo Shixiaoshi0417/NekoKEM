@@ -1,4 +1,5 @@
 #include "nekokem.h"
+#include "../nekokem_core/src/nekokem_internal.h"
 #include "secure_mem.h"
 
 #include <stdio.h>
@@ -34,6 +35,7 @@ int main(void)
     char first_fingerprint[NEKOKEM_FINGERPRINT_STRING_SIZE] = {0};
     char restarted_fingerprint[NEKOKEM_FINGERPRINT_STRING_SIZE] = {0};
     char exported_fingerprint[NEKOKEM_FINGERPRINT_STRING_SIZE] = {0};
+    char private_fingerprint[NEKOKEM_FINGERPRINT_STRING_SIZE] = {0};
     struct stat status;
     int success = 0;
 
@@ -75,6 +77,18 @@ int main(void)
                 "Correct/wrong managed-key password test failed\n");
         goto cleanup;
     }
+    if (!nekokem_internal_private_key_fingerprint(
+            private_path, password,
+            sizeof(initial_password) - 1U,
+            private_fingerprint, sizeof(private_fingerprint)) ||
+        strcmp(first_fingerprint, private_fingerprint) != 0 ||
+        nekokem_internal_private_key_fingerprint(
+            private_path, wrong_password,
+            sizeof(wrong_password_value) - 1U,
+            private_fingerprint, sizeof(private_fingerprint))) {
+        fprintf(stderr, "Private/public fingerprint validation failed\n");
+        goto cleanup;
+    }
 
 
     /* A second stateless call models an App process restart. */
@@ -108,6 +122,7 @@ cleanup:
     secure_mem_clear(first_fingerprint, sizeof(first_fingerprint));
     secure_mem_clear(restarted_fingerprint, sizeof(restarted_fingerprint));
     secure_mem_clear(exported_fingerprint, sizeof(exported_fingerprint));
+    secure_mem_clear(private_fingerprint, sizeof(private_fingerprint));
     (void)unlink(private_path);
     (void)unlink(public_path);
     (void)unlink(export_path);

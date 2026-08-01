@@ -1,5 +1,9 @@
 # NekoKEM
 
+<p align="center">
+  <img src="icon.png" alt="NekoKEM 项目图标" width="160">
+</p>
+
 NekoKEM 是一个用于学习 OpenSSL 3.5 EVP API 的实验性后量子文件加密工具。默认 Hybrid 加密生成 NKEM v3；解密按 version 严格分派并兼容 v1/v2。
 
 | 模式 | 密钥建立 | KDF | 文件加密 | 容器 |
@@ -9,6 +13,13 @@ NekoKEM 是一个用于学习 OpenSSL 3.5 EVP API 的实验性后量子文件加
 | v3 hybrid（默认） | X448 + ML-KEM-1024 | HKDF-SHA512 | AES-256-GCM | version 3 / algorithm id 3 |
 
 本项目不自行实现任何密码算法，也不依赖 liboqs。**它没有经过安全审计，不应被视为生产级软件，也不应用来保护重要或敏感数据。**
+
+## Android v3.1
+
+Android 正式版与 Core 当前均为 `3.1`，application ID 为
+`com.shixiaoshi0417.nekokem`。Android 工程及构建说明见
+[`NekoKEM-Android/README.md`](NekoKEM-Android/README.md)。App 版本 3.1 不改变
+协议编号：默认文件容器仍为 **NKEM v3**，NKPR 格式保持不变。
 
 ## 安装依赖
 
@@ -49,7 +60,7 @@ keys/
   密钥文件
 ```
 
-`plaintext/` 和 `encrypted/` 会在对应操作需要时以安全权限自动创建。参数化兼容命令仍允许通过 `output_file` 手动指定完整输出路径。
+`plaintext/`、`encrypted/` 和 `keys/` 会在对应操作需要时以 `0700` 创建。若目录已经存在，程序会拒绝符号链接、非目录、非当前用户所有或权限不是 `0700` 的路径。参数化兼容命令仍允许通过 `output_file` 手动指定完整输出路径。
 
 ## 默认交互模式
 
@@ -114,33 +125,37 @@ encrypted/test.jpg.nkem -> plaintext/test.jpg
 
 ## 参数化兼容命令
 
-原有命令继续保留，供脚本、开发测试及 v1 文件兼容使用。
-
-生成 ML-KEM-1024 密钥对：
+参数化命令继续保留，供脚本、开发测试及旧文件兼容使用。默认 keygen 与交互模式一致，生成受密码保护的 Hybrid 密钥：
 
 ```sh
 ./nekokem keygen
 ```
 
-输出：
-
-- `keys/public.key`：PEM SubjectPublicKeyInfo；
-- `keys/private.key`：未加口令的 PEM 私钥，文件权限强制为 `0600`。
-
-生成 Hybrid 密钥：
+`keygen hybrid` 保留为含义相同的显式兼容别名：
 
 ```sh
 ./nekokem keygen hybrid
 ```
 
-命令会提示输入两次密码，且不会把密码放入命令行参数。
+两种写法都会提示输入两次密码，且不会把密码放入命令行参数；输出 `keys/public.key` 与 `keys/private.key.enc`。
+
+只有需要生成旧式 v1 测试密钥时，才使用显式明文兼容选项：
+
+```sh
+./nekokem keygen legacy-v1
+```
+
+该命令会先打印明文私钥警告，然后输出：
+
+- `keys/public.key`：PEM SubjectPublicKeyInfo；
+- `keys/private.key`：未加口令的 PEM 私钥，文件权限强制为 `0600`。
 
 hybrid `public.key` 顺序保存两个 PEM public-key 块：
 
 1. X448 public key；
 2. ML-KEM-1024 public key。
 
-两个 private-key PEM 块按相同顺序在内存中序列化，随后整体加密到 `keys/private.key.enc`；不会生成明文 Hybrid `keys/private.key`。加密容器权限强制为 `0600`。v1 `./nekokem keygen` 仍按兼容逻辑生成 `keys/private.key`，因此 v1 和 Hybrid 密钥文件不能混用。
+两个 private-key PEM 块按相同顺序在内存中序列化，随后整体加密到 `keys/private.key.enc`；不会生成明文 Hybrid `keys/private.key`。加密容器权限强制为 `0600`。`keygen legacy-v1` 生成的 v1 私钥与 Hybrid 密钥文件不能混用。
 
 v1 加密和解密示例：
 
@@ -167,7 +182,7 @@ Hybrid decrypt 看到 `.enc` 后会自动提示一次密码。为兼容已有部
 ./nekokem decrypt hybrid input_file output_file private.key.enc
 ```
 
-输入必须是普通文件。工具使用分块 I/O，不会把整个文件载入内存。输出先写入同目录下权限为 `0600` 的临时文件；加密成功或 GCM 标签验证成功后才原子重命名为目标文件。认证失败、密钥错误或容器解析失败不会提交解密目标文件。
+输入必须是普通文件。工具使用分块 I/O，不会把整个文件载入内存。输出先写入同目录下权限为 `0600` 的临时文件并执行 `fsync`；加密成功或 GCM 标签验证成功后才原子重命名为目标文件，随后 `fsync` 父目录。认证失败、密钥错误、取消或容器解析失败不会提交解密目标文件。
 
 ## NKPR 加密私钥格式
 
@@ -291,7 +306,7 @@ v3 保持 v2 的 X448、ML-KEM-1024、共享秘密组合和 HKDF-SHA512 流程�
 - AES 密钥和包含明文的 AES 分块缓冲区在所有成功与失败出口清零；
 - 私钥密码、密码确认副本、Argon2id 派生密钥和内存中的完整 Hybrid PEM 在所有成功与失败出口清零；正确加载并解析 PEM 后立即释放密码；
 - KEM 失败路径保存原始分配容量，确保即使 OpenSSL 改写输出长度，也会清零整个已分配秘密缓冲区；
-- 私钥 PEM 通过有大小上限的单一 OpenSSL 缓冲区和只引用该缓冲区的 memory BIO 解析，解析后立即清零释放；敏感文件流和原子输出流关闭 stdio 缓冲，减少不可控副本。
+- 私钥以 `O_NOFOLLOW|O_CLOEXEC` 打开，并在读取前验证为当前用户所有、`0600`、普通非空文件且硬链接数为 1；PEM 通过有大小上限的单一 OpenSSL 缓冲区和只引用该缓冲区的 memory BIO 解析，解析后立即清零释放；敏感文件流和原子输出流关闭 stdio 缓冲，减少不可控副本。
 
 ### 编译保护
 
@@ -305,8 +320,10 @@ v3 保持 v2 的 X448、ML-KEM-1024、共享秘密组合和 HKDF-SHA512 流程�
 
 - 动态资源采用单一所有者和 `goto cleanup` 路径，成功转移所有权时立即清空源指针；
 - 私钥对象在解封装完成后立即释放，共享秘密在 KDF 完成后立即清零释放，AES 密钥仅存活到文件加解密结束；
-- 输出仍先写入同目录的临时文件，只有完整成功后才原子提交；认证、解析或 I/O 失败会关闭并删除临时文件；
-- Hybrid keygen 直接把两个私钥 PEM 写入 OpenSSL memory BIO，再加密为原子提交的 NKPR 文件；没有明文私钥输出文件或明文私钥临时文件；
+- 输出仍先写入同目录的临时文件，文件内容 `fsync` 完成后才重命名，重命名后再 `fsync` 父目录；认证、解析、取消或 I/O 失败会关闭并删除临时文件；
+- 公私钥生成使用同一个可回滚事务：两边都完成写入和 `fsync` 后才发布；第二次 rename 或目录 `fsync` 失败会恢复旧公私钥（原本不存在则两边都移除），避免只更新一把密钥；
+- Hybrid keygen 直接把两个私钥 PEM 写入 OpenSSL memory BIO，再加密为 NKPR 暂存文件，并与公钥一致提交；没有明文私钥输出文件或明文私钥临时文件；
+- CLI 的 Core 接口当前是路径式 API。粘贴 PEM 因而使用 `/tmp` 下独占 `0700` 目录中的 `0600`、`O_NOFOLLOW|O_CLOEXEC` 临时文件，并在所有返回路径删除文件和目录。直接 memory BIO 需要新增内部 Core 适配层，memfd 的 `/proc/self/fd` 路径又会与私钥 `O_NOFOLLOW` 策略冲突；本阶段不改变公开 Core API，后续可在独立 API 设计中消除该临时路径；
 - `secure_free()` 只用于 `OPENSSL_malloc()` 分配的敏感缓冲区，普通路径字符串和公开元数据仍由匹配的常规分配器释放。
 
 ## 自动测试
@@ -320,8 +337,11 @@ make test
 - 首先使用 GCC `-fanalyzer` 检查泄漏、空指针、未初始化读取、重复释放等资源问题；
 - 构建启用 `-fsanitize=undefined` 且禁止恢复的临时二进制，并覆盖成功路径、缺失输入、无效输出目录、截断容器、篡改密文、无效私钥和错误私钥；
 - 自动生成 NKEM/NKPR 截断、错误长度、非法版本、非法算法 ID、随机字节和超长字段，并在 UBSan 下调用正式静默解析入口；
+- 对 CLI 普通输入和粘贴 PEM 分别实施单行上限，超长输入完整消费后拒绝，不会把残余字节留给下一次提示；
+- 验证已有 `0700` 私有目录的类型、所有者和权限，以及私钥 `0600`、所有者、普通文件、符号链接和硬链接约束；
+- 通过仅测试构建启用的故障注入覆盖短写、ENOSPC、文件/目录 `fsync`、第二次 rename、公私钥回滚和临时/备份文件清理；
 
-- v1 keygen、加密、解密、SHA-256 和 `cmp`；
+- 显式 `legacy-v1` keygen、v1 加密、解密、SHA-256 和 `cmp`；
 - Hybrid 加密私钥 keygen、正确密码解密、SHA-256 和 `cmp`；
 - 默认 v3 加密/解密回环、v1/v2 旧容器解密，以及 v1/v2 解码器拒绝 v3；
 - 错误密码和篡改 NKPR 必须认证失败，且不能产生目标明文；

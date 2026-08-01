@@ -7,7 +7,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#define PROGRESS_JNI_PASSWORD_MAX_SIZE (1024U * 1024U)
+#define PROGRESS_JNI_PASSWORD_MAX_SIZE 1024U
 
 enum ProgressJniResult {
     PROGRESS_JNI_CORE_ERROR = 0,
@@ -164,7 +164,7 @@ static jint progress_result_to_jni(int core_result,
 }
 
 JNIEXPORT jint JNICALL
-Java_com_nekokem_android_nativecore_NativeBridge_nativeEncryptFileWithProgress(
+Java_com_shixiaoshi0417_nekokem_nativecore_NativeBridge_nativeEncryptFileWithProgress(
     JNIEnv *env,
     jobject bridge,
     jstring input_path,
@@ -209,7 +209,7 @@ cleanup:
 }
 
 JNIEXPORT jint JNICALL
-Java_com_nekokem_android_nativecore_NativeBridge_nativeDecryptFileWithProgress(
+Java_com_shixiaoshi0417_nekokem_nativecore_NativeBridge_nativeDecryptFileWithProgress(
     JNIEnv *env,
     jobject bridge,
     jstring input_path,

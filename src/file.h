@@ -50,6 +50,20 @@ typedef struct {
     const char *final_path;
 } AtomicFile;
 
+#ifdef NEKOKEM_TEST_FAULT_INJECTION
+typedef enum {
+    FILE_TEST_FAULT_NONE = 0,
+    FILE_TEST_FAULT_SHORT_WRITE,
+    FILE_TEST_FAULT_ENOSPC,
+    FILE_TEST_FAULT_FSYNC,
+    FILE_TEST_FAULT_RENAME,
+    FILE_TEST_FAULT_FOREIGN_OWNER
+} FileTestFault;
+
+void file_test_fault_set(FileTestFault fault, unsigned int fail_on_call);
+void file_test_fault_reset(void);
+#endif
+
 void print_openssl_error(const char *context);
 void print_system_error(const char *context);
 
@@ -64,7 +78,9 @@ int file_read_sensitive(const char *path,
                         size_t *length);
 
 int atomic_file_open(AtomicFile *file, const char *final_path, mode_t mode);
+int atomic_file_prepare(AtomicFile *file);
 int atomic_file_commit(AtomicFile *file);
+int atomic_file_commit_pair(AtomicFile *first, AtomicFile *second);
 void atomic_file_abort(AtomicFile *file);
 
 void nkem_header_encode(unsigned char output[NKEM_HEADER_SIZE],

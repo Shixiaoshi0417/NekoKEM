@@ -1,12 +1,13 @@
 #include <jni.h>
 
 #include "nekokem.h"
+#include "nekokem_internal.h"
 
 #include <openssl/crypto.h>
 
 #include <stddef.h>
 
-#define PASSWORD_JNI_MAX_SIZE (1024U * 1024U)
+#define PASSWORD_JNI_MAX_SIZE 1024U
 
 enum PasswordJniResult {
     PASSWORD_JNI_CORE_ERROR = 0,
@@ -88,7 +89,7 @@ static int password_bytes_copy(JNIEnv *env,
 }
 
 JNIEXPORT jint JNICALL
-Java_com_nekokem_android_nativecore_NativeBridge_nativeGenerateKeypairWithPassword(
+Java_com_shixiaoshi0417_nekokem_nativecore_NativeBridge_nativeGenerateKeypairWithPassword(
     JNIEnv *env,
     jobject bridge,
     jstring public_key_path,
@@ -159,7 +160,7 @@ cleanup:
 }
 
 JNIEXPORT jint JNICALL
-Java_com_nekokem_android_nativecore_NativeBridge_nativeUnlockPrivateKey(
+Java_com_shixiaoshi0417_nekokem_nativecore_NativeBridge_nativeUnlockPrivateKey(
     JNIEnv *env,
     jobject bridge,
     jstring private_key_path,
@@ -171,7 +172,7 @@ Java_com_nekokem_android_nativecore_NativeBridge_nativeUnlockPrivateKey(
 }
 
 JNIEXPORT jint JNICALL
-Java_com_nekokem_android_nativecore_NativeBridge_nativeCheckPassword(
+Java_com_shixiaoshi0417_nekokem_nativecore_NativeBridge_nativeCheckPassword(
     JNIEnv *env,
     jobject bridge,
     jstring private_key_path,
@@ -180,4 +181,43 @@ Java_com_nekokem_android_nativecore_NativeBridge_nativeCheckPassword(
     (void)bridge;
     return check_private_key_password(env, private_key_path,
                                       password_array);
+}
+
+JNIEXPORT jstring JNICALL
+Java_com_shixiaoshi0417_nekokem_nativecore_NativeBridge_nativePrivateKeyFingerprint(
+    JNIEnv *env,
+    jobject bridge,
+    jstring private_key_path,
+    jbyteArray password_array)
+{
+    PasswordJniPath private_path = {0};
+    unsigned char *password = NULL;
+    size_t password_len = 0U;
+    char fingerprint[NEKOKEM_FINGERPRINT_STRING_SIZE] = {0};
+    jstring result = NULL;
+    int status;
+
+    (void)bridge;
+    status = password_path_acquire(env, private_key_path,
+                                   &private_path);
+    if (status != PASSWORD_JNI_SUCCESS) {
+        goto cleanup;
+    }
+    status = password_bytes_copy(env, password_array,
+                                 &password, &password_len);
+    if (status != PASSWORD_JNI_SUCCESS) {
+        goto cleanup;
+    }
+    if (!nekokem_internal_private_key_fingerprint(
+            private_path.value, password, password_len,
+            fingerprint, sizeof(fingerprint))) {
+        goto cleanup;
+    }
+    result = (*env)->NewStringUTF(env, fingerprint);
+
+cleanup:
+    OPENSSL_cleanse(fingerprint, sizeof(fingerprint));
+    OPENSSL_clear_free(password, password_len);
+    password_path_release(env, &private_path);
+    return result;
 }

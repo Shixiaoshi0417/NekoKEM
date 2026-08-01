@@ -30,6 +30,15 @@ typedef struct {
     uint64_t ciphertext_len;
 } NkprHeader;
 
+static int checked_size_add(size_t left, size_t right, size_t *result)
+{
+    if (result == NULL || SIZE_MAX - left < right) {
+        return 0;
+    }
+    *result = left + right;
+    return 1;
+}
+
 static void put_u16_be(unsigned char *output, uint16_t value)
 {
     output[0] = (unsigned char)(value >> 8);
@@ -169,8 +178,16 @@ static int nkpr_container_decode_internal(
         return 0;
     }
     ciphertext_len = (size_t)header->ciphertext_len;
-    expected_len = NKPR_HEADER_SIZE + NKPR_SALT_SIZE +
-                   NKPR_NONCE_SIZE + ciphertext_len + NKPR_TAG_SIZE;
+    expected_len = NKPR_HEADER_SIZE;
+    if (!checked_size_add(expected_len, NKPR_SALT_SIZE, &expected_len) ||
+        !checked_size_add(expected_len, NKPR_NONCE_SIZE, &expected_len) ||
+        !checked_size_add(expected_len, ciphertext_len, &expected_len) ||
+        !checked_size_add(expected_len, NKPR_TAG_SIZE, &expected_len)) {
+        if (report_errors != 0) {
+            fprintf(stderr, "NKPR private-key length overflows\n");
+        }
+        return 0;
+    }
     if (input_len != expected_len) {
         if (report_errors != 0) {
             fprintf(stderr, "Invalid NKPR private-key container length\n");
@@ -207,9 +224,14 @@ static int derive_protection_key(
     uint32_t version = NKPR_ARGON2_VERSION;
     int success = 0;
 
+    if (key == NULL) {
+        fprintf(stderr, "Invalid private-key protection output\n");
+        return 0;
+    }
     secure_mem_clear(key, 32U);
-    if (password == NULL || password_len == 0U) {
-        fprintf(stderr, "Private-key password must not be empty\n");
+    if (password == NULL || password_len == 0U ||
+        password_len > NKPR_MAX_PASSWORD_SIZE || salt == NULL) {
+        fprintf(stderr, "Invalid private-key protection parameters\n");
         goto cleanup;
     }
     if ((OSSL_get_thread_support_flags() &
@@ -283,6 +305,13 @@ static int encrypt_pem(
     int final_len = 0;
     int success = 0;
 
+    if (pem == NULL || pem_len == 0U || pem_len > (size_t)INT_MAX ||
+        key == NULL || header == NULL || salt == NULL || nonce == NULL ||
+        ciphertext == NULL || tag == NULL) {
+        fprintf(stderr, "Invalid private-key encryption request\n");
+        return 0;
+    }
+
     context = EVP_CIPHER_CTX_new();
     if (context == NULL) {
         print_openssl_error("Cannot create private-key cipher context");
@@ -340,6 +369,15 @@ static int decrypt_pem(
     int final_len = 0;
     int success = 0;
 
+    if (ciphertext == NULL || ciphertext_len == 0U ||
+        ciphertext_len > (size_t)INT_MAX || tag == NULL || key == NULL ||
+        header == NULL || salt == NULL || nonce == NULL || pem == NULL ||
+        pem_len == NULL) {
+        fprintf(stderr, "Invalid private-key decryption request\n");
+        return 0;
+    }
+    *pem_len = 0U;
+
     context = EVP_CIPHER_CTX_new();
     if (context == NULL) {
         print_openssl_error("Cannot create private-key cipher context");
@@ -383,24 +421,26 @@ cleanup:
     return success;
 }
 
-int protected_private_key_write(
+int protected_private_key_stage(
+    AtomicFile *output,
     const char *path,
     const unsigned char *pem,
     size_t pem_len,
     const unsigned char *password,
     size_t password_len)
 {
-    AtomicFile output = {0};
-    unsigned char header[NKPR_HEADER_SIZE];
-    unsigned char salt[NKPR_SALT_SIZE];
-    unsigned char nonce[NKPR_NONCE_SIZE];
-    unsigned char tag[NKPR_TAG_SIZE];
+    unsigned char header[NKPR_HEADER_SIZE] = {0};
+    unsigned char salt[NKPR_SALT_SIZE] = {0};
+    unsigned char nonce[NKPR_NONCE_SIZE] = {0};
+    unsigned char tag[NKPR_TAG_SIZE] = {0};
     unsigned char key[32] = {0};
     unsigned char *ciphertext = NULL;
     int success = 0;
 
-    if (path == NULL || pem == NULL || pem_len == 0U ||
-        pem_len > NKPR_MAX_PEM_SIZE || pem_len > (size_t)INT_MAX) {
+    if (output == NULL || path == NULL || pem == NULL || pem_len == 0U ||
+        pem_len > NKPR_MAX_PEM_SIZE || pem_len > (size_t)INT_MAX ||
+        password == NULL || password_len == 0U ||
+        password_len > NKPR_MAX_PASSWORD_SIZE) {
         fprintf(stderr, "Invalid hybrid private-key PEM data\n");
         goto cleanup;
     }
@@ -422,12 +462,41 @@ int protected_private_key_write(
                      ciphertext, tag)) {
         goto cleanup;
     }
-    if (!atomic_file_open(&output, path, 0600) ||
-        !file_write_all(output.stream, header, sizeof(header)) ||
-        !file_write_all(output.stream, salt, sizeof(salt)) ||
-        !file_write_all(output.stream, nonce, sizeof(nonce)) ||
-        !file_write_all(output.stream, ciphertext, pem_len) ||
-        !file_write_all(output.stream, tag, sizeof(tag)) ||
+    if (!atomic_file_open(output, path, 0600) ||
+        !file_write_all(output->stream, header, sizeof(header)) ||
+        !file_write_all(output->stream, salt, sizeof(salt)) ||
+        !file_write_all(output->stream, nonce, sizeof(nonce)) ||
+        !file_write_all(output->stream, ciphertext, pem_len) ||
+        !file_write_all(output->stream, tag, sizeof(tag))) {
+        goto cleanup;
+    }
+    success = 1;
+
+cleanup:
+    if (success == 0) {
+        atomic_file_abort(output);
+    }
+    secure_free(ciphertext, pem_len);
+    secure_mem_clear(key, sizeof(key));
+    secure_mem_clear(header, sizeof(header));
+    secure_mem_clear(salt, sizeof(salt));
+    secure_mem_clear(nonce, sizeof(nonce));
+    secure_mem_clear(tag, sizeof(tag));
+    return success;
+}
+
+int protected_private_key_write(
+    const char *path,
+    const unsigned char *pem,
+    size_t pem_len,
+    const unsigned char *password,
+    size_t password_len)
+{
+    AtomicFile output = {0};
+    int success = 0;
+
+    if (!protected_private_key_stage(&output, path, pem, pem_len,
+                                     password, password_len) ||
         !atomic_file_commit(&output)) {
         goto cleanup;
     }
@@ -435,9 +504,6 @@ int protected_private_key_write(
 
 cleanup:
     atomic_file_abort(&output);
-    OPENSSL_free(ciphertext);
-    secure_mem_clear(key, sizeof(key));
-    secure_mem_clear(tag, sizeof(tag));
     return success;
 }
 

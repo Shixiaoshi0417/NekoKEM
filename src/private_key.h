@@ -1,6 +1,8 @@
 #ifndef NEKOKEM_PRIVATE_KEY_H
 #define NEKOKEM_PRIVATE_KEY_H
 
+#include "file.h"
+
 #include <stddef.h>
 
 #define NKPR_MAGIC "NKPR"
@@ -13,6 +15,15 @@
 #define NKPR_ARGON2_ITERATIONS 3U
 #define NKPR_ARGON2_PARALLELISM 4U
 #define NKPR_MAX_PEM_SIZE (1024U * 1024U)
+#define NKPR_MAX_PASSWORD_SIZE 1024U
+
+int protected_private_key_stage(
+    AtomicFile *output,
+    const char *path,
+    const unsigned char *pem,
+    size_t pem_len,
+    const unsigned char *password,
+    size_t password_len);
 
 int protected_private_key_write(
     const char *path,

@@ -1,4 +1,5 @@
 #include "nekokem.h"
+#include "nekokem_internal.h"
 
 #include "aes.h"
 #include "file.h"
@@ -586,14 +587,13 @@ cleanup:
     return success;
 }
 
-int nekokem_public_key_fingerprint(const char *public_key_path,
+static int fingerprint_hybrid_keys(const HybridKeys *keys,
                                    char *output,
                                    size_t output_size)
 {
     static const unsigned char domain[] =
         "NekoKEM v2 hybrid public-key fingerprint";
     static const char hex[] = "0123456789ABCDEF";
-    HybridKeys keys = {0};
     EVP_MD_CTX *context = NULL;
     unsigned char fingerprint[EVP_MAX_MD_SIZE] = {0};
     unsigned int fingerprint_len = 0U;
@@ -601,15 +601,13 @@ int nekokem_public_key_fingerprint(const char *public_key_path,
     size_t output_index = 0U;
     int success = 0;
 
-    if (!valid_path(public_key_path) || output == NULL ||
+    if (keys == NULL || keys->x448 == NULL || keys->mlkem == NULL ||
+        output == NULL ||
         output_size < NEKOKEM_FINGERPRINT_STRING_SIZE) {
-        fprintf(stderr, "Invalid fingerprint output buffer or key path\n");
+        fprintf(stderr, "Invalid fingerprint input or output buffer\n");
         goto cleanup;
     }
     output[0] = '\0';
-    if (!hybrid_load_public_keys(public_key_path, &keys)) {
-        goto cleanup;
-    }
     context = EVP_MD_CTX_new();
     if (context == NULL) {
         print_openssl_error("Cannot create fingerprint context");
@@ -617,8 +615,8 @@ int nekokem_public_key_fingerprint(const char *public_key_path,
     }
     if (EVP_DigestInit_ex(context, EVP_sha256(), NULL) != 1 ||
         EVP_DigestUpdate(context, domain, sizeof(domain) - 1U) != 1 ||
-        !digest_public_key_component(context, keys.x448) ||
-        !digest_public_key_component(context, keys.mlkem) ||
+        !digest_public_key_component(context, keys->x448) ||
+        !digest_public_key_component(context, keys->mlkem) ||
         EVP_DigestFinal_ex(context, fingerprint,
                            &fingerprint_len) != 1) {
         print_openssl_error("Cannot calculate public-key fingerprint");
@@ -647,6 +645,65 @@ cleanup:
     }
     secure_mem_clear(fingerprint, sizeof(fingerprint));
     EVP_MD_CTX_free(context);
+    return success;
+}
+
+int nekokem_public_key_fingerprint(const char *public_key_path,
+                                   char *output,
+                                   size_t output_size)
+{
+    HybridKeys keys = {0};
+    int success = 0;
+
+    if (!valid_path(public_key_path) || output == NULL ||
+        output_size < NEKOKEM_FINGERPRINT_STRING_SIZE) {
+        fprintf(stderr, "Invalid fingerprint output buffer or key path\n");
+        goto cleanup;
+    }
+    output[0] = '\0';
+    if (!hybrid_load_public_keys(public_key_path, &keys) ||
+        !fingerprint_hybrid_keys(&keys, output, output_size)) {
+        goto cleanup;
+    }
+    success = 1;
+
+cleanup:
+    if (success == 0 && output != NULL && output_size > 0U) {
+        output[0] = '\0';
+    }
+    hybrid_keys_cleanup(&keys);
+    return success;
+}
+
+int nekokem_internal_private_key_fingerprint(
+    const char *private_key_path,
+    const unsigned char *password,
+    size_t password_len,
+    char *output,
+    size_t output_size)
+{
+    HybridKeys keys = {0};
+    int success = 0;
+
+    if (!valid_path(private_key_path) || password == NULL ||
+        password_len == 0U || output == NULL ||
+        output_size < NEKOKEM_FINGERPRINT_STRING_SIZE) {
+        fprintf(stderr, "Invalid private-key fingerprint argument\n");
+        goto cleanup;
+    }
+    output[0] = '\0';
+    if (!nekokem_private_key_exists(private_key_path) ||
+        !hybrid_load_protected_private_keys(
+            private_key_path, password, password_len, &keys) ||
+        !fingerprint_hybrid_keys(&keys, output, output_size)) {
+        goto cleanup;
+    }
+    success = 1;
+
+cleanup:
+    if (success == 0 && output != NULL && output_size > 0U) {
+        output[0] = '\0';
+    }
     hybrid_keys_cleanup(&keys);
     return success;
 }

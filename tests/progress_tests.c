@@ -1,5 +1,6 @@
 #include "nekokem.h"
 
+#include <dirent.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <stdint.h>
@@ -121,6 +122,28 @@ static int path_absent(const char *path)
     return errno == ENOENT;
 }
 
+static int transaction_artifacts_absent(const char *directory)
+{
+    DIR *stream = opendir(directory);
+    struct dirent *entry;
+    int absent = 1;
+
+    if (stream == NULL) {
+        return 0;
+    }
+    while ((entry = readdir(stream)) != NULL) {
+        if (strstr(entry->d_name, ".tmp.") != NULL ||
+            strstr(entry->d_name, ".bak.") != NULL) {
+            absent = 0;
+            break;
+        }
+    }
+    if (closedir(stream) != 0) {
+        absent = 0;
+    }
+    return absent;
+}
+
 static int parse_test_size(uint64_t *test_bytes)
 {
     const char *value = getenv("NEKOKEM_PROGRESS_TEST_BYTES");
@@ -198,7 +221,8 @@ int main(void)
         progress_callback, &progress);
     if (result != NEKOKEM_OPERATION_CANCELLED || progress.invalid != 0 ||
         progress.callback_count < 2U ||
-        !path_absent(cancelled_encrypt_path)) {
+        !path_absent(cancelled_encrypt_path) ||
+        !transaction_artifacts_absent(test_directory)) {
         fprintf(stderr, "Progress encryption cancellation test failed\n");
         goto cleanup;
     }
@@ -221,7 +245,8 @@ int main(void)
         progress_callback, &progress);
     if (result != NEKOKEM_OPERATION_CANCELLED || progress.invalid != 0 ||
         progress.callback_count < 2U ||
-        !path_absent(cancelled_decrypt_path)) {
+        !path_absent(cancelled_decrypt_path) ||
+        !transaction_artifacts_absent(test_directory)) {
         fprintf(stderr, "Progress decryption cancellation test failed\n");
         goto cleanup;
     }

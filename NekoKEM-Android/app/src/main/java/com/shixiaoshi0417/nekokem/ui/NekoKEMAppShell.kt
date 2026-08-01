@@ -1,4 +1,4 @@
-package com.nekokem.android.ui
+package com.shixiaoshi0417.nekokem.ui
 
 import androidx.annotation.StringRes
 import androidx.compose.foundation.layout.Arrangement
@@ -29,6 +29,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.rememberDrawerState
 import androidx.compose.runtime.Composable
@@ -44,7 +45,7 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import com.nekokem.android.R
+import com.shixiaoshi0417.nekokem.R
 import kotlinx.coroutines.launch
 
 data class NekoKEMUiState(
@@ -53,6 +54,12 @@ data class NekoKEMUiState(
     val privateKeyExists: Boolean,
     val fingerprint: String?,
     val selectedFileName: String?,
+    val publicKeyTemporary: Boolean,
+    val publicKeyFileName: String,
+    val publicKeyFingerprint: String?,
+    val privateKeyTemporary: Boolean,
+    val privateKeyFileName: String,
+    val privateKeyFingerprint: String?,
     val running: Boolean,
 )
 
@@ -63,8 +70,15 @@ data class NekoKEMActions(
     val onExportPrivateKey: () -> Unit,
     val onImportPublicKey: () -> Unit,
     val onImportPrivateKey: () -> Unit,
+    val onDeletePublicKey: () -> Unit,
     val onDeletePrivateKey: () -> Unit,
+    val onDeleteKeypair: () -> Unit,
     val onSelectFile: () -> Unit,
+    val onClearSelectedFile: () -> Unit,
+    val onSelectTemporaryPublicKey: () -> Unit,
+    val onRestoreDefaultPublicKey: () -> Unit,
+    val onSelectTemporaryPrivateKey: () -> Unit,
+    val onRestoreDefaultPrivateKey: () -> Unit,
     val onEncrypt: () -> Unit,
     val onDecrypt: () -> Unit,
 )
@@ -173,6 +187,15 @@ private fun FileOperationsPage(
                     text = selectedName,
                     style = MaterialTheme.typography.bodyLarge,
                 )
+                if (state.selectedFileName != null) {
+                    TextButton(
+                        modifier = Modifier.align(Alignment.End),
+                        enabled = !state.running,
+                        onClick = actions.onClearSelectedFile,
+                    ) {
+                        Text(stringResource(R.string.action_clear_selection))
+                    }
+                }
             }
         }
         Spacer(modifier = Modifier.height(20.dp))
@@ -193,6 +216,90 @@ private fun FileOperationsPage(
                 state.selectedFileName != null,
             onClick = actions.onDecrypt,
         )
+        Spacer(modifier = Modifier.height(12.dp))
+        KeySelectionCard(
+            titleResource = R.string.encryption_public_key_title,
+            temporary = state.publicKeyTemporary,
+            fileName = state.publicKeyFileName,
+            fingerprint = state.publicKeyFingerprint,
+        )
+        ActionButton(
+            labelResource = R.string.action_select_other_public_key,
+            enabled = state.nativeConnected && !state.running,
+            onClick = actions.onSelectTemporaryPublicKey,
+        )
+        if (state.publicKeyTemporary) {
+            ActionButton(
+                labelResource = R.string.action_restore_default_public_key,
+                enabled = !state.running,
+                onClick = actions.onRestoreDefaultPublicKey,
+            )
+        }
+        Spacer(modifier = Modifier.height(12.dp))
+        KeySelectionCard(
+            titleResource = R.string.decryption_private_key_title,
+            temporary = state.privateKeyTemporary,
+            fileName = state.privateKeyFileName,
+            fingerprint = state.privateKeyFingerprint,
+        )
+        ActionButton(
+            labelResource = R.string.action_select_other_private_key,
+            enabled = state.nativeConnected && !state.running,
+            onClick = actions.onSelectTemporaryPrivateKey,
+        )
+        if (state.privateKeyTemporary) {
+            ActionButton(
+                labelResource = R.string.action_restore_default_private_key,
+                enabled = !state.running,
+                onClick = actions.onRestoreDefaultPrivateKey,
+            )
+        }
+    }
+}
+
+@Composable
+private fun KeySelectionCard(
+    @StringRes titleResource: Int,
+    temporary: Boolean,
+    fileName: String,
+    fingerprint: String?,
+) {
+    val unavailable = stringResource(R.string.not_available)
+    Card(modifier = Modifier.fillMaxWidth()) {
+        Column(modifier = Modifier.padding(20.dp)) {
+            Text(
+                text = stringResource(titleResource),
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+            )
+            Text(
+                modifier = Modifier.padding(top = 12.dp),
+                text = stringResource(
+                    R.string.key_source_line,
+                    stringResource(
+                        if (temporary) {
+                            R.string.key_source_temporary_saf
+                        } else {
+                            R.string.key_source_app_default
+                        },
+                    ),
+                ),
+                style = MaterialTheme.typography.bodyMedium,
+            )
+            Text(
+                modifier = Modifier.padding(top = 8.dp),
+                text = stringResource(R.string.key_file_line, fileName),
+                style = MaterialTheme.typography.bodyMedium,
+            )
+            Text(
+                modifier = Modifier.padding(top = 8.dp),
+                text = stringResource(
+                    R.string.key_fingerprint_line,
+                    fingerprint ?: unavailable,
+                ),
+                style = MaterialTheme.typography.bodySmall,
+            )
+        }
     }
 }
 
@@ -263,10 +370,22 @@ private fun KeyManagementPage(
             onClick = actions.onExportPrivateKey,
         )
         ActionButton(
+            labelResource = R.string.action_delete_public_key,
+            enabled = state.nativeConnected && !state.running &&
+                state.fingerprint != null,
+            onClick = actions.onDeletePublicKey,
+        )
+        ActionButton(
             labelResource = R.string.action_delete_private_key,
             enabled = state.nativeConnected && !state.running &&
                 state.privateKeyExists,
             onClick = actions.onDeletePrivateKey,
+        )
+        ActionButton(
+            labelResource = R.string.action_delete_keypair,
+            enabled = state.nativeConnected && !state.running &&
+                (state.fingerprint != null || state.privateKeyExists),
+            onClick = actions.onDeleteKeypair,
         )
     }
 }
@@ -291,6 +410,10 @@ private fun SettingsPage() {
             titleResource = R.string.settings_language_title,
             valueResource = R.string.settings_language_system,
         )
+        SettingRow(
+            titleResource = R.string.settings_version_title,
+            valueResource = R.string.app_version,
+        )
     }
 }
 
@@ -300,7 +423,7 @@ private fun AboutPage(state: NekoKEMUiState) {
 
     PageColumn {
         Text(
-            text = stringResource(R.string.app_name),
+            text = stringResource(R.string.app_version),
             style = MaterialTheme.typography.headlineMedium,
             fontWeight = FontWeight.Bold,
         )
