@@ -357,3 +357,19 @@ make fuzz-build
 - X448 与 ML-KEM 的组合及本项目的 KDF/AAD 绑定方式是实验性设计，不代表经过标准化的 hybrid KEM；
 - 该自定义容器没有经过第三方评审、互操作测试或模糊测试；
 - 实现不能替代成熟、经过审计的文件加密协议和密钥管理系统。
+
+## Bug 反馈与功能建议
+
+普通 Bug、兼容性问题和功能建议请统一通过
+[GitHub Issues](https://github.com/Shixiaoshi0417/NekoKEM/issues) 提交。提交前请避免附加私钥、密码、明文敏感数据或其他个人信息。
+
+## 安全声明与漏洞报告
+
+NekoKEM 使用现代公开密码算法，但目前尚未经过独立的专业安全审计。暂不建议将其用于需要正式合规认证，或保护高价值、需要长期保密的数据。
+
+安全漏洞请勿公开提交 GitHub Issue。请按照 [`SECURITY.md`](SECURITY.md) 的说明私下发送至
+[shixiaoshi@shixiaoshi0417.com](mailto:shixiaoshi@shixiaoshi0417.com)。
+
+## License
+
+本项目采用 [Apache License 2.0](LICENSE) 开源许可证。
