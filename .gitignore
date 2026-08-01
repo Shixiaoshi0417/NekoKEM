@@ -50,12 +50,13 @@ mapping.txt
 *.csr
 *.crt
 
-# Keep runtime directories, never their contents
-/keys/*
+# Git-only exclusions: keep local runtime files and preserve directory markers
+# These patterns never delete local files; they only prevent Git tracking.
+/keys/**
 !/keys/.gitkeep
-/plaintext/*
+/plaintext/**
 !/plaintext/.gitkeep
-/encrypted/*
+/encrypted/**
 !/encrypted/.gitkeep
 
 # Fuzz, crash, benchmark, and generated corpus output
