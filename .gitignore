@@ -46,6 +46,8 @@ mapping.txt
 *.pfx
 *.keystore
 *.jks
+nekokem-release.jks
+nekokem-keystore-password.enc
 *.pk8
 *.csr
 *.crt
@@ -92,6 +94,7 @@ mapping.txt
 /*.docx
 
 # Temporary files, logs, caches, and local work products
+/dist/
 **/out/
 **/tmp/
 **/temp/

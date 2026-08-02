@@ -1,0 +1,67 @@
+NekoKEM Linux CLI 3.1.1
+======================
+
+This archive contains the standalone NekoKEM Linux CLI for the architecture
+named by the archive. The executable is a static PIE and includes its OpenSSL
+3.5.6 cryptographic runtime, so no OpenSSL or other shared-library package is
+required to run it.
+
+Automatic installation
+----------------------
+
+Download and inspect the installer, then run it:
+
+    curl --fail --location --output install.sh \
+        https://raw.githubusercontent.com/Shixiaoshi0417/NekoKEM/main/install.sh
+    less install.sh
+    sh install.sh
+
+The installer detects x86_64 or aarch64, downloads the matching archive from
+the latest stable GitHub Release, verifies the archive's SHA256SUMS, and
+installs nekokem in /usr/local/bin. It uses sudo only when the destination is
+not writable; if sudo is unavailable, it prints a manual recovery command.
+The installer never compiles source code or installs OpenSSL or other packages.
+
+After installation:
+
+    nekokem --version
+
+NekoKEM is an experimental file-encryption project. It has not received an
+independent professional security audit and should not be used for formally
+regulated workloads or high-value, long-term data protection.
+
+Verify the package contents
+---------------------------
+
+From this directory, run:
+
+    sha256sum -c SHA256SUMS
+
+Basic use
+---------
+
+Generate an encrypted Hybrid private key and matching public key:
+
+    ./nekokem keygen
+
+Encrypt with the default NKEM v3 Hybrid protocol:
+
+    ./nekokem encrypt hybrid input.bin output.nkem keys/public.key
+
+Decrypt an NKEM v3 Hybrid container:
+
+    ./nekokem decrypt hybrid output.nkem recovered.bin keys/private.key.enc
+
+The key-establishment construction is X448 + ML-KEM-1024, followed by
+HKDF-SHA512 and AES-256-GCM. Decryption remains compatible with the existing
+NKEM v1 and v2 formats. NKPR private-key storage is unchanged.
+
+The default interactive interface creates keys/, plaintext/, and encrypted/
+under the current working directory. Keep private-key passwords and generated
+key files secure.
+
+License
+-------
+
+NekoKEM is distributed under the Apache License 2.0. See LICENSE in this
+archive.

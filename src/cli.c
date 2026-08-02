@@ -34,6 +34,7 @@ void cli_print_usage(const char *program)
     fprintf(stderr,
             "Usage:\n"
             "  %s\n"
+            "  %s --version\n"
             "  %s keygen\n"
             "  %s keygen hybrid\n"
             "  %s keygen legacy-v1\n"
@@ -43,7 +44,7 @@ void cli_print_usage(const char *program)
             "  %s decrypt hybrid <input_file> <output_file> "
             "<private.key|private.key.enc>\n",
             program, program, program, program, program, program, program,
-            program);
+            program, program);
 }
 
 static void password_buffer_cleanup(PasswordBuffer *password)

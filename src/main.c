@@ -5,8 +5,15 @@
 #include <stdlib.h>
 #include <string.h>
 
+#define NEKOKEM_CLI_VERSION "3.1.1"
+
 int main(int argc, char **argv)
 {
+    if (argc == 2 && strcmp(argv[1], "--version") == 0) {
+        return puts("NekoKEM " NEKOKEM_CLI_VERSION) == EOF
+                   ? EXIT_FAILURE
+                   : EXIT_SUCCESS;
+    }
     if (!file_disable_buffering(stdin)) {
         return EXIT_FAILURE;
     }

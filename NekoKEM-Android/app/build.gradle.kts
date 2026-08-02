@@ -4,6 +4,29 @@ plugins {
     id("org.jetbrains.kotlin.plugin.compose")
 }
 
+val releaseSigningEnvironment = mapOf(
+    "storeFile" to providers.environmentVariable("NEKOKEM_RELEASE_STORE_FILE").orNull,
+    "storePassword" to providers.environmentVariable("NEKOKEM_RELEASE_STORE_PASSWORD").orNull,
+    "keyAlias" to providers.environmentVariable("NEKOKEM_RELEASE_KEY_ALIAS").orNull,
+    "keyPassword" to providers.environmentVariable("NEKOKEM_RELEASE_KEY_PASSWORD").orNull,
+)
+val releaseTaskRequested = gradle.startParameter.taskNames.any {
+    it.contains("release", ignoreCase = true)
+}
+val missingReleaseSigningValues = releaseSigningEnvironment
+    .filterValues { it.isNullOrBlank() }
+    .keys
+val releaseSigningConfigured = missingReleaseSigningValues.isEmpty()
+
+if (releaseTaskRequested && !releaseSigningConfigured) {
+    throw GradleException(
+        "Release signing requires environment variables: " +
+            "NEKOKEM_RELEASE_STORE_FILE, NEKOKEM_RELEASE_STORE_PASSWORD, " +
+            "NEKOKEM_RELEASE_KEY_ALIAS, NEKOKEM_RELEASE_KEY_PASSWORD " +
+            "(missing: ${missingReleaseSigningValues.joinToString()})",
+    )
+}
+
 android {
     namespace = "com.shixiaoshi0417.nekokem"
     compileSdk = 35
@@ -13,8 +36,8 @@ android {
         applicationId = "com.shixiaoshi0417.nekokem"
         minSdk = 26
         targetSdk = 35
-        versionCode = 2
-        versionName = "3.1"
+        versionCode = 3
+        versionName = "3.1.1"
         testInstrumentationRunner =
             "com.shixiaoshi0417.nekokem.TemporaryKeyInstrumentation"
 
@@ -29,8 +52,22 @@ android {
         }
     }
 
+    signingConfigs {
+        if (releaseSigningConfigured) {
+            create("release") {
+                storeFile = file(requireNotNull(releaseSigningEnvironment["storeFile"]))
+                storePassword = requireNotNull(releaseSigningEnvironment["storePassword"])
+                keyAlias = requireNotNull(releaseSigningEnvironment["keyAlias"])
+                keyPassword = requireNotNull(releaseSigningEnvironment["keyPassword"])
+            }
+        }
+    }
+
     buildTypes {
         release {
+            if (releaseSigningConfigured) {
+                signingConfig = signingConfigs.getByName("release")
+            }
             isMinifyEnabled = false
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),

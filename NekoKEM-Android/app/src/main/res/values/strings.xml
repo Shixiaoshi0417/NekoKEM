@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">NekoKEM</string>
-    <string name="app_version">NekoKEM v3.1</string>
+    <string name="app_version">NekoKEM v3.1.1</string>
 
     <string name="navigation_files">File Encryption</string>
     <string name="navigation_keys">Key Management</string>

@@ -14,12 +14,27 @@ NekoKEM 是一个用于学习 OpenSSL 3.5 EVP API 的实验性后量子文件加
 
 本项目不自行实现任何密码算法，也不依赖 liboqs。**它没有经过安全审计，不应被视为生产级软件，也不应用来保护重要或敏感数据。**
 
-## Android v3.1
+## 发布版本 v3.1.1
 
-Android 正式版与 Core 当前均为 `3.1`，application ID 为
+Android App 版本为 `3.1.1`，Core 版本保持 `3.1`，application ID 为
 `com.shixiaoshi0417.nekokem`。Android 工程及构建说明见
-[`NekoKEM-Android/README.md`](NekoKEM-Android/README.md)。App 版本 3.1 不改变
+[`NekoKEM-Android/README.md`](NekoKEM-Android/README.md)。App 版本 3.1.1 不改变
 协议编号：默认文件容器仍为 **NKEM v3**，NKPR 格式保持不变。
+
+v3.1.1 新增无需运行时共享库依赖的 Linux x86_64/aarch64 CLI 发行包、
+自动安装脚本和 GitHub Actions 构建流程。安装脚本自动选择最新 GitHub
+Release 中与本机架构匹配的包，先使用 Release 顶层 `SHA256SUMS.txt` 验证
+归档，再验证包内文件的 SHA-256：
+
+```sh
+curl --fail --location --output install.sh \
+    https://raw.githubusercontent.com/Shixiaoshi0417/NekoKEM/main/install.sh
+less install.sh
+sh install.sh
+```
+
+Linux CLI 支持 `nekokem --version`。此发行补丁不改变 Core API、密码参数、
+NKEM v1/v2/v3 或 NKPR 格式。
 
 ## 安装依赖
 
