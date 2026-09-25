@@ -32,7 +32,7 @@ typedef int (*NekoKEMProgressCallback)(uint64_t processed_bytes,
                                        void *user_data);
 
 /*
- * All legacy functions return 1 on success and 0 on error. Password bytes
+ * Functions return 1 on success and 0 on error. Password bytes
  * are borrowed for the duration of the call and are never retained by Core.
  */
 NEKOKEM_API int nekokem_generate_keypair(
@@ -59,7 +59,7 @@ NEKOKEM_API int nekokem_encrypt_file_with_progress(
     NekoKEMProgressCallback progress_callback,
     void *progress_user_data);
 
-/* Strictly dispatches v1/v2 legacy paths or the v3 split-salt path. */
+/* Decrypts only the current NKEM v3 split-salt container. */
 NEKOKEM_API int nekokem_decrypt_file(
     const char *input_path,
     const char *output_path,
@@ -104,32 +104,6 @@ NEKOKEM_API int nekokem_export_public_key(
 NEKOKEM_API int nekokem_delete_private_key(
     const char *private_key_path);
 
-/* Compatibility entry points for the existing NKEM v1 CLI commands. */
-NEKOKEM_API int nekokem_generate_v1_keypair(
-    const char *public_key_path,
-    const char *private_key_path);
-
-NEKOKEM_API int nekokem_encrypt_file_v1(
-    const char *input_path,
-    const char *output_path,
-    const char *public_key_path);
-
-NEKOKEM_API int nekokem_decrypt_file_v1(
-    const char *input_path,
-    const char *output_path,
-    const char *private_key_path);
-
-/* Compatibility entry points for producing and consuming NKEM v2. */
-NEKOKEM_API int nekokem_encrypt_file_v2(
-    const char *input_path,
-    const char *output_path,
-    const char *public_key_path);
-NEKOKEM_API int nekokem_decrypt_file_v2(
-    const char *input_path,
-    const char *output_path,
-    const char *private_key_path,
-    const unsigned char *password,
-    size_t password_len);
 
 /* Lets a UI decide whether it must request a password. */
 NEKOKEM_API int nekokem_private_key_requires_password(
