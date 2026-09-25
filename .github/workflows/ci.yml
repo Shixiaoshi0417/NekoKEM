@@ -115,7 +115,7 @@ jobs:
       - name: Run Android unit tests and build debug artifacts
         working-directory: android
         run: |
-          ./gradlew --no-daemon --stacktrace \
+          bash ./gradlew --no-daemon --stacktrace \
             testDebugUnitTest \
             assembleDebug \
             assembleDebugAndroidTest
