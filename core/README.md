@@ -35,10 +35,6 @@ Core 使用 OpenSSL 3.5 EVP、NKEM v1/v2/v3 和 NKPR。v3 使用独立的
   再原子地重新序列化到目标文件。
 - `nekokem_delete_private_key()`：只删除指定的常规文件；目标不存在时也
   视为成功，便于 UI 实现幂等删除。
-- `nekokem_generate_v1_keypair()`、`nekokem_encrypt_file_v1()` 和
-  `nekokem_decrypt_file_v1()`：供现有 v1 CLI 兼容命令使用。
-- `nekokem_encrypt_file_v2()` 和 `nekokem_decrypt_file_v2()`：供既有 v2
-  消费者及兼容性测试使用。
 - `nekokem_private_key_requires_password()`：供 UI 在调用解密 API 前决定
   是否显示口令输入框。
 
