@@ -6,6 +6,10 @@
 #include <stdlib.h>
 #include <string.h>
 
+#define NKPR_TEST_KDF_ID_ARGON2ID 1U
+#define NKPR_TEST_CIPHER_ID_AES256_GCM 1U
+#define NKPR_TEST_ARGON2_VERSION 0x13U
+
 static void put_u16_be(unsigned char *output, uint16_t value)
 {
     output[0] = (unsigned char)(value >> 8);
@@ -51,13 +55,13 @@ static size_t build_valid_nkpr(unsigned char *buffer, size_t capacity)
     memset(buffer, 0, total);
     memcpy(buffer, "NKPR", 4U);
     buffer[4] = NKPR_VERSION;
-    buffer[5] = NKPR_KDF_ID_ARGON2ID;
-    buffer[6] = NKPR_CIPHER_ID_AES256_GCM;
+    buffer[5] = NKPR_TEST_KDF_ID_ARGON2ID;
+    buffer[6] = NKPR_TEST_CIPHER_ID_AES256_GCM;
     buffer[7] = 0U;
     put_u32_be(buffer + 8U, NKPR_ARGON2_MEMORY_KIB);
     put_u32_be(buffer + 12U, NKPR_ARGON2_ITERATIONS);
     put_u32_be(buffer + 16U, NKPR_ARGON2_PARALLELISM);
-    put_u32_be(buffer + 20U, NKPR_ARGON2_VERSION);
+    put_u32_be(buffer + 20U, NKPR_TEST_ARGON2_VERSION);
     put_u16_be(buffer + 24U, NKPR_SALT_SIZE);
     buffer[26] = NKPR_NONCE_SIZE;
     buffer[27] = NKPR_TAG_SIZE;
@@ -75,14 +79,14 @@ int main(void)
 
     if (nkem_len == 0U || nkpr_len == 0U ||
         !nkem_v3_container_parse(nkem, nkem_len) ||
-        !nkpr_container_parse(nkpr, nkpr_len)) {
+        !protected_private_key_container_parse(nkpr, nkpr_len)) {
         return EXIT_FAILURE;
     }
     for (i = 0U; i < nkem_len; ++i) {
         if (nkem_v3_container_parse(nkem, i)) return EXIT_FAILURE;
     }
     for (i = 0U; i < nkpr_len; ++i) {
-        if (nkpr_container_parse(nkpr, i)) return EXIT_FAILURE;
+        if (protected_private_key_container_parse(nkpr, i)) return EXIT_FAILURE;
     }
 
     nkem[4] = 1U;
@@ -94,7 +98,7 @@ int main(void)
     if (nkem_v3_container_parse(nkem, nkem_len)) return EXIT_FAILURE;
 
     nkpr[4] ^= 1U;
-    if (nkpr_container_parse(nkpr, nkpr_len)) return EXIT_FAILURE;
+    if (protected_private_key_container_parse(nkpr, nkpr_len)) return EXIT_FAILURE;
 
     puts("NKEM v3 and NKPR parser tests passed");
     return EXIT_SUCCESS;
