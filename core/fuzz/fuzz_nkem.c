@@ -10,7 +10,7 @@ int main(int argc, char **argv)
     if (argc != 2 || !fuzz_read_input(argv[1], &input, &input_len)) {
         return 0;
     }
-    (void)nkem_container_parse(input, input_len);
+    (void)nkem_v3_container_parse(input, input_len);
     free(input);
     return 0;
 }
