@@ -1,0 +1,113 @@
+name: Continuous integration
+
+on:
+  pull_request:
+    branches:
+      - main
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  linux-tests:
+    name: Linux Core and CLI tests
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Install Linux build tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends \
+            build-essential ca-certificates curl perl
+
+      - name: Build OpenSSL 3.5.6
+        env:
+          OPENSSL_VERSION: "3.5.6"
+          OPENSSL_SHA256: deae7c80cba99c4b4f940ecadb3c3338b13cb77418409238e57d7f31f2a3b736
+        run: |
+          set -Eeuo pipefail
+          build_root="$RUNNER_TEMP/openssl-build"
+          install_root="$RUNNER_TEMP/openssl-$OPENSSL_VERSION"
+          archive="$build_root/openssl-$OPENSSL_VERSION.tar.gz"
+          source_dir="$build_root/source"
+
+          mkdir -p "$build_root" "$source_dir"
+          curl --fail --location --silent --show-error --proto '=https' \
+            --tlsv1.2 --retry 3 \
+            --output "$archive" \
+            "https://github.com/openssl/openssl/releases/download/openssl-$OPENSSL_VERSION/openssl-$OPENSSL_VERSION.tar.gz"
+          printf '%s  %s\n' "$OPENSSL_SHA256" "$archive" | sha256sum -c -
+          tar --extract --gzip --file "$archive" \
+            --directory "$source_dir" --strip-components=1 --no-same-owner
+
+          cd "$source_dir"
+          perl ./Configure linux-x86_64 \
+            no-shared no-module no-dso no-tests no-apps no-docs \
+            no-sock no-zlib no-zstd \
+            --prefix="$install_root" --openssldir=/etc/ssl --libdir=lib
+          make --silent -j2
+          make --silent install_dev
+
+      - name: Run complete Linux test suite
+        env:
+          CPATH: ${{ runner.temp }}/openssl-3.5.6/include
+          LIBRARY_PATH: ${{ runner.temp }}/openssl-3.5.6/lib
+        run: make -C linux test
+
+  android-build:
+    name: Android debug build and tests
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install pinned Android toolchain
+        run: |
+          sdkmanager \
+            "platform-tools" \
+            "platforms;android-35" \
+            "build-tools;35.0.0" \
+            "ndk;28.2.13676358" \
+            "cmake;3.22.1"
+
+      - name: Set up Gradle cache
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          cache-read-only: ${{ github.event_name == 'pull_request' }}
+
+      - name: Build OpenSSL 3.5.6 for Android arm64
+        working-directory: android
+        env:
+          JOBS: "2"
+        run: sh scripts/build-openssl-android.sh
+
+      - name: Run Android unit tests and build debug artifacts
+        working-directory: android
+        run: |
+          ./gradlew --no-daemon --stacktrace \
+            testDebugUnitTest \
+            assembleDebug \
+            assembleDebugAndroidTest
