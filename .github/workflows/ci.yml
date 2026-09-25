@@ -97,6 +97,9 @@ jobs:
             "build-tools;35.0.0" \
             "ndk;28.2.13676358" \
             "cmake;3.22.1"
+          printf 'ANDROID_SDK_ROOT=%s\n' "$sdk_root" >> "$GITHUB_ENV"
+          printf 'ANDROID_NDK_ROOT=%s/ndk/28.2.13676358\n' \
+            "$sdk_root" >> "$GITHUB_ENV"
 
       - name: Set up Gradle cache
         uses: gradle/actions/setup-gradle@v4
