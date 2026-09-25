@@ -15,7 +15,7 @@
 
 static int valid_path(const char *path)
 {
-    return path != NULL && path[0] != '\\0';
+    return path != NULL && path[0] != '\0';
 }
 
 int nekokem_generate_keypair(const char *public_key_path,
