@@ -83,7 +83,15 @@ jobs:
 
       - name: Install pinned Android toolchain
         run: |
-          sdkmanager \
+          set -Eeuo pipefail
+          sdk_root="${ANDROID_SDK_ROOT:-${ANDROID_HOME:-/usr/local/lib/android/sdk}}"
+          sdkmanager_path=$(find "$sdk_root/cmdline-tools" -maxdepth 3 \
+            -type f -name sdkmanager -print -quit)
+          if [ -z "$sdkmanager_path" ]; then
+            echo "sdkmanager not found under $sdk_root/cmdline-tools" >&2
+            exit 1
+          fi
+          "$sdkmanager_path" \
             "platform-tools" \
             "platforms;android-35" \
             "build-tools;35.0.0" \
