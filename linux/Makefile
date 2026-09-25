@@ -1,7 +1,7 @@
 CC = /usr/bin/gcc
 AR = /usr/bin/ar
 CPPFLAGS = -D_POSIX_C_SOURCE=200809L -D_FORTIFY_SOURCE=3 \
-	-Inekokem_core/include -Isrc
+	-I../core/include -I../core/src
 CFLAGS = -std=c17 -O2 -Wall -Wextra -Wpedantic -Wconversion -Wshadow \
 	-Wformat=2 -Wstrict-prototypes -Werror -fstack-protector-strong -fPIE
 LDFLAGS = -pie
@@ -16,10 +16,10 @@ FUZZ_LDFLAGS = -fsanitize=undefined
 
 TARGET = nekokem
 CORE_LIBRARY = libnekokem_core.a
-CORE_SOURCES = nekokem_core/src/nekokem.c \
-	nekokem_core/src/key_management.c \
-	nekokem_core/src/nekokem_v3.c src/kem.c src/hybrid.c \
-	src/aes.c src/file.c src/file_v3.c src/secure_mem.c src/private_key.c
+CORE_SOURCES = ../core/src/nekokem.c \
+	../core/src/key_management.c \
+	../core/src/nekokem_v3.c ../core/src/kem.c ../core/src/hybrid.c \
+	../core/src/aes.c ../core/src/file.c ../core/src/file_v3.c ../core/src/secure_mem.c ../core/src/private_key.c
 CLI_SOURCES = src/main.c src/cli.c
 SOURCES = $(CLI_SOURCES) $(CORE_SOURCES)
 CORE_OBJECTS = $(CORE_SOURCES:.c=.o)
@@ -48,11 +48,11 @@ $(TARGET): $(CLI_OBJECTS) $(CORE_LIBRARY)
 analyze:
 	$(CC) $(CPPFLAGS) $(CFLAGS) -O1 -fanalyzer -fsyntax-only $(SOURCES)
 	$(CC) $(CPPFLAGS) $(CFLAGS) -O1 -fanalyzer -fsyntax-only \
-		tests/parser_tests.c src/file.c src/file_v3.c src/private_key.c \
-		src/secure_mem.c
+		../core/tests/parser_tests.c ../core/src/file.c ../core/src/file_v3.c ../core/src/private_key.c \
+		../core/src/secure_mem.c
 	$(CC) $(CPPFLAGS) $(CFLAGS) -O1 -fanalyzer -fsyntax-only \
-		-DNEKOKEM_TEST_FAULT_INJECTION tests/file_security_tests.c \
-		src/file.c src/file_v3.c src/secure_mem.c
+		-DNEKOKEM_TEST_FAULT_INJECTION ../core/tests/file_security_tests.c \
+		../core/src/file.c ../core/src/file_v3.c ../core/src/secure_mem.c
 
 test-ubsan:
 	@set -eu; \
@@ -64,7 +64,7 @@ test-ubsan:
 		$(LDFLAGS) $(SOURCES) $(LDLIBS) -fsanitize=undefined \
 		-o "$$ubsan_binary"; \
 	UBSAN_OPTIONS=halt_on_error=1:print_stacktrace=1 \
-		sh tests/security_paths.sh "$$ubsan_binary"
+		sh ../core/tests/security_paths.sh "$$ubsan_binary"
 
 test-parser:
 	@set -eu; \
@@ -73,8 +73,8 @@ test-parser:
 	trap cleanup_parser EXIT INT TERM; \
 	$(CC) $(CPPFLAGS) $(CFLAGS) -O1 \
 		-fsanitize=undefined -fno-sanitize-recover=undefined \
-		$(LDFLAGS) tests/parser_tests.c src/file.c src/file_v3.c \
-		src/private_key.c src/secure_mem.c $(LDLIBS) \
+		$(LDFLAGS) ../core/tests/parser_tests.c ../core/src/file.c ../core/src/file_v3.c \
+		../core/src/private_key.c ../core/src/secure_mem.c $(LDLIBS) \
 		-fsanitize=undefined -o "$$parser_binary"; \
 	UBSAN_OPTIONS=halt_on_error=1:print_stacktrace=1 \
 		"$$parser_binary"
@@ -87,28 +87,28 @@ test-file-security:
 	$(CC) $(CPPFLAGS) $(CFLAGS) -O1 \
 		-DNEKOKEM_TEST_FAULT_INJECTION \
 		-fsanitize=undefined -fno-sanitize-recover=undefined \
-		$(LDFLAGS) tests/file_security_tests.c src/file.c src/file_v3.c \
-		src/secure_mem.c $(LDLIBS) -fsanitize=undefined \
+		$(LDFLAGS) ../core/tests/file_security_tests.c ../core/src/file.c ../core/src/file_v3.c \
+		../core/src/secure_mem.c $(LDLIBS) -fsanitize=undefined \
 		-o "$$security_binary"; \
 	UBSAN_OPTIONS=halt_on_error=1:print_stacktrace=1 \
 		"$$security_binary"
 
 fuzz-seeds:
-	sh fuzz/generate_seeds.sh
+	sh ../core/fuzz/generate_seeds.sh
 
 fuzz-build: fuzz-seeds
 	@command -v "$(AFL_CC)" >/dev/null || { \
 		echo "afl-clang-fast is required (install afl++)" >&2; \
 		exit 1; \
 	}
-	mkdir -p fuzz/bin
+	mkdir -p ../core/fuzz/bin
 	$(AFL_CC) $(FUZZ_CPPFLAGS) $(FUZZ_CFLAGS) \
-		fuzz/fuzz_nkem.c src/file.c src/file_v3.c src/secure_mem.c \
-		$(FUZZ_LDFLAGS) $(LDLIBS) -o fuzz/bin/fuzz_nkem
+		../core/fuzz/fuzz_nkem.c ../core/src/file.c ../core/src/file_v3.c ../core/src/secure_mem.c \
+		$(FUZZ_LDFLAGS) $(LDLIBS) -o ../core/fuzz/bin/fuzz_nkem
 	$(AFL_CC) $(FUZZ_CPPFLAGS) $(FUZZ_CFLAGS) \
-		fuzz/fuzz_nkpr.c src/private_key.c src/file.c src/file_v3.c \
-		src/secure_mem.c $(FUZZ_LDFLAGS) $(LDLIBS) \
-		-o fuzz/bin/fuzz_nkpr
+		../core/fuzz/fuzz_nkpr.c ../core/src/private_key.c ../core/src/file.c ../core/src/file_v3.c \
+		../core/src/secure_mem.c $(FUZZ_LDFLAGS) $(LDLIBS) \
+		-o ../core/fuzz/bin/fuzz_nkpr
 
 test-version: $(CORE_LIBRARY)
 	@set -eu; \
@@ -116,7 +116,7 @@ test-version: $(CORE_LIBRARY)
 	cleanup_version() { rm -f "$$version_binary"; }; \
 	trap cleanup_version EXIT INT TERM; \
 	$(CC) $(CPPFLAGS) $(CFLAGS) $(LDFLAGS) \
-		tests/version_compat_tests.c $(CORE_LIBRARY) $(LDLIBS) \
+		../core/tests/version_compat_tests.c $(CORE_LIBRARY) $(LDLIBS) \
 		-o "$$version_binary"; \
 	"$$version_binary"
 
@@ -126,7 +126,7 @@ test-key-management: $(CORE_LIBRARY)
 	cleanup_key() { rm -f "$$key_binary"; }; \
 	trap cleanup_key EXIT INT TERM; \
 	$(CC) $(CPPFLAGS) $(CFLAGS) $(LDFLAGS) \
-		tests/key_management_tests.c $(CORE_LIBRARY) $(LDLIBS) \
+		../core/tests/key_management_tests.c $(CORE_LIBRARY) $(LDLIBS) \
 		-o "$$key_binary"; \
 	"$$key_binary"
 
@@ -136,7 +136,7 @@ test-progress test-progress-large: $(CORE_LIBRARY)
 	cleanup_progress() { rm -f "$$progress_binary"; }; \
 	trap cleanup_progress EXIT INT TERM; \
 	$(CC) $(CPPFLAGS) $(CFLAGS) $(LDFLAGS) \
-		tests/progress_tests.c $(CORE_LIBRARY) $(LDLIBS) \
+		../core/tests/progress_tests.c $(CORE_LIBRARY) $(LDLIBS) \
 		-o "$$progress_binary"; \
 	if [ "$@" = "test-progress-large" ]; then \
 		NEKOKEM_PROGRESS_TEST_BYTES=3221225472 \
@@ -335,6 +335,6 @@ test: $(TARGET) analyze test-ubsan test-parser test-file-security \
 
 clean:
 	rm -f $(TARGET) $(CORE_LIBRARY) $(OBJECTS) $(DEPS)
-	rm -f fuzz/bin/fuzz_nkem fuzz/bin/fuzz_nkpr
+	rm -f ../core/fuzz/bin/fuzz_nkem ../core/fuzz/bin/fuzz_nkpr
 
 -include $(DEPS)

@@ -34,11 +34,11 @@ jobs:
             build-essential ca-certificates curl perl
 
       - name: Build, verify, and package
-        run: bash scripts/build-linux-release.sh "${{ matrix.arch }}" "$GITHUB_WORKSPACE/dist"
+        run: bash linux/scripts/build-linux-release.sh "${{ matrix.arch }}" "$GITHUB_WORKSPACE/dist"
 
       - name: Test latest-release installer
         run: |
-          sh tests/install_script_tests.sh \
+          sh core/tests/install_script_tests.sh \
             "${{ matrix.arch }}" \
             "dist/NekoKEM-linux-${{ matrix.arch }}.tar.gz"
 

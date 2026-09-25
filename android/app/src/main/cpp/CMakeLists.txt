@@ -43,16 +43,16 @@ set_target_properties(
 
 set(
     NEKOKEM_CORE_SOURCES
-    "${NEKOKEM_REPOSITORY_ROOT}/nekokem_core/src/nekokem.c"
-    "${NEKOKEM_REPOSITORY_ROOT}/nekokem_core/src/key_management.c"
-    "${NEKOKEM_REPOSITORY_ROOT}/nekokem_core/src/nekokem_v3.c"
-    "${NEKOKEM_REPOSITORY_ROOT}/src/kem.c"
-    "${NEKOKEM_REPOSITORY_ROOT}/src/hybrid.c"
-    "${NEKOKEM_REPOSITORY_ROOT}/src/aes.c"
-    "${NEKOKEM_REPOSITORY_ROOT}/src/file.c"
-    "${NEKOKEM_REPOSITORY_ROOT}/src/file_v3.c"
-    "${NEKOKEM_REPOSITORY_ROOT}/src/secure_mem.c"
-    "${NEKOKEM_REPOSITORY_ROOT}/src/private_key.c"
+    "${NEKOKEM_REPOSITORY_ROOT}/core/src/nekokem.c"
+    "${NEKOKEM_REPOSITORY_ROOT}/core/src/key_management.c"
+    "${NEKOKEM_REPOSITORY_ROOT}/core/src/nekokem_v3.c"
+    "${NEKOKEM_REPOSITORY_ROOT}/core/src/kem.c"
+    "${NEKOKEM_REPOSITORY_ROOT}/core/src/hybrid.c"
+    "${NEKOKEM_REPOSITORY_ROOT}/core/src/aes.c"
+    "${NEKOKEM_REPOSITORY_ROOT}/core/src/file.c"
+    "${NEKOKEM_REPOSITORY_ROOT}/core/src/file_v3.c"
+    "${NEKOKEM_REPOSITORY_ROOT}/core/src/secure_mem.c"
+    "${NEKOKEM_REPOSITORY_ROOT}/core/src/private_key.c"
 )
 
 # main.c and cli.c are intentionally absent: Android links only reusable Core.
@@ -61,8 +61,8 @@ set_target_properties(nekokem_core PROPERTIES POSITION_INDEPENDENT_CODE ON)
 
 target_include_directories(
     nekokem_core
-    PUBLIC "${NEKOKEM_REPOSITORY_ROOT}/nekokem_core/include"
-    PRIVATE "${NEKOKEM_REPOSITORY_ROOT}/src"
+    PUBLIC "${NEKOKEM_REPOSITORY_ROOT}/core/include"
+    PRIVATE "${NEKOKEM_REPOSITORY_ROOT}/core/src"
 )
 
 # The Android NDK toolchain supplies its supported _FORTIFY_SOURCE setting.
@@ -94,7 +94,7 @@ target_sources(nekokem_jni PRIVATE password_jni.c)
 target_sources(nekokem_jni PRIVATE progress_jni.c)
 target_include_directories(
     nekokem_jni
-    PRIVATE "${NEKOKEM_REPOSITORY_ROOT}/nekokem_core/src"
+    PRIVATE "${NEKOKEM_REPOSITORY_ROOT}/core/src"
 )
 
 target_compile_options(
