@@ -33,7 +33,7 @@ mapping.txt
 *.swo
 
 # Locally compiled Android OpenSSL prefix; rebuild with the checked-in script
-/NekoKEM-Android/app/src/main/cpp/third_party/openssl/
+/android/app/src/main/cpp/third_party/openssl/
 
 # Runtime keys and sensitive key/certificate containers
 *.nkpr
@@ -52,23 +52,20 @@ nekokem-keystore-password.enc
 *.csr
 *.crt
 
-# Git-only exclusions: keep local runtime files and preserve directory markers
+# Runtime working directories created by the Linux CLI
 # These patterns never delete local files; they only prevent Git tracking.
-/keys/**
-!/keys/.gitkeep
-/plaintext/**
-!/plaintext/.gitkeep
-/encrypted/**
-!/encrypted/.gitkeep
+/linux/keys/
+/linux/plaintext/
+/linux/encrypted/
 
 # Fuzz, crash, benchmark, and generated corpus output
-/fuzz/bin/
-/fuzz/out/
-/fuzz/findings/
-/fuzz/crashes/
-/fuzz/hangs/
-/fuzz/queue/
-/fuzz/seeds/nkem/valid-v3
+/core/fuzz/bin/
+/core/fuzz/out/
+/core/fuzz/findings/
+/core/fuzz/crashes/
+/core/fuzz/hangs/
+/core/fuzz/queue/
+/core/fuzz/seeds/nkem/valid-v3
 **/crash-*
 **/id:*
 **/benchmark/
@@ -94,7 +91,7 @@ nekokem-keystore-password.enc
 /*.docx
 
 # Temporary files, logs, caches, and local work products
-/dist/
+/linux/dist/
 **/out/
 **/tmp/
 **/temp/
