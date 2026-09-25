@@ -18,7 +18,7 @@ NekoKEM 是一个用于学习 OpenSSL 3.5 EVP API 的实验性后量子文件加
 
 Android App 版本为 `3.1.1`，Core 版本保持 `3.1`，application ID 为
 `com.shixiaoshi0417.nekokem`。Android 工程及构建说明见
-[`NekoKEM-Android/README.md`](NekoKEM-Android/README.md)。App 版本 3.1.1 不改变
+[`android/README.md`](android/README.md)。App 版本 3.1.1 不改变
 协议编号：默认文件容器仍为 **NKEM v3**，NKPR 格式保持不变。
 
 v3.1.1 新增无需运行时共享库依赖的 Linux x86_64/aarch64 CLI 发行包、
@@ -28,7 +28,7 @@ Release 中与本机架构匹配的包，先使用 Release 顶层 `SHA256SUMS.tx
 
 ```sh
 curl --fail --location --output install.sh \
-    https://raw.githubusercontent.com/Shixiaoshi0417/NekoKEM/main/install.sh
+    https://raw.githubusercontent.com/Shixiaoshi0417/NekoKEM/main/linux/install.sh
 less install.sh
 sh install.sh
 ```
@@ -55,7 +55,7 @@ sudo apt install afl++
 ## 编译
 
 ```sh
-make
+make -C linux
 ```
 
 构建使用 C17，并链接 OpenSSL `libcrypto`。Hybrid 私钥保护使用 OpenSSL 3.5 provider 提供的 Argon2id，不需要额外安装 `libargon2`。默认构建启用 `-Werror`、`-fstack-protector-strong`、`-D_FORTIFY_SOURCE=3`、`-fPIE` 和 `-pie`。
@@ -315,7 +315,7 @@ v3 保持 v2 的 X448、ML-KEM-1024、共享秘密组合和 HKDF-SHA512 流程�
 
 ### 敏感数据清零
 
-- `src/secure_mem.c` 统一提供 `secure_mem_clear()` 和 `secure_free()`，底层分别使用 `OPENSSL_cleanse()` 与 `OPENSSL_clear_free()`，不使用可能被死存储消除优化掉的 `memset()` 清理秘密；
+- `core/src/secure_mem.c` 统一提供 `secure_mem_clear()` 和 `secure_free()`，底层分别使用 `OPENSSL_cleanse()` 与 `OPENSSL_clear_free()`，不使用可能被死存储消除优化掉的 `memset()` 清理秘密；
 - ML-KEM/X448 共享秘密在 HKDF 完成后立即清零释放，不再保留到整个文件操作结束；
 - Hybrid HKDF 所需的 `x448_secret || mlkem_secret` 是协议要求的唯一组合副本，在 KDF 上下文释放后立即清零；
 - AES 密钥和包含明文的 AES 分块缓冲区在所有成功与失败出口清零；
@@ -344,7 +344,7 @@ v3 保持 v2 的 X448、ML-KEM-1024、共享秘密组合和 HKDF-SHA512 流程�
 ## 自动测试
 
 ```sh
-make test
+make -C linux test
 ```
 
 测试会在临时目录中执行：
@@ -375,15 +375,15 @@ make test
 ## AFL++ parser fuzzing
 
 ```sh
-make fuzz-build
+make -C linux fuzz-build
 ```
 
 该目标使用 `afl-clang-fast` 和 UBSan 构建：
 
-- `fuzz/bin/fuzz_nkem`：仅解析 NKEM v1/v2/v3 header 与容器总长度；
-- `fuzz/bin/fuzz_nkpr`：仅解析 NKPR header、参数与容器总长度。
+- `core/fuzz/bin/fuzz_nkem`：仅解析 NKEM v1/v2/v3 header 与容器总长度；
+- `core/fuzz/bin/fuzz_nkpr`：仅解析 NKPR header、参数与容器总长度。
 
-两个 harness 都接受一个 `argv[1]` 文件路径，拒绝超过 2 MiB 的输入，不执行密钥解封装、Argon2id、AES-GCM 或明文写出。`fuzz/seeds/` 中的有效样本只是零填充的结构样本，不含密码、私钥或真实敏感数据；同时提供多个截断样本。具体 AFL 命令见 `fuzz/README.md`。
+两个 harness 都接受一个 `argv[1]` 文件路径，拒绝超过 2 MiB 的输入，不执行密钥解封装、Argon2id、AES-GCM 或明文写出。`core/fuzz/seeds/` 中的有效样本只是零填充的结构样本，不含密码、私钥或真实敏感数据；同时提供多个截断样本。具体 AFL 命令见 `core/fuzz/README.md`。
 
 ## 安全边界
 

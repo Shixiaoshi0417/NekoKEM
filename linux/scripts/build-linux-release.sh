@@ -36,7 +36,7 @@ case "$target_arch" in
 esac
 
 script_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)
-repo_root=$(cd -- "$script_dir/.." && pwd -P)
+repo_root=$(cd -- "$script_dir/../.." && pwd -P)
 output_dir=${2:-"$repo_root/dist"}
 mkdir -p -- "$output_dir"
 output_dir=$(cd -- "$output_dir" && pwd -P)
@@ -132,25 +132,25 @@ binary="$build_root/nekokem"
 mkdir -p -- "$build_objects"
 
 sources=(
-    src/main.c
-    src/cli.c
-    nekokem_core/src/nekokem.c
-    nekokem_core/src/key_management.c
-    nekokem_core/src/nekokem_v3.c
-    src/kem.c
-    src/hybrid.c
-    src/aes.c
-    src/file.c
-    src/file_v3.c
-    src/secure_mem.c
-    src/private_key.c
+    linux/src/main.c
+    linux/src/cli.c
+    core/src/nekokem.c
+    core/src/key_management.c
+    core/src/nekokem_v3.c
+    core/src/kem.c
+    core/src/hybrid.c
+    core/src/aes.c
+    core/src/file.c
+    core/src/file_v3.c
+    core/src/secure_mem.c
+    core/src/private_key.c
 )
 cpp_flags=(
     -D_POSIX_C_SOURCE=200809L
     -D_FORTIFY_SOURCE=3
     -I"$openssl_prefix/include"
-    -I"$repo_root/nekokem_core/include"
-    -I"$repo_root/src"
+    -I"$repo_root/core/include"
+    -I"$repo_root/core/src"
 )
 c_flags=(
     -std=c17
@@ -243,7 +243,7 @@ stage_parent="$build_root/stage"
 package_dir="$stage_parent/$package_name"
 mkdir -p -- "$package_dir"
 install -m 0755 "$binary" "$package_dir/nekokem"
-install -m 0644 "$repo_root/packaging/linux/README" "$package_dir/README"
+install -m 0644 "$repo_root/linux/packaging/README" "$package_dir/README"
 install -m 0644 "$repo_root/LICENSE" "$package_dir/LICENSE"
 (
     cd -- "$package_dir"
