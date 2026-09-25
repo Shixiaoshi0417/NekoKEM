@@ -37,13 +37,10 @@ void cli_print_usage(const char *program)
             "  %s --version\n"
             "  %s keygen\n"
             "  %s keygen hybrid\n"
-            "  %s encrypt <input_file> <output_file> <public.key>\n"
-            "  %s decrypt <input_file> <output_file> <private.key>\n"
             "  %s encrypt hybrid <input_file> <output_file> <public.key>\n"
             "  %s decrypt hybrid <input_file> <output_file> "
             "<private.key|private.key.enc>\n",
-            program, program, program, program, program, program, program,
-            program, program);
+            program, program, program, program, program, program);
 }
 
 static void password_buffer_cleanup(PasswordBuffer *password)
