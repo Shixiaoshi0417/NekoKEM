@@ -11,7 +11,7 @@ afl-fuzz -i fuzz/seeds/nkpr -o fuzz/out-nkpr -- \
   fuzz/bin/fuzz_nkpr @@
 ```
 
-`fuzz_nkem` calls only the production NKEM v1/v2/v3 header and total-size
+`fuzz_nkem` calls only the production NKEM v3 header and total-size
 parser. `fuzz_nkpr` calls only the production NKPR header, parameter, and
 total-size parser. Neither harness performs key decapsulation, Argon2id,
 AES-GCM, or plaintext output.
@@ -24,4 +24,4 @@ The seed files are synthetic structure-only containers. Their KEM bytes,
 nonce, tags, and NKPR ciphertext bytes are all zero and are not
 cryptographically valid. The v3 salt is synthetic zero data. Seeds contain no
 password, private key, plaintext, or other sensitive material.
-Run `sh fuzz/generate_seeds.sh` to regenerate them deterministically.
+Run `sh core/fuzz/generate_seeds.sh` to regenerate them deterministically.
