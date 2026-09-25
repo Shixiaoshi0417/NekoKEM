@@ -160,7 +160,6 @@ test: $(TARGET) analyze test-ubsan test-parser test-file-security \
 			"$$test_dir/long-input-error.txt" \
 			"$$test_dir/long-paste-output.txt" \
 			"$$test_dir/long-paste-error.txt" \
-			"$$test_dir/" \
 			"$$test_dir/encrypted/hybrid.nkem" \
 			"$$test_dir/encrypted/tampered.nkem" \
 			"$$test_dir/encrypted/interactive.txt.nkem" \
