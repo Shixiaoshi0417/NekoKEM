@@ -14,7 +14,7 @@ case "$release_arch" in
 esac
 
 script_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd -P)
-repo_root=$(CDPATH= cd -- "$script_dir/../.." && pwd -P)
+repo_root=$(CDPATH= cd -- "$script_dir/.." && pwd -P)
 archive_path=$(CDPATH= cd -- "$(dirname -- "$archive_path")" && \
     printf '%s/%s\n' "$(pwd -P)" "$(basename -- "$archive_path")")
 [ -s "$archive_path" ] || { printf 'Archive not found: %s\n' "$archive_path" >&2; exit 1; }
@@ -113,7 +113,7 @@ NEKOKEM_TEST_ARCH="$release_arch" \
 NEKOKEM_TEST_ARCHIVE="$archive_path" \
 NEKOKEM_TEST_SUMS="$release_sums_path" \
 NEKOKEM_INSTALL_DIR="$install_root" \
-    sh "$repo_root/linux/install.sh" > "$test_root/success.log"
+    sh "$repo_root/install.sh" > "$test_root/success.log"
 test "$("$install_root/nekokem" --version)" = "NekoKEM 3.1.1"
 grep -F "Installed NekoKEM 3.1.1 to $install_root/nekokem" \
     "$test_root/success.log" >/dev/null
@@ -133,7 +133,7 @@ if PATH="$mock_bin:$PATH" \
    NEKOKEM_TEST_ARCHIVE="$bad_archive" \
    NEKOKEM_TEST_SUMS="$release_sums_path" \
    NEKOKEM_INSTALL_DIR="$bad_install" \
-       sh "$repo_root/linux/install.sh" > "$test_root/bad.log" 2>&1; then
+       sh "$repo_root/install.sh" > "$test_root/bad.log" 2>&1; then
     printf 'Installer accepted a package with a bad SHA-256\n' >&2
     exit 1
 fi
@@ -144,7 +144,7 @@ grep -F 'release archive SHA-256 verification failed' \
 if PATH="$mock_bin:$PATH" \
    NEKOKEM_TEST_UNAME_S=Darwin \
    NEKOKEM_TEST_UNAME_M="$release_arch" \
-       sh "$repo_root/linux/install.sh" > "$test_root/os.log" 2>&1; then
+       sh "$repo_root/install.sh" > "$test_root/os.log" 2>&1; then
     printf 'Installer accepted a non-Linux operating system\n' >&2
     exit 1
 fi
@@ -153,7 +153,7 @@ grep -F "unsupported operating system 'Darwin'" "$test_root/os.log" >/dev/null
 if PATH="$mock_bin:$PATH" \
    NEKOKEM_TEST_UNAME_S=Linux \
    NEKOKEM_TEST_UNAME_M=riscv64 \
-       sh "$repo_root/linux/install.sh" > "$test_root/arch.log" 2>&1; then
+       sh "$repo_root/install.sh" > "$test_root/arch.log" 2>&1; then
     printf 'Installer accepted an unsupported architecture\n' >&2
     exit 1
 fi
@@ -180,7 +180,7 @@ if PATH="$no_sudo_bin" \
    NEKOKEM_TEST_ARCHIVE="$archive_path" \
    NEKOKEM_TEST_SUMS="$release_sums_path" \
    NEKOKEM_INSTALL_DIR=/proc/nekokem-installer-no-sudo \
-       /bin/sh "$repo_root/linux/install.sh" > "$test_root/no-sudo.log" 2>&1; then
+       /bin/sh "$repo_root/install.sh" > "$test_root/no-sudo.log" 2>&1; then
     printf 'Installer unexpectedly wrote without permission or sudo\n' >&2
     exit 1
 fi
