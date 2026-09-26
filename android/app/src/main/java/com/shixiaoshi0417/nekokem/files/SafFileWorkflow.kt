@@ -120,6 +120,7 @@ class SafFileWorkflow(
                         stagedInput,
                         MAX_STAGED_FILE_BYTES,
                         progress,
+                        allowEmpty = true,
                     )
                 ) {
                     result = cancelledOrStorageError(progress)
@@ -756,6 +757,7 @@ class SafFileWorkflow(
         destination: File,
         maximumBytes: Long,
         progress: CancellableProgressCallback?,
+        allowEmpty: Boolean = false,
     ): Boolean {
         val buffer = ByteArray(COPY_BUFFER_SIZE)
         var total = 0L
@@ -784,7 +786,7 @@ class SafFileWorkflow(
                     destinationStream.fd.sync()
                 }
             }
-            total > 0L && setAndVerifyPrivateFile(destination)
+            (allowEmpty || total > 0L) && setAndVerifyPrivateFile(destination)
         } finally {
             buffer.fill(0)
         }
