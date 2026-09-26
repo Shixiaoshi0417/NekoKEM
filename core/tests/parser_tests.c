@@ -82,6 +82,13 @@ static int expect_nkpr_invalid(const unsigned char *input, size_t input_len)
 static int test_nkem_mutations(const unsigned char *valid, size_t valid_len)
 {
     unsigned char mutated[512];
+    NkemV3Header header;
+
+    if (!nkem_gcm_data_size_is_valid(NKEM_GCM_MAX_DATA_SIZE) ||
+        nkem_gcm_data_size_is_valid(
+            NKEM_GCM_MAX_DATA_SIZE + UINT64_C(1))) {
+        return 0;
+    }
 
     memcpy(mutated, valid, valid_len);
     mutated[4] = 1U;
@@ -107,6 +114,15 @@ static int test_nkem_mutations(const unsigned char *valid, size_t valid_len)
     memcpy(mutated, valid, valid_len);
     put_u64_be(mutated + 16U, UINT64_MAX);
     if (!expect_nkem_invalid(mutated, valid_len)) return 0;
+
+    nkem_v3_header_encode(mutated, NKEM_X448_EPHEMERAL_PUBLIC_SIZE,
+                          NKEM_MAX_KEM_CIPHERTEXT_SIZE,
+                          NKEM_GCM_MAX_DATA_SIZE);
+    if (nkem_v3_header_decode(mutated, &header) == 0) return 0;
+    nkem_v3_header_encode(mutated, NKEM_X448_EPHEMERAL_PUBLIC_SIZE,
+                          NKEM_MAX_KEM_CIPHERTEXT_SIZE,
+                          NKEM_GCM_MAX_DATA_SIZE + UINT64_C(1));
+    if (nkem_v3_header_decode(mutated, &header) != 0) return 0;
     memcpy(mutated, valid, valid_len);
     mutated[24] ^= 1U;
     if (!expect_nkem_invalid(mutated, valid_len)) return 0;

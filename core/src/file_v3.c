@@ -51,6 +51,11 @@ static uint64_t get_u64_be(const unsigned char *input)
     return value;
 }
 
+int nkem_gcm_data_size_is_valid(uint64_t data_size)
+{
+    return data_size <= NKEM_GCM_MAX_DATA_SIZE;
+}
+
 void nkem_v3_header_encode(unsigned char output[NKEM_V3_HEADER_SIZE],
                            uint16_t x448_ephemeral_len,
                            uint32_t kem_ciphertext_len,
@@ -130,6 +135,12 @@ static int nkem_v3_header_decode_internal(
         header->kem_ciphertext_len > NKEM_MAX_KEM_CIPHERTEXT_SIZE) {
         if (report_errors != 0) {
             fprintf(stderr, "Invalid ML-KEM ciphertext length\n");
+        }
+        return 0;
+    }
+    if (!nkem_gcm_data_size_is_valid(header->ciphertext_len)) {
+        if (report_errors != 0) {
+            fprintf(stderr, "NKEM v3 ciphertext exceeds AES-GCM limit\n");
         }
         return 0;
     }

@@ -77,7 +77,8 @@ int aes_gcm_encrypt_file_with_progress(
     int result = AES_GCM_FILE_ERROR;
 
     if (input == NULL || output == NULL || key == NULL || nonce == NULL ||
-        tag == NULL || (aad == NULL && aad_len != 0U)) {
+        tag == NULL || (aad == NULL && aad_len != 0U) ||
+        !nkem_gcm_data_size_is_valid(plaintext_len)) {
         fprintf(stderr, "Invalid AES-GCM encryption request\n");
         goto cleanup;
     }
@@ -202,7 +203,8 @@ int aes_gcm_decrypt_file_with_progress(
     int result = AES_GCM_FILE_ERROR;
 
     if (input == NULL || output == NULL || key == NULL || nonce == NULL ||
-        (aad == NULL && aad_len != 0U)) {
+        (aad == NULL && aad_len != 0U) ||
+        !nkem_gcm_data_size_is_valid(ciphertext_len)) {
         fprintf(stderr, "Invalid AES-GCM decryption request\n");
         goto cleanup;
     }

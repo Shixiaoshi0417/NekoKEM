@@ -29,7 +29,7 @@ DEPS = $(OBJECTS:.o=.d)
 
 .PHONY: all core clean test analyze test-ubsan test-parser fuzz-seeds \
 	fuzz-build test-key-management test-progress test-progress-large \
-	test-file-security test-version-rejection
+	test-file-security test-version-rejection test-gcm-limit
 
 all: $(TARGET)
 
@@ -93,6 +93,19 @@ test-file-security:
 	UBSAN_OPTIONS=halt_on_error=1:print_stacktrace=1 \
 		"$$security_binary"
 
+test-gcm-limit:
+	@set -eu; \
+	gcm_binary=$$(mktemp /tmp/nekokem-gcm-limit-tests.XXXXXX); \
+	cleanup_gcm() { rm -f "$$gcm_binary"; }; \
+	trap cleanup_gcm EXIT INT TERM; \
+	$(CC) $(CPPFLAGS) $(CFLAGS) -O1 \
+		-fsanitize=undefined -fno-sanitize-recover=undefined \
+		$(LDFLAGS) ../core/tests/gcm_limit_tests.c ../core/src/aes.c \
+		../core/src/file.c ../core/src/file_v3.c ../core/src/secure_mem.c \
+		$(LDLIBS) -fsanitize=undefined -o "$$gcm_binary"; \
+	UBSAN_OPTIONS=halt_on_error=1:print_stacktrace=1 \
+		"$$gcm_binary"
+
 fuzz-seeds:
 	sh ../core/fuzz/generate_seeds.sh
 
@@ -146,7 +159,7 @@ test-progress test-progress-large: $(CORE_LIBRARY)
 		"$$progress_binary"; \
 	fi
 
-test: $(TARGET) analyze test-ubsan test-parser test-file-security \
+test: $(TARGET) analyze test-ubsan test-parser test-file-security test-gcm-limit \
 	test-key-management test-version-rejection test-progress
 	@set -eu; \
 	test_dir=$$(mktemp -d); \

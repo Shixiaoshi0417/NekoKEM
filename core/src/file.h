@@ -14,6 +14,9 @@
 #define NKEM_V3_ALGORITHM_ID 3U
 #define NKEM_V3_SALT_SIZE 32U
 
+/* SP 800-38D section 5.5: 2^39 - 256 bits = 2^36 - 32 bytes. */
+#define NKEM_GCM_MAX_DATA_SIZE ((UINT64_C(1) << 36) - UINT64_C(32))
+
 typedef struct {
     uint16_t x448_ephemeral_len;
     uint32_t kem_ciphertext_len;
@@ -62,6 +65,7 @@ int atomic_file_commit(AtomicFile *file);
 int atomic_file_commit_pair(AtomicFile *first, AtomicFile *second);
 void atomic_file_abort(AtomicFile *file);
 
+int nkem_gcm_data_size_is_valid(uint64_t data_size);
 void nkem_v3_header_encode(unsigned char output[NKEM_V3_HEADER_SIZE],
                            uint16_t x448_ephemeral_len,
                            uint32_t kem_ciphertext_len,
