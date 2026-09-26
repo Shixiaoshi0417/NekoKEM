@@ -136,9 +136,9 @@ encrypted/test.jpg.nkem -> plaintext/test.jpg
 
 “查看公钥指纹”接受公钥文件或粘贴内容，并显示大写、冒号分隔的 SHA-256 指纹。指纹输入是带域分隔字符串的两个公钥 DER SubjectPublicKeyInfo 编码，按 X448、ML-KEM-1024 顺序排列，每段前带 4 字节大端长度。因此同一对公钥不受 PEM 换行方式影响。
 
-## 参数化兼容命令
+## 参数化命令
 
-参数化命令继续保留，供脚本、开发测试及旧文件兼容使用。默认 keygen 与交互模式一致，生成受密码保护的 Hybrid 密钥：
+参数化命令供脚本和开发测试使用。默认 keygen 与交互模式一致，生成受密码保护的 Hybrid 密钥：
 
 ```sh
 ./nekokem keygen
@@ -164,8 +164,6 @@ Hybrid decrypt 看到 `.enc` 后会自动提示一次密码。为兼容已有部
 命令可以使用其他位置的相应 PEM 密钥：
 
 ```text
-./nekokem encrypt input_file output_file public.key
-./nekokem decrypt input_file output_file private.key
 ./nekokem encrypt hybrid input_file output_file public.key
 ./nekokem decrypt hybrid input_file output_file private.key.enc
 ```
