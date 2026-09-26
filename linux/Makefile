@@ -29,7 +29,7 @@ DEPS = $(OBJECTS:.o=.d)
 
 .PHONY: all core clean test analyze test-ubsan test-parser fuzz-seeds \
 	fuzz-build test-key-management test-progress test-progress-large \
-	test-file-security
+	test-file-security test-version-rejection
 
 all: $(TARGET)
 
@@ -121,6 +121,16 @@ test-key-management: $(CORE_LIBRARY)
 		-o "$$key_binary"; \
 	"$$key_binary"
 
+test-version-rejection: $(CORE_LIBRARY)
+	@set -eu; \
+	version_binary=$$(mktemp /tmp/nekokem-version-rejection-tests.XXXXXX); \
+	cleanup_version() { rm -f "$$version_binary"; }; \
+	trap cleanup_version EXIT INT TERM; \
+	$(CC) $(CPPFLAGS) $(CFLAGS) $(LDFLAGS) \
+		../core/tests/version_rejection_tests.c $(CORE_LIBRARY) $(LDLIBS) \
+		-o "$$version_binary"; \
+	"$$version_binary"
+
 test-progress test-progress-large: $(CORE_LIBRARY)
 	@set -eu; \
 	progress_binary=$$(mktemp /tmp/nekokem-progress-tests.XXXXXX); \
@@ -137,12 +147,12 @@ test-progress test-progress-large: $(CORE_LIBRARY)
 	fi
 
 test: $(TARGET) analyze test-ubsan test-parser test-file-security \
-	test-key-management test-progress
+	test-key-management test-version-rejection test-progress
 	@set -eu; \
 	test_dir=$$(mktemp -d); \
 	cleanup() { \
 		rm -f "$$test_dir/nekokem" "$$test_dir/test.txt" \
-			"$$test_dir/v1-output.txt" "$$test_dir/hybrid-output.txt" \
+			"$$test_dir/hybrid-output.txt" \
 			"$$test_dir/tampered-output.txt" \
 			"$$test_dir/wrong-password-output.txt" \
 			"$$test_dir/tampered-key-output.txt" \

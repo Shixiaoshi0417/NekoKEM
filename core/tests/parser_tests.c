@@ -69,6 +69,136 @@ static size_t build_valid_nkpr(unsigned char *buffer, size_t capacity)
     return total;
 }
 
+static int expect_nkem_invalid(const unsigned char *input, size_t input_len)
+{
+    return nkem_v3_container_parse(input, input_len) == 0;
+}
+
+static int expect_nkpr_invalid(const unsigned char *input, size_t input_len)
+{
+    return protected_private_key_container_parse(input, input_len) == 0;
+}
+
+static int test_nkem_mutations(const unsigned char *valid, size_t valid_len)
+{
+    unsigned char mutated[512];
+
+    memcpy(mutated, valid, valid_len);
+    mutated[4] = 1U;
+    if (!expect_nkem_invalid(mutated, valid_len)) return 0;
+    mutated[4] = 2U;
+    if (!expect_nkem_invalid(mutated, valid_len)) return 0;
+
+    memcpy(mutated, valid, valid_len);
+    mutated[5] ^= 1U;
+    if (!expect_nkem_invalid(mutated, valid_len)) return 0;
+    memcpy(mutated, valid, valid_len);
+    put_u16_be(mutated + 6U, 0U);
+    if (!expect_nkem_invalid(mutated, valid_len)) return 0;
+    memcpy(mutated, valid, valid_len);
+    put_u16_be(mutated + 8U, 0U);
+    if (!expect_nkem_invalid(mutated, valid_len)) return 0;
+    memcpy(mutated, valid, valid_len);
+    mutated[10] = 1U;
+    if (!expect_nkem_invalid(mutated, valid_len)) return 0;
+    memcpy(mutated, valid, valid_len);
+    put_u32_be(mutated + 12U, NKEM_MAX_KEM_CIPHERTEXT_SIZE + 1U);
+    if (!expect_nkem_invalid(mutated, valid_len)) return 0;
+    memcpy(mutated, valid, valid_len);
+    put_u64_be(mutated + 16U, UINT64_MAX);
+    if (!expect_nkem_invalid(mutated, valid_len)) return 0;
+    memcpy(mutated, valid, valid_len);
+    mutated[24] ^= 1U;
+    if (!expect_nkem_invalid(mutated, valid_len)) return 0;
+    memcpy(mutated, valid, valid_len);
+    mutated[25] ^= 1U;
+    if (!expect_nkem_invalid(mutated, valid_len)) return 0;
+    memcpy(mutated, valid, valid_len);
+    mutated[26] ^= 1U;
+    if (!expect_nkem_invalid(mutated, valid_len)) return 0;
+    memcpy(mutated, valid, valid_len);
+    mutated[27] = 1U;
+    if (!expect_nkem_invalid(mutated, valid_len)) return 0;
+    memcpy(mutated, valid, valid_len);
+    put_u32_be(mutated + 28U, 1U);
+    if (!expect_nkem_invalid(mutated, valid_len)) return 0;
+
+    memcpy(mutated, valid, valid_len);
+    mutated[valid_len] = 0U;
+    return expect_nkem_invalid(mutated, valid_len + 1U);
+}
+
+static int test_nkpr_mutations(const unsigned char *valid, size_t valid_len)
+{
+    unsigned char mutated[512];
+
+    memcpy(mutated, valid, valid_len);
+    mutated[4] ^= 1U;
+    if (!expect_nkpr_invalid(mutated, valid_len)) return 0;
+    memcpy(mutated, valid, valid_len);
+    mutated[5] ^= 1U;
+    if (!expect_nkpr_invalid(mutated, valid_len)) return 0;
+    memcpy(mutated, valid, valid_len);
+    mutated[6] ^= 1U;
+    if (!expect_nkpr_invalid(mutated, valid_len)) return 0;
+    memcpy(mutated, valid, valid_len);
+    mutated[7] = 1U;
+    if (!expect_nkpr_invalid(mutated, valid_len)) return 0;
+    memcpy(mutated, valid, valid_len);
+    put_u32_be(mutated + 8U, UINT32_MAX);
+    if (!expect_nkpr_invalid(mutated, valid_len)) return 0;
+    memcpy(mutated, valid, valid_len);
+    put_u32_be(mutated + 12U, 0U);
+    if (!expect_nkpr_invalid(mutated, valid_len)) return 0;
+    memcpy(mutated, valid, valid_len);
+    put_u32_be(mutated + 16U, 0U);
+    if (!expect_nkpr_invalid(mutated, valid_len)) return 0;
+    memcpy(mutated, valid, valid_len);
+    put_u32_be(mutated + 20U, 0U);
+    if (!expect_nkpr_invalid(mutated, valid_len)) return 0;
+    memcpy(mutated, valid, valid_len);
+    put_u16_be(mutated + 24U, 0U);
+    if (!expect_nkpr_invalid(mutated, valid_len)) return 0;
+    memcpy(mutated, valid, valid_len);
+    mutated[26] ^= 1U;
+    if (!expect_nkpr_invalid(mutated, valid_len)) return 0;
+    memcpy(mutated, valid, valid_len);
+    mutated[27] ^= 1U;
+    if (!expect_nkpr_invalid(mutated, valid_len)) return 0;
+    memcpy(mutated, valid, valid_len);
+    put_u64_be(mutated + 28U, UINT64_MAX);
+    if (!expect_nkpr_invalid(mutated, valid_len)) return 0;
+
+    memcpy(mutated, valid, valid_len);
+    mutated[valid_len] = 0U;
+    return expect_nkpr_invalid(mutated, valid_len + 1U);
+}
+
+static int test_random_inputs(void)
+{
+    unsigned char random_data[256];
+    uint32_t state = 0x4e4b454dU;
+    size_t sample;
+    size_t index;
+
+    for (sample = 0U; sample < 128U; ++sample) {
+        size_t length = (sample * 37U) % sizeof(random_data);
+
+        for (index = 0U; index < length; ++index) {
+            state = (state * 1664525U) + 1013904223U;
+            random_data[index] = (unsigned char)(state >> 24);
+        }
+        if (length >= 4U) {
+            memcpy(random_data, "RNDM", 4U);
+        }
+        if (!expect_nkem_invalid(random_data, length) ||
+            !expect_nkpr_invalid(random_data, length)) {
+            return 0;
+        }
+    }
+    return 1;
+}
+
 int main(void)
 {
     unsigned char nkem[512];
@@ -89,16 +219,11 @@ int main(void)
         if (protected_private_key_container_parse(nkpr, i)) return EXIT_FAILURE;
     }
 
-    nkem[4] = 1U;
-    if (nkem_v3_container_parse(nkem, nkem_len)) return EXIT_FAILURE;
-    nkem[4] = 2U;
-    if (nkem_v3_container_parse(nkem, nkem_len)) return EXIT_FAILURE;
-    nkem[4] = NKEM_V3_VERSION;
-    nkem[5] ^= 1U;
-    if (nkem_v3_container_parse(nkem, nkem_len)) return EXIT_FAILURE;
-
-    nkpr[4] ^= 1U;
-    if (protected_private_key_container_parse(nkpr, nkpr_len)) return EXIT_FAILURE;
+    if (!test_nkem_mutations(nkem, nkem_len) ||
+        !test_nkpr_mutations(nkpr, nkpr_len) ||
+        !test_random_inputs()) {
+        return EXIT_FAILURE;
+    }
 
     puts("NKEM v3 and NKPR parser tests passed");
     return EXIT_SUCCESS;

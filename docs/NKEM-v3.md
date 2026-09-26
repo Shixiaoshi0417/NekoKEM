@@ -1,6 +1,7 @@
 # NKEM v3 Hybrid container
 
-NKEM v3 is the default NekoKEM Hybrid file container. It preserves the v2
+NKEM v3 is the only NekoKEM file container supported by the current
+implementation. Its construction preserves the earlier
 X448 and ML-KEM-1024 operations, the `x448_secret || mlkem_secret` input
 ordering, HKDF-SHA512, and AES-256-GCM. Its protocol change is an independent
 32-byte HKDF salt instead of reusing the 12-byte GCM nonce as that salt.
@@ -85,10 +86,11 @@ trailing data before committing atomic plaintext output.
 ## Compatibility
 
 - `nekokem_encrypt_file()` writes v3.
-- `nekokem_decrypt_file()` reads the magic/version prefix and strictly
-  dispatches v1, v2, or v3.
-- `nekokem_encrypt_file_v1()` and `nekokem_decrypt_file_v1()` retain v1.
-- `nekokem_encrypt_file_v2()` and `nekokem_decrypt_file_v2()` retain v2 for
-  compatibility tests and existing consumers.
-- Legacy v1/v2 header decoders reject v3 because both its version and
-  algorithm ID are distinct.
+- `nekokem_decrypt_file()` accepts only v3. Containers whose version byte is
+  `1` or `2` are rejected and no plaintext output is committed.
+- The v1/v2 encryption, decryption, parser, header, API, and CLI compatibility
+  implementations have been removed. Existing v1/v2 containers can no longer
+  be decrypted by this project.
+- NKPR is a separate password-protected private-key container with its own
+  version number. NKPR version 1 remains supported and is unchanged by the
+  removal of NKEM v1/v2.
