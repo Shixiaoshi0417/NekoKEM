@@ -65,6 +65,7 @@ class TemporaryKeyInstrumentation : Instrumentation() {
                 plaintext,
             )
             testEmptyPlaintextRoundTrip(workflow, context.cacheDir)
+            testExistingOutputRollback(workflow, context.cacheDir, plaintext)
             testTemporaryKeys(manager, workflow, context.cacheDir, plaintext)
             testInvalidKeys(manager, workflow, context.cacheDir)
             testCancellationCleanup(workflow, context.cacheDir, plaintext)
@@ -305,6 +306,32 @@ class TemporaryKeyInstrumentation : Instrumentation() {
         ) == NativeBridge.RESULT_SUCCESS)
         check(decrypted.exists())
         check(decrypted.length() == 0L)
+    }
+
+    private fun testExistingOutputRollback(
+        workflow: SafFileWorkflow,
+        cache: File,
+        plaintext: File,
+    ) {
+        val destination = File(cache, EXISTING_OUTPUT_NAME)
+        val original = "existing-output-must-survive".toByteArray(
+            StandardCharsets.US_ASCII,
+        )
+        destination.writeBytes(original)
+        Os.chmod(destination.absolutePath, PRIVATE_FILE_MODE)
+
+        val encryption = workflow.prepareEncryption(
+            Uri.fromFile(plaintext),
+            CONTINUE_PROGRESS,
+        )
+        check(encryption.code == NativeBridge.RESULT_SUCCESS)
+        val prepared = checkNotNull(encryption.prepared)
+        check(workflow.commitPreparedEncryption(
+            prepared,
+            Uri.fromFile(destination),
+            CANCEL_AFTER_WRITE_PROGRESS,
+        ) != NativeBridge.RESULT_SUCCESS)
+        check(destination.readBytes().contentEquals(original))
     }
 
     private fun assertSuccessfulPublicKeyImport(
@@ -568,6 +595,7 @@ class TemporaryKeyInstrumentation : Instrumentation() {
         const val EMPTY_PLAINTEXT_NAME = "empty-plaintext.bin"
         const val EMPTY_CIPHERTEXT_NAME = "empty-plaintext.nkem"
         const val EMPTY_DECRYPTED_NAME = "empty-plaintext.out"
+        const val EXISTING_OUTPUT_NAME = "existing-output.bin"
         const val DEFAULT_CIPHERTEXT_NAME = "default.nkem"
         const val DEFAULT_DECRYPTED_NAME = "default.out"
         const val EXPORTED_PUBLIC_KEY_NAME = "exported-public.key"
@@ -607,6 +635,14 @@ class TemporaryKeyInstrumentation : Instrumentation() {
                 processedBytes: Long,
                 totalBytes: Long,
             ): Boolean = true
+        }
+        val CANCEL_AFTER_WRITE_PROGRESS = object : CancellableProgressCallback {
+            override fun isCancelled(): Boolean = false
+
+            override fun onProgress(
+                processedBytes: Long,
+                totalBytes: Long,
+            ): Boolean = processedBytes == 0L
         }
         val CANCELLED_PROGRESS = object : CancellableProgressCallback {
             override fun isCancelled(): Boolean = true
