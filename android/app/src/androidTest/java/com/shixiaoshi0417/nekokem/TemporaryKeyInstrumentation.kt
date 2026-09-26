@@ -10,7 +10,6 @@ import android.system.Os
 import com.shixiaoshi0417.nekokem.files.SafFileWorkflow
 import com.shixiaoshi0417.nekokem.keys.LocalKeyManager
 import com.shixiaoshi0417.nekokem.nativecore.NativeBridge
-import com.shixiaoshi0417.nekokem.nativecore.NativeProgressCallback
 import com.shixiaoshi0417.nekokem.progress.CancellableProgressCallback
 import com.shixiaoshi0417.nekokem.ui.runWithUiBusyReset
 import com.shixiaoshi0417.nekokem.ui.FileInputState
@@ -601,7 +600,14 @@ class TemporaryKeyInstrumentation : Instrumentation() {
         val INVALID_KEY_BYTES = "not-a-nekokem-key".toByteArray(
             StandardCharsets.US_ASCII,
         )
-        val CONTINUE_PROGRESS = NativeProgressCallback { _, _ -> true }
+        val CONTINUE_PROGRESS = object : CancellableProgressCallback {
+            override fun isCancelled(): Boolean = false
+
+            override fun onProgress(
+                processedBytes: Long,
+                totalBytes: Long,
+            ): Boolean = true
+        }
         val CANCELLED_PROGRESS = object : CancellableProgressCallback {
             override fun isCancelled(): Boolean = true
 
