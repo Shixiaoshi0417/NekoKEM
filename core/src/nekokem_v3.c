@@ -84,35 +84,6 @@ static unsigned char *build_v3_aad(
     return aad;
 }
 
-static int read_nkem_version(const char *input_path, unsigned char *version)
-{
-    FILE *input = NULL;
-    unsigned char prefix[5];
-    int success = 0;
-
-    input = fopen(input_path, "rb");
-    if (input == NULL) {
-        print_system_error("Cannot open NKEM input");
-        goto cleanup;
-    }
-    if (!file_disable_buffering(input) ||
-        !file_read_exact(input, prefix, sizeof(prefix))) {
-        goto cleanup;
-    }
-    if (memcmp(prefix, "NKEM", 4U) != 0) {
-        fprintf(stderr, "Invalid NKEM magic\n");
-        goto cleanup;
-    }
-    *version = prefix[4];
-    success = 1;
-
-cleanup:
-    if (input != NULL) {
-        (void)fclose(input);
-    }
-    return success;
-}
-
 int nekokem_encrypt_file_with_progress(
     const char *input_path,
     const char *output_path,
@@ -384,33 +355,13 @@ int nekokem_decrypt_file_with_progress(
     NekoKEMProgressCallback progress_callback,
     void *progress_user_data)
 {
-    unsigned char version = 0U;
-
-    if (!validate_file_paths(input_path, output_path, private_key_path) ||
-        !read_nkem_version(input_path, &version)) {
+    if (!validate_file_paths(input_path, output_path, private_key_path)) {
         return NEKOKEM_OPERATION_ERROR;
     }
-    if (version == NKEM_VERSION) {
-        return nekokem_decrypt_file_v1(
-                   input_path, output_path, private_key_path)
-                   ? NEKOKEM_OPERATION_SUCCESS
-                   : NEKOKEM_OPERATION_ERROR;
-    }
-    if (version == NKEM_V2_VERSION) {
-        return nekokem_decrypt_file_v2(
-                   input_path, output_path, private_key_path,
-                   password, password_len)
-                   ? NEKOKEM_OPERATION_SUCCESS
-                   : NEKOKEM_OPERATION_ERROR;
-    }
-    if (version == NKEM_V3_VERSION) {
-        return decrypt_file_v3_with_progress(
-            input_path, output_path, private_key_path,
-            password, password_len,
-            progress_callback, progress_user_data);
-    }
-    fprintf(stderr, "Unsupported NKEM version: %u\n", version);
-    return NEKOKEM_OPERATION_ERROR;
+    return decrypt_file_v3_with_progress(
+        input_path, output_path, private_key_path,
+        password, password_len,
+        progress_callback, progress_user_data);
 }
 
 int nekokem_decrypt_file(const char *input_path,

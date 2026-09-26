@@ -1,5 +1,5 @@
 #include "nekokem.h"
-#include "../nekokem_core/src/nekokem_internal.h"
+#include "nekokem_internal.h"
 #include "secure_mem.h"
 
 #include <stdio.h>

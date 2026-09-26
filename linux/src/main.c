@@ -27,20 +27,6 @@ int main(int argc, char **argv)
         strcmp(argv[2], "hybrid") == 0) {
         return cli_run_hybrid_keygen() ? EXIT_SUCCESS : EXIT_FAILURE;
     }
-    if (argc == 3 && strcmp(argv[1], "keygen") == 0 &&
-        strcmp(argv[2], "legacy-v1") == 0) {
-        return cli_run_v1_keygen() ? EXIT_SUCCESS : EXIT_FAILURE;
-    }
-    if (argc == 5 && strcmp(argv[1], "encrypt") == 0) {
-        return cli_run_v1_encrypt(argv[2], argv[3], argv[4])
-                   ? EXIT_SUCCESS
-                   : EXIT_FAILURE;
-    }
-    if (argc == 5 && strcmp(argv[1], "decrypt") == 0) {
-        return cli_run_v1_decrypt(argv[2], argv[3], argv[4])
-                   ? EXIT_SUCCESS
-                   : EXIT_FAILURE;
-    }
     if (argc == 6 && strcmp(argv[1], "encrypt") == 0 &&
         strcmp(argv[2], "hybrid") == 0) {
         return cli_run_hybrid_encrypt(argv[3], argv[4], argv[5])

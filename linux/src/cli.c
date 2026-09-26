@@ -37,14 +37,10 @@ void cli_print_usage(const char *program)
             "  %s --version\n"
             "  %s keygen\n"
             "  %s keygen hybrid\n"
-            "  %s keygen legacy-v1\n"
-            "  %s encrypt <input_file> <output_file> <public.key>\n"
-            "  %s decrypt <input_file> <output_file> <private.key>\n"
             "  %s encrypt hybrid <input_file> <output_file> <public.key>\n"
             "  %s decrypt hybrid <input_file> <output_file> "
             "<private.key|private.key.enc>\n",
-            program, program, program, program, program, program, program,
-            program, program);
+            program, program, program, program, program, program);
 }
 
 static void password_buffer_cleanup(PasswordBuffer *password)
@@ -176,20 +172,6 @@ cleanup:
     return success;
 }
 
-int cli_run_v1_keygen(void)
-{
-    fprintf(stderr,
-            "WARNING: legacy-v1 writes an unencrypted plaintext private "
-            "key. Use only for explicit compatibility testing.\n");
-    if (!ensure_directory("keys", 0700) ||
-        !nekokem_generate_v1_keypair(PUBLIC_KEY_PATH,
-                                     PRIVATE_KEY_PATH)) {
-        return 0;
-    }
-    printf("Generated %s and %s\n", PUBLIC_KEY_PATH, PRIVATE_KEY_PATH);
-    return 1;
-}
-
 static int generate_hybrid_keypair(int interactive)
 {
     PasswordBuffer password = {0};
@@ -224,30 +206,6 @@ int cli_run_hybrid_keygen(void)
     return generate_hybrid_keypair(0);
 }
 
-int cli_run_v1_encrypt(const char *input_path,
-                       const char *output_path,
-                       const char *public_key_path)
-{
-    if (!nekokem_encrypt_file_v1(input_path, output_path,
-                                 public_key_path)) {
-        return 0;
-    }
-    printf("Encrypted %s -> %s\n", input_path, output_path);
-    return 1;
-}
-
-int cli_run_v1_decrypt(const char *input_path,
-                       const char *output_path,
-                       const char *private_key_path)
-{
-    if (!nekokem_decrypt_file_v1(input_path, output_path,
-                                 private_key_path)) {
-        return 0;
-    }
-    printf("Decrypted %s -> %s\n", input_path, output_path);
-    return 1;
-}
-
 int cli_run_hybrid_encrypt(const char *input_path,
                            const char *output_path,
                            const char *public_key_path)
@@ -277,7 +235,7 @@ int cli_run_hybrid_decrypt(const char *input_path,
         goto cleanup;
     }
     password_buffer_cleanup(&password);
-    printf("Decrypted NKEM v1/v2/v3 %s -> %s\n",
+    printf("Decrypted NKEM v3 %s -> %s\n",
            input_path, output_path);
     success = 1;
 

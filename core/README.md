@@ -8,8 +8,8 @@
 make core
 ```
 
-Core 使用 OpenSSL 3.5 EVP、NKEM v1/v2/v3 和 NKPR。v3 使用独立的
-32-byte HKDF salt；v1/v2 解码和 NKPR 保持兼容。
+Core 使用 OpenSSL 3.5 EVP、NKEM v3 和 NKPR。NKEM v3 使用独立的
+32-byte HKDF salt；NKPR 作为独立私钥容器继续维护。
 
 ## 公共 API
 
@@ -19,12 +19,11 @@ Core 使用 OpenSSL 3.5 EVP、NKEM v1/v2/v3 和 NKPR。v3 使用独立的
 - `nekokem_generate_keypair()`：生成 X448 + ML-KEM-1024 Hybrid 公钥和
   受口令保护的 NKPR 私钥。
 - `nekokem_encrypt_file()`：默认生成 NKEM v3 Hybrid 文件。
-- `nekokem_decrypt_file()`：读取 magic/version，并严格分派 v1、v2 或 v3；
-  Hybrid 路径同时兼容 NKPR 私钥和旧式明文 Hybrid PEM 私钥。
+- `nekokem_decrypt_file()`：仅接受 NKEM v3；Hybrid 路径同时兼容 NKPR
+  私钥和旧式明文 Hybrid PEM 私钥。
 - `nekokem_encrypt_file_with_progress()`：与默认 v3 加密协议完全相同，
   额外报告 `processed_bytes` 和 `total_bytes`。
-- `nekokem_decrypt_file_with_progress()`：解密 v3 时按数据块报告进度；仍保留
-  v1/v2 兼容分派。回调在调用线程同步执行，返回 `0` 请求取消。
+- `nekokem_decrypt_file_with_progress()`：解密 v3 时按数据块报告进度。回调在调用线程同步执行，返回 `0` 请求取消。
 - `nekokem_public_key_fingerprint()`：返回大写、冒号分隔的 SHA-256
   公钥指纹。调用者至少提供 `NEKOKEM_FINGERPRINT_STRING_SIZE` 字节。
 - `nekokem_private_key_exists()`：只接受权限为 `0600`、结构有效的 NKPR
@@ -35,10 +34,6 @@ Core 使用 OpenSSL 3.5 EVP、NKEM v1/v2/v3 和 NKPR。v3 使用独立的
   再原子地重新序列化到目标文件。
 - `nekokem_delete_private_key()`：只删除指定的常规文件；目标不存在时也
   视为成功，便于 UI 实现幂等删除。
-- `nekokem_generate_v1_keypair()`、`nekokem_encrypt_file_v1()` 和
-  `nekokem_decrypt_file_v1()`：供现有 v1 CLI 兼容命令使用。
-- `nekokem_encrypt_file_v2()` 和 `nekokem_decrypt_file_v2()`：供既有 v2
-  消费者及兼容性测试使用。
 - `nekokem_private_key_requires_password()`：供 UI 在调用解密 API 前决定
   是否显示口令输入框。
 

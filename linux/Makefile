@@ -27,9 +27,9 @@ CLI_OBJECTS = $(CLI_SOURCES:.c=.o)
 OBJECTS = $(CLI_OBJECTS) $(CORE_OBJECTS)
 DEPS = $(OBJECTS:.o=.d)
 
-.PHONY: all core clean test analyze test-ubsan test-parser test-version fuzz-seeds \
+.PHONY: all core clean test analyze test-ubsan test-parser fuzz-seeds \
 	fuzz-build test-key-management test-progress test-progress-large \
-	test-file-security
+	test-file-security test-version-rejection
 
 all: $(TARGET)
 
@@ -110,15 +110,6 @@ fuzz-build: fuzz-seeds
 		../core/src/secure_mem.c $(FUZZ_LDFLAGS) $(LDLIBS) \
 		-o ../core/fuzz/bin/fuzz_nkpr
 
-test-version: $(CORE_LIBRARY)
-	@set -eu; \
-	version_binary=$$(mktemp /tmp/nekokem-version-tests.XXXXXX); \
-	cleanup_version() { rm -f "$$version_binary"; }; \
-	trap cleanup_version EXIT INT TERM; \
-	$(CC) $(CPPFLAGS) $(CFLAGS) $(LDFLAGS) \
-		../core/tests/version_compat_tests.c $(CORE_LIBRARY) $(LDLIBS) \
-		-o "$$version_binary"; \
-	"$$version_binary"
 
 test-key-management: $(CORE_LIBRARY)
 	@set -eu; \
@@ -129,6 +120,16 @@ test-key-management: $(CORE_LIBRARY)
 		../core/tests/key_management_tests.c $(CORE_LIBRARY) $(LDLIBS) \
 		-o "$$key_binary"; \
 	"$$key_binary"
+
+test-version-rejection: $(CORE_LIBRARY)
+	@set -eu; \
+	version_binary=$$(mktemp /tmp/nekokem-version-rejection-tests.XXXXXX); \
+	cleanup_version() { rm -f "$$version_binary"; }; \
+	trap cleanup_version EXIT INT TERM; \
+	$(CC) $(CPPFLAGS) $(CFLAGS) $(LDFLAGS) \
+		../core/tests/version_rejection_tests.c $(CORE_LIBRARY) $(LDLIBS) \
+		-o "$$version_binary"; \
+	"$$version_binary"
 
 test-progress test-progress-large: $(CORE_LIBRARY)
 	@set -eu; \
@@ -146,12 +147,12 @@ test-progress test-progress-large: $(CORE_LIBRARY)
 	fi
 
 test: $(TARGET) analyze test-ubsan test-parser test-file-security \
-	test-version test-key-management test-progress
+	test-key-management test-version-rejection test-progress
 	@set -eu; \
 	test_dir=$$(mktemp -d); \
 	cleanup() { \
 		rm -f "$$test_dir/nekokem" "$$test_dir/test.txt" \
-			"$$test_dir/v1-output.txt" "$$test_dir/hybrid-output.txt" \
+			"$$test_dir/hybrid-output.txt" \
 			"$$test_dir/tampered-output.txt" \
 			"$$test_dir/wrong-password-output.txt" \
 			"$$test_dir/tampered-key-output.txt" \
@@ -169,7 +170,6 @@ test: $(TARGET) analyze test-ubsan test-parser test-file-security \
 			"$$test_dir/long-input-error.txt" \
 			"$$test_dir/long-paste-output.txt" \
 			"$$test_dir/long-paste-error.txt" \
-			"$$test_dir/encrypted/v1.nkem" \
 			"$$test_dir/encrypted/hybrid.nkem" \
 			"$$test_dir/encrypted/tampered.nkem" \
 			"$$test_dir/encrypted/interactive.txt.nkem" \
@@ -186,12 +186,6 @@ test: $(TARGET) analyze test-ubsan test-parser test-file-security \
 	cd "$$test_dir"; \
 	key_password='test-only-hybrid-password'; \
 	interactive_password='test-only-interactive-password'; \
-	./nekokem keygen legacy-v1; \
-	./nekokem encrypt test.txt encrypted/v1.nkem keys/public.key; \
-	./nekokem decrypt encrypted/v1.nkem v1-output.txt keys/private.key; \
-	sha256sum test.txt v1-output.txt; \
-	cmp test.txt v1-output.txt; \
-	rm -f keys/private.key; \
 	printf '%s\n%s\n' "$$key_password" "$$key_password" | \
 		./nekokem keygen; \
 	test -s keys/public.key; \
@@ -257,7 +251,7 @@ test: $(TARGET) analyze test-ubsan test-parser test-file-security \
 		exit 1; \
 	fi; \
 	test ! -e wrong-output.txt; \
-	rm -f encrypted/v1.nkem encrypted/hybrid.nkem \
+	rm -f encrypted/hybrid.nkem \
 		encrypted/tampered.nkem; \
 	rmdir encrypted; \
 	test ! -e encrypted; \
@@ -331,7 +325,7 @@ test: $(TARGET) analyze test-ubsan test-parser test-file-security \
 	test "$$(stat -c %a password-echo-check.log)" = 600; \
 	test -z "$$(find . -type f -name '*.tmp.*' -print -quit)"; \
 	test -z "$$(find . -type f -name 'private.key' -print -quit)"; \
-	echo "NekoKEM v1, v2/v3 hybrid, NKPR, and interactive CLI tests passed"
+	echo "NekoKEM v3, NKPR, and interactive CLI tests passed"
 
 clean:
 	rm -f $(TARGET) $(CORE_LIBRARY) $(OBJECTS) $(DEPS)

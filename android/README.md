@@ -6,7 +6,8 @@
 
 Android App 通过窄 JNI Bridge 调用可复用的 NekoKEM C17 Core。Kotlin 和
 JNI 不实现或解析 X448、ML-KEM-1024、HKDF、AES-GCM、NKEM 或 NKPR。
-NKEM v1/v2/v3 与 NKPR 协议仍由 Core 统一处理。
+Core 仅处理 NKEM v3 文件容器；NKEM v1/v2 已不再支持。NKPR 是独立的
+私钥容器，仍由 Core 处理且格式不变。
 
 当前正式 App 版本为 `3.1.1`，Core 版本保持 `3.1`，Android application ID
 与 namespace 均为 `com.shixiaoshi0417.nekokem`。协议容器版本仍为
