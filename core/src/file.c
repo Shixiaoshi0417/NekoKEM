@@ -477,6 +477,50 @@ static char *parent_directory_path(const char *path)
     return directory;
 }
 
+static int atomic_file_targets_are_same(
+    const char *first_path,
+    const char *second_path,
+    int *same_target)
+{
+    struct stat first_directory_status;
+    struct stat second_directory_status;
+    char *first_directory = NULL;
+    char *second_directory = NULL;
+    const char *first_name;
+    const char *second_name;
+    int result = 0;
+
+    if (first_path == NULL || second_path == NULL || same_target == NULL) {
+        errno = EINVAL;
+        return 0;
+    }
+    *same_target = 0;
+    first_directory = parent_directory_path(first_path);
+    second_directory = parent_directory_path(second_path);
+    if (first_directory == NULL || second_directory == NULL ||
+        stat(first_directory, &first_directory_status) != 0 ||
+        stat(second_directory, &second_directory_status) != 0 ||
+        !S_ISDIR(first_directory_status.st_mode) ||
+        !S_ISDIR(second_directory_status.st_mode)) {
+        goto cleanup;
+    }
+    first_name = strrchr(first_path, '/');
+    second_name = strrchr(second_path, '/');
+    first_name = first_name == NULL ? first_path : first_name + 1;
+    second_name = second_name == NULL ? second_path : second_name + 1;
+    *same_target = first_directory_status.st_dev ==
+                       second_directory_status.st_dev &&
+                   first_directory_status.st_ino ==
+                       second_directory_status.st_ino &&
+                   strcmp(first_name, second_name) == 0;
+    result = 1;
+
+cleanup:
+    free(first_directory);
+    free(second_directory);
+    return result;
+}
+
 static int fsync_parent_directory(const char *path, int inject_fault)
 {
     char *directory = NULL;
@@ -590,16 +634,26 @@ int atomic_file_commit_pair(AtomicFile *first, AtomicFile *second)
     size_t index;
     int saved_errno = 0;
     int success = 0;
+    int same_target = 0;
 
     if (first == NULL || first->temporary_path == NULL ||
         first->final_path == NULL ||
         (second != NULL &&
          (first == second || second->temporary_path == NULL ||
-          second->final_path == NULL ||
-          strcmp(first->final_path, second->final_path) == 0))) {
+          second->final_path == NULL))) {
         errno = EINVAL;
         print_system_error("Invalid atomic output pair");
         return 0;
+    }
+    if (second != NULL &&
+        (!atomic_file_targets_are_same(first->final_path,
+                                       second->final_path,
+                                       &same_target) || same_target != 0)) {
+        saved_errno = errno != 0 ? errno : EINVAL;
+        if (same_target != 0) {
+            saved_errno = EINVAL;
+        }
+        goto rollback;
     }
     for (index = 0U; index < count; ++index) {
         if (files[index] == NULL || files[index]->temporary_path == NULL ||

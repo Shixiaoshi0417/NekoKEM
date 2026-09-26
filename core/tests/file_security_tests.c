@@ -364,6 +364,45 @@ cleanup:
     return success;
 }
 
+static int test_pair_alias_rejection(const char *root)
+{
+    static const unsigned char public_data[] = "public";
+    static const unsigned char private_data[] = "private";
+    char directory[256];
+    char public_path[256];
+    char aliased_path[256];
+    AtomicFile public_output = {0};
+    AtomicFile private_output = {0};
+    int success = 0;
+
+    if (!make_path(directory, sizeof(directory), root, "alias") ||
+        !make_path(public_path, sizeof(public_path), directory,
+                   "public.key") ||
+        !make_path(aliased_path, sizeof(aliased_path), directory,
+                   "./public.key") ||
+        mkdir(directory, 0700) != 0 ||
+        !stage_bytes(&public_output, public_path,
+                     public_data, sizeof(public_data)) ||
+        !stage_bytes(&private_output, aliased_path,
+                     private_data, sizeof(private_data))) {
+        goto cleanup;
+    }
+    if (atomic_file_commit_pair(&public_output, &private_output) != 0 ||
+        access(public_path, F_OK) == 0 ||
+        has_transaction_artifact(directory)) {
+        goto cleanup;
+    }
+    success = 1;
+
+cleanup:
+    atomic_file_abort(&private_output);
+    atomic_file_abort(&public_output);
+    (void)unlink(aliased_path);
+    (void)unlink(public_path);
+    (void)rmdir(directory);
+    return success;
+}
+
 int main(void)
 {
     char test_directory[] = "/tmp/nekokem-file-security.XXXXXX";
@@ -399,6 +438,10 @@ int main(void)
     }
     if (!test_new_pair_rollback(test_directory)) {
         fprintf(stderr, "New pair rollback subtest failed\n");
+        goto cleanup;
+    }
+    if (!test_pair_alias_rejection(test_directory)) {
+        fprintf(stderr, "Pair alias rejection subtest failed\n");
         goto cleanup;
     }
     if (has_transaction_artifact(test_directory)) {
