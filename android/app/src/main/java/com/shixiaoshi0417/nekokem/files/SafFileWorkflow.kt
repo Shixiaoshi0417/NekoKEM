@@ -19,7 +19,6 @@ import com.shixiaoshi0417.nekokem.keys.TemporaryPublicKeyResult
 import com.shixiaoshi0417.nekokem.nativecore.NativeBridge
 import com.shixiaoshi0417.nekokem.progress.CancellableProgressCallback
 import java.io.File
-import java.io.FileNotFoundException
 import java.io.FileInputStream
 import java.io.FileOutputStream
 import java.io.RandomAccessFile
@@ -854,12 +853,10 @@ class SafFileWorkflow(
         }
     }
 
-    private fun backupUriToFile(destination: Uri): File? {
-        val input = try {
-            contentResolver.openInputStream(destination)
-        } catch (_: FileNotFoundException) {
-            return null
-        }
+    private fun backupUriToFile(destination: Uri): File {
+        // An unreadable URI may still be writable. Without a snapshot, a
+        // cancelled or failed write could leave partial output behind.
+        val input = contentResolver.openInputStream(destination)
         if (input == null) {
             throw IllegalStateException()
         }

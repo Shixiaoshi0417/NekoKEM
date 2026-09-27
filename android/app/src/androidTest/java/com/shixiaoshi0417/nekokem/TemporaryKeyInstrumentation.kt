@@ -66,6 +66,7 @@ class TemporaryKeyInstrumentation : Instrumentation() {
             )
             testEmptyPlaintextRoundTrip(workflow, context.cacheDir)
             testExistingOutputRollback(workflow, context.cacheDir, plaintext)
+            testUnreadableOutputRejection(workflow, context.cacheDir, plaintext)
             testTemporaryKeys(manager, workflow, context.cacheDir, plaintext)
             testInvalidKeys(manager, workflow, context.cacheDir)
             testCancellationCleanup(workflow, context.cacheDir, plaintext)
@@ -183,6 +184,7 @@ class TemporaryKeyInstrumentation : Instrumentation() {
             NativeBridge.RESULT_SUCCESS)
         val originalFingerprint = checkNotNull(manager.readState().fingerprint)
         val exportedPublicKey = File(cache, EXPORTED_PUBLIC_KEY_NAME)
+        check(exportedPublicKey.createNewFile())
         val exportTrace = workflow.exportPublicKeyDetailed(
             Uri.fromFile(exportedPublicKey),
         )
@@ -279,6 +281,7 @@ class TemporaryKeyInstrumentation : Instrumentation() {
         Os.chmod(emptyPlaintext.absolutePath, PRIVATE_FILE_MODE)
 
         val encrypted = File(cache, EMPTY_CIPHERTEXT_NAME)
+        check(encrypted.createNewFile())
         val encryption = workflow.prepareEncryption(
             Uri.fromFile(emptyPlaintext),
             CONTINUE_PROGRESS,
@@ -292,6 +295,7 @@ class TemporaryKeyInstrumentation : Instrumentation() {
         ) == NativeBridge.RESULT_SUCCESS)
 
         val decrypted = File(cache, EMPTY_DECRYPTED_NAME)
+        check(decrypted.createNewFile())
         val decryption = workflow.prepareDecryption(
             Uri.fromFile(encrypted),
             password(DEFAULT_PASSWORD),
@@ -332,6 +336,27 @@ class TemporaryKeyInstrumentation : Instrumentation() {
             CANCEL_AFTER_WRITE_PROGRESS,
         ) != NativeBridge.RESULT_SUCCESS)
         check(destination.readBytes().contentEquals(original))
+    }
+
+    private fun testUnreadableOutputRejection(
+        workflow: SafFileWorkflow,
+        cache: File,
+        plaintext: File,
+    ) {
+        val destination = File(cache, UNREADABLE_OUTPUT_NAME)
+        check(!destination.exists())
+        val encryption = workflow.prepareEncryption(
+            Uri.fromFile(plaintext),
+            CONTINUE_PROGRESS,
+        )
+        check(encryption.code == NativeBridge.RESULT_SUCCESS)
+        val prepared = checkNotNull(encryption.prepared)
+        check(workflow.commitPreparedEncryption(
+            prepared,
+            Uri.fromFile(destination),
+            CONTINUE_PROGRESS,
+        ) != NativeBridge.RESULT_SUCCESS)
+        check(!destination.exists())
     }
 
     private fun assertSuccessfulPublicKeyImport(
@@ -596,6 +621,7 @@ class TemporaryKeyInstrumentation : Instrumentation() {
         const val EMPTY_CIPHERTEXT_NAME = "empty-plaintext.nkem"
         const val EMPTY_DECRYPTED_NAME = "empty-plaintext.out"
         const val EXISTING_OUTPUT_NAME = "existing-output.bin"
+        const val UNREADABLE_OUTPUT_NAME = "unreadable-output.bin"
         const val DEFAULT_CIPHERTEXT_NAME = "default.nkem"
         const val DEFAULT_DECRYPTED_NAME = "default.out"
         const val EXPORTED_PUBLIC_KEY_NAME = "exported-public.key"
