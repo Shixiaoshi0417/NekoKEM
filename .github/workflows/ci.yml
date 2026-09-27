@@ -75,7 +75,8 @@ jobs:
           LIBRARY_PATH: ${{ runner.temp }}/openssl-3.5.6/lib
         run: |
           set -Eeuo pipefail
-          make -C linux fuzz-build
+          make -C linux fuzz-build \
+            FUZZ_LDFLAGS="-fsanitize=undefined -L$LIBRARY_PATH"
           afl-fuzz -V 15 -i core/fuzz/seeds/nkem \
             -o "$RUNNER_TEMP/fuzz-nkem" -- core/fuzz/bin/fuzz_nkem @@
           afl-fuzz -V 15 -i core/fuzz/seeds/nkpr \
