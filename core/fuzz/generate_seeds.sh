@@ -16,9 +16,9 @@ hex_to_binary()
 
 # Structurally valid NKEM v3 with synthetic public fields and no file data.
 printf '%s' \
-    '4e4b454d0303002000380000000000010000000000000000200c100000000000' |
+    '4e4b454d0303002000380000000006200000000000000000200c100000000000' |
     hex_to_binary > "$nkem_dir/valid-v3"
-dd if=/dev/zero bs=1 count=117 status=none \
+dd if=/dev/zero bs=1 count=1684 status=none \
     >> "$nkem_dir/valid-v3"
 
 # Structurally valid NKPR with one synthetic ciphertext byte.

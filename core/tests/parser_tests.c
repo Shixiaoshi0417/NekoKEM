@@ -34,7 +34,7 @@ static void put_u64_be(unsigned char *output, uint64_t value)
 
 static size_t build_valid_nkem(unsigned char *buffer, size_t capacity)
 {
-    const uint32_t kem_len = 32U;
+    const uint32_t kem_len = NKEM_V3_KEM_CIPHERTEXT_SIZE;
     const uint64_t ciphertext_len = 16U;
     const size_t total = NKEM_V3_HEADER_SIZE + NKEM_X448_EPHEMERAL_PUBLIC_SIZE +
                          kem_len + NKEM_V3_SALT_SIZE + NKEM_NONCE_SIZE +
@@ -81,7 +81,7 @@ static int expect_nkpr_invalid(const unsigned char *input, size_t input_len)
 
 static int test_nkem_mutations(const unsigned char *valid, size_t valid_len)
 {
-    unsigned char mutated[512];
+    unsigned char mutated[2048];
     NkemV3Header header;
 
     if (!nkem_gcm_data_size_is_valid(NKEM_GCM_MAX_DATA_SIZE) ||
@@ -109,18 +109,21 @@ static int test_nkem_mutations(const unsigned char *valid, size_t valid_len)
     mutated[10] = 1U;
     if (!expect_nkem_invalid(mutated, valid_len)) return 0;
     memcpy(mutated, valid, valid_len);
-    put_u32_be(mutated + 12U, NKEM_MAX_KEM_CIPHERTEXT_SIZE + 1U);
+    put_u32_be(mutated + 12U, NKEM_V3_KEM_CIPHERTEXT_SIZE - 1U);
+    if (!expect_nkem_invalid(mutated, valid_len)) return 0;
+    memcpy(mutated, valid, valid_len);
+    put_u32_be(mutated + 12U, NKEM_V3_KEM_CIPHERTEXT_SIZE + 1U);
     if (!expect_nkem_invalid(mutated, valid_len)) return 0;
     memcpy(mutated, valid, valid_len);
     put_u64_be(mutated + 16U, UINT64_MAX);
     if (!expect_nkem_invalid(mutated, valid_len)) return 0;
 
     nkem_v3_header_encode(mutated, NKEM_X448_EPHEMERAL_PUBLIC_SIZE,
-                          NKEM_MAX_KEM_CIPHERTEXT_SIZE,
+                          NKEM_V3_KEM_CIPHERTEXT_SIZE,
                           NKEM_GCM_MAX_DATA_SIZE);
     if (nkem_v3_header_decode(mutated, &header) == 0) return 0;
     nkem_v3_header_encode(mutated, NKEM_X448_EPHEMERAL_PUBLIC_SIZE,
-                          NKEM_MAX_KEM_CIPHERTEXT_SIZE,
+                          NKEM_V3_KEM_CIPHERTEXT_SIZE,
                           NKEM_GCM_MAX_DATA_SIZE + UINT64_C(1));
     if (nkem_v3_header_decode(mutated, &header) != 0) return 0;
     memcpy(mutated, valid, valid_len);
@@ -217,7 +220,7 @@ static int test_random_inputs(void)
 
 int main(void)
 {
-    unsigned char nkem[512];
+    unsigned char nkem[2048];
     unsigned char nkpr[512];
     size_t nkem_len = build_valid_nkem(nkem, sizeof(nkem));
     size_t nkpr_len = build_valid_nkpr(nkpr, sizeof(nkpr));

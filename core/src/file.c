@@ -234,6 +234,102 @@ int file_disable_buffering(FILE *stream)
     return 1;
 }
 
+int file_read_regular(const char *path,
+                      size_t maximum_size,
+                      unsigned char **buffer,
+                      size_t *length)
+{
+    struct stat status;
+    unsigned char *local_buffer = NULL;
+    size_t capacity = 0U;
+    size_t position = 0U;
+    int descriptor = -1;
+    int success = 0;
+
+    if (path == NULL || buffer == NULL || length == NULL ||
+        maximum_size == 0U) {
+        errno = EINVAL;
+        print_system_error("Invalid regular-file read request");
+        return 0;
+    }
+    *buffer = NULL;
+    *length = 0U;
+    descriptor = open(path, O_RDONLY | O_CLOEXEC | O_NONBLOCK);
+    if (descriptor < 0) {
+        print_system_error("Cannot open regular input file");
+        goto cleanup;
+    }
+    if (fstat(descriptor, &status) != 0) {
+        print_system_error("Cannot inspect regular input file");
+        goto cleanup;
+    }
+    if (!S_ISREG(status.st_mode) || status.st_size <= 0) {
+        fprintf(stderr, "Input must be a non-empty regular file\n");
+        goto cleanup;
+    }
+    if ((uintmax_t)status.st_size > (uintmax_t)maximum_size ||
+        (uintmax_t)status.st_size > (uintmax_t)SIZE_MAX) {
+        fprintf(stderr, "Regular input exceeds the size limit\n");
+        goto cleanup;
+    }
+    capacity = (size_t)status.st_size;
+    local_buffer = OPENSSL_malloc(capacity);
+    if (local_buffer == NULL) {
+        print_openssl_error("Cannot allocate regular-file buffer");
+        goto cleanup;
+    }
+    while (position < capacity) {
+        ssize_t count = read(descriptor, local_buffer + position,
+                             capacity - position);
+
+        if (count < 0) {
+            if (errno == EINTR) {
+                continue;
+            }
+            print_system_error("Cannot read regular input file");
+            goto cleanup;
+        }
+        if (count == 0) {
+            fprintf(stderr, "Regular input changed while being read\n");
+            goto cleanup;
+        }
+        position += (size_t)count;
+    }
+    {
+        unsigned char extra_byte;
+        ssize_t count;
+
+        do {
+            count = read(descriptor, &extra_byte, 1U);
+        } while (count < 0 && errno == EINTR);
+        if (count < 0) {
+            print_system_error("Cannot verify regular input length");
+            goto cleanup;
+        }
+        if (count != 0) {
+            fprintf(stderr, "Regular input changed while being read\n");
+            goto cleanup;
+        }
+    }
+    if (close(descriptor) != 0) {
+        descriptor = -1;
+        print_system_error("Cannot close regular input file");
+        goto cleanup;
+    }
+    descriptor = -1;
+    *buffer = local_buffer;
+    *length = capacity;
+    local_buffer = NULL;
+    success = 1;
+
+cleanup:
+    if (descriptor >= 0) {
+        (void)close(descriptor);
+    }
+    OPENSSL_free(local_buffer);
+    return success;
+}
+
 int file_read_sensitive(const char *path,
                         size_t maximum_size,
                         unsigned char **buffer,

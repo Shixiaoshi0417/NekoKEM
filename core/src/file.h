@@ -7,8 +7,8 @@
 
 #define NKEM_NONCE_SIZE 12U
 #define NKEM_TAG_SIZE 16U
-#define NKEM_MAX_KEM_CIPHERTEXT_SIZE 65536U
 #define NKEM_X448_EPHEMERAL_PUBLIC_SIZE 56U
+#define NKEM_V3_KEM_CIPHERTEXT_SIZE 1568U
 #define NKEM_V3_HEADER_SIZE 32U
 #define NKEM_V3_VERSION 3U
 #define NKEM_V3_ALGORITHM_ID 3U
@@ -54,6 +54,10 @@ int file_get_size(FILE *stream, uint64_t *size);
 int file_read_exact(FILE *stream, void *buffer, size_t length);
 int file_write_all(FILE *stream, const void *buffer, size_t length);
 int file_disable_buffering(FILE *stream);
+int file_read_regular(const char *path,
+                      size_t maximum_size,
+                      unsigned char **buffer,
+                      size_t *length);
 int file_read_sensitive(const char *path,
                         size_t maximum_size,
                         unsigned char **buffer,

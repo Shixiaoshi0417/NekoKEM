@@ -131,8 +131,7 @@ static int nkem_v3_header_decode_internal(
         }
         return 0;
     }
-    if (header->kem_ciphertext_len == 0U ||
-        header->kem_ciphertext_len > NKEM_MAX_KEM_CIPHERTEXT_SIZE) {
+    if (header->kem_ciphertext_len != NKEM_V3_KEM_CIPHERTEXT_SIZE) {
         if (report_errors != 0) {
             fprintf(stderr, "Invalid ML-KEM ciphertext length\n");
         }

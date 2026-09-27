@@ -21,7 +21,7 @@ The fixed header is 32 bytes. Multibyte integers use big-endian encoding.
 | 6 | 2 | Header length: `32` |
 | 8 | 2 | X448 ephemeral public-key length: `56` |
 | 10 | 2 | Reserved: `0` |
-| 12 | 4 | ML-KEM ciphertext length |
+| 12 | 4 | ML-KEM-1024 ciphertext length: `1568` |
 | 16 | 8 | AES-GCM ciphertext length |
 | 24 | 1 | HKDF salt length: `32` |
 | 25 | 1 | AES-GCM nonce length: `12` |
@@ -82,6 +82,13 @@ Consequently, changes to the header, salt, nonce, ephemeral public key, or KEM
 ciphertext fail GCM authentication. Decryption validates the version,
 algorithm ID, fixed lengths, reserved fields, total size, and absence of
 trailing data before committing atomic plaintext output.
+
+The implementation accepts at most `2^36 - 32` plaintext/ciphertext bytes in
+one v3 container. This is the byte-aligned form of the
+`len(P) <= 2^39 - 256` bit limit in NIST SP 800-38D, Section 5.2.1.1.
+Encryption rejects a larger input before key encapsulation or GCM processing;
+decryption rejects an oversized declared ciphertext length while decoding the
+header.
 
 ## Compatibility
 

@@ -81,13 +81,14 @@ if cmp -s encrypted/valid.nkem encrypted/tampered.nkem; then
     printf '\377' | dd of=encrypted/tampered.nkem bs=1 seek=1688 \
         count=1 conv=notrunc status=none
 fi
+printf 'existing authenticated output sentinel\n' > tampered-output.bin
 if printf '%s\n' "$key_password" |
     ./nekokem decrypt hybrid encrypted/tampered.nkem \
         tampered-output.bin keys/private.key.enc >/dev/null 2>&1; then
     echo "Tampered container was accepted" >&2
     exit 1
 fi
-test ! -e tampered-output.bin
+test "$(cat tampered-output.bin)" = 'existing authenticated output sentinel'
 
 printf 'not a PEM private key\n' > invalid-private.key
 if ./nekokem decrypt hybrid encrypted/valid.nkem \

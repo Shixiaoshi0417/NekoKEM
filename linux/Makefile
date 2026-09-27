@@ -29,7 +29,8 @@ DEPS = $(OBJECTS:.o=.d)
 
 .PHONY: all core clean test analyze test-ubsan test-parser fuzz-seeds \
 	fuzz-build test-key-management test-progress test-progress-large \
-	test-file-security test-version-rejection test-gcm-limit
+	test-file-security test-version-rejection test-gcm-limit \
+	test-hybrid-kdf test-asan
 
 all: $(TARGET)
 
@@ -106,6 +107,27 @@ test-gcm-limit:
 	UBSAN_OPTIONS=halt_on_error=1:print_stacktrace=1 \
 		"$$gcm_binary"
 
+test-hybrid-kdf: $(CORE_LIBRARY)
+	@set -eu; \
+	kdf_binary=$$(mktemp /tmp/nekokem-hybrid-kdf-tests.XXXXXX); \
+	cleanup_kdf() { rm -f "$$kdf_binary"; }; \
+	trap cleanup_kdf EXIT INT TERM; \
+	$(CC) $(CPPFLAGS) $(CFLAGS) $(LDFLAGS) \
+		../core/tests/hybrid_kdf_tests.c $(CORE_LIBRARY) $(LDLIBS) \
+		-o "$$kdf_binary"; \
+	"$$kdf_binary"
+
+test-asan:
+	@set -eu; \
+	asan_binary=$$(mktemp /tmp/nekokem-asan.XXXXXX); \
+	cleanup_asan() { rm -f "$$asan_binary"; }; \
+	trap cleanup_asan EXIT INT TERM; \
+	$(CC) $(CPPFLAGS) $(CFLAGS) -O1 -g -fno-omit-frame-pointer \
+		-fsanitize=address $(LDFLAGS) $(SOURCES) $(LDLIBS) \
+		-fsanitize=address -o "$$asan_binary"; \
+	ASAN_OPTIONS=detect_leaks=1:halt_on_error=1 \
+		sh ../core/tests/security_paths.sh "$$asan_binary"
+
 fuzz-seeds:
 	sh ../core/fuzz/generate_seeds.sh
 
@@ -160,7 +182,8 @@ test-progress test-progress-large: $(CORE_LIBRARY)
 	fi
 
 test: $(TARGET) analyze test-ubsan test-parser test-file-security test-gcm-limit \
-	test-key-management test-version-rejection test-progress
+	test-key-management test-version-rejection test-progress test-hybrid-kdf \
+	test-asan
 	@set -eu; \
 	test_dir=$$(mktemp -d); \
 	cleanup() { \

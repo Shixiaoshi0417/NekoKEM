@@ -1,11 +1,13 @@
 #ifndef NEKOKEM_KEM_H
 #define NEKOKEM_KEM_H
 
+#include "file.h"
+
 #include <openssl/evp.h>
 #include <stddef.h>
 
 #define KEM_ALGORITHM_NAME "ML-KEM-1024"
-#define KEM_CIPHERTEXT_SIZE 1568U
+#define KEM_CIPHERTEXT_SIZE NKEM_V3_KEM_CIPHERTEXT_SIZE
 #define KEM_SHARED_SECRET_SIZE 32U
 #define KEM_MAX_SHARED_SECRET_SIZE 4096U
 #define AES256_KEY_SIZE 32U

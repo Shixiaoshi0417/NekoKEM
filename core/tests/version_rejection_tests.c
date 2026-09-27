@@ -114,6 +114,9 @@ int main(void)
     char public_path[TEST_PATH_SIZE] = {0};
     char private_path[TEST_PATH_SIZE] = {0};
     char plaintext_path[TEST_PATH_SIZE] = {0};
+    char empty_path[TEST_PATH_SIZE] = {0};
+    char empty_v3_path[TEST_PATH_SIZE] = {0};
+    char empty_output_path[TEST_PATH_SIZE] = {0};
     char v3_path[TEST_PATH_SIZE] = {0};
     char v3_output_path[TEST_PATH_SIZE] = {0};
     char v1_path[TEST_PATH_SIZE] = {0};
@@ -129,6 +132,12 @@ int main(void)
                    "private.nkpr.enc") ||
         !make_path(plaintext_path, sizeof(plaintext_path), directory,
                    "plaintext.bin") ||
+        !make_path(empty_path, sizeof(empty_path), directory,
+                   "empty.bin") ||
+        !make_path(empty_v3_path, sizeof(empty_v3_path), directory,
+                   "empty-v3.nkem") ||
+        !make_path(empty_output_path, sizeof(empty_output_path), directory,
+                   "empty-output.bin") ||
         !make_path(v3_path, sizeof(v3_path), directory, "valid-v3.nkem") ||
         !make_path(v3_output_path, sizeof(v3_output_path), directory,
                    "v3-output.bin") ||
@@ -153,6 +162,15 @@ int main(void)
         fprintf(stderr, "NKEM v3 public decrypt regression failed\n");
         goto cleanup;
     }
+    if (!write_plaintext(empty_path, plaintext, 0U) ||
+        !nekokem_encrypt_file(empty_path, empty_v3_path, public_path) ||
+        !nekokem_decrypt_file(empty_v3_path, empty_output_path,
+                              private_path, password,
+                              sizeof(password) - 1U) ||
+        !file_equals(empty_output_path, plaintext, 0U)) {
+        fprintf(stderr, "Empty NKEM v3 round-trip failed\n");
+        goto cleanup;
+    }
     if (!copy_with_version(v3_path, v1_path, 1U) ||
         !copy_with_version(v3_path, v2_path, 2U)) {
         fprintf(stderr, "Cannot prepare legacy-version fixtures\n");
@@ -175,6 +193,9 @@ int main(void)
     success = 1;
 
 cleanup:
+    (void)unlink(empty_output_path);
+    (void)unlink(empty_v3_path);
+    (void)unlink(empty_path);
     (void)unlink(v2_output_path);
     (void)unlink(v1_output_path);
     (void)unlink(v2_path);

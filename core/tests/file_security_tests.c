@@ -4,6 +4,7 @@
 #include <dirent.h>
 #include <errno.h>
 #include <fcntl.h>
+#include <openssl/crypto.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -195,6 +196,41 @@ cleanup:
     return success;
 }
 
+static int test_regular_file_validation(const char *root)
+{
+    static const unsigned char contents[] = "public-test";
+    char regular_path[256];
+    char fifo_path[256];
+    unsigned char *buffer = NULL;
+    size_t length = 0U;
+    int success = 0;
+
+    if (!make_path(regular_path, sizeof(regular_path), root, "public.key") ||
+        !make_path(fifo_path, sizeof(fifo_path), root, "public.fifo") ||
+        !write_plain_file(regular_path, contents, sizeof(contents), 0644) ||
+        !file_read_regular(regular_path, 1024U, &buffer, &length) ||
+        length != sizeof(contents) ||
+        memcmp(buffer, contents, sizeof(contents)) != 0) {
+        goto cleanup;
+    }
+    OPENSSL_free(buffer);
+    buffer = NULL;
+    length = 0U;
+    if (file_read_regular(regular_path, sizeof(contents) - 1U,
+                          &buffer, &length) != 0 ||
+        mkfifo(fifo_path, 0600) != 0 ||
+        file_read_regular(fifo_path, 1024U, &buffer, &length) != 0) {
+        goto cleanup;
+    }
+    success = 1;
+
+cleanup:
+    OPENSSL_free(buffer);
+    (void)unlink(fifo_path);
+    (void)unlink(regular_path);
+    return success;
+}
+
 static int stage_bytes(AtomicFile *output, const char *path,
                        const unsigned char *data, size_t length)
 {
@@ -278,6 +314,42 @@ cleanup:
     file_test_fault_reset();
     atomic_file_abort(&output);
     (void)unlink(output_path);
+    return success;
+}
+
+static int test_symlink_output_replacement(const char *root)
+{
+    static const unsigned char target_data[] = "target-data";
+    static const unsigned char output_data[] = "output-data";
+    char target_path[256];
+    char output_path[256];
+    AtomicFile output = {0};
+    struct stat status;
+    int success = 0;
+
+    if (!make_path(target_path, sizeof(target_path), root, "target.bin") ||
+        !make_path(output_path, sizeof(output_path), root, "output.link") ||
+        !write_plain_file(target_path, target_data,
+                          sizeof(target_data), 0600) ||
+        symlink(target_path, output_path) != 0 ||
+        !stage_bytes(&output, output_path,
+                     output_data, sizeof(output_data)) ||
+        fstat(fileno(output.stream), &status) != 0 ||
+        (status.st_mode & (mode_t)0777) != (mode_t)0600 ||
+        !atomic_file_commit(&output) ||
+        lstat(output_path, &status) != 0 ||
+        !S_ISREG(status.st_mode) ||
+        !file_equals(output_path, output_data, sizeof(output_data)) ||
+        !file_equals(target_path, target_data, sizeof(target_data)) ||
+        has_transaction_artifact(root)) {
+        goto cleanup;
+    }
+    success = 1;
+
+cleanup:
+    atomic_file_abort(&output);
+    (void)unlink(output_path);
+    (void)unlink(target_path);
     return success;
 }
 
@@ -420,12 +492,20 @@ int main(void)
         fprintf(stderr, "Sensitive-file validation subtest failed\n");
         goto cleanup;
     }
+    if (!test_regular_file_validation(test_directory)) {
+        fprintf(stderr, "Regular-file validation subtest failed\n");
+        goto cleanup;
+    }
     if (!test_write_failures(test_directory)) {
         fprintf(stderr, "Short-write/ENOSPC subtest failed\n");
         goto cleanup;
     }
     if (!test_single_file_fsync_rollback(test_directory)) {
         fprintf(stderr, "Single-file fsync rollback subtest failed\n");
+        goto cleanup;
+    }
+    if (!test_symlink_output_replacement(test_directory)) {
+        fprintf(stderr, "Symlink output replacement subtest failed\n");
         goto cleanup;
     }
     if (!test_pair_rollback(test_directory, FILE_TEST_FAULT_RENAME, 2U)) {
