@@ -76,6 +76,46 @@ cleanup:
     return success;
 }
 
+static int copy_with_zero_field(const char *source_path,
+                                const char *destination_path,
+                                long offset,
+                                size_t length)
+{
+    unsigned char zeros[128] = {0};
+    FILE *output;
+    int success = 0;
+
+    if (!copy_with_version(source_path, destination_path, 3U)) {
+        return 0;
+    }
+    output = fopen(destination_path, "r+b");
+    if (output == NULL) {
+        (void)unlink(destination_path);
+        return 0;
+    }
+    if (fseek(output, offset, SEEK_SET) != 0) {
+        goto cleanup;
+    }
+    while (length > 0U) {
+        size_t chunk = length < sizeof(zeros) ? length : sizeof(zeros);
+
+        if (fwrite(zeros, 1U, chunk, output) != chunk) {
+            goto cleanup;
+        }
+        length -= chunk;
+    }
+    success = 1;
+
+cleanup:
+    if (fclose(output) != 0) {
+        success = 0;
+    }
+    if (success == 0) {
+        (void)unlink(destination_path);
+    }
+    return success;
+}
+
 static int file_equals(const char *path,
                        const unsigned char *expected,
                        size_t expected_length)
@@ -123,6 +163,10 @@ int main(void)
     char v2_path[TEST_PATH_SIZE] = {0};
     char v1_output_path[TEST_PATH_SIZE] = {0};
     char v2_output_path[TEST_PATH_SIZE] = {0};
+    char zero_x448_path[TEST_PATH_SIZE] = {0};
+    char zero_x448_output_path[TEST_PATH_SIZE] = {0};
+    char zero_kem_path[TEST_PATH_SIZE] = {0};
+    char zero_kem_output_path[TEST_PATH_SIZE] = {0};
     int success = 0;
 
     if (mkdtemp(directory) == NULL ||
@@ -146,7 +190,15 @@ int main(void)
         !make_path(v1_output_path, sizeof(v1_output_path), directory,
                    "version-1-output.bin") ||
         !make_path(v2_output_path, sizeof(v2_output_path), directory,
-                   "version-2-output.bin")) {
+                   "version-2-output.bin") ||
+        !make_path(zero_x448_path, sizeof(zero_x448_path), directory,
+                   "zero-x448.nkem") ||
+        !make_path(zero_x448_output_path, sizeof(zero_x448_output_path),
+                   directory, "zero-x448-output.bin") ||
+        !make_path(zero_kem_path, sizeof(zero_kem_path), directory,
+                   "zero-kem.nkem") ||
+        !make_path(zero_kem_output_path, sizeof(zero_kem_output_path),
+                   directory, "zero-kem-output.bin")) {
         fprintf(stderr, "Cannot prepare version-rejection test paths\n");
         goto cleanup;
     }
@@ -190,9 +242,29 @@ int main(void)
                 "Public decrypt accepted version 2 or left output\n");
         goto cleanup;
     }
+    if (!copy_with_zero_field(v3_path, zero_x448_path, 32L, 56U) ||
+        nekokem_decrypt_file(zero_x448_path, zero_x448_output_path,
+                             private_path, password,
+                             sizeof(password) - 1U) != 0 ||
+        access(zero_x448_output_path, F_OK) == 0) {
+        fprintf(stderr, "All-zero X448 peer key was accepted or left output\n");
+        goto cleanup;
+    }
+    if (!copy_with_zero_field(v3_path, zero_kem_path, 88L, 1568U) ||
+        nekokem_decrypt_file(zero_kem_path, zero_kem_output_path,
+                             private_path, password,
+                             sizeof(password) - 1U) != 0 ||
+        access(zero_kem_output_path, F_OK) == 0) {
+        fprintf(stderr, "Invalid ML-KEM ciphertext was accepted or left output\n");
+        goto cleanup;
+    }
     success = 1;
 
 cleanup:
+    (void)unlink(zero_kem_output_path);
+    (void)unlink(zero_kem_path);
+    (void)unlink(zero_x448_output_path);
+    (void)unlink(zero_x448_path);
     (void)unlink(empty_output_path);
     (void)unlink(empty_v3_path);
     (void)unlink(empty_path);
