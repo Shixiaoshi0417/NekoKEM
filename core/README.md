@@ -21,6 +21,8 @@ Core 使用 OpenSSL 3.5 EVP、NKEM v3 和 NKPR。NKEM v3 使用独立的
 - `nekokem_encrypt_file()`：默认生成 NKEM v3 Hybrid 文件。
 - `nekokem_decrypt_file()`：仅接受 NKEM v3；Hybrid 路径同时兼容 NKPR
   私钥和旧式明文 Hybrid PEM 私钥。
+  加密 PKCS#8 PEM（包括 NKPR 内嵌的加密 PEM）会非交互地拒绝；Core
+  不调用 OpenSSL 的默认终端密码输入回调。
 - `nekokem_encrypt_file_with_progress()`：与默认 v3 加密协议完全相同，
   额外报告 `processed_bytes` 和 `total_bytes`。
 - `nekokem_decrypt_file_with_progress()`：解密 v3 时按数据块报告进度。回调在调用线程同步执行，返回 `0` 请求取消。

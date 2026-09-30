@@ -30,7 +30,7 @@ DEPS = $(OBJECTS:.o=.d)
 .PHONY: all core clean test analyze test-ubsan test-parser fuzz-seeds \
 	fuzz-build test-key-management test-progress test-progress-large \
 	test-file-security test-version-rejection test-gcm-limit \
-	test-hybrid-kdf test-asan test-input-boundaries
+	test-hybrid-kdf test-asan test-input-boundaries test-pem-interaction
 
 all: $(TARGET)
 
@@ -166,6 +166,16 @@ test-input-boundaries: $(CORE_LIBRARY)
 		-o "$$input_binary"; \
 	"$$input_binary"
 
+test-pem-interaction: $(CORE_LIBRARY)
+	@set -eu; \
+	pem_binary=$$(mktemp /tmp/nekokem-pem-interaction-tests.XXXXXX); \
+	cleanup_pem() { rm -f "$$pem_binary"; }; \
+	trap cleanup_pem EXIT INT TERM; \
+	$(CC) $(CPPFLAGS) $(CFLAGS) $(LDFLAGS) \
+		../core/tests/pem_interaction_tests.c $(CORE_LIBRARY) $(LDLIBS) \
+		-o "$$pem_binary"; \
+	python3 ../core/tests/pem_interaction_tests.py "$$pem_binary"
+
 test-version-rejection: $(CORE_LIBRARY)
 	@set -eu; \
 	version_binary=$$(mktemp /tmp/nekokem-version-rejection-tests.XXXXXX); \
@@ -193,7 +203,7 @@ test-progress test-progress-large: $(CORE_LIBRARY)
 
 test: $(TARGET) analyze test-ubsan test-parser test-file-security test-gcm-limit \
 	test-key-management test-version-rejection test-progress test-hybrid-kdf test-input-boundaries \
-	test-asan
+	test-asan test-pem-interaction
 	@set -eu; \
 	test_dir=$$(mktemp -d); \
 	cleanup() { \

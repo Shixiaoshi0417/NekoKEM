@@ -154,6 +154,17 @@ cleanup:
     return success;
 }
 
+static int reject_pem_password(char *buffer, int size,
+                                int writing, void *user_data)
+{
+    (void)buffer;
+    (void)size;
+    (void)writing;
+    (void)user_data;
+    /* Core accepts plaintext PEM or NKPR; never invoke OpenSSL's terminal UI. */
+    return 0;
+}
+
 static int parse_hybrid_private_keys(const unsigned char *pem,
                                      size_t pem_len,
                                      HybridKeys *keys)
@@ -174,8 +185,10 @@ static int parse_hybrid_private_keys(const unsigned char *pem,
             "Cannot create hybrid private-key memory BIO");
         goto cleanup;
     }
-    loaded.x448 = PEM_read_bio_PrivateKey(input, NULL, NULL, NULL);
-    loaded.mlkem = PEM_read_bio_PrivateKey(input, NULL, NULL, NULL);
+    loaded.x448 = PEM_read_bio_PrivateKey(
+        input, NULL, reject_pem_password, NULL);
+    loaded.mlkem = PEM_read_bio_PrivateKey(
+        input, NULL, reject_pem_password, NULL);
     if (loaded.x448 == NULL || loaded.mlkem == NULL) {
         print_openssl_error("Cannot parse both hybrid key components");
         goto cleanup;
