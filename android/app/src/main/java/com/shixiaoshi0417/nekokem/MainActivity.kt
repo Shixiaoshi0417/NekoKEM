@@ -1,6 +1,7 @@
 package com.shixiaoshi0417.nekokem
 
 import android.content.Context
+import com.shixiaoshi0417.nekokem.i18n.AppLanguages
 import android.net.Uri
 import android.os.Bundle
 import androidx.activity.ComponentActivity
@@ -57,10 +58,14 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 class MainActivity : ComponentActivity() {
+    override fun attachBaseContext(newBase: Context) {
+        super.attachBaseContext(AppLanguages.localizedContext(newBase))
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         val keyManager = LocalKeyManager(applicationContext)
-        val fileWorkflow = SafFileWorkflow(applicationContext, keyManager)
+        val fileWorkflow = SafFileWorkflow(this, keyManager)
 
         setContent {
             NekoKEMTheme {

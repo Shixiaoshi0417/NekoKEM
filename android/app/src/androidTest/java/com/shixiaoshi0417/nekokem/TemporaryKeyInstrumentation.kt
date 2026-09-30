@@ -24,10 +24,18 @@ import kotlinx.coroutines.runBlocking
  * isolated filesDir/cacheDir so it never replaces the debug App's normal keys.
  */
 class TemporaryKeyInstrumentation : Instrumentation() {
+    private var languagePhase: String? = null
+
+    override fun onCreate(arguments: Bundle?) {
+        languagePhase = arguments?.getString("languagePhase")
+        super.onCreate(arguments)
+        start()
+    }
     override fun onStart() {
         val results = Bundle()
         val status = try {
-            val publicKeyTrace = runTemporaryKeyTests(targetContext)
+            val publicKeyTrace = if (languagePhase == null) runTemporaryKeyTests(targetContext) else "language-only"
+            runLanguageDeviceTests(this, languagePhase)
             results.putString(RESULT_KEY, RESULT_SUCCESS)
             results.putString(PUBLIC_KEY_TRACE_KEY, publicKeyTrace)
             Activity.RESULT_OK

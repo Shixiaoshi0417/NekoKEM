@@ -9,7 +9,13 @@ NDK_VERSION=28.2.13676358
 
 script_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 project_dir=$(CDPATH= cd -- "$script_dir/.." && pwd)
-output_root="$project_dir/app/src/main/cpp/third_party/openssl/arm64-v8a"
+abi="${1:-arm64-v8a}"
+case "$abi" in
+    arm64-v8a) openssl_target=android-arm64; compiler_prefix=aarch64 ;;
+    x86_64) openssl_target=android-x86_64; compiler_prefix=x86_64 ;;
+    *) echo "Unsupported Android ABI: $abi" >&2; exit 1 ;;
+esac
+output_root="$project_dir/app/src/main/cpp/third_party/openssl/$abi"
 
 if [ -z "${ANDROID_NDK_ROOT:-}" ]; then
     if [ -z "${ANDROID_SDK_ROOT:-}" ]; then
@@ -54,8 +60,8 @@ toolchain_bin="$toolchain_root/bin"
 ndk_sysroot="$toolchain_root/sysroot"
 install_root="$build_root/install"
 
-if [ ! -x "$toolchain_bin/aarch64-linux-android${ANDROID_API}-clang" ]; then
-    echo "NDK arm64 clang not found under $toolchain_bin" >&2
+if [ ! -x "$toolchain_bin/${compiler_prefix}-linux-android${ANDROID_API}-clang" ]; then
+    echo "NDK $abi clang not found under $toolchain_bin" >&2
     exit 1
 fi
 
@@ -65,7 +71,7 @@ PATH="$toolchain_bin:$PATH"
 export PATH
 
 CFLAGS="--sysroot=$ndk_sysroot" \
-    ./Configure android-arm64 "-D__ANDROID_API__=$ANDROID_API" \
+    ./Configure "$openssl_target" "-D__ANDROID_API__=$ANDROID_API" \
         no-shared no-tests no-apps no-docs no-legacy \
         --prefix="$install_root" --openssldir="$install_root/ssl" \
         --libdir=lib
@@ -75,4 +81,4 @@ install -m 0644 LICENSE.txt "$install_root/LICENSE.txt"
 
 mkdir -p "$(dirname -- "$output_root")"
 mv "$install_root" "$output_root"
-echo "Installed OpenSSL $OPENSSL_VERSION for arm64-v8a at $output_root"
+echo "Installed OpenSSL $OPENSSL_VERSION for $abi at $output_root"

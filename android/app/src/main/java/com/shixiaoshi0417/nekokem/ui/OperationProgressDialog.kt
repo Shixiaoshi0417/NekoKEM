@@ -16,7 +16,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.shixiaoshi0417.nekokem.R
 import com.shixiaoshi0417.nekokem.progress.OperationProgressSnapshot
-import java.util.Locale
+import java.text.NumberFormat
 
 @Composable
 fun OperationProgressDialog(
@@ -93,17 +93,17 @@ fun formatByteCount(context: Context, byteCount: Long): String {
     return when {
         bytes >= GIBIBYTE -> context.getString(
             R.string.size_gib,
-            formatDecimal(bytes / GIBIBYTE),
+            formatDecimal(context, bytes / GIBIBYTE),
         )
 
         bytes >= MEBIBYTE -> context.getString(
             R.string.size_mib,
-            formatDecimal(bytes / MEBIBYTE),
+            formatDecimal(context, bytes / MEBIBYTE),
         )
 
         bytes >= KIBIBYTE -> context.getString(
             R.string.size_kib,
-            formatDecimal(bytes / KIBIBYTE),
+            formatDecimal(context, bytes / KIBIBYTE),
         )
 
         else -> context.getString(R.string.size_bytes, byteCount.coerceAtLeast(0L))
@@ -113,7 +113,9 @@ fun formatByteCount(context: Context, byteCount: Long): String {
 fun formatDuration(context: Context, millis: Long): String {
     val seconds = millis.coerceAtLeast(0L) / 1000L
     return if (seconds < SECONDS_PER_MINUTE) {
-        context.getString(R.string.duration_seconds, seconds)
+        context.resources.getQuantityString(
+            R.plurals.duration_seconds, seconds.toInt(), seconds,
+        )
     } else {
         context.getString(
             R.string.duration_minutes_seconds,
@@ -123,8 +125,11 @@ fun formatDuration(context: Context, millis: Long): String {
     }
 }
 
-private fun formatDecimal(value: Double): String =
-    String.format(Locale.getDefault(), "%.1f", value)
+private fun formatDecimal(context: Context, value: Double): String =
+    NumberFormat.getNumberInstance(context.resources.configuration.locales[0]).apply {
+        minimumFractionDigits = 1
+        maximumFractionDigits = 1
+    }.format(value)
 
 private const val KIBIBYTE = 1024.0
 private const val MEBIBYTE = KIBIBYTE * 1024.0
