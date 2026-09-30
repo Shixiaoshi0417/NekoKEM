@@ -2,16 +2,19 @@
 
 The signed Android preparation workflow builds a production arm64 APK and verifies
 its application ID, version, minimum SDK, ABI and signature. It requires these
-repository secrets for normal future builds:
+secrets in the GitHub Environment named `NekoKEM` for normal future builds:
 
 - `NEKOKEM_RELEASE_KEYSTORE_BASE64`: base64 of the PKCS12 signing keystore.
 - `NEKOKEM_RELEASE_STORE_PASSWORD`
 - `NEKOKEM_RELEASE_KEY_ALIAS`
 - `NEKOKEM_RELEASE_KEY_PASSWORD`
 
-The v3.2.0 bootstrap branch explicitly rotates the signing key with the maintainer's
-authorization. Manual runs default to using existing secrets. A signing-key change
-requires a migration warning and cannot be used for in-place updates of old APKs.
+The v3.2.0 bootstrap explicitly rotated the signing key with the maintainer's
+authorization. Subsequent builds run manually and default to using existing secrets
+from the `NekoKEM` Environment; automatic bootstrap rotation on branch pushes has
+been removed. Select `rotate_signing` only for an explicitly authorized key change
+with a migration warning. A new key cannot update APKs signed with the previous key.
+The jobs retain the Environment's configured approval and branch protection rules.
 
 The workflow uploads the signed APK, public build metadata and a CMS signing
 recovery envelope encrypted with AES-256-GCM and RSA-OAEP/SHA-256 to the pinned

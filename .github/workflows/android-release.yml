@@ -1,8 +1,6 @@
 name: Android signed release preparation
 
 on:
-  push:
-    branches: [release/v3.2.0]
   workflow_dispatch:
     inputs:
       rotate_signing:
@@ -15,6 +13,7 @@ permissions:
 
 jobs:
   signed-apk:
+    environment: NekoKEM
     runs-on: ubuntu-24.04
     timeout-minutes: 45
     steps:
@@ -34,7 +33,7 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
       - name: Prepare protected release signing
         env:
-          ROTATE_SIGNING: ${{ github.event_name == 'push' || inputs.rotate_signing }}
+          ROTATE_SIGNING: ${{ inputs.rotate_signing }}
           NEKOKEM_RELEASE_KEYSTORE_BASE64: ${{ secrets.NEKOKEM_RELEASE_KEYSTORE_BASE64 }}
           NEKOKEM_RELEASE_STORE_PASSWORD: ${{ secrets.NEKOKEM_RELEASE_STORE_PASSWORD }}
           NEKOKEM_RELEASE_KEY_ALIAS: ${{ secrets.NEKOKEM_RELEASE_KEY_ALIAS }}
