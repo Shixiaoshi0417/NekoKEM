@@ -385,6 +385,7 @@ class SafFileWorkflow(
                 candidate = createPrivateTemporaryFile(
                     TEMPORARY_PRIVATE_PREFIX,
                     temporaryPrivateKeyDirectory,
+                    suffix = ".enc",
                 )
                 if (!copyUriToFile(
                         source,
@@ -809,8 +810,9 @@ class SafFileWorkflow(
     private fun createPrivateTemporaryFile(
         prefix: String,
         directory: File = workDirectory,
+        suffix: String = TEMPORARY_SUFFIX,
     ): File {
-        val file = File.createTempFile(prefix, TEMPORARY_SUFFIX, directory)
+        val file = File.createTempFile(prefix, suffix, directory)
         Os.chmod(file.absolutePath, PRIVATE_FILE_MODE)
         if (!setAndVerifyPrivateFile(file)) {
             clearAndDelete(file)

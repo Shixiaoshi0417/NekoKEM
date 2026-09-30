@@ -82,6 +82,18 @@ class SafOutputTransactionTest {
         }
     }
 
+    @Test fun temporaryNkprUsesEncryptedReaderSuffixAndPreservesProtection() {
+        val result = workflow.stageTemporaryPrivateKey(uri, "private.arbitrary-extension")
+        assertEquals(NativeBridge.RESULT_SUCCESS, result.code)
+        val candidate = checkNotNull(checkNotNull(result.key).consume())
+        // Core selects the NKPR decrypt reader by this suffix, not the display name.
+        assertTrue(candidate.name.endsWith(".enc"))
+        assertArrayEquals(original, candidate.readBytes())
+        assertEquals(0, outputOpens)
+        assertTrue(workflow.clearTemporaryKeyCache())
+        assertFalse(candidate.exists())
+    }
+
     private fun progress(accept: (Long) -> Boolean = { true }) =
         object : CancellableProgressCallback {
             override fun isCancelled() = false
