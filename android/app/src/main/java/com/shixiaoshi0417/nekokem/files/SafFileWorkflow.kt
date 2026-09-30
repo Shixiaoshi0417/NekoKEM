@@ -21,6 +21,7 @@ import com.shixiaoshi0417.nekokem.progress.CancellableProgressCallback
 import java.io.File
 import java.io.FileInputStream
 import java.io.FileOutputStream
+import java.io.IOException
 import java.io.RandomAccessFile
 import java.security.MessageDigest
 
@@ -98,34 +99,50 @@ class SafFileWorkflow(
         TEMPORARY_PRIVATE_KEY_DIRECTORY_NAME,
     )
 
-    private inner class UriOutputTransaction(
-        val success: Boolean,
-        private val destination: Uri,
-        private var backup: File?,
-    ) {
-        private var finished = false
+    private enum class OutputState { UNMODIFIED, MODIFYING, FAILED, WRITTEN, FINISHED }
+
+    private inner class UriOutputTransaction(private val destination: Uri) {
+        private var state = OutputState.UNMODIFIED
+        private var backup: File? = null
+        val success: Boolean get() = state == OutputState.WRITTEN
+
+        fun snapshot() {
+            check(state == OutputState.UNMODIFIED && backup == null)
+            backup = backupUriToFile(destination)
+        }
+
+        fun beginModification() {
+            check(state == OutputState.UNMODIFIED && backup != null)
+            // Opening "wt" may truncate before returning OR throwing.
+            state = OutputState.MODIFYING
+        }
+
+        fun written() {
+            check(state == OutputState.MODIFYING)
+            state = OutputState.WRITTEN
+        }
+
+        fun fail(): UriOutputTransaction {
+            if (state == OutputState.MODIFYING) state = OutputState.FAILED
+            return this
+        }
 
         fun commit() {
-            if (finished) {
-                return
-            }
-            finished = true
+            check(state == OutputState.WRITTEN)
+            state = OutputState.FINISHED
             clearAndDelete(backup)
             backup = null
         }
 
         fun rollback() {
-            if (finished) {
-                return
-            }
+            if (state == OutputState.FINISHED) return
             val saved = backup
-            if (saved != null && !restoreFileToUri(saved, destination)) {
+            val needsRestore = state != OutputState.UNMODIFIED
+            state = OutputState.FINISHED
+            if (needsRestore && saved != null && !restoreFileToUri(saved, destination)) {
                 // Keep the private backup if the provider cannot restore it.
-                // It must not be erased by a failed rollback.
-                finished = true
                 return
             }
-            finished = true
             clearAndDelete(saved)
             backup = null
         }
@@ -854,42 +871,38 @@ class SafFileWorkflow(
     }
 
     private fun backupUriToFile(destination: Uri): File {
-        // An unreadable URI may still be writable. Without a snapshot, a
-        // cancelled or failed write could leave partial output behind.
-        val input = contentResolver.openInputStream(destination)
-        if (input == null) {
-            throw IllegalStateException()
-        }
-
-        if (!preparePrivateDirectory(outputBackupDirectory)) {
-            throw IllegalStateException()
-        }
-        val backup = createPrivateTemporaryFile(
-            OUTPUT_BACKUP_PREFIX,
-            outputBackupDirectory,
-        )
         val buffer = ByteArray(COPY_BUFFER_SIZE)
-        var total = 0L
+        var backup: File? = null
         return try {
+            // Include ALL initialization and stream closing in the cleanup scope.
+            val input = contentResolver.openInputStream(destination)
+                ?: throw IOException("Cannot read output before replacement")
             input.use { sourceStream ->
-                FileOutputStream(backup, false).use { backupStream ->
+                if (!preparePrivateDirectory(outputBackupDirectory)) {
+                    throw IOException("Cannot prepare output backup directory")
+                }
+                val saved = createPrivateTemporaryFile(
+                    OUTPUT_BACKUP_PREFIX,
+                    outputBackupDirectory,
+                )
+                backup = saved
+                FileOutputStream(saved, false).use { backupStream ->
+                    var total = 0L
                     while (true) {
                         val count = sourceStream.read(buffer)
-                        if (count < 0) {
-                            break
-                        }
+                        if (count < 0) break
                         if (count > 0) {
                             total += count.toLong()
                             if (total > MAX_OUTPUT_BACKUP_BYTES) {
-                                throw IllegalStateException()
+                                throw IOException("Output backup exceeds size limit")
                             }
                             backupStream.write(buffer, 0, count)
                         }
                     }
                     backupStream.fd.sync()
                 }
+                saved
             }
-            backup
         } catch (error: Exception) {
             clearAndDelete(backup)
             throw error
@@ -901,20 +914,15 @@ class SafFileWorkflow(
     private fun restoreFileToUri(backup: File, destination: Uri): Boolean {
         val buffer = ByteArray(COPY_BUFFER_SIZE)
         return try {
-            val output = contentResolver.openOutputStream(
-                destination,
-                WRITE_TRUNCATE_MODE,
-            ) ?: return false
+            // Open the source first: missing backups must not truncate the target.
             FileInputStream(backup).use { sourceStream ->
+                val output = contentResolver.openOutputStream(destination, WRITE_TRUNCATE_MODE)
+                    ?: return false
                 output.use { destinationStream ->
                     while (true) {
                         val count = sourceStream.read(buffer)
-                        if (count < 0) {
-                            break
-                        }
-                        if (count > 0) {
-                            destinationStream.write(buffer, 0, count)
-                        }
+                        if (count < 0) break
+                        if (count > 0) destinationStream.write(buffer, 0, count)
                     }
                     destinationStream.flush()
                 }
@@ -936,59 +944,40 @@ class SafFileWorkflow(
         val buffer = ByteArray(COPY_BUFFER_SIZE)
         val expected = source.length().coerceAtLeast(0L)
         var processed = 0L
-        var backup: File? = null
+        val transaction = UriOutputTransaction(destination)
 
         return try {
-            backup = backupUriToFile(destination)
+            if (progress?.isCancelled() == true) return transaction
+            transaction.snapshot()
             if (reportProgress && progress?.onProgress(0L, expected) == false) {
-                UriOutputTransaction(false, destination, backup)
-            } else {
-                val output = contentResolver.openOutputStream(
-                    destination,
-                    WRITE_TRUNCATE_MODE,
-                )
-                if (output == null) {
-                    UriOutputTransaction(false, destination, backup)
-                } else {
-                    FileInputStream(source).use { sourceStream ->
-                        output.use { destinationStream ->
-                            while (true) {
-                                if (progress?.isCancelled() == true) {
-                                    return UriOutputTransaction(
-                                        false,
-                                        destination,
-                                        backup,
-                                    )
-                                }
-                                val count = sourceStream.read(buffer)
-                                if (count < 0) {
-                                    break
-                                }
-                                if (count > 0) {
-                                    destinationStream.write(buffer, 0, count)
-                                    processed += count.toLong()
-                                    if (reportProgress &&
-                                        progress?.onProgress(
-                                            processed,
-                                            expected,
-                                        ) == false
-                                    ) {
-                                        return UriOutputTransaction(
-                                            false,
-                                            destination,
-                                            backup,
-                                        )
-                                    }
-                                }
+                return transaction
+            }
+            FileInputStream(source).use { sourceStream ->
+                if (progress?.isCancelled() == true) return transaction
+                transaction.beginModification()
+                val output = contentResolver.openOutputStream(destination, WRITE_TRUNCATE_MODE)
+                    ?: throw IOException("Cannot open output")
+                output.use { destinationStream ->
+                    while (true) {
+                        if (progress?.isCancelled() == true) return transaction.fail()
+                        val count = sourceStream.read(buffer)
+                        if (count < 0) break
+                        if (count > 0) {
+                            destinationStream.write(buffer, 0, count)
+                            processed += count.toLong()
+                            if (reportProgress && progress?.onProgress(processed, expected) == false) {
+                                return transaction.fail()
                             }
-                            destinationStream.flush()
                         }
                     }
-                    UriOutputTransaction(true, destination, backup)
+                    destinationStream.flush()
                 }
             }
+            // A failed close is also a failed transfer, so transition only after use.
+            transaction.written()
+            transaction
         } catch (_: Exception) {
-            UriOutputTransaction(false, destination, backup)
+            transaction.fail()
         } finally {
             buffer.fill(0)
         }

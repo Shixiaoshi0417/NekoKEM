@@ -38,6 +38,8 @@ class SafOutputTransactionTest {
     private var failOpen = false
     private var failClose = false
     private var failRestore = false
+    private var failInputRead = false
+    private var failInputClose = false
 
     @Before fun setUp() {
         val cache = temporary.newFolder("cache")
@@ -50,7 +52,15 @@ class SafOutputTransactionTest {
         val resolver = shadowOf(context.contentResolver)
         resolver.registerInputStreamSupplier(uri) {
             object : ByteArrayInputStream(document.copyOf()) {
-                override fun close() { inputCloses++; super.close() }
+                override fun read(bytes: ByteArray, offset: Int, length: Int): Int {
+                    if (failInputRead) throw IOException("backup read")
+                    return super.read(bytes, offset, length)
+                }
+                override fun close() {
+                    inputCloses++
+                    super.close()
+                    if (failInputClose) throw IOException("backup close")
+                }
             }
         }
         resolver.registerOutputStreamSupplier(uri) {
@@ -164,4 +174,54 @@ class SafOutputTransactionTest {
         assertEquals(1, outputOpens)
         assertTrue(backups().isEmpty())
     }
+    @Test fun backupReadFailureClosesInputAndNeverWrites() {
+        failInputRead = true
+        assertNotEquals(NativeBridge.RESULT_SUCCESS, commit())
+        assertEquals(1, inputCloses)
+        assertEquals(0, outputOpens)
+        assertArrayEquals(original, document)
+        assertTrue(backups().isEmpty())
+    }
+
+    @Test fun backupCloseFailureNeverWritesAndCleansBackup() {
+        failInputClose = true
+        assertNotEquals(NativeBridge.RESULT_SUCCESS, commit())
+        assertEquals(1, inputCloses)
+        assertEquals(0, outputOpens)
+        assertArrayEquals(original, document)
+        assertTrue(backups().isEmpty())
+    }
+
+    @Test fun progressExceptionBeforeWriteNeverOpensDestination() {
+        assertNotEquals(NativeBridge.RESULT_SUCCESS, commit(callback = progress {
+            throw IOException("progress callback")
+        }))
+        assertEquals(0, outputOpens)
+        assertArrayEquals(original, document)
+        assertTrue(backups().isEmpty())
+    }
+
+    @Test fun missingStageDoesNotTruncateDestinationOrLeakOutput() {
+        assertNotEquals(NativeBridge.RESULT_SUCCESS, commit(callback = progress {
+            check(File(context.cacheDir, "stage").delete())
+            true
+        }))
+        assertEquals(0, outputOpens)
+        assertEquals(0, outputCloses)
+        assertArrayEquals(original, document)
+        assertTrue(backups().isEmpty())
+    }
+
+    @Test fun alreadyCancelledDoesNotReadOrWriteDestination() {
+        val cancelled = object : CancellableProgressCallback {
+            override fun isCancelled() = true
+            override fun onProgress(processedBytes: Long, totalBytes: Long) = false
+        }
+        assertEquals(NativeBridge.RESULT_CANCELLED, commit(callback = cancelled))
+        assertEquals(0, inputCloses)
+        assertEquals(0, outputOpens)
+        assertArrayEquals(original, document)
+        assertTrue(backups().isEmpty())
+    }
+
 }
