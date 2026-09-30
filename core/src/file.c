@@ -234,6 +234,102 @@ int file_disable_buffering(FILE *stream)
     return 1;
 }
 
+int file_read_regular(const char *path,
+                      size_t maximum_size,
+                      unsigned char **buffer,
+                      size_t *length)
+{
+    struct stat status;
+    unsigned char *local_buffer = NULL;
+    size_t capacity = 0U;
+    size_t position = 0U;
+    int descriptor = -1;
+    int success = 0;
+
+    if (path == NULL || buffer == NULL || length == NULL ||
+        maximum_size == 0U) {
+        errno = EINVAL;
+        print_system_error("Invalid regular-file read request");
+        return 0;
+    }
+    *buffer = NULL;
+    *length = 0U;
+    descriptor = open(path, O_RDONLY | O_CLOEXEC | O_NONBLOCK);
+    if (descriptor < 0) {
+        print_system_error("Cannot open regular input file");
+        goto cleanup;
+    }
+    if (fstat(descriptor, &status) != 0) {
+        print_system_error("Cannot inspect regular input file");
+        goto cleanup;
+    }
+    if (!S_ISREG(status.st_mode) || status.st_size <= 0) {
+        fprintf(stderr, "Input must be a non-empty regular file\n");
+        goto cleanup;
+    }
+    if ((uintmax_t)status.st_size > (uintmax_t)maximum_size ||
+        (uintmax_t)status.st_size > (uintmax_t)SIZE_MAX) {
+        fprintf(stderr, "Regular input exceeds the size limit\n");
+        goto cleanup;
+    }
+    capacity = (size_t)status.st_size;
+    local_buffer = OPENSSL_malloc(capacity);
+    if (local_buffer == NULL) {
+        print_openssl_error("Cannot allocate regular-file buffer");
+        goto cleanup;
+    }
+    while (position < capacity) {
+        ssize_t count = read(descriptor, local_buffer + position,
+                             capacity - position);
+
+        if (count < 0) {
+            if (errno == EINTR) {
+                continue;
+            }
+            print_system_error("Cannot read regular input file");
+            goto cleanup;
+        }
+        if (count == 0) {
+            fprintf(stderr, "Regular input changed while being read\n");
+            goto cleanup;
+        }
+        position += (size_t)count;
+    }
+    {
+        unsigned char extra_byte;
+        ssize_t count;
+
+        do {
+            count = read(descriptor, &extra_byte, 1U);
+        } while (count < 0 && errno == EINTR);
+        if (count < 0) {
+            print_system_error("Cannot verify regular input length");
+            goto cleanup;
+        }
+        if (count != 0) {
+            fprintf(stderr, "Regular input changed while being read\n");
+            goto cleanup;
+        }
+    }
+    if (close(descriptor) != 0) {
+        descriptor = -1;
+        print_system_error("Cannot close regular input file");
+        goto cleanup;
+    }
+    descriptor = -1;
+    *buffer = local_buffer;
+    *length = capacity;
+    local_buffer = NULL;
+    success = 1;
+
+cleanup:
+    if (descriptor >= 0) {
+        (void)close(descriptor);
+    }
+    OPENSSL_free(local_buffer);
+    return success;
+}
+
 int file_read_sensitive(const char *path,
                         size_t maximum_size,
                         unsigned char **buffer,
@@ -477,6 +573,50 @@ static char *parent_directory_path(const char *path)
     return directory;
 }
 
+static int atomic_file_targets_are_same(
+    const char *first_path,
+    const char *second_path,
+    int *same_target)
+{
+    struct stat first_directory_status;
+    struct stat second_directory_status;
+    char *first_directory = NULL;
+    char *second_directory = NULL;
+    const char *first_name;
+    const char *second_name;
+    int result = 0;
+
+    if (first_path == NULL || second_path == NULL || same_target == NULL) {
+        errno = EINVAL;
+        return 0;
+    }
+    *same_target = 0;
+    first_directory = parent_directory_path(first_path);
+    second_directory = parent_directory_path(second_path);
+    if (first_directory == NULL || second_directory == NULL ||
+        stat(first_directory, &first_directory_status) != 0 ||
+        stat(second_directory, &second_directory_status) != 0 ||
+        !S_ISDIR(first_directory_status.st_mode) ||
+        !S_ISDIR(second_directory_status.st_mode)) {
+        goto cleanup;
+    }
+    first_name = strrchr(first_path, '/');
+    second_name = strrchr(second_path, '/');
+    first_name = first_name == NULL ? first_path : first_name + 1;
+    second_name = second_name == NULL ? second_path : second_name + 1;
+    *same_target = first_directory_status.st_dev ==
+                       second_directory_status.st_dev &&
+                   first_directory_status.st_ino ==
+                       second_directory_status.st_ino &&
+                   strcmp(first_name, second_name) == 0;
+    result = 1;
+
+cleanup:
+    free(first_directory);
+    free(second_directory);
+    return result;
+}
+
 static int fsync_parent_directory(const char *path, int inject_fault)
 {
     char *directory = NULL;
@@ -590,16 +730,26 @@ int atomic_file_commit_pair(AtomicFile *first, AtomicFile *second)
     size_t index;
     int saved_errno = 0;
     int success = 0;
+    int same_target = 0;
 
     if (first == NULL || first->temporary_path == NULL ||
         first->final_path == NULL ||
         (second != NULL &&
          (first == second || second->temporary_path == NULL ||
-          second->final_path == NULL ||
-          strcmp(first->final_path, second->final_path) == 0))) {
+          second->final_path == NULL))) {
         errno = EINVAL;
         print_system_error("Invalid atomic output pair");
         return 0;
+    }
+    if (second != NULL &&
+        (!atomic_file_targets_are_same(first->final_path,
+                                       second->final_path,
+                                       &same_target) || same_target != 0)) {
+        saved_errno = errno != 0 ? errno : EINVAL;
+        if (same_target != 0) {
+            saved_errno = EINVAL;
+        }
+        goto rollback;
     }
     for (index = 0U; index < count; ++index) {
         if (files[index] == NULL || files[index]->temporary_path == NULL ||

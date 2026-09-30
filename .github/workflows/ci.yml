@@ -30,7 +30,7 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install --yes --no-install-recommends \
-            build-essential ca-certificates curl perl
+            afl++ build-essential ca-certificates curl perl
 
       - name: Build OpenSSL 3.5.6
         env:
@@ -65,6 +65,22 @@ jobs:
           CPATH: ${{ runner.temp }}/openssl-3.5.6/include
           LIBRARY_PATH: ${{ runner.temp }}/openssl-3.5.6/lib
         run: make -C linux test
+
+      - name: Run parser fuzz smoke tests
+        env:
+          AFL_I_DONT_CARE_ABOUT_MISSING_CRASHES: "1"
+          AFL_NO_UI: "1"
+          AFL_SKIP_CPUFREQ: "1"
+          CPATH: ${{ runner.temp }}/openssl-3.5.6/include
+          LIBRARY_PATH: ${{ runner.temp }}/openssl-3.5.6/lib
+        run: |
+          set -Eeuo pipefail
+          make -C linux fuzz-build \
+            FUZZ_LDFLAGS="-fsanitize=undefined -L$LIBRARY_PATH"
+          afl-fuzz -V 15 -i core/fuzz/seeds/nkem \
+            -o "$RUNNER_TEMP/fuzz-nkem" -- core/fuzz/bin/fuzz_nkem @@
+          afl-fuzz -V 15 -i core/fuzz/seeds/nkpr \
+            -o "$RUNNER_TEMP/fuzz-nkpr" -- core/fuzz/bin/fuzz_nkpr @@
 
   android-build:
     name: Android debug build and tests

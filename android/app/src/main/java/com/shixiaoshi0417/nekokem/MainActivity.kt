@@ -577,7 +577,6 @@ private fun NekoKEMRoute(
                 preparedEncryption = null
                 if (prepared == null) {
                     encryptionPreparationProgress = null
-                    deleteDocumentQuietly(context, destination)
                     reportFailure(
                         R.string.operation_encrypt_file,
                         LocalKeyManager.RESULT_STORAGE_ERROR,
@@ -596,7 +595,6 @@ private fun NekoKEMRoute(
                                 )
                             }
                         } catch (_: Exception) {
-                            deleteDocumentQuietly(context, destination)
                             LocalKeyManager.RESULT_STORAGE_ERROR
                         } finally {
                             endProgress(tracker)
@@ -617,7 +615,6 @@ private fun NekoKEMRoute(
                 preparedDecryption = null
                 if (prepared == null) {
                     decryptionPreparationProgress = null
-                    deleteDocumentQuietly(context, destination)
                     reportFailure(
                         R.string.operation_decrypt_file,
                         LocalKeyManager.RESULT_STORAGE_ERROR,
@@ -636,7 +633,6 @@ private fun NekoKEMRoute(
                                 )
                             }
                         } catch (_: Exception) {
-                            deleteDocumentQuietly(context, destination)
                             LocalKeyManager.RESULT_STORAGE_ERROR
                         } finally {
                             endProgress(tracker)
@@ -1301,14 +1297,6 @@ private fun combineProgress(
         totalBytes = first.totalBytes + second.totalBytes,
         elapsedMillis = first.elapsedMillis + second.elapsedMillis,
     )
-}
-
-private fun deleteDocumentQuietly(context: Context, destination: Uri) {
-    try {
-        context.contentResolver.delete(destination, null, null)
-    } catch (_: Exception) {
-        // File names and provider details are intentionally not logged.
-    }
 }
 
 private fun resultReason(

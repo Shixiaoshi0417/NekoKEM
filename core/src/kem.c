@@ -46,7 +46,6 @@ int kem_encapsulate(EVP_PKEY *public_key,
         goto cleanup;
     }
     if (local_ciphertext_len != KEM_CIPHERTEXT_SIZE ||
-        local_ciphertext_len > NKEM_MAX_KEM_CIPHERTEXT_SIZE ||
         local_secret_capacity != KEM_SHARED_SECRET_SIZE ||
         local_secret_capacity > KEM_MAX_SHARED_SECRET_SIZE) {
         fprintf(stderr, "OpenSSL returned invalid ML-KEM output sizes\n");

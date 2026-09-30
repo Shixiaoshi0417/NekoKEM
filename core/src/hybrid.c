@@ -8,12 +8,36 @@
 #include <openssl/kdf.h>
 #include <openssl/params.h>
 #include <openssl/pem.h>
+#include <ctype.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
 
 #define X448_MAX_SHARED_SECRET_SIZE 1024U
+#define MAX_PUBLIC_KEY_FILE_SIZE (1024U * 1024U)
 #define MAX_PRIVATE_KEY_FILE_SIZE (1024U * 1024U)
+
+static int bio_remaining_is_whitespace(BIO *input)
+{
+    unsigned char buffer[256];
+
+    while (BIO_ctrl_pending(input) > 0U) {
+        int count = BIO_read(input, buffer, (int)sizeof(buffer));
+        int index;
+
+        if (count <= 0) {
+            print_openssl_error("Cannot finish parsing hybrid key file");
+            return 0;
+        }
+        for (index = 0; index < count; ++index) {
+            if (isspace(buffer[index]) == 0) {
+                fprintf(stderr, "Hybrid key file has trailing data\n");
+                return 0;
+            }
+        }
+    }
+    return 1;
+}
 
 static int validate_key(EVP_PKEY *key,
                         const char *algorithm,
@@ -159,7 +183,8 @@ static int parse_hybrid_private_keys(const unsigned char *pem,
     if (!validate_key(loaded.x448, X448_ALGORITHM_NAME,
                       "First hybrid key component") ||
         !validate_key(loaded.mlkem, KEM_ALGORITHM_NAME,
-                      "Second hybrid key component")) {
+                      "Second hybrid key component") ||
+        !bio_remaining_is_whitespace(input)) {
         goto cleanup;
     }
 
@@ -178,13 +203,23 @@ int hybrid_load_public_keys(const char *path, HybridKeys *keys)
 {
     BIO *input = NULL;
     HybridKeys loaded = {0};
+    unsigned char *pem = NULL;
+    size_t pem_len = 0U;
     int success = 0;
 
     keys->x448 = NULL;
     keys->mlkem = NULL;
-    input = BIO_new_file(path, "rb");
+    if (!file_read_regular(path, MAX_PUBLIC_KEY_FILE_SIZE,
+                           &pem, &pem_len)) {
+        goto cleanup;
+    }
+    if (pem_len > (size_t)INT_MAX) {
+        fprintf(stderr, "Invalid hybrid public-key PEM length\n");
+        goto cleanup;
+    }
+    input = BIO_new_mem_buf(pem, (int)pem_len);
     if (input == NULL) {
-        print_openssl_error("Cannot open hybrid public-key file");
+        print_openssl_error("Cannot create hybrid public-key memory BIO");
         goto cleanup;
     }
     loaded.x448 = PEM_read_bio_PUBKEY(input, NULL, NULL, NULL);
@@ -196,7 +231,8 @@ int hybrid_load_public_keys(const char *path, HybridKeys *keys)
     if (!validate_key(loaded.x448, X448_ALGORITHM_NAME,
                       "First hybrid key component") ||
         !validate_key(loaded.mlkem, KEM_ALGORITHM_NAME,
-                      "Second hybrid key component")) {
+                      "Second hybrid key component") ||
+        !bio_remaining_is_whitespace(input)) {
         goto cleanup;
     }
     *keys = loaded;
@@ -206,6 +242,7 @@ int hybrid_load_public_keys(const char *path, HybridKeys *keys)
 
 cleanup:
     BIO_free(input);
+    OPENSSL_free(pem);
     hybrid_keys_cleanup(&loaded);
     return success;
 }

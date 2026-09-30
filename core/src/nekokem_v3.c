@@ -122,6 +122,7 @@ int nekokem_encrypt_file_with_progress(
     }
     if (!file_disable_buffering(input) ||
         !file_get_size(input, &plaintext_len) ||
+        !nkem_gcm_data_size_is_valid(plaintext_len) ||
         !hybrid_load_public_keys(public_key_path, &public_keys) ||
         !hybrid_x448_encapsulate(public_keys.x448, ephemeral_public,
                                  &x448_secret, &x448_secret_len) ||

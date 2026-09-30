@@ -81,6 +81,10 @@ class SafFileWorkflow(
         context.cacheDir,
         LocalKeyManager.WORK_CACHE_DIRECTORY_NAME,
     )
+    private val outputBackupDirectory = File(
+        context.cacheDir,
+        OUTPUT_BACKUP_DIRECTORY_NAME,
+    )
     private val temporaryKeyDirectory = File(
         context.cacheDir,
         TEMPORARY_KEY_DIRECTORY_NAME,
@@ -93,6 +97,39 @@ class SafFileWorkflow(
         temporaryKeyDirectory,
         TEMPORARY_PRIVATE_KEY_DIRECTORY_NAME,
     )
+
+    private inner class UriOutputTransaction(
+        val success: Boolean,
+        private val destination: Uri,
+        private var backup: File?,
+    ) {
+        private var finished = false
+
+        fun commit() {
+            if (finished) {
+                return
+            }
+            finished = true
+            clearAndDelete(backup)
+            backup = null
+        }
+
+        fun rollback() {
+            if (finished) {
+                return
+            }
+            val saved = backup
+            if (saved != null && !restoreFileToUri(saved, destination)) {
+                // Keep the private backup if the provider cannot restore it.
+                // It must not be erased by a failed rollback.
+                finished = true
+                return
+            }
+            finished = true
+            clearAndDelete(saved)
+            backup = null
+        }
+    }
 
     fun describe(uri: Uri): SelectedDocument = SelectedDocument(
         uri = uri,
@@ -120,6 +157,7 @@ class SafFileWorkflow(
                         stagedInput,
                         MAX_STAGED_FILE_BYTES,
                         progress,
+                        allowEmpty = true,
                     )
                 ) {
                     result = cancelledOrStorageError(progress)
@@ -161,20 +199,27 @@ class SafFileWorkflow(
         val encrypted = prepared.consume()
             ?: return NativeBridge.RESULT_INVALID_ARGUMENT
         var outputCommitted = false
+        var transfer: UriOutputTransaction? = null
 
         return try {
-            if (!copyFileToUri(encrypted, destination, progress, true)) {
+            val currentTransfer = copyFileToUri(
+                encrypted,
+                destination,
+                progress,
+                true,
+            )
+            transfer = currentTransfer
+            if (!currentTransfer.success) {
                 cancelledOrStorageError(progress)
             } else {
+                currentTransfer.commit()
                 outputCommitted = true
                 NativeBridge.RESULT_SUCCESS
             }
         } catch (_: Exception) {
             LocalKeyManager.RESULT_STORAGE_ERROR
         } finally {
-            if (!outputCommitted) {
-                deleteDestinationQuietly(destination)
-            }
+            if (!outputCommitted) transfer?.rollback()
             clearAndDelete(encrypted)
             keyManager.clearWorkCache()
         }
@@ -438,20 +483,27 @@ class SafFileWorkflow(
         val plaintext = prepared.consume()
             ?: return NativeBridge.RESULT_INVALID_ARGUMENT
         var outputCommitted = false
+        var transfer: UriOutputTransaction? = null
 
         return try {
-            if (!copyFileToUri(plaintext, destination, progress, true)) {
+            val currentTransfer = copyFileToUri(
+                plaintext,
+                destination,
+                progress,
+                true,
+            )
+            transfer = currentTransfer
+            if (!currentTransfer.success) {
                 cancelledOrStorageError(progress)
             } else {
+                currentTransfer.commit()
                 outputCommitted = true
                 NativeBridge.RESULT_SUCCESS
             }
         } catch (_: Exception) {
             LocalKeyManager.RESULT_STORAGE_ERROR
         } finally {
-            if (!outputCommitted) {
-                deleteDestinationQuietly(destination)
-            }
+            if (!outputCommitted) transfer?.rollback()
             clearAndDelete(plaintext)
             keyManager.clearWorkCache()
         }
@@ -472,6 +524,7 @@ class SafFileWorkflow(
         var normalizedRecord: PublicKeyFileRecord? = null
         var safRecord: PublicKeyFileRecord? = null
         var outputCommitted = false
+        var transfer: UriOutputTransaction? = null
         var result = LocalKeyManager.RESULT_STORAGE_ERROR
 
         try {
@@ -485,24 +538,28 @@ class SafFileWorkflow(
                     normalizedRecord = keyManager.publicKeyFileRecord(stagedOutput)
                     if (defaultRecord == null || normalizedRecord == null) {
                         result = LocalKeyManager.RESULT_STORAGE_ERROR
-                    } else if (!copyFileToUri(
+                    } else {
+                        val currentTransfer = copyFileToUri(
                             stagedOutput,
                             destination,
                             null,
                             false,
                         )
-                    ) {
-                        result = LocalKeyManager.RESULT_PUBLIC_KEY_COPY_FAILED
-                    } else {
-                        safRecord = publicKeyUriRecord(destination)
-                        if (safRecord == null ||
-                            safRecord != normalizedRecord
-                        ) {
-                            result =
-                                LocalKeyManager.RESULT_PUBLIC_KEY_INTEGRITY_FAILED
+                        transfer = currentTransfer
+                        if (!currentTransfer.success) {
+                            result = LocalKeyManager.RESULT_PUBLIC_KEY_COPY_FAILED
                         } else {
-                            outputCommitted = true
-                            result = NativeBridge.RESULT_SUCCESS
+                            safRecord = publicKeyUriRecord(destination)
+                            if (safRecord == null ||
+                                safRecord != normalizedRecord
+                            ) {
+                                result =
+                                    LocalKeyManager.RESULT_PUBLIC_KEY_INTEGRITY_FAILED
+                            } else {
+                                currentTransfer.commit()
+                                outputCommitted = true
+                                result = NativeBridge.RESULT_SUCCESS
+                            }
                         }
                     }
                 }
@@ -510,9 +567,7 @@ class SafFileWorkflow(
         } catch (_: Exception) {
             result = LocalKeyManager.RESULT_STORAGE_ERROR
         } finally {
-            if (!outputCommitted) {
-                deleteDestinationQuietly(destination)
-            }
+            if (!outputCommitted) transfer?.rollback()
             clearAndDelete(stagedOutput)
             keyManager.clearWorkCache()
         }
@@ -623,6 +678,7 @@ class SafFileWorkflow(
     ): Int {
         var stagedOutput: File? = null
         var outputCommitted = false
+        var transfer: UriOutputTransaction? = null
 
         return try {
             if (!prepareWorkDirectory()) {
@@ -633,17 +689,23 @@ class SafFileWorkflow(
             if (result != NativeBridge.RESULT_SUCCESS) {
                 return result
             }
-            if (!copyFileToUri(stagedOutput, destination, null, false)) {
+            val currentTransfer = copyFileToUri(
+                stagedOutput,
+                destination,
+                null,
+                false,
+            )
+            transfer = currentTransfer
+            if (!currentTransfer.success) {
                 return LocalKeyManager.RESULT_STORAGE_ERROR
             }
+            currentTransfer.commit()
             outputCommitted = true
             NativeBridge.RESULT_SUCCESS
         } catch (_: Exception) {
             LocalKeyManager.RESULT_STORAGE_ERROR
         } finally {
-            if (!outputCommitted) {
-                deleteDestinationQuietly(destination)
-            }
+            if (!outputCommitted) transfer?.rollback()
             clearAndDelete(stagedOutput)
             keyManager.clearWorkCache()
         }
@@ -756,6 +818,7 @@ class SafFileWorkflow(
         destination: File,
         maximumBytes: Long,
         progress: CancellableProgressCallback?,
+        allowEmpty: Boolean = false,
     ): Boolean {
         val buffer = ByteArray(COPY_BUFFER_SIZE)
         var total = 0L
@@ -784,7 +847,81 @@ class SafFileWorkflow(
                     destinationStream.fd.sync()
                 }
             }
-            total > 0L && setAndVerifyPrivateFile(destination)
+            (allowEmpty || total > 0L) && setAndVerifyPrivateFile(destination)
+        } finally {
+            buffer.fill(0)
+        }
+    }
+
+    private fun backupUriToFile(destination: Uri): File {
+        // An unreadable URI may still be writable. Without a snapshot, a
+        // cancelled or failed write could leave partial output behind.
+        val input = contentResolver.openInputStream(destination)
+        if (input == null) {
+            throw IllegalStateException()
+        }
+
+        if (!preparePrivateDirectory(outputBackupDirectory)) {
+            throw IllegalStateException()
+        }
+        val backup = createPrivateTemporaryFile(
+            OUTPUT_BACKUP_PREFIX,
+            outputBackupDirectory,
+        )
+        val buffer = ByteArray(COPY_BUFFER_SIZE)
+        var total = 0L
+        return try {
+            input.use { sourceStream ->
+                FileOutputStream(backup, false).use { backupStream ->
+                    while (true) {
+                        val count = sourceStream.read(buffer)
+                        if (count < 0) {
+                            break
+                        }
+                        if (count > 0) {
+                            total += count.toLong()
+                            if (total > MAX_OUTPUT_BACKUP_BYTES) {
+                                throw IllegalStateException()
+                            }
+                            backupStream.write(buffer, 0, count)
+                        }
+                    }
+                    backupStream.fd.sync()
+                }
+            }
+            backup
+        } catch (error: Exception) {
+            clearAndDelete(backup)
+            throw error
+        } finally {
+            buffer.fill(0)
+        }
+    }
+
+    private fun restoreFileToUri(backup: File, destination: Uri): Boolean {
+        val buffer = ByteArray(COPY_BUFFER_SIZE)
+        return try {
+            val output = contentResolver.openOutputStream(
+                destination,
+                WRITE_TRUNCATE_MODE,
+            ) ?: return false
+            FileInputStream(backup).use { sourceStream ->
+                output.use { destinationStream ->
+                    while (true) {
+                        val count = sourceStream.read(buffer)
+                        if (count < 0) {
+                            break
+                        }
+                        if (count > 0) {
+                            destinationStream.write(buffer, 0, count)
+                        }
+                    }
+                    destinationStream.flush()
+                }
+            }
+            true
+        } catch (_: Exception) {
+            false
         } finally {
             buffer.fill(0)
         }
@@ -795,43 +932,63 @@ class SafFileWorkflow(
         destination: Uri,
         progress: CancellableProgressCallback?,
         reportProgress: Boolean,
-    ): Boolean {
+    ): UriOutputTransaction {
         val buffer = ByteArray(COPY_BUFFER_SIZE)
         val expected = source.length().coerceAtLeast(0L)
         var processed = 0L
+        var backup: File? = null
 
         return try {
+            backup = backupUriToFile(destination)
             if (reportProgress && progress?.onProgress(0L, expected) == false) {
-                return false
-            }
-            val output = contentResolver.openOutputStream(
-                destination,
-                WRITE_TRUNCATE_MODE,
-            ) ?: return false
-            FileInputStream(source).use { sourceStream ->
-                output.use { destinationStream ->
-                    while (true) {
-                        if (progress?.isCancelled() == true) {
-                            return false
-                        }
-                        val count = sourceStream.read(buffer)
-                        if (count < 0) {
-                            break
-                        }
-                        if (count > 0) {
-                            destinationStream.write(buffer, 0, count)
-                            processed += count.toLong()
-                            if (reportProgress &&
-                                progress?.onProgress(processed, expected) == false
-                            ) {
-                                return false
+                UriOutputTransaction(false, destination, backup)
+            } else {
+                val output = contentResolver.openOutputStream(
+                    destination,
+                    WRITE_TRUNCATE_MODE,
+                )
+                if (output == null) {
+                    UriOutputTransaction(false, destination, backup)
+                } else {
+                    FileInputStream(source).use { sourceStream ->
+                        output.use { destinationStream ->
+                            while (true) {
+                                if (progress?.isCancelled() == true) {
+                                    return UriOutputTransaction(
+                                        false,
+                                        destination,
+                                        backup,
+                                    )
+                                }
+                                val count = sourceStream.read(buffer)
+                                if (count < 0) {
+                                    break
+                                }
+                                if (count > 0) {
+                                    destinationStream.write(buffer, 0, count)
+                                    processed += count.toLong()
+                                    if (reportProgress &&
+                                        progress?.onProgress(
+                                            processed,
+                                            expected,
+                                        ) == false
+                                    ) {
+                                        return UriOutputTransaction(
+                                            false,
+                                            destination,
+                                            backup,
+                                        )
+                                    }
+                                }
                             }
+                            destinationStream.flush()
                         }
                     }
-                    destinationStream.flush()
+                    UriOutputTransaction(true, destination, backup)
                 }
             }
-            true
+        } catch (_: Exception) {
+            UriOutputTransaction(false, destination, backup)
         } finally {
             buffer.fill(0)
         }
@@ -935,14 +1092,6 @@ class SafFileWorkflow(
         }
     }
 
-    private fun deleteDestinationQuietly(destination: Uri) {
-        try {
-            contentResolver.delete(destination, null, null)
-        } catch (_: Exception) {
-            // Some providers cannot delete; no URI or contents are logged.
-        }
-    }
-
     private fun cancelledOrStorageError(
         progress: CancellableProgressCallback,
     ): Int = if (progress.isCancelled()) {
@@ -954,6 +1103,7 @@ class SafFileWorkflow(
     private companion object {
         const val COPY_BUFFER_SIZE = 64 * 1024
         const val MAX_STAGED_FILE_BYTES = 8L * 1024L * 1024L * 1024L
+        const val MAX_OUTPUT_BACKUP_BYTES = MAX_STAGED_FILE_BYTES
         const val MAX_KEY_IMPORT_BYTES = 16L * 1024L * 1024L
         const val PERMISSION_MASK = 0x1FF
         const val PRIVATE_DIRECTORY_MODE = 0x1C0
@@ -966,6 +1116,8 @@ class SafFileWorkflow(
         const val PUBLIC_IMPORT_PREFIX = "nkem-pi-"
         const val PRIVATE_IMPORT_PREFIX = "nkem-ki-"
         const val KEY_EXPORT_PREFIX = "nkem-ke-"
+        const val OUTPUT_BACKUP_PREFIX = "nkem-output-backup-"
+        const val OUTPUT_BACKUP_DIRECTORY_NAME = "nekokem-output-backups"
         const val TEMPORARY_KEY_DIRECTORY_NAME = "nekokem-key-selection"
         const val TEMPORARY_PUBLIC_KEY_DIRECTORY_NAME = "public"
         const val TEMPORARY_PRIVATE_KEY_DIRECTORY_NAME = "private"

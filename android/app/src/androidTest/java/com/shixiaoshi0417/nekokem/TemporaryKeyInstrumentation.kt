@@ -10,7 +10,6 @@ import android.system.Os
 import com.shixiaoshi0417.nekokem.files.SafFileWorkflow
 import com.shixiaoshi0417.nekokem.keys.LocalKeyManager
 import com.shixiaoshi0417.nekokem.nativecore.NativeBridge
-import com.shixiaoshi0417.nekokem.nativecore.NativeProgressCallback
 import com.shixiaoshi0417.nekokem.progress.CancellableProgressCallback
 import com.shixiaoshi0417.nekokem.ui.runWithUiBusyReset
 import com.shixiaoshi0417.nekokem.ui.FileInputState
@@ -65,6 +64,9 @@ class TemporaryKeyInstrumentation : Instrumentation() {
                 context.cacheDir,
                 plaintext,
             )
+            testEmptyPlaintextRoundTrip(workflow, context.cacheDir)
+            testExistingOutputRollback(workflow, context.cacheDir, plaintext)
+            testUnreadableOutputRejection(workflow, context.cacheDir, plaintext)
             testTemporaryKeys(manager, workflow, context.cacheDir, plaintext)
             testInvalidKeys(manager, workflow, context.cacheDir)
             testCancellationCleanup(workflow, context.cacheDir, plaintext)
@@ -182,6 +184,7 @@ class TemporaryKeyInstrumentation : Instrumentation() {
             NativeBridge.RESULT_SUCCESS)
         val originalFingerprint = checkNotNull(manager.readState().fingerprint)
         val exportedPublicKey = File(cache, EXPORTED_PUBLIC_KEY_NAME)
+        check(exportedPublicKey.createNewFile())
         val exportTrace = workflow.exportPublicKeyDetailed(
             Uri.fromFile(exportedPublicKey),
         )
@@ -267,6 +270,93 @@ class TemporaryKeyInstrumentation : Instrumentation() {
             "permission=${importTrace.permissionResult};" +
             "commit=${importTrace.commitResult};" +
             "errno=${importTrace.commitErrno ?: 0}"
+    }
+
+    private fun testEmptyPlaintextRoundTrip(
+        workflow: SafFileWorkflow,
+        cache: File,
+    ) {
+        val emptyPlaintext = File(cache, EMPTY_PLAINTEXT_NAME)
+        emptyPlaintext.writeBytes(ByteArray(0))
+        Os.chmod(emptyPlaintext.absolutePath, PRIVATE_FILE_MODE)
+
+        val encrypted = File(cache, EMPTY_CIPHERTEXT_NAME)
+        check(encrypted.createNewFile())
+        val encryption = workflow.prepareEncryption(
+            Uri.fromFile(emptyPlaintext),
+            CONTINUE_PROGRESS,
+        )
+        check(encryption.code == NativeBridge.RESULT_SUCCESS)
+        val preparedEncryption = checkNotNull(encryption.prepared)
+        check(workflow.commitPreparedEncryption(
+            preparedEncryption,
+            Uri.fromFile(encrypted),
+            CONTINUE_PROGRESS,
+        ) == NativeBridge.RESULT_SUCCESS)
+
+        val decrypted = File(cache, EMPTY_DECRYPTED_NAME)
+        check(decrypted.createNewFile())
+        val decryption = workflow.prepareDecryption(
+            Uri.fromFile(encrypted),
+            password(DEFAULT_PASSWORD),
+            CONTINUE_PROGRESS,
+        )
+        check(decryption.code == NativeBridge.RESULT_SUCCESS)
+        val preparedDecryption = checkNotNull(decryption.prepared)
+        check(workflow.commitPreparedDecryption(
+            preparedDecryption,
+            Uri.fromFile(decrypted),
+            CONTINUE_PROGRESS,
+        ) == NativeBridge.RESULT_SUCCESS)
+        check(decrypted.exists())
+        check(decrypted.length() == 0L)
+    }
+
+    private fun testExistingOutputRollback(
+        workflow: SafFileWorkflow,
+        cache: File,
+        plaintext: File,
+    ) {
+        val destination = File(cache, EXISTING_OUTPUT_NAME)
+        val original = "existing-output-must-survive".toByteArray(
+            StandardCharsets.US_ASCII,
+        )
+        destination.writeBytes(original)
+        Os.chmod(destination.absolutePath, PRIVATE_FILE_MODE)
+
+        val encryption = workflow.prepareEncryption(
+            Uri.fromFile(plaintext),
+            CONTINUE_PROGRESS,
+        )
+        check(encryption.code == NativeBridge.RESULT_SUCCESS)
+        val prepared = checkNotNull(encryption.prepared)
+        check(workflow.commitPreparedEncryption(
+            prepared,
+            Uri.fromFile(destination),
+            CANCEL_AFTER_WRITE_PROGRESS,
+        ) != NativeBridge.RESULT_SUCCESS)
+        check(destination.readBytes().contentEquals(original))
+    }
+
+    private fun testUnreadableOutputRejection(
+        workflow: SafFileWorkflow,
+        cache: File,
+        plaintext: File,
+    ) {
+        val destination = File(cache, UNREADABLE_OUTPUT_NAME)
+        check(!destination.exists())
+        val encryption = workflow.prepareEncryption(
+            Uri.fromFile(plaintext),
+            CONTINUE_PROGRESS,
+        )
+        check(encryption.code == NativeBridge.RESULT_SUCCESS)
+        val prepared = checkNotNull(encryption.prepared)
+        check(workflow.commitPreparedEncryption(
+            prepared,
+            Uri.fromFile(destination),
+            CONTINUE_PROGRESS,
+        ) != NativeBridge.RESULT_SUCCESS)
+        check(!destination.exists())
     }
 
     private fun assertSuccessfulPublicKeyImport(
@@ -527,6 +617,11 @@ class TemporaryKeyInstrumentation : Instrumentation() {
         const val FILES_DIRECTORY = "files"
         const val CACHE_DIRECTORY = "cache"
         const val PLAINTEXT_NAME = "plaintext.bin"
+        const val EMPTY_PLAINTEXT_NAME = "empty-plaintext.bin"
+        const val EMPTY_CIPHERTEXT_NAME = "empty-plaintext.nkem"
+        const val EMPTY_DECRYPTED_NAME = "empty-plaintext.out"
+        const val EXISTING_OUTPUT_NAME = "existing-output.bin"
+        const val UNREADABLE_OUTPUT_NAME = "unreadable-output.bin"
         const val DEFAULT_CIPHERTEXT_NAME = "default.nkem"
         const val DEFAULT_DECRYPTED_NAME = "default.out"
         const val EXPORTED_PUBLIC_KEY_NAME = "exported-public.key"
@@ -559,7 +654,22 @@ class TemporaryKeyInstrumentation : Instrumentation() {
         val INVALID_KEY_BYTES = "not-a-nekokem-key".toByteArray(
             StandardCharsets.US_ASCII,
         )
-        val CONTINUE_PROGRESS = NativeProgressCallback { _, _ -> true }
+        val CONTINUE_PROGRESS = object : CancellableProgressCallback {
+            override fun isCancelled(): Boolean = false
+
+            override fun onProgress(
+                processedBytes: Long,
+                totalBytes: Long,
+            ): Boolean = true
+        }
+        val CANCEL_AFTER_WRITE_PROGRESS = object : CancellableProgressCallback {
+            override fun isCancelled(): Boolean = false
+
+            override fun onProgress(
+                processedBytes: Long,
+                totalBytes: Long,
+            ): Boolean = processedBytes == 0L
+        }
         val CANCELLED_PROGRESS = object : CancellableProgressCallback {
             override fun isCancelled(): Boolean = true
 
