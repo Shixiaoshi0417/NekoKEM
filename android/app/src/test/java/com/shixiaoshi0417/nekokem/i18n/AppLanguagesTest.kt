@@ -7,6 +7,8 @@ import android.content.res.Resources
 import android.os.LocaleList
 import com.shixiaoshi0417.nekokem.MainActivity
 import com.shixiaoshi0417.nekokem.R
+import com.shixiaoshi0417.nekokem.ui.formatDuration
+import com.shixiaoshi0417.nekokem.ui.formatByteCount
 import org.junit.Assert.assertEquals
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -86,6 +88,19 @@ class AppLanguagesTest {
         } finally {
             resources.updateConfiguration(original, resources.displayMetrics)
         }
+    }
+
+    @Test fun pluralsAndNumbersUseTheActivityLanguage() {
+        AppLanguages.setSelection(context, "en")
+        val english = AppLanguages.localizedContext(context)
+        assertEquals("1 second", formatDuration(english, 1000))
+        assertEquals("2 seconds", formatDuration(english, 2000))
+        assertEquals("1.5 KiB", formatByteCount(english, 1536))
+        AppLanguages.setSelection(context, "ja")
+        val japanese = AppLanguages.localizedContext(context)
+        assertEquals("2 秒", formatDuration(japanese, 2000))
+        assertEquals("1 分 2 秒", formatDuration(japanese, 62000))
+        AppLanguages.setSelection(context, "")
     }
 
     @Config(sdk = [33])

@@ -121,5 +121,12 @@ class LanguageTests(unittest.TestCase):
             wrong = self.cli('--lang',tag,'decrypt','hybrid',tag+'.nkem',tag+'.wrong','keys/private.key.enc',input='incorrect\n')
             self.assertEqual(1,wrong.returncode); self.assertFalse((self.root/(tag+'.wrong')).exists())
         self.assertEqual(1,len(set(fingerprints)))
+        (self.root/'--lang').write_bytes(payload)
+        encrypted=self.cli('--lang','ja','encrypt','hybrid','--lang','--','keys/public.key')
+        self.assertEqual(0,encrypted.returncode,encrypted.stderr)
+        decrypted=self.cli('--lang','ko','decrypt','hybrid','--','positional.out','keys/private.key.enc',input=password+'\n')
+        self.assertEqual(0,decrypted.returncode,decrypted.stderr)
+        self.assertEqual(payload,(self.root/'positional.out').read_bytes())
+
 
 if __name__ == '__main__': unittest.main(verbosity=2)

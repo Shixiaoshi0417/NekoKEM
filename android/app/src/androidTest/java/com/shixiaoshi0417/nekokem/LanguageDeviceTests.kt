@@ -71,10 +71,15 @@ internal fun runLanguageDeviceTests(instrumentation: Instrumentation, phase: Str
         }
         // Exercise the actual settings control and its accessible option labels.
         instrumentation.waitForIdleSync()
-        fun node(text: String): AccessibilityNodeInfo? {
-            val root = instrumentation.uiAutomation.rootInActiveWindow ?: return null
-            return root.findAccessibilityNodeInfosByText(text).firstOrNull()
+        fun findText(root: AccessibilityNodeInfo?, text: String): AccessibilityNodeInfo? {
+            if (root == null) return null
+            if (root.text?.toString()?.contains(text) == true ||
+                root.contentDescription?.toString()?.contains(text) == true) return root
+            for (i in 0 until root.childCount) findText(root.getChild(i), text)?.let { return it }
+            return null
         }
+        fun node(text: String): AccessibilityNodeInfo? =
+            findText(instrumentation.uiAutomation.rootInActiveWindow, text)
         fun awaitNode(text: String): AccessibilityNodeInfo? {
             val deadline = SystemClock.uptimeMillis() + 5000
             while (SystemClock.uptimeMillis() < deadline) {

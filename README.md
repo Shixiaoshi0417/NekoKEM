@@ -78,7 +78,7 @@ CLI 示例：
 ./nekokem --lang system --help
 ```
 
-`--lang` 仅影响本次命令。`--set-lang` 将默认语言保存到 `$XDG_CONFIG_HOME/nekokem/language`；XDG_CONFIG_HOME 未设置或为相对路径时使用 `$HOME/.config/nekokem/language`。配置文件权限为 `0600`，无需 root 权限。优先级为 `--lang` → 已保存设置 → `LC_ALL` → `LC_MESSAGES` → `LANG` → 英语。`system` 恢复自动检测；无效或损坏的设置安全回退系统检测。系统检测支持 `zh_CN.UTF-8`、`ja_JP.UTF-8` 等常见 POSIX Locale。ASCII 或非 UTF-8 终端下 CLI 提示回退英语。文件参数类似选项时，可使用 `--` 结束全局选项解析。语言配置和帮助不会交互询问语言。
+`--lang` 仅影响本次命令。`--set-lang` 将默认语言保存到 `$XDG_CONFIG_HOME/nekokem/language`；XDG_CONFIG_HOME 未设置或为相对路径时使用 `$HOME/.config/nekokem/language`。配置文件权限为 `0600`，无需 root 权限。优先级为 `--lang` → 已保存设置 → `LC_ALL` → `LC_MESSAGES` → `LANG` → 英语。`system` 恢复自动检测；无效或损坏的设置安全回退系统检测。系统检测支持 `zh_CN.UTF-8`、`ja_JP.UTF-8` 等常见 POSIX Locale。ASCII 或非 UTF-8 终端下 CLI 提示回退英语。全局语言选项放在命令之前；命令之后的文件参数按原样处理。可使用 `--` 显式结束全局选项解析。语言配置和帮助不会交互询问语言。
 
 协议标识、密码学算法名、CLI 参数、环境变量名及 `--version` 输出保持不变。上游 OpenSSL/操作系统的诊断细节保留原文。这些语言参数为本分支新增，先前发行二进制可能尚不提供。
 

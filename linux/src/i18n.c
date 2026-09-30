@@ -200,7 +200,10 @@ int cli_language_init(int *argc, char **argv)
         }
         if (value != NULL) {
             if (!explicit_language(value, &selected_language)) valid = 0;
-        } else argv[output++] = argv[input];
+        } else {
+            argv[output++] = argv[input];
+            options = 0; /* Preserve all positional filenames, even --lang or --. */
+        }
     }
     argv[output] = NULL;
     *argc = output;
