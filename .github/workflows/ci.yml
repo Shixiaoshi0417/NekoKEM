@@ -66,6 +66,9 @@ jobs:
           LIBRARY_PATH: ${{ runner.temp }}/openssl-3.5.6/lib
         run: make -C linux test
 
+      - name: Test fuzz result and process failure handling
+        run: python3 .github/scripts/test_fuzz_smoke.py -v
+
       - name: Run parser fuzz smoke tests
         env:
           AFL_I_DONT_CARE_ABOUT_MISSING_CRASHES: "1"
@@ -77,10 +80,29 @@ jobs:
           set -Eeuo pipefail
           make -C linux fuzz-build \
             FUZZ_LDFLAGS="-fsanitize=undefined -L$LIBRARY_PATH"
-          afl-fuzz -V 15 -i core/fuzz/seeds/nkem \
-            -o "$RUNNER_TEMP/fuzz-nkem" -- core/fuzz/bin/fuzz_nkem @@
-          afl-fuzz -V 15 -i core/fuzz/seeds/nkpr \
-            -o "$RUNNER_TEMP/fuzz-nkpr" -- core/fuzz/bin/fuzz_nkpr @@
+          status=0
+          for format in nkem nkpr; do
+            if ! python3 .github/scripts/run_fuzz_smoke.py \
+              --seeds "core/fuzz/seeds/$format" \
+              --target "core/fuzz/bin/fuzz_$format" \
+              --output "$RUNNER_TEMP/fuzz-$format"; then
+              status=1
+            fi
+          done
+          exit "$status"
+
+      - name: Archive fuzz results with original AFL filenames
+        if: always()
+        run: python3 .github/scripts/archive_fuzz_results.py "$RUNNER_TEMP"
+
+      - name: Preserve fuzz logs, statistics and samples
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: parser-fuzz-results
+          path: ${{ runner.temp }}/parser-fuzz-results.tar.gz
+          if-no-files-found: warn
+          retention-days: 14
 
   android-build:
     name: Android debug build and tests
@@ -135,3 +157,14 @@ jobs:
             testDebugUnitTest \
             assembleDebug \
             assembleDebugAndroidTest
+
+      - name: Preserve executed JVM test reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-jvm-test-results
+          path: |
+            android/app/build/test-results/testDebugUnitTest/
+            android/app/build/reports/tests/testDebugUnitTest/
+          if-no-files-found: warn
+          retention-days: 14
