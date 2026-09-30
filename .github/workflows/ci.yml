@@ -218,7 +218,7 @@ jobs:
         run: |
           bash ./gradlew --no-daemon -PnekokemEmulatorTest=true tasks --all \
             > "$RUNNER_TEMP/nekokem-emulator-tasks.txt"
-          if grep -Eq '^(assembleRelease|bundleRelease)([[:space:]]|$)' \
+          if grep -Eq '^([[:alnum:]_.-]+:)*(assembleRelease|bundleRelease)([[:space:]]|$)' \
               "$RUNNER_TEMP/nekokem-emulator-tasks.txt"; then
             echo "Emulator test configuration must not expose release variants" >&2
             exit 1

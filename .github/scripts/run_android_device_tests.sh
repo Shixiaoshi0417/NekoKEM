@@ -11,7 +11,7 @@ collect_evidence() {
     adb exec-out screencap -p > "$report_dir/final-screen.png" || true
     adb logcat -d -s AndroidRuntime > "$report_dir/android-runtime.txt" || true
 }
-# Collection cannot change test status; every phase still requires both success markers.
+# Failure collection preserves test status; successful runs verify the complete archive.
 trap 'collect_evidence || true' EXIT
 adb install -r android/app/build/outputs/apk/debug/app-debug.apk
 adb install -r android/app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk
