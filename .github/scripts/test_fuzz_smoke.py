@@ -5,6 +5,8 @@ import os
 from pathlib import Path
 import subprocess
 import tempfile
+import tarfile
+from archive_fuzz_results import archive_results
 import unittest
 from unittest.mock import patch
 
@@ -75,6 +77,20 @@ class FuzzGateTests(unittest.TestCase):
                 if case == 'nonzero': self.assertEqual(2, evidence['exit_code'])
                 if case in ('crash', 'hang'):
                     self.assertEqual(1, len(list(output.rglob('id:*'))))
+
+    def test_archive_preserves_colons_and_evidence(self):
+        with patch.dict(os.environ, FUZZ_TEST_CASE='crash'):
+            with self.assertRaises(gate.FuzzFailure):
+                gate.run_fuzz(self.afl, 'seeds', 'target', self.root/'fuzz-nkem',
+                              seconds=1, wall_timeout=2)
+        archive_path = archive_results(self.root)
+        self.assertNotIn(':', archive_path.name)
+        with tarfile.open(archive_path) as archive:
+            sample = archive.extractfile('fuzz-nkem/corpus/default/crashes/id:000000')
+            self.assertEqual(b'evidence', sample.read())
+            evidence = json.load(archive.extractfile('fuzz-nkem/result.json'))
+            self.assertEqual('failed', evidence['status'])
+        self.assertTrue((self.root/'fuzz-nkem/corpus/default/crashes/id:000000').exists())
 
     def test_stale_results_cannot_pass(self):
         self.run_case('clean')

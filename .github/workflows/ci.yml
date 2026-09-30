@@ -91,12 +91,16 @@ jobs:
           done
           exit "$status"
 
+      - name: Archive fuzz results with original AFL filenames
+        if: always()
+        run: python3 .github/scripts/archive_fuzz_results.py "$RUNNER_TEMP"
+
       - name: Preserve fuzz logs, statistics and samples
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: parser-fuzz-results
-          path: ${{ runner.temp }}/fuzz-*
+          path: ${{ runner.temp }}/parser-fuzz-results.tar.gz
           if-no-files-found: warn
           retention-days: 14
 
