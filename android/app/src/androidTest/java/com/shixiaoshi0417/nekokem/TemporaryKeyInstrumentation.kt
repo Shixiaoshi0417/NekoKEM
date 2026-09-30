@@ -25,9 +25,11 @@ import kotlinx.coroutines.runBlocking
  */
 class TemporaryKeyInstrumentation : Instrumentation() {
     private var languagePhase: String? = null
+    private var expectedSystemLanguage: String? = null
 
     override fun onCreate(arguments: Bundle?) {
         languagePhase = arguments?.getString("languagePhase")
+        expectedSystemLanguage = arguments?.getString("expectedSystemLanguage")
         super.onCreate(arguments)
         start()
     }
@@ -35,7 +37,7 @@ class TemporaryKeyInstrumentation : Instrumentation() {
         val results = Bundle()
         val status = try {
             val publicKeyTrace = if (languagePhase == null) runTemporaryKeyTests(targetContext) else "language-only"
-            runLanguageDeviceTests(this, languagePhase)
+            runLanguageDeviceTests(this, languagePhase, expectedSystemLanguage)
             results.putString(RESULT_KEY, RESULT_SUCCESS)
             results.putString(PUBLIC_KEY_TRACE_KEY, publicKeyTrace)
             Activity.RESULT_OK

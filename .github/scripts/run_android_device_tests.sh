@@ -21,3 +21,25 @@ for phase in persist restart full; do
     grep -Fx 'INSTRUMENTATION_RESULT: result=temporary-key-tests-passed' "$report_dir/$phase.txt"
     grep -Fx 'INSTRUMENTATION_CODE: -1' "$report_dir/$phase.txt"
 done
+
+# Change the disposable emulator's actual OS language between app processes.
+# App production permissions and filesystem checks remain unchanged.
+adb root
+adb wait-for-device
+for system_locale in ja-JP de-DE; do
+    adb shell settings put system system_locales "$system_locale"
+    adb shell setprop persist.sys.locale "$system_locale"
+    adb shell setprop sys.boot_completed 0
+    adb shell stop
+    adb shell start
+    booted=0
+    for attempt in $(seq 1 120); do
+        if [[ $(adb shell getprop sys.boot_completed | tr -d '\r') == 1 ]]; then booted=1; break; fi
+        sleep 1
+    done
+    [[ "$booted" == 1 ]]
+    language=${system_locale%%-*}
+    adb shell am instrument -w -e languagePhase system -e expectedSystemLanguage "$language" "$runner" | tee "$report_dir/system-$language.txt"
+    grep -Fx 'INSTRUMENTATION_RESULT: result=temporary-key-tests-passed' "$report_dir/system-$language.txt"
+    grep -Fx 'INSTRUMENTATION_CODE: -1' "$report_dir/system-$language.txt"
+done

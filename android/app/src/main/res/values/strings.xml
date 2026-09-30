@@ -173,4 +173,5 @@
     <string name="default_decrypted_filename">decrypted-file</string>
     <string name="default_public_key_filename">public.key</string>
     <string name="default_private_key_filename">private.nkpr.enc</string>
+    <string name="error_language_save">The language preference could not be saved. Please try again.</string>
 </resources>

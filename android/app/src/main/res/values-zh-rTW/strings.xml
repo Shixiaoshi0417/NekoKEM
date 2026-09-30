@@ -158,4 +158,5 @@
     <plurals name="duration_seconds">
         <item quantity="other">%1$d 秒</item>
     </plurals>
+    <string name="error_language_save">無法儲存語言設定，請重試。</string>
 </resources>

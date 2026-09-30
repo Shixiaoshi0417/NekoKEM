@@ -42,15 +42,19 @@ object AppLanguages {
         }
     }
 
-    fun setSelection(context: Context, tag: String) {
+    fun setSelection(context: Context, tag: String): Boolean {
         require(tag in tags)
         if (Build.VERSION.SDK_INT >= 33) {
             context.getSystemService(LocaleManager::class.java).applicationLocales =
                 if (tag.isEmpty()) LocaleList.getEmptyLocaleList()
                 else LocaleList.forLanguageTags(tag)
+            return true
         } else {
-            check(context.getSharedPreferences(PREFERENCES, Context.MODE_PRIVATE)
-                .edit().putString(LANGUAGE, tag).commit())
+            val previous = selection(context)
+            val preferences = context.getSharedPreferences(PREFERENCES, Context.MODE_PRIVATE)
+            val saved = preferences.edit().putString(LANGUAGE, tag).commit()
+            if (!saved) preferences.edit().putString(LANGUAGE, previous).apply()
+            return saved
         }
     }
 

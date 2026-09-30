@@ -2,6 +2,8 @@ package com.shixiaoshi0417.nekokem.i18n
 
 import android.app.LocaleManager
 import android.content.Context
+import android.content.ContextWrapper
+import android.content.SharedPreferences
 import android.content.res.Configuration
 import android.content.res.Resources
 import android.os.LocaleList
@@ -10,6 +12,7 @@ import com.shixiaoshi0417.nekokem.R
 import com.shixiaoshi0417.nekokem.ui.formatDuration
 import com.shixiaoshi0417.nekokem.ui.formatByteCount
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.Robolectric
@@ -88,6 +91,29 @@ class AppLanguagesTest {
         } finally {
             resources.updateConfiguration(original, resources.displayMetrics)
         }
+    }
+
+    @Test fun failedPreferenceWriteDoesNotCrashOrChangeSelection() {
+        AppLanguages.setSelection(context, "en")
+        val preferences = context.getSharedPreferences("application_language", Context.MODE_PRIVATE)
+        val failing = object : ContextWrapper(context) {
+            override fun getSharedPreferences(name: String, mode: Int): SharedPreferences =
+                object : SharedPreferences by preferences {
+                    override fun edit(): SharedPreferences.Editor {
+                        val editor = preferences.edit()
+                        return object : SharedPreferences.Editor by editor {
+                            override fun putString(key: String?, value: String?): SharedPreferences.Editor {
+                                editor.putString(key, value)
+                                return this
+                            }
+                            override fun commit(): Boolean = false
+                        }
+                    }
+                }
+        }
+        assertFalse(AppLanguages.setSelection(failing, "ja"))
+        assertEquals("en", AppLanguages.selection(context))
+        AppLanguages.setSelection(context, "")
     }
 
     @Test fun pluralsAndNumbersUseTheActivityLanguage() {

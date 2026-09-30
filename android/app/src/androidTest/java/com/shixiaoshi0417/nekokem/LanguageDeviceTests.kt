@@ -6,6 +6,7 @@ import android.app.Activity
 import android.app.Instrumentation
 import android.app.LocaleManager
 import android.content.Intent
+import android.content.res.Resources
 import android.os.Build
 import android.os.LocaleList
 import android.os.SystemClock
@@ -13,8 +14,27 @@ import android.view.accessibility.AccessibilityNodeInfo
 import com.shixiaoshi0417.nekokem.i18n.AppLanguages
 
 /** Runs inside the existing device runner, with the real Compose Activity. */
-internal fun runLanguageDeviceTests(instrumentation: Instrumentation, phase: String?) {
+internal fun runLanguageDeviceTests(
+    instrumentation: Instrumentation, phase: String?, expectedSystemLanguage: String?,
+) {
     val context = instrumentation.targetContext
+    if (phase == "system") {
+        val locales = if (Build.VERSION.SDK_INT >= 33) {
+            context.getSystemService(LocaleManager::class.java).systemLocales
+        } else Resources.getSystem().configuration.locales
+        check(!locales.isEmpty && locales[0].language == expectedSystemLanguage) {
+            "Framework system locale did not change: ${locales.toLanguageTags()}"
+        }
+        check(AppLanguages.selection(context).isEmpty())
+        val following = instrumentation.startActivitySync(
+            Intent(context, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+        )
+        instrumentation.waitForIdleSync()
+        val expected = if (expectedSystemLanguage == "ja") "ファイルの暗号化・復号" else "File Encryption"
+        check(following.getString(R.string.navigation_files) == expected)
+        instrumentation.runOnMainSync { following.finish() }
+        return
+    }
     if (phase == "persist") {
         instrumentation.runOnMainSync { AppLanguages.setSelection(context, "ja") }
         check(AppLanguages.selection(context) == "ja")
@@ -111,6 +131,11 @@ internal fun runLanguageDeviceTests(instrumentation: Instrumentation, phase: Str
         AppLanguages.names(context).drop(1).forEach { check(awaitNode(it) != null) { "Missing language option $it" } }
         check(awaitNode(activity.getString(R.string.settings_language_system)) != null)
         click(activity.getString(R.string.settings_language_system))
+        val deadline = SystemClock.uptimeMillis() + 5000
+        while (AppLanguages.selection(context).isNotEmpty() && SystemClock.uptimeMillis() < deadline) {
+            SystemClock.sleep(100)
+        }
+        check(AppLanguages.selection(context).isEmpty()) { "UI did not restore follow-system mode" }
     } finally {
         instrumentation.runOnMainSync {
             AppLanguages.setSelection(context, "")

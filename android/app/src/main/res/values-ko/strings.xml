@@ -158,4 +158,5 @@
     <plurals name="duration_seconds">
         <item quantity="other">%1$d초</item>
     </plurals>
+    <string name="error_language_save">언어 설정을 저장할 수 없습니다. 다시 시도하세요.</string>
 </resources>

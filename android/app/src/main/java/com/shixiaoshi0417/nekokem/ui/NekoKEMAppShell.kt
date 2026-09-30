@@ -409,7 +409,20 @@ private fun KeyManagementPage(
 private fun SettingsPage(running: Boolean) {
     val context = LocalContext.current
     var showLanguages by remember { mutableStateOf(false) }
+    var languageSaveFailed by remember { mutableStateOf(false) }
     val selection = AppLanguages.selection(context)
+    if (languageSaveFailed) {
+        AlertDialog(
+            onDismissRequest = { languageSaveFailed = false },
+            title = { Text(stringResource(R.string.error_dialog_title)) },
+            text = { Text(stringResource(R.string.error_language_save)) },
+            confirmButton = {
+                TextButton(onClick = { languageSaveFailed = false }) {
+                    Text(stringResource(R.string.action_close))
+                }
+            },
+        )
+    }
     if (showLanguages) {
         AlertDialog(
             onDismissRequest = { showLanguages = false },
@@ -423,10 +436,9 @@ private fun SettingsPage(running: Boolean) {
                                 role = Role.RadioButton,
                                 onClick = {
                                     showLanguages = false
-                                    AppLanguages.setSelection(context, tag)
-                                    if (Build.VERSION.SDK_INT < 33) {
-                                        (context as Activity).recreate()
-                                    }
+                                    if (AppLanguages.setSelection(context, tag)) {
+                                        if (Build.VERSION.SDK_INT < 33) (context as Activity).recreate()
+                                    } else languageSaveFailed = true
                                 },
                             ).padding(vertical = 8.dp),
                             verticalAlignment = Alignment.CenterVertically,
