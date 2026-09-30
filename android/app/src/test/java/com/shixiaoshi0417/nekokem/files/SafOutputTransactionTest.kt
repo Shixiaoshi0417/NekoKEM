@@ -23,7 +23,7 @@ import org.robolectric.annotation.Config
 
 /** Executes the production SAF transaction without loading or mocking Core/JNI. */
 @RunWith(RobolectricTestRunner::class)
-@Config(sdk = [28])
+@Config(sdk = [28], shadows = [HostPosixShadow::class])
 class SafOutputTransactionTest {
     @get:Rule val temporary = TemporaryFolder()
     private lateinit var context: Context
