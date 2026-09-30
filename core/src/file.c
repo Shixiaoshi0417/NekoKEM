@@ -127,6 +127,41 @@ int ensure_directory(const char *path, mode_t mode)
     return 1;
 }
 
+FILE *file_open_regular(const char *path)
+{
+    struct stat status;
+    FILE *stream;
+    int descriptor;
+
+    if (path == NULL || path[0] == '\0') {
+        errno = EINVAL;
+        print_system_error("Invalid regular input path");
+        return NULL;
+    }
+    /* Reject FIFOs before a blocking open can prevent validation/cancellation. */
+    descriptor = open(path, O_RDONLY | O_CLOEXEC | O_NONBLOCK);
+    if (descriptor < 0) {
+        print_system_error("Cannot open regular input file");
+        return NULL;
+    }
+    if (fstat(descriptor, &status) != 0) {
+        print_system_error("Cannot inspect regular input file");
+        (void)close(descriptor);
+        return NULL;
+    }
+    if (!S_ISREG(status.st_mode) || status.st_size < 0) {
+        fprintf(stderr, "Input must be a regular file with a valid size\n");
+        (void)close(descriptor);
+        return NULL;
+    }
+    stream = fdopen(descriptor, "rb");
+    if (stream == NULL) {
+        print_system_error("Cannot open regular input stream");
+        (void)close(descriptor);
+    }
+    return stream;
+}
+
 int file_get_size(FILE *stream, uint64_t *size)
 {
     struct stat status;
@@ -351,7 +386,7 @@ int file_read_sensitive(const char *path,
     *buffer = NULL;
     *length = 0U;
 
-    descriptor = open(path, O_RDONLY | O_CLOEXEC | O_NOFOLLOW);
+    descriptor = open(path, O_RDONLY | O_CLOEXEC | O_NOFOLLOW | O_NONBLOCK);
     if (descriptor < 0) {
         print_system_error("Cannot open sensitive file");
         goto cleanup;

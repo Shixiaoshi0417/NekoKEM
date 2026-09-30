@@ -115,9 +115,8 @@ int nekokem_encrypt_file_with_progress(
     if (!validate_file_paths(input_path, output_path, public_key_path)) {
         goto cleanup;
     }
-    input = fopen(input_path, "rb");
+    input = file_open_regular(input_path);
     if (input == NULL) {
-        print_system_error("Cannot open plaintext");
         goto cleanup;
     }
     if (!file_disable_buffering(input) ||
@@ -244,9 +243,8 @@ static int decrypt_file_v3_with_progress(
     if (!validate_file_paths(input_path, output_path, private_key_path)) {
         goto cleanup;
     }
-    input = fopen(input_path, "rb");
+    input = file_open_regular(input_path);
     if (input == NULL) {
-        print_system_error("Cannot open NKEM v3 input");
         goto cleanup;
     }
     if (!file_disable_buffering(input) ||
