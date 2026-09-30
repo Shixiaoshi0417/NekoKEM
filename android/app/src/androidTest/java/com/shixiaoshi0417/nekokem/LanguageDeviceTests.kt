@@ -18,21 +18,80 @@ internal fun runLanguageDeviceTests(
     instrumentation: Instrumentation, phase: String?, expectedSystemLanguage: String?,
 ) {
     val context = instrumentation.targetContext
-    if (phase == "system") {
-        val locales = if (Build.VERSION.SDK_INT >= 33) {
-            context.getSystemService(LocaleManager::class.java).systemLocales
-        } else Resources.getSystem().configuration.locales
-        check(!locales.isEmpty && locales[0].language == expectedSystemLanguage) {
-            "Framework system locale did not change: ${locales.toLanguageTags()}"
+    fun findText(root: AccessibilityNodeInfo?, text: String): AccessibilityNodeInfo? {
+        if (root == null) return null
+        if (root.text?.toString()?.contains(text) == true ||
+            root.contentDescription?.toString()?.contains(text) == true) return root
+        for (i in 0 until root.childCount) findText(root.getChild(i), text)?.let { return it }
+        return null
+    }
+    fun node(text: String): AccessibilityNodeInfo? =
+        findText(instrumentation.uiAutomation.rootInActiveWindow, text)
+    fun awaitNode(text: String): AccessibilityNodeInfo? {
+        val deadline = SystemClock.uptimeMillis() + 5000
+        while (SystemClock.uptimeMillis() < deadline) {
+            node(text)?.let { return it }
+            SystemClock.sleep(100)
         }
+        return null
+    }
+    fun capture(name: String) {
+        instrumentation.uiAutomation.waitForIdle(500, 5000)
+        val deadline = SystemClock.uptimeMillis() + 5000
+        do {
+            val captured = checkNotNull(instrumentation.uiAutomation.takeScreenshot())
+            val screenshot = if (captured.config == Bitmap.Config.HARDWARE) {
+                checkNotNull(captured.copy(Bitmap.Config.ARGB_8888, false)).also { captured.recycle() }
+            } else captured
+            try {
+                val colors = mutableSetOf<Int>()
+                for (y in 0 until screenshot.height step 24) {
+                    for (x in 0 until screenshot.width step 24) colors.add(screenshot.getPixel(x, y))
+                }
+                // Reject a blank transition frame, even when Activity resources are ready.
+                if (colors.size > 24) {
+                    val directory = File(context.cacheDir, "i18n-screens")
+                    check(directory.isDirectory || directory.mkdir())
+                    File(directory, "$name.png").outputStream().use {
+                        check(screenshot.compress(Bitmap.CompressFormat.PNG, 100, it))
+                    }
+                    return
+                }
+            } finally {
+                screenshot.recycle()
+            }
+            SystemClock.sleep(100)
+        } while (SystemClock.uptimeMillis() < deadline)
+        error("No rendered UI screenshot for $name")
+    }
+    if (phase == "system") {
         check(AppLanguages.selection(context).isEmpty())
-        val following = instrumentation.startActivitySync(
+        var following = instrumentation.startActivitySync(
             Intent(context, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
         )
-        instrumentation.waitForIdleSync()
-        val expected = if (expectedSystemLanguage == "ja") "ファイルの暗号化・復号" else "File Encryption"
-        check(following.getString(R.string.navigation_files) == expected)
-        instrumentation.runOnMainSync { following.finish() }
+        val monitor = instrumentation.addMonitor(MainActivity::class.java.name, null, false)
+        val ready = File(context.cacheDir, "i18n-system-ready")
+        try {
+            ready.writeText("ready")
+            following = checkNotNull(monitor.waitForActivityWithTimeout(30000)) {
+                "Activity did not rebuild after real system-language change"
+            }
+            instrumentation.waitForIdleSync()
+            val locales = if (Build.VERSION.SDK_INT >= 33) {
+                context.getSystemService(LocaleManager::class.java).systemLocales
+            } else Resources.getSystem().configuration.locales
+            check(!locales.isEmpty && locales[0].language == expectedSystemLanguage) {
+                "Framework system locale did not change: ${locales.toLanguageTags()}"
+            }
+            val expected = if (expectedSystemLanguage == "ja") "ファイルの暗号化・復号" else "File Encryption"
+            check(following.getString(R.string.navigation_files) == expected)
+            check(awaitNode(expected) != null)
+            capture("system-$expectedSystemLanguage")
+        } finally {
+            ready.delete()
+            instrumentation.removeMonitor(monitor)
+            instrumentation.runOnMainSync { following.finish() }
+        }
         return
     }
     if (phase == "persist") {
@@ -70,13 +129,9 @@ internal fun runLanguageDeviceTests(
             instrumentation.waitForIdleSync()
             check(activity.getString(R.string.navigation_files) == label)
             check(AppLanguages.selection(activity) == tag)
-            val screenshot = checkNotNull(instrumentation.uiAutomation.takeScreenshot())
-            val directory = File(context.cacheDir, "i18n-screens")
-            check(directory.isDirectory || directory.mkdir())
-            File(directory, "$tag.png").outputStream().use {
-                check(screenshot.compress(Bitmap.CompressFormat.PNG, 100, it))
-            }
-            screenshot.recycle()
+            check(awaitNode(label) != null) { "Localized Compose title did not render: $tag" }
+            capture(tag)
+
         }
         if (Build.VERSION.SDK_INT >= 33) {
             val monitor = instrumentation.addMonitor(MainActivity::class.java.name, null, false)
@@ -91,23 +146,6 @@ internal fun runLanguageDeviceTests(
         }
         // Exercise the actual settings control and its accessible option labels.
         instrumentation.waitForIdleSync()
-        fun findText(root: AccessibilityNodeInfo?, text: String): AccessibilityNodeInfo? {
-            if (root == null) return null
-            if (root.text?.toString()?.contains(text) == true ||
-                root.contentDescription?.toString()?.contains(text) == true) return root
-            for (i in 0 until root.childCount) findText(root.getChild(i), text)?.let { return it }
-            return null
-        }
-        fun node(text: String): AccessibilityNodeInfo? =
-            findText(instrumentation.uiAutomation.rootInActiveWindow, text)
-        fun awaitNode(text: String): AccessibilityNodeInfo? {
-            val deadline = SystemClock.uptimeMillis() + 5000
-            while (SystemClock.uptimeMillis() < deadline) {
-                node(text)?.let { return it }
-                SystemClock.sleep(100)
-            }
-            return null
-        }
         fun click(text: String) {
             var target = checkNotNull(awaitNode(text)) { "Missing accessible text: $text" }
             while (!target.isClickable) target = checkNotNull(target.parent)
@@ -127,9 +165,12 @@ internal fun runLanguageDeviceTests(
         check(menu.performAction(AccessibilityNodeInfo.ACTION_CLICK))
         instrumentation.waitForIdleSync()
         click(activity.getString(R.string.navigation_settings))
+        check(awaitNode(activity.getString(R.string.settings_language_title)) != null)
+        capture("settings")
         click(activity.getString(R.string.settings_language_title))
         AppLanguages.names(context).drop(1).forEach { check(awaitNode(it) != null) { "Missing language option $it" } }
         check(awaitNode(activity.getString(R.string.settings_language_system)) != null)
+        capture("language-picker")
         click(activity.getString(R.string.settings_language_system))
         val deadline = SystemClock.uptimeMillis() + 5000
         while (AppLanguages.selection(context).isNotEmpty() && SystemClock.uptimeMillis() < deadline) {

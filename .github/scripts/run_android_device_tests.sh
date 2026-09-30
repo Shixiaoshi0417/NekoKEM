@@ -22,24 +22,25 @@ for phase in persist restart full; do
     grep -Fx 'INSTRUMENTATION_CODE: -1' "$report_dir/$phase.txt"
 done
 
-# Change the disposable emulator's actual OS language between app processes.
-# App production permissions and filesystem checks remain unchanged.
+# The helper exists only in the test APK and runs outside the app as emulator root.
+# The production manifest does not request CHANGE_CONFIGURATION or hidden API access.
 adb root
 adb wait-for-device
+adb push android/app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk /data/local/tmp/nekokem-locale-tests.apk
 for system_locale in ja-JP de-DE; do
-    adb shell settings put system system_locales "$system_locale"
-    adb shell setprop persist.sys.locale "$system_locale"
-    adb shell setprop sys.boot_completed 0
-    adb shell stop
-    adb shell start
-    booted=0
-    for attempt in $(seq 1 120); do
-        if [[ $(adb shell getprop sys.boot_completed | tr -d '\r') == 1 ]]; then booted=1; break; fi
+    language=${system_locale%%-*}
+    adb shell run-as com.shixiaoshi0417.nekokem rm -f cache/i18n-system-ready
+    timeout 90s adb shell am instrument -w -e languagePhase system -e expectedSystemLanguage "$language" "$runner" > "$report_dir/system-$language.txt" &
+    instrument_pid=$!
+    ready=0
+    for attempt in $(seq 1 60); do
+        if adb shell run-as com.shixiaoshi0417.nekokem test -f cache/i18n-system-ready; then ready=1; break; fi
         sleep 1
     done
-    [[ "$booted" == 1 ]]
-    language=${system_locale%%-*}
-    adb shell am instrument -w -e languagePhase system -e expectedSystemLanguage "$language" "$runner" | tee "$report_dir/system-$language.txt"
+    [[ "$ready" == 1 ]]
+    adb shell CLASSPATH=/data/local/tmp/nekokem-locale-tests.apk app_process /system/bin com.shixiaoshi0417.nekokem.SystemLocaleControl "$system_locale"
+    wait "$instrument_pid"
+    cat "$report_dir/system-$language.txt"
     grep -Fx 'INSTRUMENTATION_RESULT: result=temporary-key-tests-passed' "$report_dir/system-$language.txt"
     grep -Fx 'INSTRUMENTATION_CODE: -1' "$report_dir/system-$language.txt"
 done
