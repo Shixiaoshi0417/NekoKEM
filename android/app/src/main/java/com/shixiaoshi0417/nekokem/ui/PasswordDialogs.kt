@@ -1,6 +1,8 @@
 package com.shixiaoshi0417.nekokem.ui
 
 import androidx.annotation.StringRes
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -46,7 +48,7 @@ fun GeneratePasswordDialog(
         },
         title = { Text(stringResource(R.string.generate_password_title)) },
         text = {
-            Column {
+            Column(Modifier.verticalScroll(rememberScrollState())) {
                 Text(stringResource(R.string.generate_password_message))
                 TemporaryPasswordField(
                     value = password,
@@ -135,7 +137,7 @@ fun SinglePasswordDialog(
         },
         title = { Text(stringResource(titleResource)) },
         text = {
-            Column {
+            Column(Modifier.verticalScroll(rememberScrollState())) {
                 Text(stringResource(messageResource))
                 TemporaryPasswordField(
                     value = password,

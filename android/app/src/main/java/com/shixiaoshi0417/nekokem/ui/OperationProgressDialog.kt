@@ -2,6 +2,8 @@ package com.shixiaoshi0417.nekokem.ui
 
 import android.content.Context
 import androidx.annotation.StringRes
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -35,7 +37,7 @@ fun OperationProgressDialog(
         onDismissRequest = {},
         title = { Text(stringResource(R.string.progress_title, operation)) },
         text = {
-            Column {
+            Column(Modifier.verticalScroll(rememberScrollState())) {
                 if (progress.totalBytes > 0L) {
                     LinearProgressIndicator(
                         progress = { progress.fraction },

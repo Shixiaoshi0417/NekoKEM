@@ -14,4 +14,4 @@ for phase in persist restart full; do
     grep -Fx 'INSTRUMENTATION_RESULT: result=temporary-key-tests-passed' "$report_dir/$phase.txt"
     grep -Fx 'INSTRUMENTATION_CODE: -1' "$report_dir/$phase.txt"
 done
-adb exec-out screencap -p > "$report_dir/screen.png"
+adb exec-out run-as com.shixiaoshi0417.nekokem tar -czf - -C cache i18n-screens > "$report_dir/screens.tar.gz"

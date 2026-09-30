@@ -9,7 +9,14 @@ merged and successful main CI. Security PR #8 remained an open draft at
 complete Linux security suite, Android JVM tests and arm64 debug builds, and
 native Linux x86_64/aarch64 release validation. Device instrumentation had not
 been executed. The i18n branch depends on #8 and initially targets its branch;
-it must be retargeted to main after the dependency merges.
+it must be retargeted to main after the dependencies merge.
+
+Actual API 26/35 instrumentation subsequently exposed a pre-existing temporary
+NKPR reader-routing failure: staged .tmp files passed fingerprint verification
+but Core treated them as plaintext PEM during decryption. This prerequisite is
+isolated in PR #10 (fix/android-temporary-nkpr-suffix), dependent on #8. The i18n
+PR targets #10 so its diff excludes this file-operation fix. Integration order
+is #8, #10, then #9; none is merged automatically.
 
 Android uses Compose with ComponentActivity, minSdk 26 and targetSdk 35.
 English and Simplified Chinese resources existed; language settings were static.

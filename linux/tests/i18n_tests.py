@@ -46,7 +46,7 @@ class LanguageTests(unittest.TestCase):
                 self.assertEqual(1, r.returncode); self.assertIn(LABELS[tag], r.stderr); self.assertEqual('', r.stdout)
     def test_posix_regions_and_unsupported_fallback(self):
         cases = {'zh_CN.UTF-8':'zh-CN', 'zh_SG.UTF-8':'zh-CN', 'zh_TW.UTF-8':'zh-TW',
-            'zh_HK.UTF-8':'zh-TW', 'zh_MO.UTF-8':'zh-TW', 'zh-Hant.UTF-8':'zh-TW',
+            'zh_HK.UTF-8':'zh-TW', 'zh_MO.UTF-8':'zh-TW', 'zh-Hant.UTF-8':'zh-TW', 'zh-Hans-HK.UTF-8':'zh-TW', 'zh-Hant-SG.UTF-8':'zh-CN',
             'en_US.UTF-8':'en', 'ja_JP.UTF-8':'ja', 'ko_KR.UTF-8':'ko', 'fr_FR.UTF-8':'en', 'bad.UTF-8':'en', '':'en'}
         for value, tag in cases.items():
             with self.subTest(locale=value): self.help(tag, LANG=value)

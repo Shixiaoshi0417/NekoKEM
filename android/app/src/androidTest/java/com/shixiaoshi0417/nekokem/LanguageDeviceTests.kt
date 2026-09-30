@@ -1,5 +1,7 @@
 package com.shixiaoshi0417.nekokem
 
+import android.graphics.Bitmap
+import java.io.File
 import android.app.Activity
 import android.app.Instrumentation
 import android.app.LocaleManager
@@ -48,7 +50,13 @@ internal fun runLanguageDeviceTests(instrumentation: Instrumentation, phase: Str
             instrumentation.waitForIdleSync()
             check(activity.getString(R.string.navigation_files) == label)
             check(AppLanguages.selection(activity) == tag)
-            check(instrumentation.uiAutomation.takeScreenshot() != null)
+            val screenshot = checkNotNull(instrumentation.uiAutomation.takeScreenshot())
+            val directory = File(context.cacheDir, "i18n-screens")
+            check(directory.isDirectory || directory.mkdir())
+            File(directory, "$tag.png").outputStream().use {
+                check(screenshot.compress(Bitmap.CompressFormat.PNG, 100, it))
+            }
+            screenshot.recycle()
         }
         if (Build.VERSION.SDK_INT >= 33) {
             val monitor = instrumentation.addMonitor(MainActivity::class.java.name, null, false)

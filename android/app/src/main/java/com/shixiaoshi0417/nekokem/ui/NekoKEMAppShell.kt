@@ -19,6 +19,8 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
@@ -109,6 +111,7 @@ fun NekoKEMAppShell(
     val drawerState = rememberDrawerState(DrawerValue.Closed)
     val scope = rememberCoroutineScope()
     var destination by rememberSaveable { mutableStateOf(AppDestination.FILES) }
+    val fontScale = LocalDensity.current.fontScale.coerceAtLeast(1f)
     val menuDescription = stringResource(R.string.navigation_open_menu)
 
     ModalNavigationDrawer(
@@ -125,10 +128,12 @@ fun NekoKEMAppShell(
                 Column(
                     modifier = Modifier
                         .padding(horizontal = 12.dp)
+                        .verticalScroll(rememberScrollState())
                         .selectableGroup(),
                 ) {
                     AppDestination.entries.forEach { item ->
                         NavigationDrawerItem(
+                            modifier = Modifier.heightIn(min = (56f * fontScale).dp),
                             label = { Text(stringResource(item.titleResource)) },
                             selected = destination == item,
                             onClick = {
@@ -144,6 +149,7 @@ fun NekoKEMAppShell(
         Scaffold(
             topBar = {
                 TopAppBar(
+                    expandedHeight = (64f * fontScale).dp,
                     title = { Text(stringResource(destination.titleResource)) },
                     actions = {
                         IconButton(

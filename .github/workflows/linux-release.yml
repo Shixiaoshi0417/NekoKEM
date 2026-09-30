@@ -5,6 +5,7 @@ on:
     branches:
       - main
       - fix/audit-core-input-boundaries
+      - fix/android-temporary-nkpr-suffix
     paths:
       - "core/**"
       - "linux/**"

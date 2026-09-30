@@ -56,10 +56,12 @@ static size_t match_language(const char *value)
     }
     normalized[n] = '\0';
     if (strcmp(normalized, "zh") == 0 || (n >= 3U && strncmp(normalized, "zh-", 3U) == 0)) {
-        const char *region = normalized + (n > 2U ? 3U : 2U);
+        const char *last_separator = strrchr(normalized, '-');
+        const char *region = last_separator != NULL ? last_separator + 1 : "";
         if (strcmp(region, "tw") == 0 || strcmp(region, "hk") == 0 ||
-            strcmp(region, "mo") == 0 || strncmp(region, "hant", 4U) == 0) return 2U;
-        return 1U;
+            strcmp(region, "mo") == 0) return 2U;
+        if (strcmp(region, "cn") == 0 || strcmp(region, "sg") == 0) return 1U;
+        return n >= 7U && strncmp(normalized + 3, "hant", 4U) == 0 ? 2U : 1U;
     }
     if (strcmp(normalized, "ja") == 0 || (n >= 3U && strncmp(normalized, "ja-", 3U) == 0)) return 3U;
     if (strcmp(normalized, "ko") == 0 || (n >= 3U && strncmp(normalized, "ko-", 3U) == 0)) return 4U;
