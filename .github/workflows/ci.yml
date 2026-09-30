@@ -186,8 +186,24 @@ jobs:
           java-version: "17"
       - name: Install pinned native toolchain
         run: |
-          sdkmanager "platform-tools" "platforms;android-35" "build-tools;35.0.0" "ndk;28.2.13676358" "cmake;3.22.1"
-          printf 'ANDROID_NDK_ROOT=%s/ndk/28.2.13676358\n' "$ANDROID_HOME" >> "$GITHUB_ENV"
+          set -Eeuo pipefail
+          sdk_root="${ANDROID_SDK_ROOT:-${ANDROID_HOME:-/usr/local/lib/android/sdk}}"
+          sdkmanager_path=$(find "$sdk_root/cmdline-tools" -maxdepth 3 \
+            -type f -name sdkmanager -print -quit)
+          if [ -z "$sdkmanager_path" ]; then
+            echo "sdkmanager not found under $sdk_root/cmdline-tools" >&2
+            exit 1
+          fi
+          "$sdkmanager_path" \
+            "platform-tools" \
+            "platforms;android-35" \
+            "build-tools;35.0.0" \
+            "ndk;28.2.13676358" \
+            "cmake;3.22.1"
+          printf 'ANDROID_SDK_ROOT=%s\n' "$sdk_root" >> "$GITHUB_ENV"
+          printf 'ANDROID_NDK_ROOT=%s/ndk/28.2.13676358\n' \
+            "$sdk_root" >> "$GITHUB_ENV"
+
       - uses: gradle/actions/setup-gradle@v4
         with:
           cache-read-only: ${{ github.event_name == 'pull_request' }}
