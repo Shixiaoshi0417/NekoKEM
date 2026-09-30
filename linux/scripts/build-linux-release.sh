@@ -220,7 +220,7 @@ printf 'NekoKEM Linux release test\nBinary:\000\001\377\n' > "$test_root/input.b
     export OPENSSL_CONF=/dev/null
     export OPENSSL_MODULES="$test_root/no-external-modules"
     export LD_LIBRARY_PATH="$test_root/no-shared-libraries"
-    test "$("${run_command[@]}" --version)" = "NekoKEM 3.1.1"
+    test "$("${run_command[@]}" --version)" = "NekoKEM 3.2.0"
     printf '%s\n%s\n' "$password" "$password" | \
         "${run_command[@]}" keygen
     test -s keys/public.key

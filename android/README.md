@@ -1,4 +1,4 @@
-# NekoKEM Android v3.1.1
+# NekoKEM Android v3.2.0
 
 <p align="center">
   <img src="../icon.png" alt="NekoKEM App icon" width="160">
@@ -9,9 +9,11 @@ JNI 不实现或解析 X448、ML-KEM-1024、HKDF、AES-GCM、NKEM 或 NKPR。
 Core 仅处理 NKEM v3 文件容器；NKEM v1/v2 已不再支持。NKPR 是独立的
 私钥容器，仍由 Core 处理且格式不变。
 
-当前正式 App 版本为 `3.1.1`，Core 版本保持 `3.1`，Android application ID
+当前正式 App 版本为 `3.2.0`，Core 版本保持 `3.1`，Android application ID
 与 namespace 均为 `com.shixiaoshi0417.nekokem`。协议容器版本仍为
 **NKEM v3**，与 App 版本号相互独立；NKPR 格式保持不变。
+
+**v3.2.0 更换发布签名：先导出公钥和加密 NKPR 私钥、验证备份并保存私钥密码，再卸载旧版重装。卸载会删除内部密钥。** 详见 [中英双语更新日志](../release/v3.2.0.md)。
 
 ## 工具链
 

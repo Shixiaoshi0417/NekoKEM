@@ -1,7 +1,7 @@
 <?xml version='1.0' encoding='utf-8'?>
 <resources>
     <string name="app_name">NekoKEM</string>
-    <string name="app_version">NekoKEM v3.1.1</string>
+    <string name="app_version">NekoKEM v3.2.0</string>
     <string name="navigation_files">ファイルの暗号化・復号</string>
     <string name="navigation_keys">鍵の管理</string>
     <string name="navigation_settings">設定</string>
