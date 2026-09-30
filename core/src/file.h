@@ -14,7 +14,7 @@
 #define NKEM_V3_ALGORITHM_ID 3U
 #define NKEM_V3_SALT_SIZE 32U
 
-/* SP 800-38D section 5.5: 2^39 - 256 bits = 2^36 - 32 bytes. */
+/* SP 800-38D section 5.2.1.1: 2^39 - 256 bits = 2^36 - 32 bytes. */
 #define NKEM_GCM_MAX_DATA_SIZE ((UINT64_C(1) << 36) - UINT64_C(32))
 
 typedef struct {
@@ -50,6 +50,7 @@ void print_openssl_error(const char *context);
 void print_system_error(const char *context);
 
 int ensure_directory(const char *path, mode_t mode);
+FILE *file_open_regular(const char *path);
 int file_get_size(FILE *stream, uint64_t *size);
 int file_read_exact(FILE *stream, void *buffer, size_t length);
 int file_write_all(FILE *stream, const void *buffer, size_t length);

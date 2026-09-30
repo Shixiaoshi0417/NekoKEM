@@ -30,7 +30,7 @@ DEPS = $(OBJECTS:.o=.d)
 .PHONY: all core clean test analyze test-ubsan test-parser fuzz-seeds \
 	fuzz-build test-key-management test-progress test-progress-large \
 	test-file-security test-version-rejection test-gcm-limit \
-	test-hybrid-kdf test-asan
+	test-hybrid-kdf test-asan test-input-boundaries
 
 all: $(TARGET)
 
@@ -156,6 +156,16 @@ test-key-management: $(CORE_LIBRARY)
 		-o "$$key_binary"; \
 	"$$key_binary"
 
+test-input-boundaries: $(CORE_LIBRARY)
+	@set -eu; \
+	input_binary=$$(mktemp /tmp/nekokem-input-boundary-tests.XXXXXX); \
+	cleanup_input() { rm -f "$$input_binary"; }; \
+	trap cleanup_input EXIT INT TERM; \
+	$(CC) $(CPPFLAGS) $(CFLAGS) $(LDFLAGS) \
+		../core/tests/input_boundary_tests.c $(CORE_LIBRARY) $(LDLIBS) \
+		-o "$$input_binary"; \
+	"$$input_binary"
+
 test-version-rejection: $(CORE_LIBRARY)
 	@set -eu; \
 	version_binary=$$(mktemp /tmp/nekokem-version-rejection-tests.XXXXXX); \
@@ -182,7 +192,7 @@ test-progress test-progress-large: $(CORE_LIBRARY)
 	fi
 
 test: $(TARGET) analyze test-ubsan test-parser test-file-security test-gcm-limit \
-	test-key-management test-version-rejection test-progress test-hybrid-kdf \
+	test-key-management test-version-rejection test-progress test-hybrid-kdf test-input-boundaries \
 	test-asan
 	@set -eu; \
 	test_dir=$$(mktemp -d); \

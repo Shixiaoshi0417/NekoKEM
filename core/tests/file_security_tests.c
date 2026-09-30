@@ -231,6 +231,50 @@ cleanup:
     return success;
 }
 
+static int test_regular_stream_validation(const char *root)
+{
+    char regular_path[256];
+    char symbolic_path[256];
+    FILE *stream = NULL;
+    uint64_t size = UINT64_MAX;
+    int flags;
+    int success = 0;
+
+    if (!make_path(regular_path, sizeof(regular_path), root, "empty") ||
+        !make_path(symbolic_path, sizeof(symbolic_path), root, "empty.link") ||
+        !write_plain_file(regular_path, NULL, 0U, 0600) ||
+        symlink(regular_path, symbolic_path) != 0) {
+        goto cleanup;
+    }
+    stream = file_open_regular(symbolic_path);
+    if (stream == NULL) {
+        goto cleanup;
+    }
+    flags = fcntl(fileno(stream), F_GETFD);
+    if (!file_get_size(stream, &size) || size != 0U ||
+        flags < 0 || (flags & FD_CLOEXEC) == 0 ||
+        fgetc(stream) != EOF || ferror(stream) != 0) {
+        goto cleanup;
+    }
+    if (fclose(stream) != 0) {
+        stream = NULL;
+        goto cleanup;
+    }
+    stream = file_open_regular(root);
+    if (stream != NULL) {
+        goto cleanup;
+    }
+    success = 1;
+
+cleanup:
+    if (stream != NULL) {
+        (void)fclose(stream);
+    }
+    (void)unlink(symbolic_path);
+    (void)unlink(regular_path);
+    return success;
+}
+
 static int stage_bytes(AtomicFile *output, const char *path,
                        const unsigned char *data, size_t length)
 {
@@ -494,6 +538,10 @@ int main(void)
     }
     if (!test_regular_file_validation(test_directory)) {
         fprintf(stderr, "Regular-file validation subtest failed\n");
+        goto cleanup;
+    }
+    if (!test_regular_stream_validation(test_directory)) {
+        fprintf(stderr, "Regular-stream validation subtest failed\n");
         goto cleanup;
     }
     if (!test_write_failures(test_directory)) {
