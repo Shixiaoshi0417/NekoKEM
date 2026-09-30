@@ -29,12 +29,19 @@ adb wait-for-device
 adb push android/app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk /data/local/tmp/nekokem-locale-tests.apk
 for system_locale in ja-JP de-DE; do
     language=${system_locale%%-*}
+    screenshot_prefix=large-dark
+    if [[ "$language" == de ]]; then
+        adb shell cmd uimode night no
+        adb shell wm size 720x1280
+        adb shell wm density 320
+        screenshot_prefix=small-light
+    fi
     adb shell run-as com.shixiaoshi0417.nekokem rm -f cache/i18n-system-ready
-    timeout 90s adb shell am instrument -w -e languagePhase system -e expectedSystemLanguage "$language" "$runner" > "$report_dir/system-$language.txt" &
+    timeout 90s adb shell am instrument -w -e languagePhase system -e expectedSystemLanguage "$language" -e screenshotPrefix "$screenshot_prefix" "$runner" > "$report_dir/system-$language.txt" &
     instrument_pid=$!
     ready=0
     for attempt in $(seq 1 60); do
-        if adb shell run-as com.shixiaoshi0417.nekokem test -f cache/i18n-system-ready; then ready=1; break; fi
+        if adb shell "run-as com.shixiaoshi0417.nekokem sh -c 'test -f cache/i18n-system-ready'"; then ready=1; break; fi
         sleep 1
     done
     [[ "$ready" == 1 ]]
@@ -44,3 +51,10 @@ for system_locale in ja-JP de-DE; do
     grep -Fx 'INSTRUMENTATION_RESULT: result=temporary-key-tests-passed' "$report_dir/system-$language.txt"
     grep -Fx 'INSTRUMENTATION_CODE: -1' "$report_dir/system-$language.txt"
 done
+
+# Repeat the UI language/layout assertions at 360x640 dp in light mode.
+# JNI/SAF gates already executed in full above; this phase exercises the UI only.
+adb shell am force-stop com.shixiaoshi0417.nekokem
+adb shell am instrument -w -e languagePhase layout -e screenshotPrefix small-light "$runner" | tee "$report_dir/layout-small-light.txt"
+grep -Fx 'INSTRUMENTATION_RESULT: result=temporary-key-tests-passed' "$report_dir/layout-small-light.txt"
+grep -Fx 'INSTRUMENTATION_CODE: -1' "$report_dir/layout-small-light.txt"

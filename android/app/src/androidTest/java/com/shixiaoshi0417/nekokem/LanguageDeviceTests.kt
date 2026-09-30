@@ -16,6 +16,7 @@ import com.shixiaoshi0417.nekokem.i18n.AppLanguages
 /** Runs inside the existing device runner, with the real Compose Activity. */
 internal fun runLanguageDeviceTests(
     instrumentation: Instrumentation, phase: String?, expectedSystemLanguage: String?,
+    screenshotPrefix: String,
 ) {
     val context = instrumentation.targetContext
     fun findText(root: AccessibilityNodeInfo?, text: String): AccessibilityNodeInfo? {
@@ -27,10 +28,20 @@ internal fun runLanguageDeviceTests(
     }
     fun node(text: String): AccessibilityNodeInfo? =
         findText(instrumentation.uiAutomation.rootInActiveWindow, text)
-    fun awaitNode(text: String): AccessibilityNodeInfo? {
+    fun scrollable(root: AccessibilityNodeInfo?): AccessibilityNodeInfo? {
+        if (root == null) return null
+        if (root.isScrollable) return root
+        for (i in 0 until root.childCount) scrollable(root.getChild(i))?.let { return it }
+        return null
+    }
+    fun awaitNode(text: String, scrollAction: Int? = null): AccessibilityNodeInfo? {
         val deadline = SystemClock.uptimeMillis() + 5000
         while (SystemClock.uptimeMillis() < deadline) {
             node(text)?.let { return it }
+            if (scrollAction != null) {
+                scrollable(instrumentation.uiAutomation.rootInActiveWindow)?.performAction(scrollAction)
+                instrumentation.waitForIdleSync()
+            }
             SystemClock.sleep(100)
         }
         return null
@@ -52,7 +63,7 @@ internal fun runLanguageDeviceTests(
                 if (colors.size > 24) {
                     val directory = File(context.cacheDir, "i18n-screens")
                     check(directory.isDirectory || directory.mkdir())
-                    File(directory, "$name.png").outputStream().use {
+                    File(directory, "$screenshotPrefix-$name.png").outputStream().use {
                         check(screenshot.compress(Bitmap.CompressFormat.PNG, 100, it))
                     }
                     return
@@ -168,8 +179,8 @@ internal fun runLanguageDeviceTests(
         check(awaitNode(activity.getString(R.string.settings_language_title)) != null)
         capture("settings")
         click(activity.getString(R.string.settings_language_title))
-        AppLanguages.names(context).drop(1).forEach { check(awaitNode(it) != null) { "Missing language option $it" } }
-        check(awaitNode(activity.getString(R.string.settings_language_system)) != null)
+        AppLanguages.names(context).drop(1).forEach { check(awaitNode(it, AccessibilityNodeInfo.ACTION_SCROLL_FORWARD) != null) { "Missing language option $it" } }
+        check(awaitNode(activity.getString(R.string.settings_language_system), AccessibilityNodeInfo.ACTION_SCROLL_BACKWARD) != null)
         capture("language-picker")
         click(activity.getString(R.string.settings_language_system))
         val deadline = SystemClock.uptimeMillis() + 5000
