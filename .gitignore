@@ -109,3 +109,6 @@ nekokem-keystore-password.enc
 .DS_Store
 Thumbs.db
 Desktop.ini
+
+# Public recipient certificate only; its private key remains outside the repository.
+!/release/signing-recovery-recipient.pem

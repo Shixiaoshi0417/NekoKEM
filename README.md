@@ -14,6 +14,10 @@ NekoKEM 是一个用于学习 OpenSSL 3.5 EVP API 的实验性后量子文件加
 
 本项目不自行实现任何密码算法，也不依赖 liboqs。**它没有经过安全审计，不应被视为生产级软件，也不应用来保护重要或敏感数据。**
 
+## 发布版本 v3.2.0
+
+Android 和 Linux CLI 版本为 `3.2.0`，Core 保持 `3.1`。五种界面语言、跟随系统选项和安全修复详见 [更新日志](release/v3.2.0.md)。**Android 签名密钥已更换：先导出公钥与加密 NKPR 私钥、验证备份并保存私钥密码，再卸载旧版重装；卸载会删除应用内部密钥。** NKEM v3 和 NKPR v1 格式不变，NKEM v1/v2 不再支持。
+
 ## 发布版本 v3.1.1
 
 Android App 版本为 `3.1.1`，Core 版本保持 `3.1`，application ID 为
@@ -80,7 +84,7 @@ CLI 示例：
 
 `--lang` 仅影响本次命令。`--set-lang` 将默认语言保存到 `$XDG_CONFIG_HOME/nekokem/language`；XDG_CONFIG_HOME 未设置或为相对路径时使用 `$HOME/.config/nekokem/language`。配置文件权限为 `0600`，无需 root 权限。优先级为 `--lang` → 已保存设置 → `LC_ALL` → `LC_MESSAGES` → `LANG` → 英语。`system` 恢复自动检测；无效或损坏的设置安全回退系统检测。系统检测支持 `zh_CN.UTF-8`、`ja_JP.UTF-8` 等常见 POSIX Locale。ASCII 或非 UTF-8 终端下 CLI 提示回退英语。全局语言选项放在命令之前；命令之后的文件参数按原样处理。可使用 `--` 显式结束全局选项解析。语言配置和帮助不会交互询问语言。
 
-协议标识、密码学算法名、CLI 参数、环境变量名及 `--version` 输出保持不变。上游 OpenSSL/操作系统的诊断细节保留原文。这些语言参数为本分支新增，先前发行二进制可能尚不提供。
+协议标识、密码学算法名、CLI 参数、环境变量名及 `--version` 输出保持不变。上游 OpenSSL/操作系统的诊断细节保留原文。这些语言参数从 v3.2.0 开始提供，旧版二进制可能不支持。
 
 ## 目录结构
 

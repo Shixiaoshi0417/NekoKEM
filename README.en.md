@@ -14,6 +14,10 @@ NekoKEM is an experimental post-quantum file encryption tool for learning the Op
 
 The project does not implement cryptographic algorithms itself and does not depend on liboqs. **It has not undergone a security audit, must not be considered production-grade software, and must not be used to protect important or sensitive data.**
 
+## Release v3.2.0
+
+Android and Linux CLI versions are `3.2.0`; Core remains `3.1`. See the [release notes](release/v3.2.0.md) for five interface languages, system-language selection and security fixes. **The Android signing key has changed: export the public key and encrypted NKPR private key, verify the backup and retain the private-key password before uninstalling and reinstalling. Uninstalling removes app-private keys.** NKEM v3 and NKPR v1 formats are unchanged; NKEM v1/v2 are no longer supported.
+
 ## Release v3.1.1
 
 The Android App version is `3.1.1`; the Core version remains `3.1`, and the application ID is `com.shixiaoshi0417.nekokem`. See [`android/README.md`](android/README.md) for the Android project and build instructions. App version 3.1.1 does not change protocol numbering: the default file container remains **NKEM v3**, and the NKPR format is unchanged.
@@ -73,7 +77,7 @@ CLI examples:
 
 `--lang` applies to one command. `--set-lang` saves the default in `$XDG_CONFIG_HOME/nekokem/language`, or `$HOME/.config/nekokem/language` when XDG_CONFIG_HOME is missing or relative. The configuration file has mode `0600`; no root permission is required. Priority is `--lang` → saved preference → `LC_ALL` → `LC_MESSAGES` → `LANG` → English. `system` restores automatic detection; invalid or damaged preferences safely fall back to system detection. Common POSIX locales such as `zh_CN.UTF-8` and `ja_JP.UTF-8` are accepted for system detection. On an ASCII or non-UTF-8 terminal, CLI messages fall back to English. Global language options precede the command; subsequent file arguments are preserved verbatim. Use `--` to explicitly end global option parsing. Language configuration and help never request interactive language input.
 
-Protocol identifiers, cryptographic algorithm names, CLI options, environment variable names, and `--version` output are unchanged. Upstream OpenSSL/OS diagnostic details retain their original text. These language options are new in this branch; earlier release binaries may not provide them.
+Protocol identifiers, cryptographic algorithm names, CLI options, environment variable names, and `--version` output are unchanged. Upstream OpenSSL/OS diagnostic details retain their original text. These language options are available starting with v3.2.0; older binaries may not support them.
 
 ## Directory structure
 

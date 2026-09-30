@@ -1,6 +1,12 @@
 # Changelog
 
-## Unreleased
+## 3.2.0
+
+- 完整中英双语发布日志见 [v3.2.0](../release/v3.2.0.md)。
+- 五种语言、跟随系统、Android 系统级应用语言与 CLI 持久化语言设置。
+- 修复 Core 输入边界、SAF 取消/回滚/资源关闭、暂存 NKPR 导入和 fuzz CI 失败判定。
+- Android 发布签名已更换：备份公钥和加密 NKPR 私钥并保存密码后，再卸载旧版重装。
+- Full bilingual release notes: [v3.2.0](../release/v3.2.0.md). Five languages, system-language selection, security regressions and a new Android signing identity; export both keys and retain the private-key password before uninstalling/reinstalling.
 
 - 删除 NKEM v1/v2 加密、解密和兼容解析路径；当前仅支持 NKEM v3。
 - NKPR 私钥容器格式保持不变。
@@ -17,4 +23,4 @@
 - Android App 与 NekoKEM Core 的正式版本统一为 3.1。
 - 保留现有 Material 3 UI、本地密钥管理、SAF 导入导出、文件加解密进度与中英文界面。
 - 默认容器协议为 NKEM v3；该版本发布时仍兼容解密 NKEM v1/v2。当前
-  `Unreleased` 开发版本已移除这两条兼容路径，NKPR 格式不变。
+  `3.2.0` 版本已移除这两条兼容路径，NKPR 格式不变。

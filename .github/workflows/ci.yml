@@ -71,6 +71,9 @@ jobs:
       - name: Test fuzz result and process failure handling
         run: python3 .github/scripts/test_fuzz_smoke.py -v
 
+      - name: Test release signing configuration and identity persistence
+        run: python3 .github/scripts/test_release_signing.py -v
+
       - name: Run parser fuzz smoke tests
         env:
           AFL_I_DONT_CARE_ABOUT_MISSING_CRASHES: "1"
