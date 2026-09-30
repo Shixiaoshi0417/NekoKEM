@@ -117,6 +117,12 @@ android {
     }
 }
 
+androidComponents {
+    beforeVariants(selector().withBuildType("release")) { variant ->
+        if (emulatorTest) variant.enable = false
+    }
+}
+
 kotlin {
     compilerOptions {
         jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17)

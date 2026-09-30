@@ -4,12 +4,15 @@ set -Eeuo pipefail
 report_dir=${1:?report directory required}
 mkdir -p "$report_dir"
 collect_evidence() {
-    adb exec-out run-as com.shixiaoshi0417.nekokem tar -czf - -C cache i18n-screens > "$report_dir/screens.tar.gz" || true
+    # Compress on the host: older Android tar may close the adb stream before its
+    # gzip child finishes, leaving a truncated archive despite a zero exit code.
+    adb exec-out run-as com.shixiaoshi0417.nekokem tar -cf - -C cache i18n-screens |
+        gzip > "$report_dir/screens.tar.gz" || return 1
     adb exec-out screencap -p > "$report_dir/final-screen.png" || true
     adb logcat -d -s AndroidRuntime > "$report_dir/android-runtime.txt" || true
 }
 # Collection cannot change test status; every phase still requires both success markers.
-trap collect_evidence EXIT
+trap 'collect_evidence || true' EXIT
 adb install -r android/app/build/outputs/apk/debug/app-debug.apk
 adb install -r android/app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk
 runner=com.shixiaoshi0417.nekokem.test/com.shixiaoshi0417.nekokem.TemporaryKeyInstrumentation
@@ -58,3 +61,22 @@ adb shell am force-stop com.shixiaoshi0417.nekokem
 adb shell am instrument -w -e languagePhase layout -e screenshotPrefix small-light "$runner" | tee "$report_dir/layout-small-light.txt"
 grep -Fx 'INSTRUMENTATION_RESULT: result=temporary-key-tests-passed' "$report_dir/layout-small-light.txt"
 grep -Fx 'INSTRUMENTATION_CODE: -1' "$report_dir/layout-small-light.txt"
+
+collect_evidence
+python3 - "$report_dir/screens.tar.gz" <<'PY'
+import sys
+import tarfile
+with tarfile.open(sys.argv[1], 'r:gz') as archive:
+    for prefix in ('large-dark', 'small-light'):
+        for name in ('zh-CN', 'zh-TW', 'en', 'ja', 'ko', 'settings', 'language-picker'):
+            image = archive.extractfile(f'i18n-screens/{prefix}-{name}.png')
+            assert image is not None and image.read(8) == b'\x89PNG\r\n\x1a\n'
+    for name in ('large-dark-system-ja', 'small-light-system-de'):
+        image = archive.extractfile(f'i18n-screens/{name}.png')
+        assert image is not None and image.read(8) == b'\x89PNG\r\n\x1a\n'
+    # Consume the complete gzip stream, including its trailer.
+    archive.getmembers()
+print('All 16 rendered language/layout screenshots archived')
+PY
+gzip -t "$report_dir/screens.tar.gz"
+trap - EXIT
