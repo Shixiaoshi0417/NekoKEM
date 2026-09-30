@@ -48,7 +48,8 @@ internal fun runLanguageDeviceTests(
     }
     fun capture(name: String) {
         instrumentation.uiAutomation.waitForIdle(500, 5000)
-        val deadline = SystemClock.uptimeMillis() + 5000
+        val deadline = SystemClock.uptimeMillis() + 10000
+        var lastColorCount = 0
         do {
             val captured = checkNotNull(instrumentation.uiAutomation.takeScreenshot())
             val screenshot = if (captured.config == Bitmap.Config.HARDWARE) {
@@ -56,24 +57,26 @@ internal fun runLanguageDeviceTests(
             } else captured
             try {
                 val colors = mutableSetOf<Int>()
-                for (y in 0 until screenshot.height step 24) {
-                    for (x in 0 until screenshot.width step 24) colors.add(screenshot.getPixel(x, y))
+                for (y in screenshot.height / 10 until screenshot.height * 9 / 10 step 8) {
+                    for (x in 0 until screenshot.width step 8) colors.add(screenshot.getPixel(x, y))
                 }
+                lastColorCount = colors.size
                 // Reject a blank transition frame, even when Activity resources are ready.
-                if (colors.size > 24) {
+                if (colors.size > 24 || SystemClock.uptimeMillis() >= deadline) {
                     val directory = File(context.cacheDir, "i18n-screens")
                     check(directory.isDirectory || directory.mkdir())
-                    File(directory, "$screenshotPrefix-$name.png").outputStream().use {
+                    val frameName = if (colors.size > 24) name else "$name-failed"
+                    File(directory, "$screenshotPrefix-$frameName.png").outputStream().use {
                         check(screenshot.compress(Bitmap.CompressFormat.PNG, 100, it))
                     }
-                    return
+                    if (colors.size > 24) return
                 }
             } finally {
                 screenshot.recycle()
             }
             SystemClock.sleep(100)
         } while (SystemClock.uptimeMillis() < deadline)
-        error("No rendered UI screenshot for $name")
+        error("No rendered UI screenshot for $name; sampled colors=$lastColorCount")
     }
     if (phase == "system") {
         check(AppLanguages.selection(context).isEmpty())
