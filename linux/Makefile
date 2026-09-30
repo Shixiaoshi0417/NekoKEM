@@ -20,7 +20,7 @@ CORE_SOURCES = ../core/src/nekokem.c \
 	../core/src/key_management.c \
 	../core/src/nekokem_v3.c ../core/src/kem.c ../core/src/hybrid.c \
 	../core/src/aes.c ../core/src/file.c ../core/src/file_v3.c ../core/src/secure_mem.c ../core/src/private_key.c
-CLI_SOURCES = src/main.c src/cli.c
+CLI_SOURCES = src/main.c src/cli.c src/i18n.c
 SOURCES = $(CLI_SOURCES) $(CORE_SOURCES)
 CORE_OBJECTS = $(CORE_SOURCES:.c=.o)
 CLI_OBJECTS = $(CLI_SOURCES:.c=.o)
@@ -203,7 +203,7 @@ test-progress test-progress-large: $(CORE_LIBRARY)
 
 test: $(TARGET) analyze test-ubsan test-parser test-file-security test-gcm-limit \
 	test-key-management test-version-rejection test-progress test-hybrid-kdf test-input-boundaries \
-	test-asan test-pem-interaction
+	test-asan test-pem-interaction test-i18n
 	@set -eu; \
 	test_dir=$$(mktemp -d); \
 	cleanup() { \
@@ -311,7 +311,7 @@ test: $(TARGET) analyze test-ubsan test-parser test-file-security test-gcm-limit
 		encrypted/tampered.nkem; \
 	rmdir encrypted; \
 	test ! -e encrypted; \
-	printf '5\n' | ./nekokem > menu-output.txt; \
+	printf '5\n' | LC_ALL=C.UTF-8 ./nekokem --lang zh-CN > menu-output.txt; \
 	grep -Fx '      NekoKEM' menu-output.txt >/dev/null; \
 	grep -Fx '1. 生成密钥' menu-output.txt >/dev/null; \
 	grep -Fx '5. 退出' menu-output.txt >/dev/null; \
@@ -388,3 +388,9 @@ clean:
 	rm -f ../core/fuzz/bin/fuzz_nkem ../core/fuzz/bin/fuzz_nkpr
 
 -include $(DEPS)
+
+.PHONY: test-i18n
+test-i18n: $(TARGET)
+	python3 ../scripts/check_i18n.py
+	python3 ../scripts/test_i18n_checks.py
+	python3 tests/i18n_tests.py ./$(TARGET)

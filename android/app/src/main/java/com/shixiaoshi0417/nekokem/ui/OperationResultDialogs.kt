@@ -1,6 +1,8 @@
 package com.shixiaoshi0417.nekokem.ui
 
 import androidx.annotation.StringRes
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.AlertDialog
@@ -32,7 +34,7 @@ fun OperationCompletedDialog(
         onDismissRequest = onDismiss,
         title = { Text(stringResource(R.string.completion_title)) },
         text = {
-            Column {
+            Column(Modifier.verticalScroll(rememberScrollState())) {
                 ResultLine(
                     label = stringResource(R.string.completion_operation),
                     value = stringResource(operationResource),
@@ -85,7 +87,7 @@ fun OperationErrorDialog(
         onDismissRequest = onDismiss,
         title = { Text(stringResource(R.string.error_dialog_title)) },
         text = {
-            Column {
+            Column(Modifier.verticalScroll(rememberScrollState())) {
                 ResultLine(
                     label = stringResource(R.string.completion_operation),
                     value = stringResource(operationResource),

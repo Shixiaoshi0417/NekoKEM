@@ -26,7 +26,7 @@
     <string name="settings_theme_system">跟随系统</string>
     <string name="settings_dynamic_color_title">动态颜色</string>
     <string name="settings_dynamic_color_system">设备支持时启用</string>
-    <string name="settings_language_title">语言</string>
+    <string name="settings_language_title">语言 / Language</string>
     <string name="settings_language_system">跟随系统</string>
     <string name="settings_version_title">版本</string>
 
@@ -101,7 +101,9 @@
     <string name="size_kib">%1$s KiB</string>
     <string name="size_mib">%1$s MiB</string>
     <string name="size_gib">%1$s GiB</string>
-    <string name="duration_seconds">%1$d 秒</string>
+    <plurals name="duration_seconds">
+        <item quantity="other">%1$d 秒</item>
+    </plurals>
     <string name="duration_minutes_seconds">%1$d 分 %2$d 秒</string>
     <string name="speed_per_second">%1$s/秒</string>
 
@@ -170,4 +172,5 @@
     <string name="default_decrypted_filename">解密文件</string>
     <string name="default_public_key_filename">public.key</string>
     <string name="default_private_key_filename">private.nkpr.enc</string>
+    <string name="error_language_save">无法保存语言设置，请重试。</string>
 </resources>

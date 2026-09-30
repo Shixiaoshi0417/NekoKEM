@@ -10,8 +10,9 @@ if(NOT ANDROID)
     message(FATAL_ERROR "NekoKEM Android native code requires the Android NDK")
 endif()
 
-if(NOT ANDROID_ABI STREQUAL "arm64-v8a")
-    message(FATAL_ERROR "Only arm64-v8a is supported")
+if(NOT ANDROID_ABI STREQUAL "arm64-v8a" AND
+   NOT (NEKOKEM_EMULATOR_TEST AND ANDROID_ABI STREQUAL "x86_64"))
+    message(FATAL_ERROR "Production supports arm64-v8a; x86_64 requires NEKOKEM_EMULATOR_TEST")
 endif()
 
 get_filename_component(
@@ -22,14 +23,14 @@ get_filename_component(
 
 set(
     OPENSSL_ANDROID_ROOT
-    "${CMAKE_CURRENT_SOURCE_DIR}/third_party/openssl/arm64-v8a"
+    "${CMAKE_CURRENT_SOURCE_DIR}/third_party/openssl/${ANDROID_ABI}"
 )
 set(OPENSSL_CRYPTO_LIBRARY "${OPENSSL_ANDROID_ROOT}/lib/libcrypto.a")
 
 if(NOT EXISTS "${OPENSSL_CRYPTO_LIBRARY}")
     message(
         FATAL_ERROR
-        "Android arm64 OpenSSL is missing. Run scripts/build-openssl-android.sh"
+        "Android ${ANDROID_ABI} OpenSSL is missing. Run scripts/build-openssl-android.sh"
     )
 endif()
 

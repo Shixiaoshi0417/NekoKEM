@@ -4,6 +4,8 @@ on:
   pull_request:
     branches:
       - main
+      - fix/audit-core-input-boundaries
+      - fix/android-temporary-nkpr-suffix
     paths:
       - "core/**"
       - "linux/**"
@@ -48,6 +50,14 @@ jobs:
           sh core/tests/install_script_tests.sh \
             "${{ matrix.arch }}" \
             "dist/NekoKEM-linux-${{ matrix.arch }}.tar.gz"
+
+      - name: Run i18n regressions against the native release binary
+        run: |
+          release_test_dir="$RUNNER_TEMP/release-i18n"
+          mkdir -p "$release_test_dir"
+          tar -xzf "dist/NekoKEM-linux-${{ matrix.arch }}.tar.gz" -C "$release_test_dir" --strip-components=1
+          python3 scripts/check_i18n.py
+          python3 linux/tests/i18n_tests.py "$release_test_dir/nekokem"
 
       - name: Upload Linux archive
         uses: actions/upload-artifact@v4

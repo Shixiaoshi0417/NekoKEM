@@ -1,4 +1,5 @@
 #include "cli.h"
+#include "i18n.h"
 
 #include "file.h"
 #include "nekokem.h"
@@ -29,18 +30,34 @@ typedef struct {
     size_t capacity;
 } PasswordBuffer;
 
-void cli_print_usage(const char *program)
+static void print_usage(FILE *output, const char *program)
 {
-    fprintf(stderr,
-            "Usage:\n"
+    fprintf(output,
+            file_message("Usage:\n"
             "  %s\n"
             "  %s --version\n"
             "  %s keygen\n"
             "  %s keygen hybrid\n"
             "  %s encrypt hybrid <input_file> <output_file> <public.key>\n"
             "  %s decrypt hybrid <input_file> <output_file> "
-            "<private.key|private.key.enc>\n",
+            "<private.key|private.key.enc>\n"),
             program, program, program, program, program, program);
+    fputs(file_message(
+        "  --help                 Show this help\n"
+        "  --lang LANGUAGE        Override language for this command\n"
+        "  --set-lang LANGUAGE    Save language (system, en, zh-CN, zh-TW, ja, ko)\n"
+        "Language: --lang > saved preference > LC_ALL > LC_MESSAGES > LANG > en\n"
+        "Use --lang system or --set-lang system to follow the system.\n"), output);
+}
+
+void cli_print_usage(const char *program)
+{
+    print_usage(stderr, program);
+}
+
+void cli_print_help(const char *program)
+{
+    print_usage(stdout, program);
 }
 
 static void password_buffer_cleanup(PasswordBuffer *password)
@@ -112,12 +129,12 @@ static int read_password_line(const char *prompt,
         goto cleanup;
     }
     if (too_long != 0) {
-        fprintf(stderr, "Password exceeds %u bytes\n",
+        fprintf(stderr, file_message("Password exceeds %u bytes\n"),
                 MAX_PASSWORD_SIZE);
         goto cleanup;
     }
     if (length == 0U) {
-        fprintf(stderr, "Password must not be empty\n");
+        fprintf(stderr, file_message("Password must not be empty\n"));
         goto cleanup;
     }
 
@@ -151,15 +168,15 @@ static int prompt_new_private_key_password(PasswordBuffer *password)
     PasswordBuffer confirmation = {0};
     int success = 0;
 
-    if (!read_password_line("请输入私钥保护密码：", password) ||
-        !read_password_line("请再次输入私钥保护密码：",
+    if (!read_password_line(file_message("请输入私钥保护密码："), password) ||
+        !read_password_line(file_message("请再次输入私钥保护密码："),
                             &confirmation)) {
         goto cleanup;
     }
     if (password->length != confirmation.length ||
         CRYPTO_memcmp(password->data, confirmation.data,
                       password->length) != 0) {
-        fprintf(stderr, "两次输入的密码不一致\n");
+        fprintf(stderr, file_message("两次输入的密码不一致\n"));
         goto cleanup;
     }
     success = 1;
@@ -188,10 +205,10 @@ static int generate_hybrid_keypair(int interactive)
     }
     password_buffer_cleanup(&password);
     if (interactive != 0) {
-        printf("已生成：\n  %s\n  %s\n",
+        printf(file_message("已生成：\n  %s\n  %s\n"),
                PUBLIC_KEY_PATH, PROTECTED_PRIVATE_KEY_PATH);
     } else {
-        printf("Generated hybrid X448 + ML-KEM-1024 keys: %s and %s\n",
+        printf(file_message("Generated hybrid X448 + ML-KEM-1024 keys: %s and %s\n"),
                PUBLIC_KEY_PATH, PROTECTED_PRIVATE_KEY_PATH);
     }
     success = 1;
@@ -214,7 +231,7 @@ int cli_run_hybrid_encrypt(const char *input_path,
                               public_key_path)) {
         return 0;
     }
-    printf("Encrypted hybrid NKEM v3 %s -> %s\n",
+    printf(file_message("Encrypted hybrid NKEM v3 %s -> %s\n"),
            input_path, output_path);
     return 1;
 }
@@ -227,7 +244,7 @@ int cli_run_hybrid_decrypt(const char *input_path,
     int success = 0;
 
     if (nekokem_private_key_requires_password(private_key_path) != 0 &&
-        !read_password_line("请输入私钥密码：", &password)) {
+        !read_password_line(file_message("请输入私钥密码："), &password)) {
         goto cleanup;
     }
     if (!nekokem_decrypt_file(input_path, output_path, private_key_path,
@@ -235,7 +252,7 @@ int cli_run_hybrid_decrypt(const char *input_path,
         goto cleanup;
     }
     password_buffer_cleanup(&password);
-    printf("Decrypted NKEM v3 %s -> %s\n",
+    printf(file_message("Decrypted NKEM v3 %s -> %s\n"),
            input_path, output_path);
     success = 1;
 
@@ -281,7 +298,7 @@ static char *read_prompt_line(const char *prompt)
         return NULL;
     }
     if (too_long != 0) {
-        fprintf(stderr, "Input exceeds %u bytes and was discarded\n",
+        fprintf(stderr, file_message("Input exceeds %u bytes and was discarded\n"),
                 MAX_PROMPT_LINE_SIZE);
         line[0] = '\0';
         return line;
@@ -330,11 +347,11 @@ static int read_pasted_key_line(char **line,
         goto cleanup;
     }
     if (character == EOF && length == 0U && too_long == 0) {
-        fprintf(stderr, "Pasted key ended before two PEM blocks\n");
+        fprintf(stderr, file_message("Pasted key ended before two PEM blocks\n"));
         goto cleanup;
     }
     if (too_long != 0) {
-        fprintf(stderr, "Pasted-key line exceeds %u bytes and was discarded\n",
+        fprintf(stderr, file_message("Pasted-key line exceeds %u bytes and was discarded\n"),
                 MAX_PASTED_KEY_LINE_SIZE);
         goto cleanup;
     }
@@ -384,7 +401,7 @@ static int collect_pasted_key(int private_key, char **temporary_path)
         goto cleanup;
     }
     if (strlen(directory) > SIZE_MAX - sizeof(filename)) {
-        fprintf(stderr, "Temporary key path is too long\n");
+        fprintf(stderr, file_message("Temporary key path is too long\n"));
         goto cleanup;
     }
     path = malloc(strlen(directory) + sizeof(filename));
@@ -396,7 +413,7 @@ static int collect_pasted_key(int private_key, char **temporary_path)
                            "%s%s", directory, filename);
     if (path_result < 0 ||
         (size_t)path_result >= strlen(directory) + sizeof(filename)) {
-        fprintf(stderr, "Cannot construct temporary key path\n");
+        fprintf(stderr, file_message("Cannot construct temporary key path\n"));
         goto cleanup;
     }
     descriptor = open(path, O_WRONLY | O_CREAT | O_EXCL |
@@ -420,7 +437,7 @@ static int collect_pasted_key(int private_key, char **temporary_path)
     }
 
     if (private_key != 0) {
-        if (fputs("请粘贴两个 PEM 私钥块；输入过程不会回显。\n",
+        if (fputs(file_message("请粘贴两个 PEM 私钥块；输入过程不会回显。\n"),
                   stdout) == EOF ||
             fflush(stdout) != 0) {
             print_system_error("Cannot display private-key prompt");
@@ -440,7 +457,7 @@ static int collect_pasted_key(int private_key, char **temporary_path)
             }
             echo_disabled = 1;
         }
-    } else if (fputs("请粘贴两个 PEM 公钥块：\n", stdout) == EOF ||
+    } else if (fputs(file_message("请粘贴两个 PEM 公钥块：\n"), stdout) == EOF ||
                fflush(stdout) != 0) {
         print_system_error("Cannot display public-key prompt");
         goto cleanup;
@@ -452,7 +469,7 @@ static int collect_pasted_key(int private_key, char **temporary_path)
             goto cleanup;
         }
         if (line_length > MAX_PASTED_KEY_SIZE - total_size) {
-            fprintf(stderr, "Pasted key exceeds the size limit\n");
+            fprintf(stderr, file_message("Pasted key exceeds the size limit\n"));
             goto cleanup;
         }
         if (!file_write_all(output, line, line_length)) {
@@ -535,23 +552,23 @@ static int select_key_input(int private_key,
 
     *key_path = NULL;
     *temporary = 0;
-    printf("\n1. 选择%s输入方式：\n"
+    printf(file_message("\n1. 选择%s输入方式：\n"
            "[1] %s文件路径\n"
-           "[2] 粘贴%s内容\n",
-           private_key != 0 ? "私钥" : "公钥",
-           private_key != 0 ? "私钥" : "公钥",
-           private_key != 0 ? "私钥" : "公钥");
-    choice = read_prompt_line("请选择 [1/2]：");
+           "[2] 粘贴%s内容\n"),
+           private_key != 0 ? file_message("私钥") : file_message("公钥"),
+           private_key != 0 ? file_message("私钥") : file_message("公钥"),
+           private_key != 0 ? file_message("私钥") : file_message("公钥"));
+    choice = read_prompt_line(file_message("请选择 [1/2]："));
     if (choice == NULL) {
         return 0;
     }
     if (strcmp(choice, "1") == 0) {
         free(choice);
         *key_path = read_prompt_line(
-            private_key != 0 ? "请输入私钥文件路径（支持 .enc）："
-                             : "请输入公钥文件路径：");
+            private_key != 0 ? file_message("请输入私钥文件路径（支持 .enc）：")
+                             : file_message("请输入公钥文件路径："));
         if (*key_path == NULL || (*key_path)[0] == '\0') {
-            fprintf(stderr, "密钥文件路径不能为空\n");
+            fprintf(stderr, file_message("密钥文件路径不能为空\n"));
             free(*key_path);
             *key_path = NULL;
             return 0;
@@ -567,7 +584,7 @@ static int select_key_input(int private_key,
         return 1;
     }
 
-    fprintf(stderr, "无效选择\n");
+    fprintf(stderr, file_message("无效选择\n"));
     free(choice);
     return 0;
 }
@@ -613,12 +630,12 @@ static char *interactive_encrypt_output_path(const char *input_path)
     char *output_path;
 
     if (filename_len == 0U) {
-        fprintf(stderr, "输入路径不包含文件名\n");
+        fprintf(stderr, file_message("输入路径不包含文件名\n"));
         return NULL;
     }
     if (filename_len >
         SIZE_MAX - sizeof(directory) - sizeof(suffix)) {
-        fprintf(stderr, "输出路径长度溢出\n");
+        fprintf(stderr, file_message("输出路径长度溢出\n"));
         return NULL;
     }
     output_len = sizeof(directory) + filename_len + sizeof(suffix);
@@ -629,7 +646,7 @@ static char *interactive_encrypt_output_path(const char *input_path)
     }
     if (snprintf(output_path, output_len, "%s/%s%s",
                  directory, filename, suffix) < 0) {
-        fprintf(stderr, "无法构造输出路径\n");
+        fprintf(stderr, file_message("无法构造输出路径\n"));
         free(output_path);
         return NULL;
     }
@@ -649,13 +666,13 @@ static char *interactive_decrypt_output_path(const char *input_path)
 
     if (filename_len <= suffix_len ||
         strcmp(filename + filename_len - suffix_len, suffix) != 0) {
-        fprintf(stderr, "输入文件必须以 .nkem 结尾\n");
+        fprintf(stderr, file_message("输入文件必须以 .nkem 结尾\n"));
         return NULL;
     }
     plaintext_filename_len = filename_len - suffix_len;
     if (plaintext_filename_len >
         SIZE_MAX - sizeof(directory) - 1U) {
-        fprintf(stderr, "输出路径长度溢出\n");
+        fprintf(stderr, file_message("输出路径长度溢出\n"));
         return NULL;
     }
     allocation_size = sizeof(directory) +
@@ -684,9 +701,9 @@ static int interactive_encrypt(void)
     if (!select_key_input(0, &key_path, &temporary)) {
         goto cleanup;
     }
-    input_path = read_prompt_line("请输入待加密文件路径：");
+    input_path = read_prompt_line(file_message("请输入待加密文件路径："));
     if (input_path == NULL || input_path[0] == '\0') {
-        fprintf(stderr, "输入文件路径不能为空\n");
+        fprintf(stderr, file_message("输入文件路径不能为空\n"));
         goto cleanup;
     }
     if (!ensure_directory("encrypted", 0700)) {
@@ -696,7 +713,7 @@ static int interactive_encrypt(void)
     if (output_path == NULL) {
         goto cleanup;
     }
-    printf("输出文件：%s\n", output_path);
+    printf(file_message("输出文件：%s\n"), output_path);
     success = cli_run_hybrid_encrypt(input_path, output_path, key_path);
 
 cleanup:
@@ -717,9 +734,9 @@ static int interactive_decrypt(void)
     if (!select_key_input(1, &key_path, &temporary)) {
         goto cleanup;
     }
-    input_path = read_prompt_line("请输入 .nkem 文件路径：");
+    input_path = read_prompt_line(file_message("请输入 .nkem 文件路径："));
     if (input_path == NULL || input_path[0] == '\0') {
-        fprintf(stderr, "输入文件路径不能为空\n");
+        fprintf(stderr, file_message("输入文件路径不能为空\n"));
         goto cleanup;
     }
     output_path = interactive_decrypt_output_path(input_path);
@@ -729,7 +746,7 @@ static int interactive_decrypt(void)
     if (!ensure_directory("plaintext", 0700)) {
         goto cleanup;
     }
-    printf("输出文件：%s\n", output_path);
+    printf(file_message("输出文件：%s\n"), output_path);
     success = cli_run_hybrid_decrypt(input_path, output_path, key_path);
 
 cleanup:
@@ -749,7 +766,7 @@ static int interactive_fingerprint(void)
     if (select_key_input(0, &key_path, &temporary) &&
         nekokem_public_key_fingerprint(key_path, fingerprint,
                                        sizeof(fingerprint))) {
-        printf("SHA-256 fingerprint:\n%s\n", fingerprint);
+        printf(file_message("SHA-256 fingerprint:\n%s\n"), fingerprint);
         success = 1;
     }
     cleanup_key_input(key_path, temporary);
@@ -762,7 +779,7 @@ int cli_run_interactive_menu(void)
     for (;;) {
         char *choice;
 
-        printf("====================\n"
+        printf(file_message("====================\n"
                "      NekoKEM\n"
                "====================\n"
                "\n"
@@ -771,8 +788,8 @@ int cli_run_interactive_menu(void)
                "3. 解密文件\n"
                "4. 查看公钥指纹\n"
                "5. 退出\n"
-               "\n");
-        choice = read_prompt_line("请选择 [1-5]：");
+               "\n"));
+        choice = read_prompt_line(file_message("请选择 [1-5]："));
         if (choice == NULL) {
             return feof(stdin) != 0 ? 1 : 0;
         }
@@ -788,7 +805,7 @@ int cli_run_interactive_menu(void)
             free(choice);
             return 1;
         } else {
-            fprintf(stderr, "无效选择，请输入 1 到 5。\n");
+            fprintf(stderr, file_message("无效选择，请输入 1 到 5。\n"));
         }
         free(choice);
     }

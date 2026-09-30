@@ -3,6 +3,7 @@
     <style name="Theme.NekoKEM" parent="android:style/Theme.Material.Light.NoActionBar">
         <item name="android:fontFamily">sans</item>
         <item name="android:windowLightStatusBar">true</item>
+        <item name="android:windowLightNavigationBar">true</item>
         <item name="android:navigationBarColor">#FFF8F6</item>
         <item name="android:statusBarColor">#FFF8F6</item>
     </style>

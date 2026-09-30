@@ -1,4 +1,6 @@
-# Security Policy
+[简体中文](SECURITY.md) | [English](SECURITY.en.md)
+
+# 安全政策
 
 ## 安全状态
 

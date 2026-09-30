@@ -114,7 +114,7 @@ static int nkpr_header_decode_internal(
 {
     if (memcmp(input, NKPR_MAGIC, 4U) != 0) {
         if (report_errors != 0) {
-            fprintf(stderr, "Invalid NKPR private-key magic\n");
+            fprintf(stderr, file_message("Invalid NKPR private-key magic\n"));
         }
         return 0;
     }
@@ -123,7 +123,7 @@ static int nkpr_header_decode_internal(
         input[6] != NKPR_CIPHER_ID_AES256_GCM ||
         input[7] != NKPR_FLAGS) {
         if (report_errors != 0) {
-            fprintf(stderr, "Unsupported NKPR private-key format\n");
+            fprintf(stderr, file_message("Unsupported NKPR private-key format\n"));
         }
         return 0;
     }
@@ -141,7 +141,7 @@ static int nkpr_header_decode_internal(
         input[26] != NKPR_NONCE_SIZE ||
         input[27] != NKPR_TAG_SIZE) {
         if (report_errors != 0) {
-            fprintf(stderr, "Unsupported NKPR protection parameters\n");
+            fprintf(stderr, file_message("Unsupported NKPR protection parameters\n"));
         }
         return 0;
     }
@@ -150,7 +150,7 @@ static int nkpr_header_decode_internal(
         header->ciphertext_len > (uint64_t)INT_MAX) {
         if (report_errors != 0) {
             fprintf(stderr,
-                    "Invalid NKPR private-key ciphertext length\n");
+                    file_message("Invalid NKPR private-key ciphertext length\n"));
         }
         return 0;
     }
@@ -170,7 +170,7 @@ static int nkpr_container_decode_internal(
         input_len < NKPR_HEADER_SIZE + NKPR_SALT_SIZE +
                         NKPR_NONCE_SIZE + NKPR_TAG_SIZE) {
         if (report_errors != 0) {
-            fprintf(stderr, "NKPR private-key container is truncated\n");
+            fprintf(stderr, file_message("NKPR private-key container is truncated\n"));
         }
         return 0;
     }
@@ -184,13 +184,13 @@ static int nkpr_container_decode_internal(
         !checked_size_add(expected_len, ciphertext_len, &expected_len) ||
         !checked_size_add(expected_len, NKPR_TAG_SIZE, &expected_len)) {
         if (report_errors != 0) {
-            fprintf(stderr, "NKPR private-key length overflows\n");
+            fprintf(stderr, file_message("NKPR private-key length overflows\n"));
         }
         return 0;
     }
     if (input_len != expected_len) {
         if (report_errors != 0) {
-            fprintf(stderr, "Invalid NKPR private-key container length\n");
+            fprintf(stderr, file_message("Invalid NKPR private-key container length\n"));
         }
         return 0;
     }
@@ -225,19 +225,19 @@ static int derive_protection_key(
     int success = 0;
 
     if (key == NULL) {
-        fprintf(stderr, "Invalid private-key protection output\n");
+        fprintf(stderr, file_message("Invalid private-key protection output\n"));
         return 0;
     }
     secure_mem_clear(key, 32U);
     if (password == NULL || password_len == 0U ||
         password_len > NKPR_MAX_PASSWORD_SIZE || salt == NULL) {
-        fprintf(stderr, "Invalid private-key protection parameters\n");
+        fprintf(stderr, file_message("Invalid private-key protection parameters\n"));
         goto cleanup;
     }
     if ((OSSL_get_thread_support_flags() &
          OSSL_THREAD_SUPPORT_FLAG_THREAD_POOL) == 0U) {
         fprintf(stderr,
-                "OpenSSL was built without Argon2 thread-pool support\n");
+                file_message("OpenSSL was built without Argon2 thread-pool support\n"));
         goto cleanup;
     }
     if (OSSL_get_max_threads(NULL) < NKPR_ARGON2_PARALLELISM &&
@@ -308,7 +308,7 @@ static int encrypt_pem(
     if (pem == NULL || pem_len == 0U || pem_len > (size_t)INT_MAX ||
         key == NULL || header == NULL || salt == NULL || nonce == NULL ||
         ciphertext == NULL || tag == NULL) {
-        fprintf(stderr, "Invalid private-key encryption request\n");
+        fprintf(stderr, file_message("Invalid private-key encryption request\n"));
         return 0;
     }
 
@@ -337,7 +337,7 @@ static int encrypt_pem(
     }
     if (output_len < 0 || final_len < 0 ||
         (size_t)output_len + (size_t)final_len != pem_len) {
-        fprintf(stderr, "Unexpected private-key ciphertext length\n");
+        fprintf(stderr, file_message("Unexpected private-key ciphertext length\n"));
         goto cleanup;
     }
     if (EVP_CIPHER_CTX_ctrl(context, EVP_CTRL_GCM_GET_TAG,
@@ -373,7 +373,7 @@ static int decrypt_pem(
         ciphertext_len > (size_t)INT_MAX || tag == NULL || key == NULL ||
         header == NULL || salt == NULL || nonce == NULL || pem == NULL ||
         pem_len == NULL) {
-        fprintf(stderr, "Invalid private-key decryption request\n");
+        fprintf(stderr, file_message("Invalid private-key decryption request\n"));
         return 0;
     }
     *pem_len = 0U;
@@ -410,7 +410,7 @@ static int decrypt_pem(
     }
     if (output_len < 0 || final_len < 0 ||
         (size_t)output_len + (size_t)final_len != ciphertext_len) {
-        fprintf(stderr, "Unexpected decrypted private-key length\n");
+        fprintf(stderr, file_message("Unexpected decrypted private-key length\n"));
         goto cleanup;
     }
     *pem_len = (size_t)output_len + (size_t)final_len;
@@ -441,7 +441,7 @@ int protected_private_key_stage(
         pem_len > NKPR_MAX_PEM_SIZE || pem_len > (size_t)INT_MAX ||
         password == NULL || password_len == 0U ||
         password_len > NKPR_MAX_PASSWORD_SIZE) {
-        fprintf(stderr, "Invalid hybrid private-key PEM data\n");
+        fprintf(stderr, file_message("Invalid hybrid private-key PEM data\n"));
         goto cleanup;
     }
     if (RAND_bytes(salt, (int)sizeof(salt)) != 1 ||
@@ -529,7 +529,7 @@ int protected_private_key_read(
     int success = 0;
 
     if (pem == NULL || pem_len == NULL) {
-        fprintf(stderr, "Invalid protected private-key output request\n");
+        fprintf(stderr, file_message("Invalid protected private-key output request\n"));
         return 0;
     }
     *pem = NULL;

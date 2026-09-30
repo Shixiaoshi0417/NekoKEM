@@ -1,3 +1,5 @@
+[简体中文](README.md) | [English](README.en.md)
+
 # NekoKEM
 
 <p align="center">
@@ -58,6 +60,28 @@ make -C linux
 
 构建使用 C17，并链接 OpenSSL `libcrypto`。Hybrid 私钥保护使用 OpenSSL 3.5 provider 提供的 Argon2id，不需要额外安装 `libargon2`。默认构建启用 `-Werror`、`-fstack-protector-strong`、`-D_FORTIFY_SOURCE=3`、`-fPIE` 和 `-pie`。
 
+可执行文件位于 `linux/nekokem`。下文的 `./nekokem` 示例假定当前目录为 `linux/`，或已将该可执行文件复制到当前目录。
+
+## 语言设置
+
+Android 和 CLI 支持简体中文（`zh-CN`）、繁体中文（`zh-TW`）、英语（`en`）、日语（`ja`）和韩语（`ko`）。默认跟随系统；不支持的语言回退英语。中文 CN/SG 地区匹配简体，TW/HK/MO 匹配繁体；en/ja/ko 的其他地区匹配对应语言。跟随系统时会响应系统语言变化。
+
+Android 在 **设置 → 语言** 中选择 **跟随系统** 或指定语言。选择会持久保存并刷新界面。Android 13 及以上与系统级应用语言设置共用同一偏好；旧系统使用私有偏好设置。文件操作结束后可切换语言。页面和对话框支持滚动，以容纳长文本及较大字体。
+
+CLI 示例：
+
+```sh
+./nekokem --lang ja --help
+./nekokem --lang zh-TW encrypt hybrid test.txt test.nkem keys/public.key
+./nekokem --set-lang ko
+./nekokem --set-lang system
+./nekokem --lang system --help
+```
+
+`--lang` 仅影响本次命令。`--set-lang` 将默认语言保存到 `$XDG_CONFIG_HOME/nekokem/language`；XDG_CONFIG_HOME 未设置或为相对路径时使用 `$HOME/.config/nekokem/language`。配置文件权限为 `0600`，无需 root 权限。优先级为 `--lang` → 已保存设置 → `LC_ALL` → `LC_MESSAGES` → `LANG` → 英语。`system` 恢复自动检测；无效或损坏的设置安全回退系统检测。系统检测支持 `zh_CN.UTF-8`、`ja_JP.UTF-8` 等常见 POSIX Locale。ASCII 或非 UTF-8 终端下 CLI 提示回退英语。全局语言选项放在命令之前；命令之后的文件参数按原样处理。可使用 `--` 显式结束全局选项解析。语言配置和帮助不会交互询问语言。
+
+协议标识、密码学算法名、CLI 参数、环境变量名及 `--version` 输出保持不变。上游 OpenSSL/操作系统的诊断细节保留原文。这些语言参数为本分支新增，先前发行二进制可能尚不提供。
+
 ## 目录结构
 
 交互模式统一使用以下目录：
@@ -83,7 +107,7 @@ keys/
 ./nekokem
 ```
 
-显示：
+选择简体中文时显示：
 
 ```text
 ====================
@@ -274,7 +298,9 @@ make -C linux test
 - 对交互模式恢复的明文继续执行 SHA-256 和 `cmp`；
 - 通过伪终端哨兵测试分别确认粘贴私钥和输入保护密码时关闭回显，且测试记录权限为 `0600`。
 
-测试材料随后删除。
+- 五语言资源和目录完整性、格式参数一致性、Locale/配置/命令行优先级、持久化、安全回退、非交互帮助及错误本地化。文档检查验证双语导航和相对链接。
+
+测试材料随后删除。Android JVM 和真实 API 26/35 设备 instrumentation 在 CI 中执行；仅构建 test APK 不算设备测试通过。设备测试保留 JNI/SAF 集成覆盖，并验证语言切换、Activity 重建、进程重启、系统应用语言同步、无障碍、深色模式及字体放大。
 
 ## AFL++ parser fuzzing
 

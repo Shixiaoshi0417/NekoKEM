@@ -31,7 +31,7 @@ static int bio_remaining_is_whitespace(BIO *input)
         }
         for (index = 0; index < count; ++index) {
             if (isspace(buffer[index]) == 0) {
-                fprintf(stderr, "Hybrid key file has trailing data\n");
+                fprintf(stderr, file_message("Hybrid key file has trailing data\n"));
                 return 0;
             }
         }
@@ -44,7 +44,7 @@ static int validate_key(EVP_PKEY *key,
                         const char *description)
 {
     if (key == NULL || EVP_PKEY_is_a(key, algorithm) != 1) {
-        fprintf(stderr, "%s is not an %s key\n", description, algorithm);
+        fprintf(stderr, file_message("%s is not an %s key\n"), file_message(description), algorithm);
         return 0;
     }
     return 1;
@@ -123,7 +123,7 @@ int hybrid_generate_keypair(const char *public_path,
         private_buffer->length == 0U ||
         private_buffer->length > NKPR_MAX_PEM_SIZE ||
         private_buffer->length > (size_t)INT_MAX) {
-        fprintf(stderr, "Invalid serialized hybrid private-key length\n");
+        fprintf(stderr, file_message("Invalid serialized hybrid private-key length\n"));
         goto cleanup;
     }
     if (!atomic_file_open(&public_file, public_path, 0644)) {
@@ -176,7 +176,7 @@ static int parse_hybrid_private_keys(const unsigned char *pem,
     keys->x448 = NULL;
     keys->mlkem = NULL;
     if (pem == NULL || pem_len == 0U || pem_len > (size_t)INT_MAX) {
-        fprintf(stderr, "Invalid hybrid private-key PEM length\n");
+        fprintf(stderr, file_message("Invalid hybrid private-key PEM length\n"));
         goto cleanup;
     }
     input = BIO_new_mem_buf(pem, (int)pem_len);
@@ -227,7 +227,7 @@ int hybrid_load_public_keys(const char *path, HybridKeys *keys)
         goto cleanup;
     }
     if (pem_len > (size_t)INT_MAX) {
-        fprintf(stderr, "Invalid hybrid public-key PEM length\n");
+        fprintf(stderr, file_message("Invalid hybrid public-key PEM length\n"));
         goto cleanup;
     }
     input = BIO_new_mem_buf(pem, (int)pem_len);
@@ -315,7 +315,7 @@ static int x448_derive(EVP_PKEY *private_key,
 
     if (shared_secret == NULL || shared_secret_len == NULL ||
         private_key == NULL || peer_public_key == NULL) {
-        fprintf(stderr, "Invalid X448 derivation request\n");
+        fprintf(stderr, file_message("Invalid X448 derivation request\n"));
         return 0;
     }
     *shared_secret = NULL;
@@ -336,7 +336,7 @@ static int x448_derive(EVP_PKEY *private_key,
     }
     if (secret_capacity != X448_SHARED_SECRET_SIZE ||
         secret_capacity > X448_MAX_SHARED_SECRET_SIZE) {
-        fprintf(stderr, "OpenSSL returned an invalid X448 secret size\n");
+        fprintf(stderr, file_message("OpenSSL returned an invalid X448 secret size\n"));
         goto cleanup;
     }
 
@@ -375,7 +375,7 @@ int hybrid_x448_encapsulate(
 
     if (ephemeral_public == NULL || shared_secret == NULL ||
         shared_secret_len == NULL) {
-        fprintf(stderr, "Invalid X448 encapsulation output request\n");
+        fprintf(stderr, file_message("Invalid X448 encapsulation output request\n"));
         return 0;
     }
     if (!validate_key(recipient_public_key, X448_ALGORITHM_NAME,
@@ -420,7 +420,7 @@ int hybrid_x448_decapsulate(
 
     if (ephemeral_public == NULL || shared_secret == NULL ||
         shared_secret_len == NULL) {
-        fprintf(stderr, "Invalid X448 decapsulation request\n");
+        fprintf(stderr, file_message("Invalid X448 decapsulation request\n"));
         return 0;
     }
     if (!validate_key(recipient_private_key, X448_ALGORITHM_NAME,
@@ -428,7 +428,7 @@ int hybrid_x448_decapsulate(
         return 0;
     }
     if (ephemeral_public_len != X448_PUBLIC_KEY_SIZE) {
-        fprintf(stderr, "Invalid X448 ephemeral public-key length\n");
+        fprintf(stderr, file_message("Invalid X448 ephemeral public-key length\n"));
         return 0;
     }
     ephemeral_key = EVP_PKEY_new_raw_public_key_ex(
@@ -470,7 +470,7 @@ int hybrid_derive_aes256_key(
     int success = 0;
 
     if (output_key == NULL) {
-        fprintf(stderr, "Invalid hybrid key-derivation output\n");
+        fprintf(stderr, file_message("Invalid hybrid key-derivation output\n"));
         return 0;
     }
     secure_mem_clear(output_key, AES256_KEY_SIZE);
@@ -478,16 +478,16 @@ int hybrid_derive_aes256_key(
     if (x448_secret == NULL || mlkem_secret == NULL || salt == NULL ||
         x448_secret_len != X448_SHARED_SECRET_SIZE ||
         mlkem_secret_len != KEM_SHARED_SECRET_SIZE || salt_len == 0U) {
-        fprintf(stderr, "Invalid hybrid key-derivation input lengths\n");
+        fprintf(stderr, file_message("Invalid hybrid key-derivation input lengths\n"));
         goto cleanup;
     }
     if (x448_secret_len > SIZE_MAX - mlkem_secret_len) {
-        fprintf(stderr, "Hybrid shared-secret length overflows\n");
+        fprintf(stderr, file_message("Hybrid shared-secret length overflows\n"));
         goto cleanup;
     }
     combined_len = x448_secret_len + mlkem_secret_len;
     if (combined_len == 0U) {
-        fprintf(stderr, "Hybrid shared secret is empty\n");
+        fprintf(stderr, file_message("Hybrid shared secret is empty\n"));
         goto cleanup;
     }
     combined_secret = OPENSSL_malloc(combined_len);

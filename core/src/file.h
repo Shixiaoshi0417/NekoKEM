@@ -46,6 +46,14 @@ void file_test_fault_set(FileTestFault fault, unsigned int fail_on_call);
 void file_test_fault_reset(void);
 #endif
 
+/* Set once before starting CLI operations. Core defaults to identity translation. */
+void file_set_message_translator(const char *(*translator)(const char *));
+const char *file_message(const char *message)
+#if defined(__GNUC__) || defined(__clang__)
+    __attribute__((format_arg(1)))
+#endif
+    ;
+
 void print_openssl_error(const char *context);
 void print_system_error(const char *context);
 

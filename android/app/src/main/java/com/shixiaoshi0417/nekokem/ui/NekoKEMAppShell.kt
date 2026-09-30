@@ -1,6 +1,15 @@
 package com.shixiaoshi0417.nekokem.ui
 
+import android.app.Activity
+import android.os.Build
 import androidx.annotation.StringRes
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.RadioButton
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.runtime.saveable.rememberSaveable
+import com.shixiaoshi0417.nekokem.i18n.AppLanguages
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -10,6 +19,8 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
@@ -99,7 +110,8 @@ fun NekoKEMAppShell(
 ) {
     val drawerState = rememberDrawerState(DrawerValue.Closed)
     val scope = rememberCoroutineScope()
-    var destination by remember { mutableStateOf(AppDestination.FILES) }
+    var destination by rememberSaveable { mutableStateOf(AppDestination.FILES) }
+    val fontScale = LocalDensity.current.fontScale.coerceAtLeast(1f)
     val menuDescription = stringResource(R.string.navigation_open_menu)
 
     ModalNavigationDrawer(
@@ -116,10 +128,12 @@ fun NekoKEMAppShell(
                 Column(
                     modifier = Modifier
                         .padding(horizontal = 12.dp)
+                        .verticalScroll(rememberScrollState())
                         .selectableGroup(),
                 ) {
                     AppDestination.entries.forEach { item ->
                         NavigationDrawerItem(
+                            modifier = Modifier.heightIn(min = (56f * fontScale).dp),
                             label = { Text(stringResource(item.titleResource)) },
                             selected = destination == item,
                             onClick = {
@@ -135,6 +149,7 @@ fun NekoKEMAppShell(
         Scaffold(
             topBar = {
                 TopAppBar(
+                    expandedHeight = (64f * fontScale).dp,
                     title = { Text(stringResource(destination.titleResource)) },
                     actions = {
                         IconButton(
@@ -159,7 +174,7 @@ fun NekoKEMAppShell(
                 when (destination) {
                     AppDestination.FILES -> FileOperationsPage(state, actions)
                     AppDestination.KEYS -> KeyManagementPage(state, actions)
-                    AppDestination.SETTINGS -> SettingsPage()
+                    AppDestination.SETTINGS -> SettingsPage(state.running)
                     AppDestination.ABOUT -> AboutPage(state)
                 }
             }
@@ -391,7 +406,60 @@ private fun KeyManagementPage(
 }
 
 @Composable
-private fun SettingsPage() {
+private fun SettingsPage(running: Boolean) {
+    val context = LocalContext.current
+    var showLanguages by remember { mutableStateOf(false) }
+    var languageSaveFailed by remember { mutableStateOf(false) }
+    val selection = AppLanguages.selection(context)
+    if (languageSaveFailed) {
+        AlertDialog(
+            onDismissRequest = { languageSaveFailed = false },
+            title = { Text(stringResource(R.string.error_dialog_title)) },
+            text = { Text(stringResource(R.string.error_language_save)) },
+            confirmButton = {
+                TextButton(onClick = { languageSaveFailed = false }) {
+                    Text(stringResource(R.string.action_close))
+                }
+            },
+        )
+    }
+    if (showLanguages) {
+        AlertDialog(
+            onDismissRequest = { showLanguages = false },
+            title = { Text(stringResource(R.string.settings_language_title)) },
+            text = {
+                Column(Modifier.verticalScroll(rememberScrollState()).selectableGroup()) {
+                    AppLanguages.tags.forEachIndexed { index, tag ->
+                        Row(
+                            modifier = Modifier.fillMaxWidth().selectable(
+                                selected = selection == tag,
+                                role = Role.RadioButton,
+                                onClick = {
+                                    showLanguages = false
+                                    if (AppLanguages.setSelection(context, tag)) {
+                                        if (Build.VERSION.SDK_INT < 33) (context as Activity).recreate()
+                                    } else languageSaveFailed = true
+                                },
+                            ).padding(vertical = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            RadioButton(selected = selection == tag, onClick = null)
+                            Text(
+                                if (tag.isEmpty()) stringResource(R.string.settings_language_system)
+                                else AppLanguages.names(context)[index],
+                                modifier = Modifier.padding(start = 12.dp).weight(1f),
+                            )
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showLanguages = false }) {
+                    Text(stringResource(R.string.action_close))
+                }
+            },
+        )
+    }
     PageColumn {
         Text(
             text = stringResource(R.string.settings_appearance_title),
@@ -406,10 +474,20 @@ private fun SettingsPage() {
             titleResource = R.string.settings_dynamic_color_title,
             valueResource = R.string.settings_dynamic_color_system,
         )
-        SettingRow(
-            titleResource = R.string.settings_language_title,
-            valueResource = R.string.settings_language_system,
-        )
+        TextButton(
+            enabled = !running,
+            onClick = { showLanguages = true },
+            modifier = Modifier.fillMaxWidth().padding(top = 22.dp),
+        ) {
+            Column(Modifier.fillMaxWidth()) {
+                Text(stringResource(R.string.settings_language_title))
+                Text(
+                    if (selection.isEmpty()) stringResource(R.string.settings_language_system)
+                    else AppLanguages.names(context)[AppLanguages.tags.indexOf(selection)],
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+            }
+        }
         SettingRow(
             titleResource = R.string.settings_version_title,
             valueResource = R.string.app_version,
@@ -477,20 +555,16 @@ private fun SettingRow(
     @StringRes titleResource: Int,
     @StringRes valueResource: Int,
 ) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(top = 22.dp),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically,
+    Column(
+        modifier = Modifier.fillMaxWidth().padding(top = 22.dp),
     ) {
         Text(
-            modifier = Modifier.weight(1f),
+            modifier = Modifier.fillMaxWidth(),
             text = stringResource(titleResource),
             style = MaterialTheme.typography.titleMedium,
         )
         Text(
-            modifier = Modifier.padding(start = 16.dp),
+            modifier = Modifier.padding(top = 4.dp),
             text = stringResource(valueResource),
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,

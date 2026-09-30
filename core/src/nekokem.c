@@ -24,11 +24,11 @@ int nekokem_generate_keypair(const char *public_key_path,
                              size_t password_len)
 {
     if (!valid_path(public_key_path) || !valid_path(private_key_path)) {
-        fprintf(stderr, "NekoKEM Core received an empty key path\\n");
+        fprintf(stderr, file_message("NekoKEM Core received an empty key path\\n"));
         return 0;
     }
     if (password == NULL || password_len == 0U) {
-        fprintf(stderr, "A non-empty private-key password is required\\n");
+        fprintf(stderr, file_message("A non-empty private-key password is required\\n"));
         return 0;
     }
     return hybrid_generate_keypair(public_key_path, private_key_path,
@@ -97,7 +97,7 @@ static int fingerprint_hybrid_keys(const HybridKeys *keys,
     if (keys == NULL || keys->x448 == NULL || keys->mlkem == NULL ||
         output == NULL ||
         output_size < NEKOKEM_FINGERPRINT_STRING_SIZE) {
-        fprintf(stderr, "Invalid fingerprint input or output buffer\n");
+        fprintf(stderr, file_message("Invalid fingerprint input or output buffer\n"));
         goto cleanup;
     }
     output[0] = '\0';
@@ -116,7 +116,7 @@ static int fingerprint_hybrid_keys(const HybridKeys *keys,
         goto cleanup;
     }
     if (fingerprint_len != 32U) {
-        fprintf(stderr, "Unexpected SHA-256 fingerprint length\n");
+        fprintf(stderr, file_message("Unexpected SHA-256 fingerprint length\n"));
         goto cleanup;
     }
 
@@ -150,7 +150,7 @@ int nekokem_public_key_fingerprint(const char *public_key_path,
 
     if (!valid_path(public_key_path) || output == NULL ||
         output_size < NEKOKEM_FINGERPRINT_STRING_SIZE) {
-        fprintf(stderr, "Invalid fingerprint output buffer or key path\n");
+        fprintf(stderr, file_message("Invalid fingerprint output buffer or key path\n"));
         goto cleanup;
     }
     output[0] = '\0';
@@ -181,7 +181,7 @@ int nekokem_internal_private_key_fingerprint(
     if (!valid_path(private_key_path) || password == NULL ||
         password_len == 0U || output == NULL ||
         output_size < NEKOKEM_FINGERPRINT_STRING_SIZE) {
-        fprintf(stderr, "Invalid private-key fingerprint argument\n");
+        fprintf(stderr, file_message("Invalid private-key fingerprint argument\n"));
         goto cleanup;
     }
     output[0] = '\0';

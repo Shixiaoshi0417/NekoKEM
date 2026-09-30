@@ -1,12 +1,16 @@
 package com.shixiaoshi0417.nekokem
 
 import android.content.Context
+import com.shixiaoshi0417.nekokem.i18n.AppLanguages
 import android.net.Uri
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.ui.Modifier
 import androidx.annotation.StringRes
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.SnackbarHostState
@@ -57,10 +61,14 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 class MainActivity : ComponentActivity() {
+    override fun attachBaseContext(newBase: Context) {
+        super.attachBaseContext(AppLanguages.localizedContext(newBase))
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         val keyManager = LocalKeyManager(applicationContext)
-        val fileWorkflow = SafFileWorkflow(applicationContext, keyManager)
+        val fileWorkflow = SafFileWorkflow(this, keyManager)
 
         setContent {
             NekoKEMTheme {
@@ -1011,6 +1019,7 @@ private fun NekoKEMRoute(
                         candidate.displayName,
                         candidate.fingerprint,
                     ),
+                    modifier = Modifier.verticalScroll(rememberScrollState()),
                 )
             },
             confirmButton = {

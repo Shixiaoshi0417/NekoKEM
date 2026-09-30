@@ -134,6 +134,7 @@ mkdir -p -- "$build_objects"
 sources=(
     linux/src/main.c
     linux/src/cli.c
+    linux/src/i18n.c
     core/src/nekokem.c
     core/src/key_management.c
     core/src/nekokem_v3.c

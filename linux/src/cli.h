@@ -1,6 +1,7 @@
 #ifndef NEKOKEM_CLI_H
 #define NEKOKEM_CLI_H
 
+void cli_print_help(const char *program);
 void cli_print_usage(const char *program);
 
 int cli_run_interactive_menu(void);

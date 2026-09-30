@@ -83,13 +83,13 @@ static int nkem_v3_header_decode_internal(
 {
     if (memcmp(input, "NKEM", 4U) != 0) {
         if (report_errors != 0) {
-            fprintf(stderr, "Invalid NKEM magic\n");
+            fprintf(stderr, file_message("Invalid NKEM magic\n"));
         }
         return 0;
     }
     if (input[4] != NKEM_V3_VERSION) {
         if (report_errors != 0) {
-            fprintf(stderr, "Expected NKEM v3, found version %u\n",
+            fprintf(stderr, file_message("Expected NKEM v3, found version %u\n"),
                     input[4]);
         }
         return 0;
@@ -97,21 +97,21 @@ static int nkem_v3_header_decode_internal(
     if (input[5] != NKEM_V3_ALGORITHM_ID) {
         if (report_errors != 0) {
             fprintf(stderr,
-                    "Unsupported NKEM v3 algorithm id: %u\n",
+                    file_message("Unsupported NKEM v3 algorithm id: %u\n"),
                     input[5]);
         }
         return 0;
     }
     if (get_u16_be(input + 6U) != NKEM_V3_HEADER_SIZE) {
         if (report_errors != 0) {
-            fprintf(stderr, "Invalid NKEM v3 header length\n");
+            fprintf(stderr, file_message("Invalid NKEM v3 header length\n"));
         }
         return 0;
     }
     if (get_u16_be(input + 10U) != 0U || input[27] != 0U ||
         get_u32_be(input + 28U) != 0U) {
         if (report_errors != 0) {
-            fprintf(stderr, "Unsupported NKEM v3 header flags\n");
+            fprintf(stderr, file_message("Unsupported NKEM v3 header flags\n"));
         }
         return 0;
     }
@@ -127,19 +127,19 @@ static int nkem_v3_header_decode_internal(
         NKEM_X448_EPHEMERAL_PUBLIC_SIZE) {
         if (report_errors != 0) {
             fprintf(stderr,
-                    "Invalid X448 ephemeral public-key length\n");
+                    file_message("Invalid X448 ephemeral public-key length\n"));
         }
         return 0;
     }
     if (header->kem_ciphertext_len != NKEM_V3_KEM_CIPHERTEXT_SIZE) {
         if (report_errors != 0) {
-            fprintf(stderr, "Invalid ML-KEM ciphertext length\n");
+            fprintf(stderr, file_message("Invalid ML-KEM ciphertext length\n"));
         }
         return 0;
     }
     if (!nkem_gcm_data_size_is_valid(header->ciphertext_len)) {
         if (report_errors != 0) {
-            fprintf(stderr, "NKEM v3 ciphertext exceeds AES-GCM limit\n");
+            fprintf(stderr, file_message("NKEM v3 ciphertext exceeds AES-GCM limit\n"));
         }
         return 0;
     }
@@ -148,7 +148,7 @@ static int nkem_v3_header_decode_internal(
         header->tag_len != NKEM_TAG_SIZE) {
         if (report_errors != 0) {
             fprintf(stderr,
-                    "Unsupported HKDF salt, AES-GCM nonce, or tag length\n");
+                    file_message("Unsupported HKDF salt, AES-GCM nonce, or tag length\n"));
         }
         return 0;
     }
@@ -160,7 +160,7 @@ int nkem_v3_header_decode(
     NkemV3Header *header)
 {
     if (input == NULL || header == NULL) {
-        fprintf(stderr, "Invalid NKEM v3 header decode request\n");
+        fprintf(stderr, file_message("Invalid NKEM v3 header decode request\n"));
         return 0;
     }
     return nkem_v3_header_decode_internal(input, header, 1);
@@ -186,7 +186,7 @@ static int nkem_v3_container_size_is_valid_internal(
         if (UINT64_MAX - expected_size < fields[index]) {
             if (report_errors != 0) {
                 fprintf(stderr,
-                        "NKEM v3 container length overflows\n");
+                        file_message("NKEM v3 container length overflows\n"));
             }
             return 0;
         }
@@ -195,7 +195,7 @@ static int nkem_v3_container_size_is_valid_internal(
     if (expected_size != actual_size) {
         if (report_errors != 0) {
             fprintf(stderr,
-                    "NKEM v3 container is truncated or has trailing data\n");
+                    file_message("NKEM v3 container is truncated or has trailing data\n"));
         }
         return 0;
     }
@@ -206,7 +206,7 @@ int nkem_v3_container_size_is_valid(const NkemV3Header *header,
                                     uint64_t actual_size)
 {
     if (header == NULL) {
-        fprintf(stderr, "Invalid NKEM v3 size validation request\n");
+        fprintf(stderr, file_message("Invalid NKEM v3 size validation request\n"));
         return 0;
     }
     return nkem_v3_container_size_is_valid_internal(

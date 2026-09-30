@@ -70,12 +70,27 @@ static int file_rename(const char *old_path, const char *new_path)
     return rename(old_path, new_path);
 }
 
+static const char *(*message_translator)(const char *);
+
+void file_set_message_translator(const char *(*translator)(const char *))
+{
+    message_translator = translator;
+}
+
+const char *file_message(const char *message)
+{
+    int saved_errno = errno;
+    const char *translated = message_translator != NULL ? message_translator(message) : message;
+    errno = saved_errno;
+    return translated;
+}
+
 void print_openssl_error(const char *context)
 {
     unsigned long error_code;
     char error_text[256];
 
-    fprintf(stderr, "%s\n", context);
+    fprintf(stderr, "%s\n", file_message(context));
     while ((error_code = ERR_get_error()) != 0UL) {
         ERR_error_string_n(error_code, error_text, sizeof(error_text));
         fprintf(stderr, "OpenSSL: %s\n", error_text);
@@ -84,7 +99,7 @@ void print_openssl_error(const char *context)
 
 void print_system_error(const char *context)
 {
-    fprintf(stderr, "%s: %s\n", context, strerror(errno));
+    fprintf(stderr, "%s: %s\n", file_message(context), strerror(errno));
 }
 
 int ensure_directory(const char *path, mode_t mode)
@@ -106,21 +121,21 @@ int ensure_directory(const char *path, mode_t mode)
         return 0;
     }
     if (!S_ISDIR(status.st_mode)) {
-        fprintf(stderr, "%s exists but is not a directory\n", path);
+        fprintf(stderr, file_message("%s exists but is not a directory\n"), path);
         return 0;
     }
 #ifdef NEKOKEM_TEST_FAULT_INJECTION
     if (test_fault_should_fail(FILE_TEST_FAULT_FOREIGN_OWNER)) {
-        fprintf(stderr, "%s is not owned by the current user\n", path);
+        fprintf(stderr, file_message("%s is not owned by the current user\n"), path);
         return 0;
     }
 #endif
     if (status.st_uid != geteuid()) {
-        fprintf(stderr, "%s is not owned by the current user\n", path);
+        fprintf(stderr, file_message("%s is not owned by the current user\n"), path);
         return 0;
     }
     if ((status.st_mode & (mode_t)0777) != requested_mode) {
-        fprintf(stderr, "%s has unsafe permissions (expected %03o)\n",
+        fprintf(stderr, file_message("%s has unsafe permissions (expected %03o)\n"),
                 path, (unsigned int)requested_mode);
         return 0;
     }
@@ -150,7 +165,7 @@ FILE *file_open_regular(const char *path)
         return NULL;
     }
     if (!S_ISREG(status.st_mode) || status.st_size < 0) {
-        fprintf(stderr, "Input must be a regular file with a valid size\n");
+        fprintf(stderr, file_message("Input must be a regular file with a valid size\n"));
         (void)close(descriptor);
         return NULL;
     }
@@ -176,11 +191,11 @@ int file_get_size(FILE *stream, uint64_t *size)
         return 0;
     }
     if (!S_ISREG(status.st_mode)) {
-        fprintf(stderr, "Input must be a regular file\n");
+        fprintf(stderr, file_message("Input must be a regular file\n"));
         return 0;
     }
     if (status.st_size < 0) {
-        fprintf(stderr, "Input file has an invalid size\n");
+        fprintf(stderr, file_message("Input file has an invalid size\n"));
         return 0;
     }
     *size = (uint64_t)status.st_size;
@@ -204,7 +219,7 @@ int file_read_exact(FILE *stream, void *buffer, size_t length)
             if (ferror(stream) != 0) {
                 print_system_error("Cannot read input file");
             } else {
-                fprintf(stderr, "Unexpected end of input file\n");
+                fprintf(stderr, file_message("Unexpected end of input file\n"));
             }
             return 0;
         }
@@ -299,12 +314,12 @@ int file_read_regular(const char *path,
         goto cleanup;
     }
     if (!S_ISREG(status.st_mode) || status.st_size <= 0) {
-        fprintf(stderr, "Input must be a non-empty regular file\n");
+        fprintf(stderr, file_message("Input must be a non-empty regular file\n"));
         goto cleanup;
     }
     if ((uintmax_t)status.st_size > (uintmax_t)maximum_size ||
         (uintmax_t)status.st_size > (uintmax_t)SIZE_MAX) {
-        fprintf(stderr, "Regular input exceeds the size limit\n");
+        fprintf(stderr, file_message("Regular input exceeds the size limit\n"));
         goto cleanup;
     }
     capacity = (size_t)status.st_size;
@@ -325,7 +340,7 @@ int file_read_regular(const char *path,
             goto cleanup;
         }
         if (count == 0) {
-            fprintf(stderr, "Regular input changed while being read\n");
+            fprintf(stderr, file_message("Regular input changed while being read\n"));
             goto cleanup;
         }
         position += (size_t)count;
@@ -342,7 +357,7 @@ int file_read_regular(const char *path,
             goto cleanup;
         }
         if (count != 0) {
-            fprintf(stderr, "Regular input changed while being read\n");
+            fprintf(stderr, file_message("Regular input changed while being read\n"));
             goto cleanup;
         }
     }
@@ -396,30 +411,30 @@ int file_read_sensitive(const char *path,
         goto cleanup;
     }
     if (!S_ISREG(status.st_mode) || status.st_size <= 0) {
-        fprintf(stderr, "Sensitive input must be a non-empty regular file\n");
+        fprintf(stderr, file_message("Sensitive input must be a non-empty regular file\n"));
         goto cleanup;
     }
 #ifdef NEKOKEM_TEST_FAULT_INJECTION
     if (test_fault_should_fail(FILE_TEST_FAULT_FOREIGN_OWNER)) {
-        fprintf(stderr, "Sensitive input is not owned by the current user\n");
+        fprintf(stderr, file_message("Sensitive input is not owned by the current user\n"));
         goto cleanup;
     }
 #endif
     if (status.st_uid != geteuid()) {
-        fprintf(stderr, "Sensitive input is not owned by the current user\n");
+        fprintf(stderr, file_message("Sensitive input is not owned by the current user\n"));
         goto cleanup;
     }
     if ((status.st_mode & (mode_t)0777) != (mode_t)0600) {
-        fprintf(stderr, "Sensitive input must have mode 0600\n");
+        fprintf(stderr, file_message("Sensitive input must have mode 0600\n"));
         goto cleanup;
     }
     if (status.st_nlink != (nlink_t)1) {
-        fprintf(stderr, "Sensitive input must have exactly one hard link\n");
+        fprintf(stderr, file_message("Sensitive input must have exactly one hard link\n"));
         goto cleanup;
     }
     if ((uintmax_t)status.st_size > (uintmax_t)maximum_size ||
         (uintmax_t)status.st_size > (uintmax_t)SIZE_MAX) {
-        fprintf(stderr, "Sensitive input exceeds the size limit\n");
+        fprintf(stderr, file_message("Sensitive input exceeds the size limit\n"));
         goto cleanup;
     }
     capacity = (size_t)status.st_size;
@@ -441,7 +456,7 @@ int file_read_sensitive(const char *path,
             goto cleanup;
         }
         if (count == 0) {
-            fprintf(stderr, "Sensitive file changed while being read\n");
+            fprintf(stderr, file_message("Sensitive file changed while being read\n"));
             goto cleanup;
         }
         position += (size_t)count;
@@ -460,7 +475,7 @@ int file_read_sensitive(const char *path,
             goto cleanup;
         }
         if (count != 0) {
-            fprintf(stderr, "Sensitive file changed while being read\n");
+            fprintf(stderr, file_message("Sensitive file changed while being read\n"));
             goto cleanup;
         }
     }
@@ -501,7 +516,7 @@ int atomic_file_open(AtomicFile *file, const char *final_path, mode_t mode)
     memset(file, 0, sizeof(*file));
     path_length = strlen(final_path);
     if (path_length > (SIZE_MAX - sizeof(suffix))) {
-        fprintf(stderr, "Output path is too long\n");
+        fprintf(stderr, file_message("Output path is too long\n"));
         return 0;
     }
     allocation_size = path_length + sizeof(suffix);
@@ -513,7 +528,7 @@ int atomic_file_open(AtomicFile *file, const char *final_path, mode_t mode)
     result = snprintf(file->temporary_path, allocation_size, "%s%s",
                       final_path, suffix);
     if (result < 0 || (size_t)result >= allocation_size) {
-        fprintf(stderr, "Cannot construct temporary path\n");
+        fprintf(stderr, file_message("Cannot construct temporary path\n"));
         atomic_file_abort(file);
         return 0;
     }

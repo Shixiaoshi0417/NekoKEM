@@ -27,6 +27,11 @@ if (releaseTaskRequested && !releaseSigningConfigured) {
     )
 }
 
+val emulatorTest = providers.gradleProperty("nekokemEmulatorTest").orNull == "true"
+if (emulatorTest && releaseTaskRequested) {
+    throw GradleException("Emulator test ABI cannot be used for release builds")
+}
+
 android {
     namespace = "com.shixiaoshi0417.nekokem"
     compileSdk = 35
@@ -42,12 +47,13 @@ android {
             "com.shixiaoshi0417.nekokem.TemporaryKeyInstrumentation"
 
         ndk {
-            abiFilters += "arm64-v8a"
+            abiFilters += if (emulatorTest) "x86_64" else "arm64-v8a"
         }
 
         externalNativeBuild {
             cmake {
                 arguments += "-DANDROID_STL=c++_static"
+                if (emulatorTest) arguments += "-DNEKOKEM_EMULATOR_TEST=ON"
             }
         }
     }
@@ -108,6 +114,12 @@ android {
         resources {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
         }
+    }
+}
+
+androidComponents {
+    beforeVariants(selector().withBuildType("release")) { variant ->
+        if (emulatorTest) variant.enable = false
     }
 }
 

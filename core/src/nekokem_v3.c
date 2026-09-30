@@ -24,7 +24,7 @@ static int validate_file_paths(const char *input_path,
 {
     if (!valid_path(input_path) || !valid_path(output_path) ||
         !valid_path(key_path)) {
-        fprintf(stderr, "NekoKEM Core received an empty file path\n");
+        fprintf(stderr, file_message("NekoKEM Core received an empty file path\n"));
         return 0;
     }
     return 1;
@@ -45,22 +45,22 @@ static unsigned char *build_v3_aad(
     size_t offset;
 
     if (ephemeral_public_len > SIZE_MAX - length) {
-        fprintf(stderr, "Authenticated metadata length overflows\n");
+        fprintf(stderr, file_message("Authenticated metadata length overflows\n"));
         return NULL;
     }
     length += ephemeral_public_len;
     if (kem_ciphertext_len > SIZE_MAX - length) {
-        fprintf(stderr, "Authenticated metadata length overflows\n");
+        fprintf(stderr, file_message("Authenticated metadata length overflows\n"));
         return NULL;
     }
     length += kem_ciphertext_len;
     if (NKEM_V3_SALT_SIZE > SIZE_MAX - length) {
-        fprintf(stderr, "Authenticated metadata length overflows\n");
+        fprintf(stderr, file_message("Authenticated metadata length overflows\n"));
         return NULL;
     }
     length += NKEM_V3_SALT_SIZE;
     if (NKEM_NONCE_SIZE > SIZE_MAX - length) {
-        fprintf(stderr, "Authenticated metadata length overflows\n");
+        fprintf(stderr, file_message("Authenticated metadata length overflows\n"));
         return NULL;
     }
     length += NKEM_NONCE_SIZE;
@@ -132,7 +132,7 @@ int nekokem_encrypt_file_with_progress(
     }
     hybrid_keys_cleanup(&public_keys);
     if (kem_ciphertext_len > UINT32_MAX) {
-        fprintf(stderr, "ML-KEM ciphertext is too large for NKEM v3\n");
+        fprintf(stderr, file_message("ML-KEM ciphertext is too large for NKEM v3\n"));
         goto cleanup;
     }
     if (RAND_bytes(salt, (int)sizeof(salt)) != 1 ||
@@ -270,7 +270,7 @@ static int decrypt_file_v3_with_progress(
     }
     if (private_key_path_is_encrypted(private_key_path)) {
         if (password == NULL || password_len == 0U) {
-            fprintf(stderr, "A password is required for this private key\n");
+            fprintf(stderr, file_message("A password is required for this private key\n"));
             goto cleanup;
         }
         if (!hybrid_load_protected_private_keys(
