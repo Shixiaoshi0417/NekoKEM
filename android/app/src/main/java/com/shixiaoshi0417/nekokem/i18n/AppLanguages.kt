@@ -7,11 +7,13 @@ import android.content.res.Resources
 import android.os.Build
 import android.os.LocaleList
 import java.util.Locale
+import com.shixiaoshi0417.nekokem.R
 
 /** Framework application locales are authoritative on Android 13 and newer. */
 object AppLanguages {
     val tags = listOf("", "zh-CN", "zh-TW", "en", "ja", "ko")
-    val names = listOf("", "简体中文", "繁體中文", "English", "日本語", "한국어")
+    fun names(context: Context): List<String> =
+        context.resources.getStringArray(R.array.language_names).toList()
     private const val PREFERENCES = "application_language"
     private const val LANGUAGE = "language"
 

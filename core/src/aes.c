@@ -16,7 +16,7 @@ static int add_encrypt_aad(EVP_CIPHER_CTX *context,
 
     if (context == NULL || (aad == NULL && aad_len != 0U) ||
         aad_len > (size_t)INT_MAX) {
-        fprintf(stderr, "Authenticated metadata is too large\n");
+        fprintf(stderr, file_message("Authenticated metadata is too large\n"));
         return 0;
     }
     if (EVP_EncryptUpdate(context, NULL, &output_len, aad,
@@ -35,7 +35,7 @@ static int add_decrypt_aad(EVP_CIPHER_CTX *context,
 
     if (context == NULL || (aad == NULL && aad_len != 0U) ||
         aad_len > (size_t)INT_MAX) {
-        fprintf(stderr, "Authenticated metadata is too large\n");
+        fprintf(stderr, file_message("Authenticated metadata is too large\n"));
         return 0;
     }
     if (EVP_DecryptUpdate(context, NULL, &output_len, aad,
@@ -79,7 +79,7 @@ int aes_gcm_encrypt_file_with_progress(
     if (input == NULL || output == NULL || key == NULL || nonce == NULL ||
         tag == NULL || (aad == NULL && aad_len != 0U) ||
         !nkem_gcm_data_size_is_valid(plaintext_len)) {
-        fprintf(stderr, "Invalid AES-GCM encryption request\n");
+        fprintf(stderr, file_message("Invalid AES-GCM encryption request\n"));
         goto cleanup;
     }
     context = EVP_CIPHER_CTX_new();
@@ -115,7 +115,7 @@ int aes_gcm_encrypt_file_with_progress(
             if (ferror(input) != 0) {
                 print_system_error("Cannot read plaintext");
             } else {
-                fprintf(stderr, "Plaintext changed while being encrypted\n");
+                fprintf(stderr, file_message("Plaintext changed while being encrypted\n"));
             }
             goto cleanup;
         }
@@ -139,7 +139,7 @@ int aes_gcm_encrypt_file_with_progress(
     }
 
     if (fgetc(input) != EOF) {
-        fprintf(stderr, "Plaintext grew while being encrypted\n");
+        fprintf(stderr, file_message("Plaintext grew while being encrypted\n"));
         goto cleanup;
     }
     if (ferror(input) != 0) {
@@ -205,7 +205,7 @@ int aes_gcm_decrypt_file_with_progress(
     if (input == NULL || output == NULL || key == NULL || nonce == NULL ||
         (aad == NULL && aad_len != 0U) ||
         !nkem_gcm_data_size_is_valid(ciphertext_len)) {
-        fprintf(stderr, "Invalid AES-GCM decryption request\n");
+        fprintf(stderr, file_message("Invalid AES-GCM decryption request\n"));
         goto cleanup;
     }
     context = EVP_CIPHER_CTX_new();

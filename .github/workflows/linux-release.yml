@@ -4,6 +4,7 @@ on:
   pull_request:
     branches:
       - main
+      - fix/audit-core-input-boundaries
     paths:
       - "core/**"
       - "linux/**"

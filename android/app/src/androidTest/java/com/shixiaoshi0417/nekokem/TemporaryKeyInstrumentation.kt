@@ -40,6 +40,8 @@ class TemporaryKeyInstrumentation : Instrumentation() {
             results.putString(PUBLIC_KEY_TRACE_KEY, publicKeyTrace)
             Activity.RESULT_OK
         } catch (error: Throwable) {
+            results.putString("failure_location", error.stackTrace.take(6).joinToString(" | "))
+            results.putString("phase", languagePhase ?: "full")
             results.putString(
                 RESULT_KEY,
                 error.message ?: error.javaClass.simpleName,

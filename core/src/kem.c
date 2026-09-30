@@ -23,7 +23,7 @@ int kem_encapsulate(EVP_PKEY *public_key,
 
     if (public_key == NULL || ciphertext == NULL || ciphertext_len == NULL ||
         shared_secret == NULL || shared_secret_len == NULL) {
-        fprintf(stderr, "Invalid ML-KEM encapsulation request\n");
+        fprintf(stderr, file_message("Invalid ML-KEM encapsulation request\n"));
         return 0;
     }
     *ciphertext = NULL;
@@ -48,7 +48,7 @@ int kem_encapsulate(EVP_PKEY *public_key,
     if (local_ciphertext_len != KEM_CIPHERTEXT_SIZE ||
         local_secret_capacity != KEM_SHARED_SECRET_SIZE ||
         local_secret_capacity > KEM_MAX_SHARED_SECRET_SIZE) {
-        fprintf(stderr, "OpenSSL returned invalid ML-KEM output sizes\n");
+        fprintf(stderr, file_message("OpenSSL returned invalid ML-KEM output sizes\n"));
         goto cleanup;
     }
 
@@ -70,7 +70,7 @@ int kem_encapsulate(EVP_PKEY *public_key,
         local_ciphertext_len > local_ciphertext_capacity ||
         local_secret_len != KEM_SHARED_SECRET_SIZE ||
         local_secret_len > local_secret_capacity) {
-        fprintf(stderr, "OpenSSL returned invalid ML-KEM output lengths\n");
+        fprintf(stderr, file_message("OpenSSL returned invalid ML-KEM output lengths\n"));
         goto cleanup;
     }
 
@@ -104,7 +104,7 @@ int kem_decapsulate(EVP_PKEY *private_key,
     if (private_key == NULL || ciphertext == NULL ||
         ciphertext_len != KEM_CIPHERTEXT_SIZE ||
         shared_secret == NULL || shared_secret_len == NULL) {
-        fprintf(stderr, "Invalid ML-KEM decapsulation request\n");
+        fprintf(stderr, file_message("Invalid ML-KEM decapsulation request\n"));
         return 0;
     }
     *shared_secret = NULL;
@@ -126,7 +126,7 @@ int kem_decapsulate(EVP_PKEY *private_key,
     }
     if (local_secret_capacity != KEM_SHARED_SECRET_SIZE ||
         local_secret_capacity > KEM_MAX_SHARED_SECRET_SIZE) {
-        fprintf(stderr, "OpenSSL returned an invalid shared-secret size\n");
+        fprintf(stderr, file_message("OpenSSL returned an invalid shared-secret size\n"));
         goto cleanup;
     }
 
@@ -143,7 +143,7 @@ int kem_decapsulate(EVP_PKEY *private_key,
     }
     if (local_secret_len != KEM_SHARED_SECRET_SIZE ||
         local_secret_len > local_secret_capacity) {
-        fprintf(stderr, "OpenSSL returned an invalid ML-KEM secret length\n");
+        fprintf(stderr, file_message("OpenSSL returned an invalid ML-KEM secret length\n"));
         goto cleanup;
     }
 

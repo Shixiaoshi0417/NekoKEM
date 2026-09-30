@@ -428,7 +428,7 @@ private fun SettingsPage(running: Boolean) {
                             RadioButton(selected = selection == tag, onClick = null)
                             Text(
                                 if (tag.isEmpty()) stringResource(R.string.settings_language_system)
-                                else AppLanguages.names[index],
+                                else AppLanguages.names(context)[index],
                                 modifier = Modifier.padding(start = 12.dp).weight(1f),
                             )
                         }
@@ -465,7 +465,7 @@ private fun SettingsPage(running: Boolean) {
                 Text(stringResource(R.string.settings_language_title))
                 Text(
                     if (selection.isEmpty()) stringResource(R.string.settings_language_system)
-                    else AppLanguages.names[AppLanguages.tags.indexOf(selection)],
+                    else AppLanguages.names(context)[AppLanguages.tags.indexOf(selection)],
                     style = MaterialTheme.typography.bodyMedium,
                 )
             }

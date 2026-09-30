@@ -1,4 +1,5 @@
 #include "cli.h"
+#include "i18n.h"
 #include "file.h"
 
 #include <stdio.h>
@@ -9,6 +10,14 @@
 
 int main(int argc, char **argv)
 {
+    if (!cli_language_init(&argc, argv)) return EXIT_FAILURE;
+    if (argc == 2 && strcmp(argv[1], "--help") == 0) {
+        cli_print_help(argv[0]);
+        return EXIT_SUCCESS;
+    }
+    if (argc == 3 && strcmp(argv[1], "--set-lang") == 0) {
+        return cli_language_save(argv[2]) ? EXIT_SUCCESS : EXIT_FAILURE;
+    }
     if (argc == 2 && strcmp(argv[1], "--version") == 0) {
         return puts("NekoKEM " NEKOKEM_CLI_VERSION) == EOF
                    ? EXIT_FAILURE

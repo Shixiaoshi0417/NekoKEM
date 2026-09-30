@@ -82,7 +82,7 @@ int nekokem_export_public_key(const char *public_key_path,
 
     if (!managed_path_is_valid(public_key_path) ||
         !managed_path_is_valid(output_path)) {
-        fprintf(stderr, "Invalid public-key export path\n");
+        fprintf(stderr, file_message("Invalid public-key export path\n"));
         goto cleanup;
     }
     if (!hybrid_load_public_keys(public_key_path, &keys) ||
@@ -110,7 +110,7 @@ int nekokem_delete_private_key(const char *private_key_path)
     struct stat status;
 
     if (!managed_path_is_valid(private_key_path)) {
-        fprintf(stderr, "Invalid private-key deletion path\n");
+        fprintf(stderr, file_message("Invalid private-key deletion path\n"));
         return 0;
     }
     if (lstat(private_key_path, &status) != 0) {
@@ -121,7 +121,7 @@ int nekokem_delete_private_key(const char *private_key_path)
         return 0;
     }
     if (!S_ISREG(status.st_mode)) {
-        fprintf(stderr, "Private-key deletion target is not a regular file\n");
+        fprintf(stderr, file_message("Private-key deletion target is not a regular file\n"));
         return 0;
     }
     if (unlink(private_key_path) != 0) {

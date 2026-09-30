@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Language autonyms have the same spelling in every UI language. -->
+    <string-array name="language_names" translatable="false">
+        <item></item>
+        <item>简体中文</item>
+        <item>繁體中文</item>
+        <item>English</item>
+        <item>日本語</item>
+        <item>한국어</item>
+    </string-array>
+</resources>

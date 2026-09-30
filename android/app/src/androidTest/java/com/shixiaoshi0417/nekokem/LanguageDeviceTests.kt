@@ -95,7 +95,7 @@ internal fun runLanguageDeviceTests(instrumentation: Instrumentation, phase: Str
         instrumentation.waitForIdleSync()
         click(activity.getString(R.string.navigation_settings))
         click(activity.getString(R.string.settings_language_title))
-        AppLanguages.names.drop(1).forEach { check(awaitNode(it) != null) { "Missing language option $it" } }
+        AppLanguages.names(context).drop(1).forEach { check(awaitNode(it) != null) { "Missing language option $it" } }
         check(awaitNode(activity.getString(R.string.settings_language_system)) != null)
         click(activity.getString(R.string.settings_language_system))
     } finally {
