@@ -6,6 +6,7 @@ import android.app.LocaleManager
 import android.content.Intent
 import android.os.Build
 import android.os.LocaleList
+import android.os.SystemClock
 import android.view.accessibility.AccessibilityNodeInfo
 import com.shixiaoshi0417.nekokem.i18n.AppLanguages
 
@@ -19,6 +20,13 @@ internal fun runLanguageDeviceTests(instrumentation: Instrumentation, phase: Str
     }
     if (phase == "restart") {
         check(AppLanguages.selection(context) == "ja") { "Language lost across process restart" }
+        val restarted = instrumentation.startActivitySync(
+            Intent(context, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+        )
+        instrumentation.waitForIdleSync()
+        check(restarted.getString(R.string.navigation_files) == "ファイルの暗号化・復号")
+        instrumentation.runOnMainSync { restarted.finish() }
+        return
     }
     instrumentation.runOnMainSync { AppLanguages.setSelection(context, "") }
     var activity = instrumentation.startActivitySync(
@@ -59,8 +67,16 @@ internal fun runLanguageDeviceTests(instrumentation: Instrumentation, phase: Str
             val root = instrumentation.uiAutomation.rootInActiveWindow ?: return null
             return root.findAccessibilityNodeInfosByText(text).firstOrNull()
         }
+        fun awaitNode(text: String): AccessibilityNodeInfo? {
+            val deadline = SystemClock.uptimeMillis() + 5000
+            while (SystemClock.uptimeMillis() < deadline) {
+                node(text)?.let { return it }
+                SystemClock.sleep(100)
+            }
+            return null
+        }
         fun click(text: String) {
-            var target = checkNotNull(node(text)) { "Missing accessible text: $text" }
+            var target = checkNotNull(awaitNode(text)) { "Missing accessible text: $text" }
             while (!target.isClickable) target = checkNotNull(target.parent)
             check(target.performAction(AccessibilityNodeInfo.ACTION_CLICK))
             instrumentation.waitForIdleSync()
@@ -79,8 +95,8 @@ internal fun runLanguageDeviceTests(instrumentation: Instrumentation, phase: Str
         instrumentation.waitForIdleSync()
         click(activity.getString(R.string.navigation_settings))
         click(activity.getString(R.string.settings_language_title))
-        AppLanguages.names.drop(1).forEach { check(node(it) != null) { "Missing language option $it" } }
-        check(node(activity.getString(R.string.settings_language_system)) != null)
+        AppLanguages.names.drop(1).forEach { check(awaitNode(it) != null) { "Missing language option $it" } }
+        check(awaitNode(activity.getString(R.string.settings_language_system)) != null)
         click(activity.getString(R.string.settings_language_system))
     } finally {
         instrumentation.runOnMainSync {
