@@ -1,0 +1,142 @@
+name: Windows CLI and pre-port Linux interoperability
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: windows-cli-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  baseline-linux:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/checkout@v5
+        with:
+          ref: 3ce869eea9384859cc5808918d4672c43eab8c92
+          path: baseline-source
+      - name: Build pre-port main Linux CLI with pinned OpenSSL
+        run: |
+          bash baseline-source/linux/scripts/build-linux-release.sh x86_64 "$RUNNER_TEMP/baseline-dist"
+          mkdir -p "$RUNNER_TEMP/baseline-bin"
+          tar -xzf "$RUNNER_TEMP/baseline-dist/NekoKEM-linux-x86_64.tar.gz" -C "$RUNNER_TEMP/baseline-bin"
+          executable=$(find "$RUNNER_TEMP/baseline-bin" -type f -name nekokem -print -quit)
+          test -n "$executable"
+          cp "$executable" "$RUNNER_TEMP/baseline-nekokem"
+          python3 windows/tests/interop.py generate "$RUNNER_TEMP/baseline-nekokem" "$RUNNER_TEMP/linux-fixtures"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: pre-port-linux-cli
+          path: ${{ runner.temp }}/baseline-nekokem
+          retention-days: 14
+          if-no-files-found: error
+      - uses: actions/upload-artifact@v4
+        with:
+          name: public-linux-interop-fixtures
+          path: |
+            ${{ runner.temp }}/linux-fixtures/linux-public.key
+            ${{ runner.temp }}/linux-fixtures/linux-private.enc
+            ${{ runner.temp }}/linux-fixtures/binary
+            ${{ runner.temp }}/linux-fixtures/empty
+            ${{ runner.temp }}/linux-fixtures/*.linux.nkem
+          retention-days: 14
+          if-no-files-found: error
+
+  windows-native:
+    needs: baseline-linux
+    runs-on: windows-2022
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v5
+      - uses: msys2/setup-msys2@v2
+        with:
+          msystem: UCRT64
+          update: true
+          install: >-
+            make perl curl tar
+            mingw-w64-ucrt-x86_64-gcc
+            mingw-w64-ucrt-x86_64-python
+      - name: Build native x64 EXE with pinned OpenSSL and verify PE mitigations
+        shell: msys2 {0}
+        run: bash windows/scripts/build-windows-cli.sh "$(cygpath -u "$RUNNER_TEMP")/windows-cli"
+      - uses: actions/download-artifact@v4
+        with:
+          name: public-linux-interop-fixtures
+          path: ${{ runner.temp }}/linux-fixtures
+      - name: Execute native Windows security, CLI and interoperability tests
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $bin = Join-Path $env:RUNNER_TEMP 'windows-cli'
+          $work = Join-Path ([Environment]::GetFolderPath('LocalApplicationData')) "NekoKEM-ci-$env:GITHUB_RUN_ID"
+          New-Item -ItemType Directory -Path $work | Out-Null
+          $env:TEMP = $work
+          $env:TMP = $work
+          try {
+            foreach ($name in @('hybrid_kdf', 'gcm_limit', 'parser', 'windows_core')) {
+              $testDirectory = Join-Path $work $name
+              New-Item -ItemType Directory -Path $testDirectory | Out-Null
+              Push-Location $testDirectory
+              try {
+                & (Join-Path $bin "${name}_tests.exe")
+                if ($LASTEXITCODE -ne 0) { throw "$name failed: $LASTEXITCODE" }
+              } finally { Pop-Location }
+            }
+            python windows/tests/cli_tests.py (Join-Path $bin 'nekokem.exe')
+            if ($LASTEXITCODE -ne 0) { throw 'Native CLI tests failed' }
+            $interop = Join-Path $work 'interop'
+            Copy-Item (Join-Path $env:RUNNER_TEMP 'linux-fixtures') $interop -Recurse
+            python windows/tests/interop.py windows (Join-Path $bin 'nekokem.exe') $interop
+            if ($LASTEXITCODE -ne 0) { throw 'Linux-to-Windows compatibility failed' }
+            $return = Join-Path $env:RUNNER_TEMP 'windows-fixtures'
+            New-Item -ItemType Directory -Path $return | Out-Null
+            foreach ($name in @('binary','empty','windows-public.key','windows-private.enc','binary.windows.nkem','empty.windows.nkem')) {
+              Copy-Item (Join-Path $interop $name) $return
+            }
+          } finally { Remove-Item $work -Recurse -Force }
+      - name: Package unsigned native CLI
+        shell: pwsh
+        run: |
+          $bin = Join-Path $env:RUNNER_TEMP 'windows-cli'
+          Compress-Archive -Path "$bin/nekokem.exe","$bin/README.md","$bin/LICENSE","$bin/OPENSSL-LICENSE.txt","$bin/SHA256SUMS.txt","$bin/pe-headers.txt" -DestinationPath "$env:RUNNER_TEMP/NekoKEM-windows-x86_64.zip"
+          (Get-FileHash "$env:RUNNER_TEMP/NekoKEM-windows-x86_64.zip" -Algorithm SHA256).Hash.ToLower() + '  NekoKEM-windows-x86_64.zip' | Set-Content "$env:RUNNER_TEMP/windows-SHA256SUMS.txt" -Encoding ascii
+      - uses: actions/upload-artifact@v4
+        with:
+          name: NekoKEM-windows-x86_64
+          path: |
+            ${{ runner.temp }}/NekoKEM-windows-x86_64.zip
+            ${{ runner.temp }}/windows-SHA256SUMS.txt
+          retention-days: 14
+          if-no-files-found: error
+      - uses: actions/upload-artifact@v4
+        with:
+          name: public-windows-interop-fixtures
+          path: ${{ runner.temp }}/windows-fixtures/
+          retention-days: 14
+          if-no-files-found: error
+
+  verify-return-linux:
+    needs: windows-native
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/download-artifact@v4
+        with:
+          name: pre-port-linux-cli
+          path: ${{ runner.temp }}/baseline-bin
+      - uses: actions/download-artifact@v4
+        with:
+          name: public-windows-interop-fixtures
+          path: ${{ runner.temp }}/windows-fixtures
+      - name: Execute Windows-to-pre-port-Linux compatibility tests
+        run: |
+          chmod 755 "$RUNNER_TEMP/baseline-bin/baseline-nekokem"
+          python3 windows/tests/interop.py verify "$RUNNER_TEMP/baseline-bin/baseline-nekokem" "$RUNNER_TEMP/windows-fixtures"

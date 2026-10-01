@@ -8,7 +8,9 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
+#ifndef _WIN32
 #include <unistd.h>
+#endif
 
 #ifndef O_NOFOLLOW
 #define O_NOFOLLOW 0
@@ -48,6 +50,7 @@ static int test_fault_should_fail(FileTestFault fault)
 }
 #endif
 
+#ifndef _WIN32
 static int file_fsync(int descriptor)
 {
 #ifdef NEKOKEM_TEST_FAULT_INJECTION
@@ -69,6 +72,8 @@ static int file_rename(const char *old_path, const char *new_path)
 #endif
     return rename(old_path, new_path);
 }
+
+#endif
 
 static const char *(*message_translator)(const char *);
 
@@ -102,6 +107,7 @@ void print_system_error(const char *context)
     fprintf(stderr, "%s: %s\n", file_message(context), strerror(errno));
 }
 
+#ifndef _WIN32
 int ensure_directory(const char *path, mode_t mode)
 {
     struct stat status;
@@ -202,6 +208,8 @@ int file_get_size(FILE *stream, uint64_t *size)
     return 1;
 }
 
+#endif
+
 int file_read_exact(FILE *stream, void *buffer, size_t length)
 {
     unsigned char *position = buffer;
@@ -284,6 +292,7 @@ int file_disable_buffering(FILE *stream)
     return 1;
 }
 
+#ifndef _WIN32
 int file_read_regular(const char *path,
                       size_t maximum_size,
                       unsigned char **buffer,
@@ -910,3 +919,7 @@ void atomic_file_abort(AtomicFile *file)
     }
     file->final_path = NULL;
 }
+
+#else
+#include "file_windows.inc"
+#endif

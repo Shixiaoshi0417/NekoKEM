@@ -8,7 +8,11 @@
 
 #define NEKOKEM_CLI_VERSION "3.2.0"
 
+#ifdef _WIN32
+int cli_main(int argc, char **argv)
+#else
 int main(int argc, char **argv)
+#endif
 {
     if (!cli_language_init(&argc, argv)) return EXIT_FAILURE;
     if (argc == 2 && strcmp(argv[1], "--help") == 0) {

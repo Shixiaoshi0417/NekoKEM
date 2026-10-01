@@ -13,8 +13,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
-#include <termios.h>
-#include <unistd.h>
+#include "terminal.h"
 
 #define PUBLIC_KEY_PATH "keys/public.key"
 #define PRIVATE_KEY_PATH "keys/private.key"
@@ -74,8 +73,7 @@ static void password_buffer_cleanup(PasswordBuffer *password)
 static int read_password_line(const char *prompt,
                               PasswordBuffer *password)
 {
-    struct termios original_terminal;
-    struct termios hidden_terminal;
+    CliTerminal original_terminal;
     unsigned char *buffer = NULL;
     size_t length = 0U;
     const size_t capacity = MAX_PASSWORD_SIZE + 1U;
@@ -90,19 +88,9 @@ static int read_password_line(const char *prompt,
         print_openssl_error("Cannot allocate password buffer");
         goto cleanup;
     }
-    if (isatty(STDIN_FILENO) != 0) {
-        if (tcgetattr(STDIN_FILENO, &original_terminal) != 0) {
-            print_system_error("Cannot read terminal settings");
-            goto cleanup;
-        }
-        hidden_terminal = original_terminal;
-        hidden_terminal.c_lflag &= (tcflag_t)~ECHO;
-        if (tcsetattr(STDIN_FILENO, TCSAFLUSH,
-                      &hidden_terminal) != 0) {
-            print_system_error("Cannot disable password echo");
-            goto cleanup;
-        }
-        echo_disabled = 1;
+    if (!cli_terminal_hide(&original_terminal, &echo_disabled)) {
+        print_system_error("Cannot disable password echo");
+        goto cleanup;
     }
     if (fputs(prompt, stdout) == EOF || fflush(stdout) != 0) {
         print_system_error("Cannot display password prompt");
@@ -146,8 +134,7 @@ static int read_password_line(const char *prompt,
 
 cleanup:
     if (echo_disabled != 0) {
-        if (tcsetattr(STDIN_FILENO, TCSANOW,
-                      &original_terminal) != 0) {
+        if (!cli_terminal_restore(&original_terminal, 0)) {
             print_system_error("Cannot restore terminal echo");
             success = 0;
         }
@@ -373,11 +360,14 @@ static int collect_pasted_key(int private_key, char **temporary_path)
 {
     static const char public_end[] = "-----END PUBLIC KEY-----";
     static const char private_end[] = "-----END PRIVATE KEY-----";
+#ifndef _WIN32
     static const char filename[] = "/key.pem";
+#endif
+#ifndef _WIN32
     char directory_template[] = "/tmp/nekokem-paste.XXXXXX";
+#endif
     const char *end_marker = private_key != 0 ? private_end : public_end;
-    struct termios original_terminal;
-    struct termios hidden_terminal;
+    CliTerminal original_terminal;
     FILE *output = NULL;
     char *line = NULL;
     char *path = NULL;
@@ -387,11 +377,21 @@ static int collect_pasted_key(int private_key, char **temporary_path)
     size_t total_size = 0U;
     unsigned int end_markers = 0U;
     int descriptor = -1;
+#ifndef _WIN32
     int path_result;
+#endif
     int echo_disabled = 0;
     int success = 0;
 
     *temporary_path = NULL;
+#ifdef _WIN32
+    if (!windows_create_private_temp(&path, &output)) goto cleanup;
+    directory = strdup(path);
+    if (directory == NULL) goto cleanup;
+    char *last_separator = strrchr(directory, '/');
+    if (last_separator == NULL) goto cleanup;
+    *last_separator = '\0';
+#else
     directory = mkdtemp(directory_template);
     if (directory == NULL) {
         print_system_error("Cannot create private temporary directory");
@@ -432,6 +432,7 @@ static int collect_pasted_key(int private_key, char **temporary_path)
         goto cleanup;
     }
     descriptor = -1;
+#endif
     if (!file_disable_buffering(output)) {
         goto cleanup;
     }
@@ -443,19 +444,9 @@ static int collect_pasted_key(int private_key, char **temporary_path)
             print_system_error("Cannot display private-key prompt");
             goto cleanup;
         }
-        if (isatty(STDIN_FILENO) != 0) {
-            if (tcgetattr(STDIN_FILENO, &original_terminal) != 0) {
-                print_system_error("Cannot read terminal settings");
-                goto cleanup;
-            }
-            hidden_terminal = original_terminal;
-            hidden_terminal.c_lflag &= (tcflag_t)~ECHO;
-            if (tcsetattr(STDIN_FILENO, TCSAFLUSH,
-                          &hidden_terminal) != 0) {
-                print_system_error("Cannot disable private-key echo");
-                goto cleanup;
-            }
-            echo_disabled = 1;
+        if (!cli_terminal_hide(&original_terminal, &echo_disabled)) {
+            print_system_error("Cannot disable private-key echo");
+            goto cleanup;
         }
     } else if (fputs(file_message("请粘贴两个 PEM 公钥块：\n"), stdout) == EOF ||
                fflush(stdout) != 0) {
@@ -486,8 +477,7 @@ static int collect_pasted_key(int private_key, char **temporary_path)
     }
 
     if (echo_disabled != 0) {
-        if (tcsetattr(STDIN_FILENO, TCSAFLUSH,
-                      &original_terminal) != 0) {
+        if (!cli_terminal_restore(&original_terminal, 1)) {
             print_system_error("Cannot restore terminal echo");
             goto cleanup;
         }
@@ -517,8 +507,7 @@ static int collect_pasted_key(int private_key, char **temporary_path)
 
 cleanup:
     if (echo_disabled != 0) {
-        if (tcsetattr(STDIN_FILENO, TCSAFLUSH,
-                      &original_terminal) != 0) {
+        if (!cli_terminal_restore(&original_terminal, 1)) {
             print_system_error("Cannot restore terminal echo");
         }
         (void)fputc('\n', stdout);
@@ -541,6 +530,9 @@ cleanup:
     if (success == 0 && directory != NULL) {
         (void)rmdir(directory);
     }
+#ifdef _WIN32
+    free(directory);
+#endif
     return success;
 }
 
@@ -617,6 +609,10 @@ static const char *path_basename(const char *path)
 {
     const char *separator = strrchr(path, '/');
 
+#ifdef _WIN32
+    const char *backslash = strrchr(path, '\\');
+    if (backslash != NULL && (separator == NULL || backslash > separator)) separator = backslash;
+#endif
     return separator != NULL ? separator + 1 : path;
 }
 

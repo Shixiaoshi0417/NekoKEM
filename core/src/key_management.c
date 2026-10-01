@@ -10,7 +10,11 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <sys/stat.h>
+#ifndef _WIN32
 #include <unistd.h>
+#else
+#include "windows_io.h"
+#endif
 
 #define MANAGED_NKPR_MAX_SIZE \
     (NKPR_HEADER_SIZE + NKPR_SALT_SIZE + NKPR_NONCE_SIZE + \
@@ -23,17 +27,23 @@ static int managed_path_is_valid(const char *path)
 
 int nekokem_private_key_exists(const char *private_key_path)
 {
+#ifndef _WIN32
     struct stat status;
+#endif
     unsigned char *container = NULL;
     size_t container_len = 0U;
     int exists = 0;
 
-    if (!managed_path_is_valid(private_key_path) ||
-        lstat(private_key_path, &status) != 0 ||
+    if (!managed_path_is_valid(private_key_path)) {
+        goto cleanup;
+    }
+#ifndef _WIN32
+    if (lstat(private_key_path, &status) != 0 ||
         !S_ISREG(status.st_mode) ||
         (status.st_mode & (mode_t)0777) != (mode_t)0600) {
         goto cleanup;
     }
+#endif
     if (!file_read_sensitive(private_key_path,
                              MANAGED_NKPR_MAX_SIZE,
                              &container,
@@ -107,12 +117,17 @@ cleanup:
 
 int nekokem_delete_private_key(const char *private_key_path)
 {
+#ifndef _WIN32
     struct stat status;
+#endif
 
     if (!managed_path_is_valid(private_key_path)) {
         fprintf(stderr, file_message("Invalid private-key deletion path\n"));
         return 0;
     }
+#ifdef _WIN32
+    return windows_delete_regular(private_key_path);
+#else
     if (lstat(private_key_path, &status) != 0) {
         if (errno == ENOENT) {
             return 1;
@@ -129,4 +144,5 @@ int nekokem_delete_private_key(const char *private_key_path)
         return 0;
     }
     return 1;
+#endif
 }
