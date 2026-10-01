@@ -10,6 +10,10 @@
 #include <stdlib.h>
 #include <string.h>
 
+void windows_test_path_trace(const wchar_t *expected, const wchar_t *actual)
+{
+    fprintf(stderr,"Native path expected=%ls actual=%ls\n",expected,actual);
+}
 void windows_test_read_trace(const char *stage, uint64_t size, size_t maximum, int error, unsigned long native_error)
 {
     fprintf(stderr,"Native read stage=%s, size=%llu, maximum=%zu, errno=%d, win32=%lu\n",
@@ -74,6 +78,7 @@ int main(int argc, char **argv)
     CHECK(!nekokem_check_private_key_password("private.enc",(const unsigned char *)"wrong",5));
     CHECK(write_private("plain","binary\r\n\032",9));
     CHECK(nekokem_encrypt_file("plain","cipher.nkem","public.key"));
+    CHECK(GetFileAttributesW(L"cipher.nkem") != INVALID_FILE_ATTRIBUTES);
     CHECK(nekokem_decrypt_file("cipher.nkem","output","private.enc",password,sizeof(password)-1));
     CHECK(equals("output","binary\r\n\032"));
     CHECK(write_private("output","sentinel",8));

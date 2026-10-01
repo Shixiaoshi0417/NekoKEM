@@ -148,7 +148,9 @@ wchar_t *windows_utf8_path(const char *path)
     capacity = GetFullPathNameW(raw, 0, NULL, NULL);
     if (capacity == 0 || capacity > 32760) goto fail;
     full = malloc((size_t)capacity * sizeof(*full));
-    if (full == NULL || GetFullPathNameW(raw, capacity, full, NULL) >= capacity) goto fail;
+    if (full == NULL) goto fail;
+    DWORD resolved = GetFullPathNameW(raw, capacity, full, NULL);
+    if (resolved == 0 || resolved >= capacity) goto fail;
     if (wcslen(full) < 4 || full[1] != L':' || full[2] != L'\\') goto fail;
     for (wchar_t *start = full + 3; *start != L'\0';) {
         wchar_t *end = wcschr(start, L'\\');
@@ -245,10 +247,18 @@ static HANDLE win_open(const char *path, DWORD access, DWORD sharing, int privat
     handle = CreateFileW(checked.full, access | READ_CONTROL, sharing, NULL,
             OPEN_EXISTING, FILE_FLAG_OPEN_REPARSE_POINT, NULL);
     if (handle != INVALID_HANDLE_VALUE && !win_regular(handle, private_acl)) {
+#ifdef NEKOKEM_TEST_FAULT_INJECTION
+        windows_test_read_trace("regular handle rejection", 0, 0, errno, (unsigned long)GetLastError());
+        windows_test_path_trace(checked.full, L"<regular handle rejection>");
+#endif
         CloseHandle(handle);
         handle = INVALID_HANDLE_VALUE;
         errno = EACCES;
     } else if (handle == INVALID_HANDLE_VALUE) {
+#ifdef NEKOKEM_TEST_FAULT_INJECTION
+        windows_test_read_trace("native open", 0, 0, errno, (unsigned long)GetLastError());
+        windows_test_path_trace(checked.full, L"<native open failed>");
+#endif
         (void)win_error();
     }
     win_path_close(&checked);
@@ -486,6 +496,13 @@ static int win_rename(HANDLE handle, const wchar_t *destination, int replace, in
     info->FileNameLength = (DWORD)length;
     memcpy(info->FileName, destination, length);
     int result = SetFileInformationByHandle(handle, FileRenameInfo, info, (DWORD)size) != 0;
+#ifdef NEKOKEM_TEST_FAULT_INJECTION
+    if (result) {
+        wchar_t actual[32768];
+        DWORD actual_length = GetFinalPathNameByHandleW(handle, actual, 32768, FILE_NAME_NORMALIZED);
+        windows_test_path_trace(destination, actual_length > 0 && actual_length < 32768 ? actual : L"<unavailable>");
+    }
+#endif
     free(info);
     return result;
 }
