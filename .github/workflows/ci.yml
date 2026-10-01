@@ -71,6 +71,9 @@ jobs:
       - name: Test fuzz result and process failure handling
         run: python3 .github/scripts/test_fuzz_smoke.py -v
 
+      - name: Test emulator image installation failure handling
+        run: python3 .github/scripts/test_android_emulator_image.py
+
       - name: Test release signing configuration and identity persistence
         run: python3 .github/scripts/test_release_signing.py -v
 
@@ -232,6 +235,8 @@ jobs:
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
+      - name: Install and verify emulator image with bounded download retries
+        run: bash .github/scripts/install_android_emulator_image.sh "$ANDROID_SDK_ROOT" "${{ matrix.api }}"
       - name: Execute JNI, SAF and language tests on a device
         uses: reactivecircus/android-emulator-runner@v2
         with:
@@ -239,9 +244,18 @@ jobs:
           arch: x86_64
           target: google_apis
           profile: pixel_2
+          ram-size: 4096M
           emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim
           disable-animations: true
           script: |
+            adb shell input keyevent KEYCODE_WAKEUP
+            adb shell wm dismiss-keyguard
+            adb shell svc power stayon true
+            adb shell settings put system screen_off_timeout 1800000
+            # API 35 Pixel Launcher ANRs can cover the app with a system dialog.
+            # Disable only this unrelated launcher in the disposable test device.
+            # App ANRs and all JNI/SAF/language assertions remain enabled.
+            if [ '${{ matrix.api }}' = 35 ]; then adb shell pm disable-user --user 0 com.google.android.apps.nexuslauncher; fi
             adb shell settings put system font_scale 1.5
             adb shell cmd uimode night yes
             bash .github/scripts/run_android_device_tests.sh android/device-reports

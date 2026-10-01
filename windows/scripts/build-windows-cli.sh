@@ -50,10 +50,11 @@ sources=()
 for name in "${core[@]}"; do sources+=("$repo_root/core/src/$name.c"); done
 gcc "${flags[@]}" -fanalyzer -fsyntax-only "${sources[@]}" \
     "$repo_root/linux/src/cli.c" "$repo_root/linux/src/i18n.c" "$repo_root/windows/src/main.c"
+windres -I"$repo_root/windows/icons" "$repo_root/windows/icons/app.rc" "$output/app-icon.o"
 gcc "${flags[@]}" "${link[@]}" -municode \
     "$repo_root/windows/src/main.c" "$repo_root/linux/src/main.c" \
     "$repo_root/linux/src/cli.c" "$repo_root/linux/src/i18n.c" \
-    "${sources[@]}" "${libs[@]}" -o "$output/nekokem.exe"
+    "${sources[@]}" "$output/app-icon.o" "${libs[@]}" -o "$output/nekokem.exe"
 for test in hybrid_kdf gcm_limit parser; do
     gcc "${flags[@]}" "${link[@]}" "$repo_root/core/tests/${test}_tests.c" \
         "${sources[@]}" "${libs[@]}" -o "$output/${test}_tests.exe"

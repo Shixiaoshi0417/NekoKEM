@@ -4,6 +4,7 @@
 #include <stdlib.h>
 #include <wchar.h>
 #include <string.h>
+#include <shellapi.h>
 #define CHECK(x) do { if (!(x)) { fprintf(stderr,"Console check failed at line %d\n",__LINE__); return EXIT_FAILURE; } } while (0)
 
 /* Explorer starts a console-subsystem EXE with no arguments in a new console. */
@@ -15,6 +16,9 @@ static int check_no_argument_launch(void)
     wchar_t *name = wcsrchr(path, L'\\');
     if (name == NULL) return 0;
     wcscpy(name + 1, L"nekokem.exe");
+    HICON icon = NULL;
+    if (ExtractIconExW(path, 0, &icon, NULL, 1) != 1 || icon == NULL) return 0;
+    DestroyIcon(icon);
     if (swprintf(command, 32772, L"\"%ls\"", path) < 0) return 0;
     STARTUPINFOW startup = {0};
     PROCESS_INFORMATION process = {0};

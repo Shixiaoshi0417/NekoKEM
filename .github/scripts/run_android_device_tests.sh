@@ -10,6 +10,10 @@ collect_evidence() {
         gzip > "$report_dir/screens.tar.gz" || return 1
     adb exec-out screencap -p > "$report_dir/final-screen.png" || true
     adb logcat -d -s AndroidRuntime > "$report_dir/android-runtime.txt" || true
+    adb logcat -d -b all > "$report_dir/logcat.txt" || true
+    adb shell dumpsys activity activities > "$report_dir/activities.txt" || true
+    adb shell dumpsys activity lastanr > "$report_dir/last-anr.txt" || true
+    adb shell dumpsys window > "$report_dir/windows.txt" || true
 }
 # Failure collection preserves test status; successful runs verify the complete archive.
 trap 'collect_evidence || true' EXIT
