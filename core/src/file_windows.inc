@@ -297,14 +297,24 @@ static int win_read(const char *path, size_t maximum, unsigned char **buffer,
     if (buffer == NULL || length == NULL || maximum == 0) return 0;
     *buffer = NULL;
     *length = 0;
+    const char *stage = "open";
     HANDLE handle = win_open(path, GENERIC_READ, FILE_SHARE_READ, sensitive);
     if (handle == INVALID_HANDLE_VALUE) goto cleanup;
+    stage = "stream";
     stream = win_stream(handle, _O_RDONLY, "rb");
-    if (stream == NULL || !file_get_size(stream, &size) || size == 0 ||
-        size > (uint64_t)maximum || size > (uint64_t)SIZE_MAX) goto cleanup;
+    if (stream == NULL) goto cleanup;
+    stage = "size";
+    if (!file_get_size(stream, &size)) goto cleanup;
+    stage = "size limit";
+    if (size == 0 || size > (uint64_t)maximum || size > (uint64_t)SIZE_MAX) goto cleanup;
+    stage = "allocation";
     bytes = OPENSSL_malloc((size_t)size);
-    if (bytes == NULL || !file_read_exact(stream, bytes, (size_t)size) ||
-        fgetc(stream) != EOF || ferror(stream)) goto cleanup;
+    if (bytes == NULL) goto cleanup;
+    stage = "data";
+    if (!file_read_exact(stream, bytes, (size_t)size)) goto cleanup;
+    stage = "tail";
+    if (fgetc(stream) != EOF || ferror(stream)) goto cleanup;
+    stage = "close";
     if (fclose(stream) != 0) { stream = NULL; goto cleanup; }
     stream = NULL;
     *buffer = bytes;
@@ -312,6 +322,11 @@ static int win_read(const char *path, size_t maximum, unsigned char **buffer,
     bytes = NULL;
     success = 1;
 cleanup:
+#ifdef NEKOKEM_TEST_FAULT_INJECTION
+    if (!success) windows_test_read_trace(stage, size, maximum, errno, (unsigned long)GetLastError());
+#else
+    (void)stage;
+#endif
     if (stream != NULL) (void)fclose(stream);
     if (sensitive) secure_free(bytes, (size_t)size); else OPENSSL_free(bytes);
     if (!success && !quiet) print_system_error("Cannot read regular input file");

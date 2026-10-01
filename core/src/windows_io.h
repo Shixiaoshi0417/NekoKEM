@@ -3,6 +3,10 @@
 #ifdef _WIN32
 #include <wchar.h>
 #include <stdio.h>
+#include <stdint.h>
+#ifdef NEKOKEM_TEST_FAULT_INJECTION
+void windows_test_read_trace(const char *stage, uint64_t size, size_t maximum, int error, unsigned long native_error);
+#endif
 /* All Core paths are strict UTF-8. Windows accepts local NTFS paths only. */
 wchar_t *windows_utf8_path(const char *path);
 int windows_read_sensitive_quiet(const char *path, size_t maximum, unsigned char **buffer, size_t *length);

@@ -10,6 +10,11 @@
 #include <stdlib.h>
 #include <string.h>
 
+void windows_test_read_trace(const char *stage, uint64_t size, size_t maximum, int error, unsigned long native_error)
+{
+    fprintf(stderr,"Native read stage=%s, size=%llu, maximum=%zu, errno=%d, win32=%lu\n",
+            stage,(unsigned long long)size,maximum,error,native_error);
+}
 static const unsigned char password[] = "windows-test-only-password";
 #define CHECK(x) do { if (!(x)) { fprintf(stderr,"Check failed at line %d: %s (errno=%d, win32=%lu)\n",__LINE__,#x,errno,(unsigned long)GetLastError()); return EXIT_FAILURE; } } while (0)
 static int write_private(const char *path, const void *bytes, size_t length)
@@ -62,6 +67,8 @@ int main(int argc, char **argv)
     CHECK(argc == 1);
     CHECK(ensure_directory("private",0700));
     CHECK(nekokem_generate_keypair("public.key","private.enc",password,sizeof(password)-1));
+    CHECK(GetFileAttributesW(L"public.key") != INVALID_FILE_ATTRIBUTES);
+    CHECK(GetFileAttributesW(L"private.enc") != INVALID_FILE_ATTRIBUTES);
     CHECK(nekokem_private_key_exists("private.enc"));
     CHECK(nekokem_check_private_key_password("private.enc",password,sizeof(password)-1));
     CHECK(!nekokem_check_private_key_password("private.enc",(const unsigned char *)"wrong",5));
