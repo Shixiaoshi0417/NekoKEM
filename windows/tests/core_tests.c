@@ -135,6 +135,7 @@ int main(int argc, char **argv)
     CHECK(no_artifacts());
     CHECK(nekokem_delete_private_key("private.enc"));
     CHECK(nekokem_delete_private_key("private.enc"));
+    CHECK(nekokem_delete_private_key("absent-directory/private.enc"));
     puts("Windows native crypto, ACL/owner/link, paths, cancellation, rollback and flush tests passed");
     return EXIT_SUCCESS;
 }

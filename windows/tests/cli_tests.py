@@ -105,6 +105,18 @@ class Tests(unittest.TestCase):
         subprocess.run(['icacls',str(self.root/'output'),'/grant','*S-1-1-0:R'],check=True,capture_output=True)
         self.run_cli('encrypt','hybrid','plain','output','keys/public.key',ok=False)
         self.assertEqual((self.root/'output').read_bytes(),b'sentinel')
+    def test_utf8_and_exact_password_limit_with_crlf(self):
+        password = ('中文-日本語-한국어-😀'+'a'*16).encode('utf-8')+b'\r\n'
+        self.run_cli('keygen',password=password*2)
+        (self.root/'plain').write_bytes(b'data')
+        self.run_cli('encrypt','hybrid','plain','cipher.nkem','keys/public.key')
+        self.run_cli('decrypt','hybrid','cipher.nkem','output','keys/private.key.enc',password=password)
+        self.assertEqual((self.root/'output').read_bytes(),b'data')
+        password = b'a'*1024+b'\r\n'
+        self.run_cli('keygen',password=password*2)
+        self.run_cli('encrypt','hybrid','plain','cipher.nkem','keys/public.key')
+        self.run_cli('decrypt','hybrid','cipher.nkem','output','keys/private.key.enc',password=password)
+        self.assertEqual((self.root/'output').read_bytes(),b'data')
     def test_password_and_prompt_bounds(self):
         self.run_cli('keygen',password=b'\n\n',ok=False)
         self.run_cli('keygen',password=b'a'*1025+b'\n'+b'a'*1025+b'\n',ok=False)

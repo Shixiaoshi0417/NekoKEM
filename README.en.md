@@ -59,6 +59,22 @@ The build uses C17 and links OpenSSL `libcrypto`. Hybrid private-key protection 
 
 The executable is `linux/nekokem`. The `./nekokem` examples below assume the working directory is `linux/`, or another directory containing a copy of that executable.
 
+## Windows CLI (test builds)
+
+A native Windows 10/11 x64 `nekokem.exe` is available. See the
+[Windows CLI documentation](windows/README.md) for building, use and imported-key
+permissions, and the [filesystem design](windows/SECURITY-DESIGN.md) for boundaries.
+Running requires no MSYS2 runtime or OpenSSL DLL; building uses MSYS2 UCRT64 and
+pinned OpenSSL 3.5.6. Windows CI provides test builds; these are not added to the
+existing v3.2.0 Release and do not use Android signing material.
+
+The first version accepts local NTFS only and rejects network/device/ADS/reparse
+paths. Protocols, cryptographic parameters and 64 KiB streaming remain unchanged;
+Windows power-loss durability is not presented as verified POSIX directory fsync.
+Windows stores language preferences in OS LocalAppData/NekoKEM and reads the OS user
+language when no locale environment override exists. The POSIX configuration paths
+and terminal fallback rules below apply to the Linux CLI.
+
 ## Language settings
 
 Android and the CLI support Simplified Chinese (`zh-CN`), Traditional Chinese (`zh-TW`), English (`en`), Japanese (`ja`), and Korean (`ko`). The default follows the system; unsupported languages fall back to English. Chinese CN/SG regions use Simplified Chinese; TW/HK/MO use Traditional Chinese. Other regions of en/ja/ko match their language. Following the system responds to system-language changes.

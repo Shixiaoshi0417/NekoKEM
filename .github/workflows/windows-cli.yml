@@ -72,6 +72,7 @@ jobs:
         with:
           path: ${{ runner.temp }}/windows-openssl
           key: windows-ucrt64-openssl-3.5.6-${{ steps.compiler.outputs.version }}-${{ hashFiles('windows/scripts/build-windows-cli.sh') }}
+          restore-keys: windows-ucrt64-openssl-3.5.6-${{ steps.compiler.outputs.version }}-
       - name: Build native x64 EXE with pinned OpenSSL and verify PE mitigations
         shell: msys2 {0}
         run: |
@@ -95,6 +96,13 @@ jobs:
           New-Item -ItemType Directory -Path $work | Out-Null
           $env:TEMP = $work
           $env:TMP = $work
+          # Public CI directory metadata helps diagnose fail-closed NTFS checks.
+          $ancestor = Get-Item $work
+          while ($null -ne $ancestor) {
+            $acl = Get-Acl $ancestor.FullName
+            Write-Host ($ancestor.FullName + ' owner=' + $acl.Owner + ' sddl=' + $acl.Sddl)
+            $ancestor = $ancestor.Parent
+          }
           try {
             foreach ($name in @('hybrid_kdf', 'gcm_limit', 'parser', 'windows_core', 'console')) {
               $testDirectory = Join-Path $work $name
@@ -123,7 +131,7 @@ jobs:
         shell: pwsh
         run: |
           $bin = Join-Path $env:RUNNER_TEMP 'windows-cli'
-          Compress-Archive -Path "$bin/nekokem.exe","$bin/README.md","$bin/LICENSE","$bin/OPENSSL-LICENSE.txt","$bin/SHA256SUMS.txt","$bin/pe-headers.txt","$bin/benchmark.json" -DestinationPath "$env:RUNNER_TEMP/NekoKEM-windows-x86_64.zip"
+          Compress-Archive -Path "$bin/nekokem.exe","$bin/README.md","$bin/SECURITY-DESIGN.md","$bin/LICENSE","$bin/OPENSSL-LICENSE.txt","$bin/SHA256SUMS.txt","$bin/pe-headers.txt","$bin/benchmark.json","$bin/build-metadata.json" -DestinationPath "$env:RUNNER_TEMP/NekoKEM-windows-x86_64.zip"
           (Get-FileHash "$env:RUNNER_TEMP/NekoKEM-windows-x86_64.zip" -Algorithm SHA256).Hash.ToLower() + '  NekoKEM-windows-x86_64.zip' | Set-Content "$env:RUNNER_TEMP/windows-SHA256SUMS.txt" -Encoding ascii
       - uses: actions/upload-artifact@v4
         with:

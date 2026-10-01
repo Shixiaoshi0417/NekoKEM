@@ -178,9 +178,13 @@ static void win_path_close(WinPath *path)
 
 static int win_path_open(WinPath *path, const char *utf8, int trusted_parent)
 {
+    int saved_errno = EACCES;
     memset(path, 0, sizeof(*path));
     path->full = windows_utf8_path(utf8);
     if (path->full == NULL) return 0;
+    wchar_t root[4] = {path->full[0], L':', L'\\', L'\0'};
+    /* Reject mapped network/removable devices before opening any handle. */
+    if (GetDriveTypeW(root) != DRIVE_FIXED) goto fail;
     size_t capacity = wcslen(path->full);
     path->parents = calloc(capacity, sizeof(*path->parents));
     if (path->parents == NULL) goto fail;
@@ -197,26 +201,34 @@ static int win_path_open(WinPath *path, const char *utf8, int trusted_parent)
                 FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_OPEN_REPARSE_POINT, NULL);
         *cursor = saved;
         BY_HANDLE_FILE_INFORMATION info;
-        if (handle == INVALID_HANDLE_VALUE) goto fail;
+        if (handle == INVALID_HANDLE_VALUE) {
+            (void)win_error();
+            saved_errno = errno;
+            goto fail;
+        }
         path->parents[path->count++] = handle;
         if (!GetFileInformationByHandle(handle, &info) ||
             (info.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) == 0 ||
             (info.dwFileAttributes & FILE_ATTRIBUTE_REPARSE_POINT) != 0 ||
             (trusted_parent && !win_acl(handle,
                 cursor == wcsrchr(path->full,L'\\') ||
-                (cursor == path->full+3 && wcsrchr(path->full,L'\\') == path->full+2) ? 0 : 2))) goto fail;
+                (cursor == path->full+3 && wcsrchr(path->full,L'\\') == path->full+2) ? 0 : 2))) {
+#ifdef NEKOKEM_TEST_FAULT_INJECTION
+            fprintf(stderr, "Windows ancestor validation failed at component %zu (errno=%d, win32=%lu)\n",
+                    path->count, errno, (unsigned long)GetLastError());
+#endif
+            goto fail;
+        }
         if (path->count == 1) {
             wchar_t fs[32];
-            wchar_t root[4] = {path->full[0], L':', L'\\', L'\0'};
-            if (GetDriveTypeW(root) != DRIVE_FIXED ||
-                !GetVolumeInformationByHandleW(handle, NULL, 0, NULL, NULL, NULL, fs, 32) ||
+            if (!GetVolumeInformationByHandleW(handle, NULL, 0, NULL, NULL, NULL, fs, 32) ||
                 wcscmp(fs, L"NTFS") != 0) goto fail;
         }
     }
     return 1;
 fail:
     win_path_close(path);
-    errno = EACCES;
+    errno = saved_errno;
     return 0;
 }
 
@@ -438,7 +450,7 @@ int atomic_file_prepare(AtomicFile *file)
     return success;
 }
 
-static int win_rename(HANDLE handle, const wchar_t *destination, int inject)
+static int win_rename(HANDLE handle, const wchar_t *destination, int replace, int inject)
 {
 #ifndef NEKOKEM_TEST_FAULT_INJECTION
     (void)inject;
@@ -450,7 +462,7 @@ static int win_rename(HANDLE handle, const wchar_t *destination, int inject)
     if (size > (size_t)MAXDWORD) return 0;
     FILE_RENAME_INFO *info = calloc(1, size);
     if (info == NULL) return 0;
-    info->ReplaceIfExists = TRUE;
+    info->ReplaceIfExists = replace ? TRUE : FALSE;
     info->FileNameLength = (DWORD)length;
     memcpy(info->FileName, destination, length);
     int result = SetFileInformationByHandle(handle, FileRenameInfo, info, (DWORD)size) != 0;
@@ -523,7 +535,7 @@ int atomic_file_commit_pair(AtomicFile *first, AtomicFile *second)
         win_same(old[0], old[1])) goto cleanup;
     for (size_t i = 0; i < count; ++i) {
         WinAtomic *state = files[i]->platform_state;
-        if (!win_rename(state->output, state->path.full, 1)) goto cleanup;
+        if (!win_rename(state->output, state->path.full, old[i] != INVALID_HANDLE_VALUE, 1)) goto cleanup;
         published[i] = 1;
     }
     /* Flush again with the new name before reporting commit success. This is
@@ -539,7 +551,7 @@ cleanup:
             if (!published[i]) continue;
             WinAtomic *state = files[i]->platform_state;
             if (old[i] != INVALID_HANDLE_VALUE) {
-                if (!win_rename(old[i], state->path.full, 0)) {
+                if (!win_rename(old[i], state->path.full, 1, 0)) {
                     preserve[i] = 1;
                     print_system_error("Cannot restore atomic output backup");
                 }

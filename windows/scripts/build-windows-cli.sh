@@ -64,5 +64,17 @@ gcc "${flags[@]}" "${link[@]}" "$repo_root/windows/tests/console_tests.c" \
     "${sources[@]}" "${libs[@]}" -o "$output/console_tests.exe"
 objdump -p "$output/nekokem.exe" > "$output/pe-headers.txt"
 python "$repo_root/windows/tests/check_pe.py" "$output/nekokem.exe" "$output/pe-headers.txt"
-cp "$repo_root/windows/README.md" "$repo_root/LICENSE" "$output/"
+python - "$output" <<'PYMETA'
+import hashlib, json, os
+from pathlib import Path
+import subprocess, sys
+root=Path(sys.argv[1])
+metadata={'source_sha':os.environ.get('GITHUB_SHA') or subprocess.check_output(['git','rev-parse','HEAD'],text=True).strip(),
+          'run_id':os.environ.get('GITHUB_RUN_ID'), 'platform':'windows-x86_64',
+          'openssl_version':'3.5.6', 'compiler':subprocess.check_output(['gcc','--version'],text=True).splitlines()[0],
+          'authenticode_signed':False, 'apk_signing_material_used':False,
+          'exe_sha256':hashlib.sha256((root/'nekokem.exe').read_bytes()).hexdigest()}
+(root/'build-metadata.json').write_text(json.dumps(metadata,indent=2)+'\n')
+PYMETA
+cp "$repo_root/windows/README.md" "$repo_root/windows/SECURITY-DESIGN.md" "$repo_root/LICENSE" "$output/"
 (cd "$output" && sha256sum nekokem.exe > SHA256SUMS.txt)
