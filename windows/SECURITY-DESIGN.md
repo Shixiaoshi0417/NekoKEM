@@ -1,7 +1,7 @@
 # Windows filesystem boundary
 
 This port shares the original crypto implementation. `aes.c`, `hybrid.c`, `kem.c`,
-`private_key.c`, `nekokem_v3.c`, `file_v3.c` and `secure_mem.c` are unchanged. The
+`private_key.c`, `nekokem_v3.c`, `file_v3.c`, `secure_mem.c` and `nekokem.c` are unchanged. The
 Windows backend is selected at compile time; the POSIX backend and its test gates
 remain in place. There is no format migration, password/KDF weakening, crypto
 rewrite, new unlocked-key cache, or removal of assembly acceleration.
@@ -20,7 +20,8 @@ Private DACL validation intentionally rejects all effective access grants to SID
 other than the current user, even SYSTEM/Administrators entries inherited by normal
 Explorer copies. Privileged Windows administrators remain outside this isolation
 boundary, just as root is outside ordinary Unix mode isolation. Parent directories
-may grant SYSTEM/Administrators modification rights; an untrusted SID cannot own or
+may grant SYSTEM/Administrators modification rights; pinned ancestors also recognize
+the exact built-in TrustedInstaller service SID controlled by SYSTEM; an untrusted SID cannot own or
 modify an output parent. Ancestors are held without FILE_SHARE_DELETE to block path
 replacement until commit/abort. Known default ancestor read/create permissions are
 allowed when they cannot replace the already pinned path; the immediate output

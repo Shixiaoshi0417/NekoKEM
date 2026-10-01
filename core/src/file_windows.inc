@@ -5,6 +5,7 @@
 #include "windows_io.h"
 #include <windows.h>
 #include <aclapi.h>
+#include <sddl.h>
 #include <io.h>
 #include <openssl/rand.h>
 #include <stddef.h>
@@ -61,6 +62,7 @@ static int win_acl(HANDLE handle, int private_acl)
     SID_IDENTIFIER_AUTHORITY nt = SECURITY_NT_AUTHORITY;
     PSID system_sid = NULL;
     PSID admin_sid = NULL;
+    PSID installer_sid = NULL;
     int success = 0;
     const DWORD writes = FILE_WRITE_DATA | FILE_APPEND_DATA | FILE_WRITE_EA |
                          FILE_WRITE_ATTRIBUTES | FILE_DELETE_CHILD | DELETE |
@@ -77,8 +79,13 @@ static int win_acl(HANDLE handle, int private_acl)
             0, 0, 0, 0, 0, 0, 0, &system_sid) ||
         !AllocateAndInitializeSid(&nt, 2, SECURITY_BUILTIN_DOMAIN_RID,
             DOMAIN_ALIAS_RID_ADMINS, 0, 0, 0, 0, 0, 0, &admin_sid)) goto cleanup;
+    /* Exact built-in Windows Modules Installer service SID. Its token is
+     * controlled by SYSTEM; do not trust arbitrary service/account names. */
+    if (!ConvertStringSidToSidW(L"S-1-5-80-956008885-3418522649-1831038044-1853292631-2271478464",
+                              &installer_sid)) goto cleanup;
     if (private_acl != 1 && !EqualSid(owner,user->User.Sid) &&
-        !EqualSid(owner,system_sid) && !EqualSid(owner,admin_sid)) goto cleanup;
+        !EqualSid(owner,system_sid) && !EqualSid(owner,admin_sid) &&
+        !(private_acl == 2 && EqualSid(owner,installer_sid))) goto cleanup;
     for (DWORD index = 0; index < acl->AceCount; ++index) {
         void *entry = NULL;
         if (!GetAce(acl, index, &entry)) goto cleanup;
@@ -95,12 +102,14 @@ static int win_acl(HANDLE handle, int private_acl)
             if (ace->Mask != 0) goto cleanup;
         } else if ((ace->Mask & (private_acl == 2 ?
                     (writes & ~(DWORD)(FILE_WRITE_DATA | FILE_APPEND_DATA)) : writes)) != 0 &&
-                   !EqualSid(sid, system_sid) && !EqualSid(sid, admin_sid)) {
+                   !EqualSid(sid, system_sid) && !EqualSid(sid, admin_sid) &&
+                   !(private_acl == 2 && EqualSid(sid, installer_sid))) {
             goto cleanup;
         }
     }
     success = 1;
 cleanup:
+    if (installer_sid != NULL) LocalFree(installer_sid);
     if (system_sid != NULL) FreeSid(system_sid);
     if (admin_sid != NULL) FreeSid(admin_sid);
     if (descriptor != NULL) LocalFree(descriptor);
@@ -213,10 +222,6 @@ static int win_path_open(WinPath *path, const char *utf8, int trusted_parent)
             (trusted_parent && !win_acl(handle,
                 cursor == wcsrchr(path->full,L'\\') ||
                 (cursor == path->full+3 && wcsrchr(path->full,L'\\') == path->full+2) ? 0 : 2))) {
-#ifdef NEKOKEM_TEST_FAULT_INJECTION
-            fprintf(stderr, "Windows ancestor validation failed at component %zu (errno=%d, win32=%lu)\n",
-                    path->count, errno, (unsigned long)GetLastError());
-#endif
             goto fail;
         }
         if (path->count == 1) {

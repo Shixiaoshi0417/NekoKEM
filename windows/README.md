@@ -22,7 +22,7 @@ catalogs. Windows uses the OS user language when no locale environment override 
 set, and stores its language choice in the OS LocalAppData/NekoKEM directory.
 UTF-8 command-line paths are converted through the Unicode Windows APIs.
 
-Security policy: local NTFS only. UNC/network paths, FAT/exFAT, device names, named
+Security policy: local fixed NTFS drives only. UNC/network paths, FAT/exFAT, device names, named
 pipes, alternate data streams and reparse points (including ancestor junctions)
 are rejected. New outputs and key directories get a protected owner-only DACL at
 creation, with no inherited read access. Private inputs require current-user
@@ -69,7 +69,7 @@ security audit. The EXE is not Authenticode signed; Android signing keys are not
 
 本版本是原生 Windows 10/11 x64 CLI，运行无需 MSYS2 或 OpenSSL DLL。使用现有
 五语言目录；密码从关闭回显的终端或 UTF-8 标准输入读取，不放入命令行参数。
-首版只接受本地 NTFS，拒绝网络/设备路径、重解析点及替代数据流。私钥、暂存明文
+首版只接受本地固定 NTFS 磁盘，拒绝网络/设备路径、重解析点及替代数据流。私钥、暂存明文
 和输出在创建时设置仅当前用户可访问的 ACL；私钥还检查所有者与硬链接数。
 不安全的已有输出会被拒绝，不自动放宽权限或先截断目标。
 

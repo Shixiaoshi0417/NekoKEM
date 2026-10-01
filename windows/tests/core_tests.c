@@ -4,13 +4,14 @@
 #include "private_key.h"
 #include "secure_mem.h"
 #include <windows.h>
+#include <errno.h>
 #include <openssl/crypto.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
 static const unsigned char password[] = "windows-test-only-password";
-#define CHECK(x) do { if (!(x)) { fprintf(stderr,"Check failed at line %d: %s\n",__LINE__,#x); return EXIT_FAILURE; } } while (0)
+#define CHECK(x) do { if (!(x)) { fprintf(stderr,"Check failed at line %d: %s (errno=%d, win32=%lu)\n",__LINE__,#x,errno,(unsigned long)GetLastError()); return EXIT_FAILURE; } } while (0)
 static int write_private(const char *path, const void *bytes, size_t length)
 {
     AtomicFile output = {0};

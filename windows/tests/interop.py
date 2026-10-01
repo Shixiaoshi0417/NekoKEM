@@ -2,6 +2,7 @@
 All generated keys/passwords are disposable public test fixtures.
 """
 import os
+import re
 from pathlib import Path
 import shutil
 import subprocess
@@ -20,6 +21,12 @@ def run(*args, password=b'', ok=True):
     assert (p.returncode == 0) == ok, (args,p.returncode,p.stdout,p.stderr)
     return p
 
+def fingerprint(path):
+    p = run(password=b'4\n1\n'+str(path).encode('utf-8')+b'\n5\n')
+    found = re.findall(rb'(?<![0-9A-F])(?:[0-9A-F]{2}:){31}[0-9A-F]{2}(?![0-9A-F])', p.stdout)
+    assert len(found) == 1, (p.stdout,p.stderr)
+    return found[0]
+
 if phase == 'generate':
     run('keygen', password=PASSWORD*2)
     for name, data in [('binary', bytes(range(256))*512),('empty',b'')]:
@@ -27,12 +34,14 @@ if phase == 'generate':
         run('encrypt','hybrid',name,name+'.linux.nkem','keys/public.key')
     shutil.copyfile(root/'keys/public.key', root/'linux-public.key')
     shutil.copyfile(root/'keys/private.key.enc', root/'linux-private.enc')
-    print('Pre-port Linux main generated v3/NKPR fixtures')
+    (root/'linux-fingerprint.txt').write_bytes(fingerprint('linux-public.key'))
+    print('Pre-port Linux main generated v3/NKPR fixtures and fingerprint')
 elif phase == 'windows':
     assert os.name == 'nt'
     harness = str(Path(exe).with_name('windows_core_tests.exe'))
     subprocess.run([harness,'secure-copy',str(root/'linux-private.enc'),str(root/'imported.enc')],
                    cwd=root, check=True, timeout=30)
+    assert fingerprint('linux-public.key') == (root/'linux-fingerprint.txt').read_bytes()
     run('keygen', password=PASSWORD*2)
     shutil.copyfile(root/'keys/public.key',root/'windows-public.key')
     shutil.copyfile(root/'keys/private.key.enc',root/'windows-private.enc')
@@ -42,9 +51,11 @@ elif phase == 'windows':
         run('encrypt','hybrid',name,name+'.windows.nkem','keys/public.key')
         run('decrypt','hybrid',name+'.windows.nkem',name+'.roundtrip','keys/private.key.enc',password=PASSWORD)
         assert (root/(name+'.roundtrip')).read_bytes() == (root/name).read_bytes()
-    print('Windows decrypted pre-port Linux v3/NKPR and generated return fixtures')
+    (root/'windows-fingerprint.txt').write_bytes(fingerprint('windows-public.key'))
+    print('Windows decrypted pre-port Linux v3/NKPR and matched fingerprint')
 elif phase == 'verify':
     (root/'windows-private.enc').chmod(0o600)
+    assert fingerprint('windows-public.key') == (root/'windows-fingerprint.txt').read_bytes()
     for name in ['binary','empty']:
         run('decrypt','hybrid',name+'.windows.nkem',name+'.from-windows','windows-private.enc',password=PASSWORD)
         assert (root/(name+'.from-windows')).read_bytes() == (root/name).read_bytes()

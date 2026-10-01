@@ -23,8 +23,10 @@ static inline int cli_terminal_hide(CliTerminal *original, int *disabled)
 }
 static inline int cli_terminal_restore(CliTerminal *original, int discard)
 {
-    (void)discard;
-    return SetConsoleMode(GetStdHandle(STD_INPUT_HANDLE), *original) != 0;
+    HANDLE input = GetStdHandle(STD_INPUT_HANDLE);
+    int restored = SetConsoleMode(input, *original) != 0;
+    if (discard && !FlushConsoleInputBuffer(input)) return 0;
+    return restored;
 }
 #else
 #include <termios.h>

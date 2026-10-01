@@ -42,6 +42,7 @@ jobs:
           name: public-linux-interop-fixtures
           path: |
             ${{ runner.temp }}/linux-fixtures/linux-public.key
+            ${{ runner.temp }}/linux-fixtures/linux-fingerprint.txt
             ${{ runner.temp }}/linux-fixtures/linux-private.enc
             ${{ runner.temp }}/linux-fixtures/binary
             ${{ runner.temp }}/linux-fixtures/empty
@@ -123,7 +124,7 @@ jobs:
             if ($LASTEXITCODE -ne 0) { throw 'Native throughput measurement failed' }
             $return = Join-Path $env:RUNNER_TEMP 'windows-fixtures'
             New-Item -ItemType Directory -Path $return | Out-Null
-            foreach ($name in @('binary','empty','windows-public.key','windows-private.enc','binary.windows.nkem','empty.windows.nkem')) {
+            foreach ($name in @('binary','empty','windows-fingerprint.txt','windows-public.key','windows-private.enc','binary.windows.nkem','empty.windows.nkem')) {
               Copy-Item (Join-Path $interop $name) $return
             }
           } finally { Remove-Item $work -Recurse -Force }
