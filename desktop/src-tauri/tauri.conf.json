@@ -1,0 +1,43 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "NekoKEM",
+  "version": "3.2.0",
+  "identifier": "com.shixiaoshi0417.nekokem.desktop",
+  "build": {
+    "beforeDevCommand": "npm run dev",
+    "devUrl": "http://127.0.0.1:1420",
+    "beforeBuildCommand": "npm run build",
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "windows": [
+      {
+        "label": "main",
+        "title": "NekoKEM",
+        "width": 1100,
+        "height": 780,
+        "minWidth": 760,
+        "minHeight": 620,
+        "create": false
+      }
+    ],
+    "security": {
+      "csp": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src ipc: http://ipc.localhost; object-src 'none'; base-uri 'none'; form-action 'none'; frame-src 'none'",
+      "capabilities": [
+        "main"
+      ]
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": [
+      "nsis"
+    ],
+    "icon": [
+      "../../windows/icons/32x32.png",
+      "../../windows/icons/128x128.png",
+      "../../windows/icons/128x128@2x.png",
+      "../../windows/icons/icon.ico"
+    ]
+  }
+}

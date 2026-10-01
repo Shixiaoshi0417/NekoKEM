@@ -120,3 +120,11 @@ Desktop.ini
 **/__pycache__/
 
 /linux/nekokem
+
+# Desktop frontend and Rust build products
+/desktop/node_modules/
+/desktop/dist/
+/desktop/src-tauri/target/
+/desktop/src-tauri/gen/
+/desktop/test-results/
+/desktop/playwright-report/

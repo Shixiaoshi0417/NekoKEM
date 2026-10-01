@@ -25,6 +25,17 @@
 
 static size_t selected_language;
 static const char *const language_tags[] = {"en", "zh-CN", "zh-TW", "ja", "ko"};
+static const char *saved_language_tag = "system";
+
+const char *cli_language_preference(void)
+{
+    return saved_language_tag;
+}
+
+const char *cli_language_tag(void)
+{
+    return language_tags[selected_language];
+}
 
 static const char *translated_message(const char *message)
 {
@@ -191,7 +202,10 @@ static void read_preference(size_t *language)
     if (memchr(value, '\0', (size_t)count) != NULL) return;
     if (value[(size_t)count - 1U] == '\n') value[(size_t)count - 1U] = '\0';
     size_t preference;
-    if (explicit_language(value, &preference)) *language = preference;
+    if (explicit_language(value, &preference)) {
+        *language = preference;
+        saved_language_tag = strcmp(value, "system") == 0 ? "system" : language_tags[preference];
+    }
 }
 
 static int make_parent_directories(char *path)
@@ -239,6 +253,7 @@ failure:
 int cli_language_init(int *argc, char **argv)
 {
     (void)setlocale(LC_CTYPE, "");
+    saved_language_tag = "system";
     selected_language = match_language(system_language());
     read_preference(&selected_language);
     int output = 1;

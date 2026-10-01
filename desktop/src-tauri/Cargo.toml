@@ -1,0 +1,23 @@
+[package]
+name = "nekokem-gui"
+version = "3.2.0"
+description = "NekoKEM desktop frontend using the unchanged C17 cryptographic Core"
+authors = ["Shixiaoshi0417"]
+edition = "2021"
+license = "Apache-2.0"
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+cc = "1"
+
+[dependencies]
+tauri = { version = "2", features = [] }
+tauri-plugin-dialog = "2"
+serde = { version = "1", features = ["derive"] }
+zeroize = { version = "1", features = ["serde"] }
+
+[profile.release]
+strip = true
+lto = true
+codegen-units = 1
+panic = "abort"
