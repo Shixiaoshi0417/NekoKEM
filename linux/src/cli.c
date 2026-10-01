@@ -104,7 +104,7 @@ static int read_password_line(const char *prompt,
     }
 
     for (;;) {
-        character = fgetc(stdin);
+        character = cli_input_getc();
         if (character == EOF || character == '\n') {
             break;
         }
@@ -125,7 +125,7 @@ static int read_password_line(const char *prompt,
 #ifdef _WIN32
     if (length > MAX_PASSWORD_SIZE) too_long = 1;
 #endif
-    if (character == EOF && ferror(stdin) != 0) {
+    if (character == EOF && cli_input_error() != 0) {
         print_system_error("Cannot read password");
         goto cleanup;
     }
@@ -278,7 +278,7 @@ static char *read_prompt_line(const char *prompt)
         return NULL;
     }
     for (;;) {
-        character = fgetc(stdin);
+        character = cli_input_getc();
         if (character == EOF || character == '\n') {
             break;
         }
@@ -288,7 +288,7 @@ static char *read_prompt_line(const char *prompt)
             too_long = 1;
         }
     }
-    if (character == EOF && ferror(stdin) != 0) {
+    if (character == EOF && cli_input_error() != 0) {
         print_system_error("Cannot read input");
         free(line);
         return NULL;
@@ -332,7 +332,7 @@ static int read_pasted_key_line(char **line,
         return 0;
     }
     for (;;) {
-        character = fgetc(stdin);
+        character = cli_input_getc();
         if (character == EOF || character == '\n') {
             break;
         }
@@ -342,7 +342,7 @@ static int read_pasted_key_line(char **line,
             too_long = 1;
         }
     }
-    if (character == EOF && ferror(stdin) != 0) {
+    if (character == EOF && cli_input_error() != 0) {
         print_system_error("Cannot read pasted key");
         goto cleanup;
     }
@@ -800,7 +800,7 @@ int cli_run_interactive_menu(void)
                "\n"));
         choice = read_prompt_line(file_message("请选择 [1-5]："));
         if (choice == NULL) {
-            return feof(stdin) != 0 ? 1 : 0;
+            return cli_input_eof() != 0 ? 1 : 0;
         }
         if (strcmp(choice, "1") == 0) {
             (void)generate_hybrid_keypair(1);

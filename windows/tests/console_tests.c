@@ -25,7 +25,7 @@ int main(void)
     CHECK(SetConsoleMode(input,mode|ENABLE_LINE_INPUT|ENABLE_ECHO_INPUT));
     CHECK(cli_terminal_hide(&original,&disabled) && disabled);
     CHECK(GetConsoleMode(input,&mode) && !(mode & ENABLE_ECHO_INPUT));
-    const wchar_t secret[] = L"console-secret-\x4e2d\x6587\r";
+    const wchar_t secret[] = L"console-secret-\x4e2d\x6587\xd83d\xde00\r";
     INPUT_RECORD events[sizeof(secret)/sizeof(secret[0])];
     memset(events,0,sizeof(events));
     DWORD count = (DWORD)(sizeof(secret)/sizeof(secret[0])-1), written;
@@ -36,9 +36,15 @@ int main(void)
         events[i].Event.KeyEvent.uChar.UnicodeChar = secret[i];
     }
     CHECK(WriteConsoleInputW(input,events,count,&written) && written == count);
-    wchar_t received[128] = {0}; DWORD read;
-    CHECK(ReadConsoleW(input,received,128,&read,NULL));
-    CHECK(read >= count && wcsncmp(received,secret,count-1) == 0);
+    char received[128] = {0}; size_t used = 0; int value;
+    do {
+        value = cli_input_getc();
+        CHECK(value != EOF && used < sizeof(received)-1);
+        received[used++] = (char)value;
+    } while (value != '\n');
+    CHECK(!cli_input_error());
+    CHECK(strcmp(received,"console-secret-中文😀\r\n") == 0);
+    DWORD read;
     wchar_t screen[4096] = {0}; COORD start = {0,0};
     CHECK(ReadConsoleOutputCharacterW(output,screen,4095,start,&read));
     CHECK(wcsstr(screen,L"console-secret-") == NULL);

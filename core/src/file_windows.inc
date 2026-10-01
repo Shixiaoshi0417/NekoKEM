@@ -597,7 +597,14 @@ cleanup:
             if (!published[i]) continue;
             WinAtomic *state = files[i]->platform_state;
             if (old[i] != INVALID_HANDLE_VALUE) {
-                if (!win_rename(old[i], state->path.full, 1, 0)) {
+                /* Classic NTFS rename cannot replace a name with a retained
+                 * open handle. Move the new file back to its private staging
+                 * name first, keeping its identity pinned, then restore the
+                 * backup into the vacant destination without replacement. */
+                wchar_t *staging = windows_utf8_path(files[i]->temporary_path);
+                int moved = staging != NULL && win_rename(state->output, staging, 0, 0);
+                free(staging);
+                if (!moved || !win_rename(old[i], state->path.full, 0, 0)) {
                     preserve[i] = 1;
                     print_system_error("Cannot restore atomic output backup");
                 }

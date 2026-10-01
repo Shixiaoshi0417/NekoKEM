@@ -1,10 +1,65 @@
 #ifndef NEKOKEM_CLI_TERMINAL_H
 #define NEKOKEM_CLI_TERMINAL_H
+#include <stdio.h>
+#include <errno.h>
 #ifdef _WIN32
 #include <windows.h>
 #include <io.h>
 #include "windows_io.h"
 typedef DWORD CliTerminal;
+/* Read native console UTF-16 explicitly: one-byte CRT reads are unreliable for
+ * UTF-8 console code points. Pipes remain raw UTF-8 bytes for automation. */
+static unsigned char cli_console_bytes[4];
+static int cli_console_position, cli_console_count;
+static int cli_console_input, cli_console_error, cli_console_eof;
+static inline int cli_input_getc(void)
+{
+    HANDLE input = GetStdHandle(STD_INPUT_HANDLE);
+    DWORD mode;
+    if (!GetConsoleMode(input, &mode)) {
+        cli_console_input = 0;
+        return fgetc(stdin);
+    }
+    cli_console_input = 1;
+    if (cli_console_position == cli_console_count) {
+        wchar_t wide[2] = {0, 0};
+        DWORD count = 0;
+        int units = 1;
+        cli_console_error = cli_console_eof = 0;
+        cli_console_position = cli_console_count = 0;
+        if (!ReadConsoleW(input, wide, 1, &count, NULL)) goto failed;
+        if (count == 0) { cli_console_eof = 1; return EOF; }
+        if (wide[0] >= 0xd800 && wide[0] <= 0xdbff) {
+            if (!ReadConsoleW(input, wide+1, 1, &count, NULL) || count != 1 ||
+                wide[1] < 0xdc00 || wide[1] > 0xdfff) goto failed;
+            units = 2;
+        }
+        cli_console_count = WideCharToMultiByte(CP_UTF8, WC_ERR_INVALID_CHARS,
+                wide, units, (char *)cli_console_bytes, 4, NULL, NULL);
+        SecureZeroMemory(wide, sizeof(wide));
+        if (cli_console_count <= 0) goto failed;
+        goto converted;
+failed:
+        SecureZeroMemory(wide, sizeof(wide));
+        SecureZeroMemory(cli_console_bytes, sizeof(cli_console_bytes));
+        cli_console_position = cli_console_count = 0;
+        cli_console_error = 1;
+        errno = EIO;
+        return EOF;
+    }
+converted:;
+    int value = cli_console_bytes[cli_console_position];
+    cli_console_bytes[cli_console_position++] = 0;
+    return value;
+}
+static inline int cli_input_error(void)
+{
+    return cli_console_input ? cli_console_error : ferror(stdin);
+}
+static inline int cli_input_eof(void)
+{
+    return cli_console_input ? cli_console_eof : feof(stdin);
+}
 #define fsync _commit
 #define fileno _fileno
 #define close _close
@@ -18,6 +73,10 @@ static inline int cli_terminal_hide(CliTerminal *original, int *disabled)
     if (GetFileType(input) != FILE_TYPE_CHAR) return 1;
     if (!GetConsoleMode(input, original) ||
         !SetConsoleMode(input, *original & ~(DWORD)ENABLE_ECHO_INPUT)) return 0;
+    if (!FlushConsoleInputBuffer(input)) {
+        (void)SetConsoleMode(input, *original);
+        return 0;
+    }
     *disabled = 1;
     return 1;
 }
@@ -31,6 +90,9 @@ static inline int cli_terminal_restore(CliTerminal *original, int discard)
 #else
 #include <termios.h>
 #include <unistd.h>
+static inline int cli_input_getc(void) { return fgetc(stdin); }
+static inline int cli_input_error(void) { return ferror(stdin); }
+static inline int cli_input_eof(void) { return feof(stdin); }
 typedef struct termios CliTerminal;
 static inline int cli_terminal_hide(CliTerminal *original, int *disabled)
 {
