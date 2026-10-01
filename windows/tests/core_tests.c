@@ -4,6 +4,8 @@
 #include "private_key.h"
 #include "secure_mem.h"
 #include <windows.h>
+#include <aclapi.h>
+#include <sddl.h>
 #include <errno.h>
 #include <openssl/crypto.h>
 #include <stdio.h>
@@ -71,6 +73,18 @@ int main(int argc, char **argv)
     CHECK(argc == 1);
     CHECK(ensure_directory("private",0700));
     CHECK(nekokem_generate_keypair("public.key","private.enc",password,sizeof(password)-1));
+    /* OWNER RIGHTS is bound to the verified owner, not an additional user. */
+    PSECURITY_DESCRIPTOR owner_descriptor = NULL;
+    PACL owner_acl = NULL;
+    BOOL present = FALSE, defaulted = FALSE;
+    CHECK(ConvertStringSecurityDescriptorToSecurityDescriptorW(L"D:P(A;;FA;;;OW)",
+          SDDL_REVISION_1,&owner_descriptor,NULL));
+    CHECK(GetSecurityDescriptorDacl(owner_descriptor,&present,&owner_acl,&defaulted) && present);
+    wchar_t private_name[] = L"private.enc";
+    CHECK(SetNamedSecurityInfoW(private_name,SE_FILE_OBJECT,
+          DACL_SECURITY_INFORMATION|PROTECTED_DACL_SECURITY_INFORMATION,
+          NULL,NULL,owner_acl,NULL) == ERROR_SUCCESS);
+    LocalFree(owner_descriptor);
     CHECK(GetFileAttributesW(L"public.key") != INVALID_FILE_ATTRIBUTES);
     CHECK(GetFileAttributesW(L"private.enc") != INVALID_FILE_ATTRIBUTES);
     CHECK(nekokem_private_key_exists("private.enc"));

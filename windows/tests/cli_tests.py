@@ -22,7 +22,11 @@ class Tests(unittest.TestCase):
     def run_cli(self,*args,password=b'',ok=True):
         p = subprocess.run([EXE,*map(str,args)],cwd=self.root,input=password,
                            capture_output=True,timeout=30)
-        self.assertEqual(p.returncode == 0,ok,(args,p.stdout,p.stderr))
+        detail = (args,p.returncode,p.stdout,p.stderr)
+        if (p.returncode == 0) != ok:
+            acl = subprocess.run(['icacls',str(self.root)],capture_output=True,timeout=10)
+            detail += (acl.stdout,)
+        self.assertEqual(p.returncode == 0,ok,detail)
         return p
     def generate(self):
         self.run_cli('--lang','en','keygen',password=PASSWORD*2)
@@ -118,8 +122,10 @@ class Tests(unittest.TestCase):
         self.run_cli('decrypt','hybrid','cipher.nkem','output','keys/private.key.enc',password=password)
         self.assertEqual((self.root/'output').read_bytes(),b'data')
     def test_password_and_prompt_bounds(self):
-        self.run_cli('keygen',password=b'\n\n',ok=False)
-        self.run_cli('keygen',password=b'a'*1025+b'\n'+b'a'*1025+b'\n',ok=False)
+        p = self.run_cli('--lang','en','keygen',password=b'\n\n',ok=False)
+        self.assertIn(b'Password must not be empty',p.stderr)
+        p = self.run_cli('--lang','en','keygen',password=b'a'*1025+b'\n'+b'a'*1025+b'\n',ok=False)
+        self.assertIn(b'Password exceeds 1024 bytes',p.stderr)
         p = self.run_cli('--lang','en',password=b'a'*5000+b'\n5\n')
         self.assertIn(b'Input exceeds 4096 bytes',p.stderr)
         self.assertFalse((self.root/'keys/private.key.enc').exists())

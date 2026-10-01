@@ -63,6 +63,7 @@ static int win_acl(HANDLE handle, int private_acl)
     PSID system_sid = NULL;
     PSID admin_sid = NULL;
     PSID installer_sid = NULL;
+    PSID owner_rights_sid = NULL;
     int success = 0;
     const DWORD writes = FILE_WRITE_DATA | FILE_APPEND_DATA | FILE_WRITE_EA |
                          FILE_WRITE_ATTRIBUTES | FILE_DELETE_CHILD | DELETE |
@@ -82,7 +83,8 @@ static int win_acl(HANDLE handle, int private_acl)
     /* Exact built-in Windows Modules Installer service SID. Its token is
      * controlled by SYSTEM; do not trust arbitrary service/account names. */
     if (!ConvertStringSidToSidW(L"S-1-5-80-956008885-3418522649-1831038044-1853292631-2271478464",
-                              &installer_sid)) goto cleanup;
+                              &installer_sid) ||
+        !ConvertStringSidToSidW(L"S-1-3-4", &owner_rights_sid)) goto cleanup;
     if (private_acl != 1 && !EqualSid(owner,user->User.Sid) &&
         !EqualSid(owner,system_sid) && !EqualSid(owner,admin_sid) &&
         !(private_acl == 2 && EqualSid(owner,installer_sid))) goto cleanup;
@@ -97,7 +99,10 @@ static int win_acl(HANDLE handle, int private_acl)
         PSID sid = &ace->SidStart;
         if (!IsValidSid(sid)) goto cleanup;
         if ((header->AceFlags & INHERIT_ONLY_ACE) != 0) continue;
-        if (EqualSid(sid, user->User.Sid)) continue;
+        /* OWNER RIGHTS grants only the already-validated object's owner.
+         * This is used by Python 3.13+ for private Windows temp directories.
+         * For private inputs the owner must still be the current user. */
+        if (EqualSid(sid, user->User.Sid) || EqualSid(sid, owner_rights_sid)) continue;
         if (private_acl == 1) {
             if (ace->Mask != 0) goto cleanup;
         } else if ((ace->Mask & (private_acl == 2 ?
@@ -109,6 +114,7 @@ static int win_acl(HANDLE handle, int private_acl)
     }
     success = 1;
 cleanup:
+    if (owner_rights_sid != NULL) LocalFree(owner_rights_sid);
     if (installer_sid != NULL) LocalFree(installer_sid);
     if (system_sid != NULL) FreeSid(system_sid);
     if (admin_sid != NULL) FreeSid(admin_sid);

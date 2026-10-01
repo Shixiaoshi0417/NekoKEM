@@ -16,8 +16,9 @@ rewrite, new unlocked-key cache, or removal of assembly acceleration.
 | Commit failure | Flush temporary bytes, rename through retained file handle, flush again; backups retained through paired commit; reverse rollback on failure | Injected ENOSPC, prepare/post-rename flush failure, second-rename failure and short writes |
 | Compatibility | Existing header/AAD/KDF/domain/fingerprint/constants | Shared parser/GCM/KDF tests; pre-port Linux ↔ Windows v3/NKPR exchanges |
 
-Private DACL validation intentionally rejects all effective access grants to SIDs
-other than the current user, even SYSTEM/Administrators entries inherited by normal
+Private DACL validation intentionally rejects all effective access grants to principals
+other than the current user; OWNER RIGHTS refers only to the verified current owner.
+This still rejects SYSTEM/Administrators entries inherited by normal
 Explorer copies. Privileged Windows administrators remain outside this isolation
 boundary, just as root is outside ordinary Unix mode isolation. Parent directories
 may grant SYSTEM/Administrators modification rights; pinned ancestors also recognize
