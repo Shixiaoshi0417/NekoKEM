@@ -4,6 +4,7 @@
 #include "private_key.h"
 #include "secure_mem.h"
 #include <windows.h>
+#include <openssl/crypto.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -30,6 +31,11 @@ static int cancel(uint64_t done, uint64_t total, void *data)
 {
     (void)done; (void)total; (void)data;
     return 0;
+}
+static int cancel_after_data(uint64_t done, uint64_t total, void *data)
+{
+    (void)total; (void)data;
+    return done == 0;
 }
 static int no_artifacts(void)
 {
@@ -67,6 +73,10 @@ int main(int argc, char **argv)
     CHECK(equals("output","sentinel"));
     CHECK(nekokem_decrypt_file_with_progress("cipher.nkem","output","private.enc",password,sizeof(password)-1,cancel,NULL) == NEKOKEM_OPERATION_CANCELLED);
     CHECK(equals("output","sentinel"));
+    CHECK(nekokem_encrypt_file_with_progress("plain","output","public.key",cancel_after_data,NULL) == NEKOKEM_OPERATION_CANCELLED);
+    CHECK(equals("output","sentinel"));
+    CHECK(nekokem_decrypt_file_with_progress("cipher.nkem","output","private.enc",password,sizeof(password)-1,cancel_after_data,NULL) == NEKOKEM_OPERATION_CANCELLED);
+    CHECK(equals("output","sentinel"));
     CHECK(!nekokem_decrypt_file("cipher.nkem","output","private.enc",(const unsigned char *)"wrong",5));
     CHECK(equals("output","sentinel"));
     unsigned char *cipher = NULL; size_t cipher_len = 0;
@@ -100,6 +110,21 @@ int main(int argc, char **argv)
     CHECK(!atomic_file_commit(&first));
     file_test_fault_reset();
     CHECK(equals("first","first-old"));
+    CHECK(atomic_file_open(&first,"first",0600) && atomic_file_open(&second,"second",0600));
+    CHECK(file_write_all(first.stream,"first-new",9) && file_write_all(second.stream,"second-new",10));
+    file_test_fault_set(FILE_TEST_FAULT_FSYNC,3);
+    CHECK(!atomic_file_commit_pair(&first,&second));
+    file_test_fault_reset();
+    CHECK(equals("first","first-old") && equals("second","second-old"));
+    file_test_fault_set(FILE_TEST_FAULT_ENOSPC,1);
+    CHECK(!nekokem_encrypt_file("plain","output","public.key"));
+    file_test_fault_reset();
+    CHECK(equals("output","sentinel"));
+    file_test_fault_set(FILE_TEST_FAULT_SHORT_WRITE,0);
+    CHECK(nekokem_encrypt_file("plain","short.nkem","public.key"));
+    file_test_fault_reset();
+    CHECK(nekokem_decrypt_file("short.nkem","short-output","private.enc",password,sizeof(password)-1));
+    CHECK(equals("short-output","binary\r\n\032"));
     CHECK(atomic_file_open(&first,"first",0600) && atomic_file_open(&second,"FIRST",0600));
     CHECK(!atomic_file_commit_pair(&first,&second));
     CHECK(equals("first","first-old"));

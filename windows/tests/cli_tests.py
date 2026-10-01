@@ -47,12 +47,14 @@ class Tests(unittest.TestCase):
         sentinel = (self.root/'output').read_bytes()
         self.run_cli('decrypt','hybrid','valid.nkem','output','keys/private.key.enc',password=b'wrong\n',ok=False)
         valid = (self.root/'valid.nkem').read_bytes()
-        for offset,value in [(4,1),(4,2),(5,4),(10,1),(12,0),(24,0),(25,0),(26,0),(-1,valid[-1]^1)]:
+        for offset,value in [(4,1),(4,2),(5,4),(10,1),(12,1),(24,0),(25,0),(26,0),(-1,valid[-1]^1)]:
             data = bytearray(valid); data[offset] = value
             (self.root/'bad.nkem').write_bytes(data)
             self.run_cli('decrypt','hybrid','bad.nkem','output','keys/private.key.enc',password=PASSWORD,ok=False)
             self.assertEqual((self.root/'output').read_bytes(),sentinel)
-        for data in [valid[:-1],valid+b'X']:
+        zero_peer = bytearray(valid); zero_peer[32:88] = bytes(56)
+        malformed_kem = bytearray(valid); malformed_kem[88] ^= 1
+        for data in [valid[:-1],valid+b'X',zero_peer,malformed_kem]:
             (self.root/'bad.nkem').write_bytes(data)
             self.run_cli('decrypt','hybrid','bad.nkem','output','keys/private.key.enc',password=PASSWORD,ok=False)
         self.assertFalse(any('.tmp.' in p.name or '.bak.' in p.name for p in self.root.iterdir()))

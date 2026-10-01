@@ -34,6 +34,18 @@ Imported NKPR files copied by Explorer or downloaded may inherit broad access.
 Place them in the CLI-created `keys` directory and apply a current-user-only ACL
 before use. Verify the owner and ACL; do not grant Everyone/Users read access.
 Back up the encrypted NKPR and password before changing permissions or moving keys.
+For an encrypted NKPR file you own, PowerShell can replace its ACL explicitly:
+
+```powershell
+$sid = [System.Security.Principal.WindowsIdentity]::GetCurrent().User
+$acl = [System.Security.AccessControl.FileSecurity]::new()
+$acl.SetOwner($sid)
+$acl.SetAccessRuleProtection($true, $false)
+$rule = [System.Security.AccessControl.FileSystemAccessRule]::new($sid, 'FullControl', 'Allow')
+$acl.AddAccessRule($rule)
+Set-Acl -LiteralPath '.\keys\private.key.enc' -AclObject $acl
+Get-Acl -LiteralPath '.\keys\private.key.enc' | Format-List Owner, Access
+```
 
 NKEM v3, NKPR v1, all algorithms, KDF domains/parameters, header/AAD, fingerprint,
 nonce/tag and GCM limits remain unchanged. OpenSSL 3.5.6 retains assembly acceleration;

@@ -63,9 +63,25 @@ jobs:
             make perl curl tar
             mingw-w64-ucrt-x86_64-gcc
             mingw-w64-ucrt-x86_64-python
+      - name: Identify native compiler
+        id: compiler
+        shell: msys2 {0}
+        run: echo "version=$(gcc -dumpfullversion)" >> "$GITHUB_OUTPUT"
+      - uses: actions/cache/restore@v4
+        id: openssl-cache
+        with:
+          path: ${{ runner.temp }}/windows-openssl
+          key: windows-ucrt64-openssl-3.5.6-${{ steps.compiler.outputs.version }}-${{ hashFiles('windows/scripts/build-windows-cli.sh') }}
       - name: Build native x64 EXE with pinned OpenSSL and verify PE mitigations
         shell: msys2 {0}
-        run: bash windows/scripts/build-windows-cli.sh "$(cygpath -u "$RUNNER_TEMP")/windows-cli"
+        run: |
+          export NEKOKEM_OPENSSL_PREFIX="$(cygpath -u "$RUNNER_TEMP")/windows-openssl"
+          bash windows/scripts/build-windows-cli.sh "$(cygpath -u "$RUNNER_TEMP")/windows-cli"
+      - uses: actions/cache/save@v4
+        if: always() && steps.openssl-cache.outputs.cache-hit != 'true'
+        with:
+          path: ${{ runner.temp }}/windows-openssl
+          key: ${{ steps.openssl-cache.outputs.cache-primary-key }}
       - uses: actions/download-artifact@v4
         with:
           name: public-linux-interop-fixtures
@@ -80,7 +96,7 @@ jobs:
           $env:TEMP = $work
           $env:TMP = $work
           try {
-            foreach ($name in @('hybrid_kdf', 'gcm_limit', 'parser', 'windows_core')) {
+            foreach ($name in @('hybrid_kdf', 'gcm_limit', 'parser', 'windows_core', 'console')) {
               $testDirectory = Join-Path $work $name
               New-Item -ItemType Directory -Path $testDirectory | Out-Null
               Push-Location $testDirectory
@@ -95,6 +111,8 @@ jobs:
             Copy-Item (Join-Path $env:RUNNER_TEMP 'linux-fixtures') $interop -Recurse
             python windows/tests/interop.py windows (Join-Path $bin 'nekokem.exe') $interop
             if ($LASTEXITCODE -ne 0) { throw 'Linux-to-Windows compatibility failed' }
+            python windows/tests/benchmark.py (Join-Path $bin 'nekokem.exe') | Tee-Object -FilePath (Join-Path $bin 'benchmark.json')
+            if ($LASTEXITCODE -ne 0) { throw 'Native throughput measurement failed' }
             $return = Join-Path $env:RUNNER_TEMP 'windows-fixtures'
             New-Item -ItemType Directory -Path $return | Out-Null
             foreach ($name in @('binary','empty','windows-public.key','windows-private.enc','binary.windows.nkem','empty.windows.nkem')) {
@@ -105,7 +123,7 @@ jobs:
         shell: pwsh
         run: |
           $bin = Join-Path $env:RUNNER_TEMP 'windows-cli'
-          Compress-Archive -Path "$bin/nekokem.exe","$bin/README.md","$bin/LICENSE","$bin/OPENSSL-LICENSE.txt","$bin/SHA256SUMS.txt","$bin/pe-headers.txt" -DestinationPath "$env:RUNNER_TEMP/NekoKEM-windows-x86_64.zip"
+          Compress-Archive -Path "$bin/nekokem.exe","$bin/README.md","$bin/LICENSE","$bin/OPENSSL-LICENSE.txt","$bin/SHA256SUMS.txt","$bin/pe-headers.txt","$bin/benchmark.json" -DestinationPath "$env:RUNNER_TEMP/NekoKEM-windows-x86_64.zip"
           (Get-FileHash "$env:RUNNER_TEMP/NekoKEM-windows-x86_64.zip" -Algorithm SHA256).Hash.ToLower() + '  NekoKEM-windows-x86_64.zip' | Set-Content "$env:RUNNER_TEMP/windows-SHA256SUMS.txt" -Encoding ascii
       - uses: actions/upload-artifact@v4
         with:

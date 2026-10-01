@@ -10,7 +10,7 @@
 #include <stddef.h>
 #include <wchar.h>
 
-#ifndef _WIN32_WINNT
+#if !defined(_WIN32_WINNT) || _WIN32_WINNT < 0x0A00
 #error Windows build must set _WIN32_WINNT >= 0x0A00
 #endif
 
@@ -153,7 +153,10 @@ wchar_t *windows_utf8_path(const char *path)
         if ((stem == 3 && (_wcsnicmp(start,L"CON",3)==0 || _wcsnicmp(start,L"PRN",3)==0 ||
                           _wcsnicmp(start,L"AUX",3)==0 || _wcsnicmp(start,L"NUL",3)==0)) ||
             (stem == 4 && (_wcsnicmp(start,L"COM",3)==0 || _wcsnicmp(start,L"LPT",3)==0) &&
-             start[3] >= L'0' && start[3] <= L'9')) goto fail;
+             ((start[3] >= L'0' && start[3] <= L'9') || start[3] == L'\u00b9' ||
+              start[3] == L'\u00b2' || start[3] == L'\u00b3')) ||
+            (stem == 6 && _wcsnicmp(start,L"CONIN$",6) == 0) ||
+            (stem == 7 && _wcsnicmp(start,L"CONOUT$",7) == 0)) goto fail;
         start = *end == L'\0' ? end : end + 1;
     }
     free(raw);
@@ -416,15 +419,20 @@ fail:
     return 0;
 }
 
+static int win_flush(HANDLE handle)
+{
+#ifdef NEKOKEM_TEST_FAULT_INJECTION
+    if (test_fault_should_fail(FILE_TEST_FAULT_FSYNC)) return 0;
+#endif
+    return FlushFileBuffers(handle) != 0;
+}
+
 int atomic_file_prepare(AtomicFile *file)
 {
     if (file == NULL || file->stream == NULL || file->platform_state == NULL) return 0;
     WinAtomic *state = file->platform_state;
     int success = fflush(file->stream) == 0;
-#ifdef NEKOKEM_TEST_FAULT_INJECTION
-    if (test_fault_should_fail(FILE_TEST_FAULT_FSYNC)) success = 0;
-#endif
-    if (success && !FlushFileBuffers(state->output)) success = 0;
+    if (success && !win_flush(state->output)) success = 0;
     if (fclose(file->stream) != 0) success = 0;
     file->stream = NULL;
     return success;
@@ -517,6 +525,12 @@ int atomic_file_commit_pair(AtomicFile *first, AtomicFile *second)
         WinAtomic *state = files[i]->platform_state;
         if (!win_rename(state->output, state->path.full, 1)) goto cleanup;
         published[i] = 1;
+    }
+    /* Flush again with the new name before reporting commit success. This is
+     * supported file-handle flushing, not a claim of POSIX directory fsync. */
+    for (size_t i = 0; i < count; ++i) {
+        WinAtomic *state = files[i]->platform_state;
+        if (!win_flush(state->output)) goto cleanup;
     }
     success = 1;
 cleanup:

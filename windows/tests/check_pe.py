@@ -14,6 +14,6 @@ assert mitigations & 0x160 == 0x160, 'ASLR/high-entropy VA/NX required'
 text = Path(sys.argv[2]).read_text()
 dlls = {s.lower() for s in re.findall(r'DLL Name: (\S+)', text)}
 assert dlls and all(d.startswith('api-ms-win-') or d in {
-    'kernel32.dll','advapi32.dll','bcrypt.dll','crypt32.dll','shell32.dll',
+    'kernel32.dll','msvcrt.dll','advapi32.dll','bcrypt.dll','crypt32.dll','shell32.dll',
     'ole32.dll','user32.dll','ws2_32.dll','ntdll.dll','ucrtbase.dll'} for d in dlls), dlls
 print('PE x64, ASLR, high-entropy VA, NX and system-only DLL imports verified:', sorted(dlls))

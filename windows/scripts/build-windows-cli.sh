@@ -13,13 +13,12 @@ if [[ ${MSYSTEM:-} != UCRT64 ]]; then
 fi
 build_root=$(mktemp -d)
 trap 'rm -rf -- "$build_root"' EXIT
-if [[ -n ${NEKOKEM_OPENSSL_PREFIX:-} ]]; then
-    prefix=$NEKOKEM_OPENSSL_PREFIX
-else
+prefix=${NEKOKEM_OPENSSL_PREFIX:-"$build_root/openssl"}
+manifest="OpenSSL $OPENSSL_VERSION $OPENSSL_SHA256 mingw64 $(gcc -dumpfullversion) no-shared no-module no-dso no-tests no-apps no-docs no-sock no-zlib no-zstd"
+if [[ ! -f "$prefix/lib/libcrypto.a" ]]; then
     archive="$build_root/openssl.tar.gz"
     source="$build_root/source"
-    prefix="$build_root/openssl"
-    mkdir -p "$source"
+    mkdir -p "$source" "$prefix"
     curl --fail --location --silent --show-error --proto '=https' --tlsv1.2 --retry 3 \
         -o "$archive" "https://github.com/openssl/openssl/releases/download/openssl-$OPENSSL_VERSION/openssl-$OPENSSL_VERSION.tar.gz"
     printf '%s  %s\n' "$OPENSSL_SHA256" "$archive" | sha256sum -c -
@@ -31,11 +30,15 @@ else
         make --silent -j2
         make --silent install_dev
     )
-    cp "$source/LICENSE.txt" "$output/OPENSSL-LICENSE.txt"
+    cp "$source/LICENSE.txt" "$prefix/LICENSE.txt"
+    printf '%s\n' "$manifest" > "$prefix/nekokem-build-manifest.txt"
 fi
-if [[ ! -f "$output/OPENSSL-LICENSE.txt" ]]; then
-    cp "$prefix/LICENSE.txt" "$output/OPENSSL-LICENSE.txt"
-fi
+[[ $(cat "$prefix/nekokem-build-manifest.txt") == "$manifest" ]] || {
+    echo 'Prebuilt OpenSSL configuration/compiler mismatch' >&2
+    exit 1
+}
+grep -Eq '^# *define OPENSSL_VERSION_STR "3\.5\.6"' "$prefix/include/openssl/opensslv.h"
+cp "$prefix/LICENSE.txt" "$output/OPENSSL-LICENSE.txt"
 flags=(-std=c17 -O2 -Wall -Wextra -Wpedantic -Wconversion -Wshadow -Wformat=2 \
        -Wstrict-prototypes -Werror -fstack-protector-strong -D_FORTIFY_SOURCE=3 \
        -D_WIN32_WINNT=0x0A00 -D__USE_MINGW_ANSI_STDIO=1 \
@@ -57,6 +60,8 @@ for test in hybrid_kdf gcm_limit parser; do
 done
 gcc "${flags[@]}" "${link[@]}" -DNEKOKEM_TEST_FAULT_INJECTION \
     "$repo_root/windows/tests/core_tests.c" "${sources[@]}" "${libs[@]}" -o "$output/windows_core_tests.exe"
+gcc "${flags[@]}" "${link[@]}" "$repo_root/windows/tests/console_tests.c" \
+    "${sources[@]}" "${libs[@]}" -o "$output/console_tests.exe"
 objdump -p "$output/nekokem.exe" > "$output/pe-headers.txt"
 python "$repo_root/windows/tests/check_pe.py" "$output/nekokem.exe" "$output/pe-headers.txt"
 cp "$repo_root/windows/README.md" "$repo_root/LICENSE" "$output/"

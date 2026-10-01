@@ -118,3 +118,5 @@ Desktop.ini
 /windows/dist/
 /windows/fixtures/
 **/__pycache__/
+
+/linux/nekokem
