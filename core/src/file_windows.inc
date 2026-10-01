@@ -249,7 +249,9 @@ static HANDLE win_open(const char *path, DWORD access, DWORD sharing, int privat
 {
     WinPath checked;
     HANDLE handle = INVALID_HANDLE_VALUE;
-    if (!win_path_open(&checked, path, private_acl)) return handle;
+    /* All paths need trusted ancestors: a pinned directory handle alone does
+     * not justify trusting an untrusted writer to its reparse metadata. */
+    if (!win_path_open(&checked, path, 1)) return handle;
     handle = CreateFileW(checked.full, access | READ_CONTROL, sharing, NULL,
             OPEN_EXISTING, FILE_FLAG_OPEN_REPARSE_POINT, NULL);
     if (handle != INVALID_HANDLE_VALUE && !win_regular(handle, private_acl)) {

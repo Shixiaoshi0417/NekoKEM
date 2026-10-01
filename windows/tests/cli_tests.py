@@ -100,8 +100,11 @@ class Tests(unittest.TestCase):
             self.assertFalse((self.root/'actual/output').exists())
         finally:
             os.rmdir(self.root/'junction')
+        (self.root/'actual/input').write_bytes(b'untrusted directory input')
         subprocess.run(['icacls',str(self.root/'actual'),'/grant','*S-1-1-0:M'],check=True,capture_output=True)
         self.run_cli('encrypt','hybrid','plain','actual/output','keys/public.key',ok=False)
+        self.run_cli('encrypt','hybrid','actual/input','unsafe-source.nkem','keys/public.key',ok=False)
+        self.assertFalse((self.root/'unsafe-source.nkem').exists())
     def test_existing_insecure_output_is_never_replaced(self):
         self.generate()
         (self.root/'plain').write_bytes(b'data')

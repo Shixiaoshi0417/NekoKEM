@@ -24,7 +24,8 @@ UTF-8 command-line paths are converted through the Unicode Windows APIs.
 
 Security policy: local fixed NTFS drives only. UNC/network paths, FAT/exFAT, device names, named
 pipes, alternate data streams and reparse points (including ancestor junctions)
-are rejected. New outputs and key directories get a protected owner-only DACL at
+are rejected. All file paths require trusted ancestor ownership and ACLs; inputs
+whose parent can be modified by an untrusted principal are also rejected. New outputs and key directories get a protected owner-only DACL at
 creation, with no inherited read access. Private inputs require current-user
 ownership, an owner-only DACL, a single hard link and a regular file. Existing output
 files must meet that same policy before replacement. Unsafe permissions cause a
@@ -70,7 +71,8 @@ security audit. The EXE is not Authenticode signed; Android signing keys are not
 本版本是原生 Windows 10/11 x64 CLI，运行无需 MSYS2 或 OpenSSL DLL。使用现有
 五语言目录；密码从关闭回显的终端或 UTF-8 标准输入读取，不放入命令行参数。
 首版只接受本地固定 NTFS 磁盘，拒绝网络/设备路径、重解析点及替代数据流。私钥、暂存明文
-和输出在创建时设置仅当前用户可访问的 ACL；私钥还检查所有者与硬链接数。
+和输出在创建时设置仅当前用户可访问的 ACL；所有文件路径都检查父目录的可信
+所有者与 ACL，输入目录若允许其他非可信账户修改，也会拒绝；私钥还检查所有者与硬链接数。
 不安全的已有输出会被拒绝，不自动放宽权限或先截断目标。
 
 协议及密码参数不变；保留 OpenSSL 汇编加速和 64 KiB 流式处理。Windows 提交
