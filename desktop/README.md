@@ -52,7 +52,7 @@ relax them. Existing outputs must already satisfy the CLI's private output polic
 Passwords retain the CLI's 1024 UTF-8 byte limit. Pasted keys are capped at 1 MiB
 and remain subject to Core format/component/tail validation.
 
-Only bundled local content runs in the main WebView. CSP blocks remote scripts,
+Only bundled local content runs in an InPrivate main WebView. CSP blocks remote scripts,
 frames and network requests. Only native open/save dialogs and the listed Rust
 commands are exposed. Developer tools are unavailable in the production release.
 Passwords/key text are not stored in browser storage, configuration or logs. Form

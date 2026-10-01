@@ -18,7 +18,8 @@
         "height": 780,
         "minWidth": 760,
         "minHeight": 620,
-        "create": false
+        "create": false,
+        "incognito": true
       }
     ],
     "security": {
