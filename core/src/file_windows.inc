@@ -488,7 +488,9 @@ static int win_rename(HANDLE handle, const wchar_t *destination, int replace, in
     if (inject && test_fault_should_fail(FILE_TEST_FAULT_RENAME)) return 0;
 #endif
     size_t length = wcslen(destination) * sizeof(wchar_t);
-    size_t size = offsetof(FILE_RENAME_INFO, FileName) + length;
+    /* FileNameLength excludes the NUL, but FileName must be terminated for
+     * the Win32 layer that normalizes the path before the NT rename request. */
+    size_t size = offsetof(FILE_RENAME_INFO, FileName) + length + sizeof(wchar_t);
     if (size > (size_t)MAXDWORD) return 0;
     FILE_RENAME_INFO *info = calloc(1, size);
     if (info == NULL) return 0;
@@ -574,6 +576,13 @@ int atomic_file_commit_pair(AtomicFile *first, AtomicFile *second)
         WinAtomic *state = files[i]->platform_state;
         if (!win_rename(state->output, state->path.full, old[i] != INVALID_HANDLE_VALUE, 1)) goto cleanup;
         published[i] = 1;
+        /* Verify the published name identifies the retained output handle. */
+        HANDLE named = CreateFileW(state->path.full, FILE_READ_ATTRIBUTES,
+                FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, NULL,
+                OPEN_EXISTING, FILE_FLAG_OPEN_REPARSE_POINT, NULL);
+        int same = named != INVALID_HANDLE_VALUE && win_same(state->output, named);
+        if (named != INVALID_HANDLE_VALUE) CloseHandle(named);
+        if (!same) goto cleanup;
     }
     /* Flush again with the new name before reporting commit success. This is
      * supported file-handle flushing, not a claim of POSIX directory fsync. */
