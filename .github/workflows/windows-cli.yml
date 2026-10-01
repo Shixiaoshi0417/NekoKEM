@@ -43,6 +43,7 @@ jobs:
           path: |
             ${{ runner.temp }}/linux-fixtures/linux-public.key
             ${{ runner.temp }}/linux-fixtures/linux-fingerprint.txt
+            ${{ runner.temp }}/linux-fixtures/linux-cli-contract.json
             ${{ runner.temp }}/linux-fixtures/linux-private.enc
             ${{ runner.temp }}/linux-fixtures/binary
             ${{ runner.temp }}/linux-fixtures/empty

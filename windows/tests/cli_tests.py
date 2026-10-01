@@ -19,9 +19,9 @@ class Tests(unittest.TestCase):
         self.root = Path(self.temp.name)
     def tearDown(self):
         self.temp.cleanup()
-    def run_cli(self,*args,password=b'',ok=True):
+    def run_cli(self,*args,password=b'',ok=True,env=None):
         p = subprocess.run([EXE,*map(str,args)],cwd=self.root,input=password,
-                           capture_output=True,timeout=30)
+                           capture_output=True,timeout=30,env=env)
         detail = (args,p.returncode,p.stdout,p.stderr)
         if (p.returncode == 0) != ok:
             acl = subprocess.run(['icacls',str(self.root)],capture_output=True,timeout=10)
@@ -29,7 +29,50 @@ class Tests(unittest.TestCase):
         self.assertEqual(p.returncode == 0,ok,detail)
         return p
     def generate(self):
-        self.run_cli('--lang','en','keygen',password=PASSWORD*2)
+        self.run_cli('--lang','en','keygen','hybrid',password=PASSWORD*2)
+    def test_automatic_language_and_persistent_override(self):
+        # CI runs under a disposable Windows account; never overwrite a user preference.
+        directory = Path(os.environ['LOCALAPPDATA'])/'NekoKEM'
+        preference = directory/'language'
+        self.assertFalse(preference.exists(), 'Language tests require a fresh CI account')
+        existed = directory.exists()
+        env = dict(os.environ)
+        for name in ['LC_ALL','LC_MESSAGES','LANG']:
+            env.pop(name,None)
+        kernel = ctypes.windll.kernel32
+        kernel.GetUserDefaultUILanguage.restype = ctypes.c_ushort
+        tag = ctypes.create_unicode_buffer(85)
+        self.assertTrue(kernel.LCIDToLocaleName(kernel.GetUserDefaultUILanguage(),tag,85,0))
+        def match(value):
+            value = value.lower().replace('_','-').split('.')[0].split('@')[0]
+            if value == 'zh' or value.startswith('zh-'):
+                if value.split('-')[-1] in ['tw','hk','mo'] or value.startswith('zh-hant'):
+                    return 'zh-TW'
+                return 'zh-CN'
+            if value == 'ja' or value.startswith('ja-'): return 'ja'
+            if value == 'ko' or value.startswith('ko-'): return 'ko'
+            return 'en'
+        def help_for(language):
+            return self.run_cli('--lang',language,'--help',env=env).stdout
+        automatic = help_for(match(tag.value))
+        self.assertEqual(self.run_cli('--help',env=env).stdout,automatic)
+        self.assertEqual(self.run_cli('--lang=system','--help',env=env).stdout,automatic)
+        env.update(LANG='ja_JP.UTF-8',LC_MESSAGES='zh_HK.UTF-8',LC_ALL='ko_KR.UTF-8')
+        for name, expected in [('LC_ALL','ko'),('LC_MESSAGES','zh-TW'),('LANG','ja')]:
+            self.assertEqual(self.run_cli('--help',env=env).stdout,help_for(expected))
+            env.pop(name)
+        try:
+            for language in ['en','zh-CN','zh-TW','ja','ko']:
+                self.run_cli('--set-lang',language,env=env)
+                self.assertEqual(self.run_cli('--help',env=env).stdout,help_for(language))
+                self.assertEqual(self.run_cli('--lang=system','--help',env=env).stdout,automatic)
+            self.run_cli('--set-lang','invalid',ok=False,env=env)
+            self.assertEqual(self.run_cli('--help',env=env).stdout,help_for('ko'))
+            self.run_cli('--set-lang','system',env=env)
+            self.assertEqual(self.run_cli('--help',env=env).stdout,automatic)
+        finally:
+            preference.unlink(missing_ok=True)
+            if not existed and directory.exists(): directory.rmdir()
     def test_version_help_languages_and_unicode_paths(self):
         self.assertEqual(self.run_cli('--version').stdout,b'NekoKEM 3.2.0\n')
         for lang,text in [('en','Usage:'),('zh-CN','用法'),('zh-TW','用法'),('ja','使用方法'),('ko','사용법')]:
@@ -43,6 +86,23 @@ class Tests(unittest.TestCase):
         self.run_cli('encrypt','hybrid',plain,encrypted,'keys/public.key')
         self.run_cli('decrypt','hybrid',encrypted,output,'keys/private.key.enc',password=PASSWORD)
         self.assertEqual(plain.read_bytes(),output.read_bytes())
+    def test_all_five_menu_actions_and_pasted_public_key(self):
+        data = bytes(range(256))+b'\x00\r\nmenu'
+        (self.root/'plain.bin').write_bytes(data)
+        commands = (b'1\n'+PASSWORD*2+
+            b'2\n1\nkeys/public.key\nplain.bin\n'+
+            b'3\n1\nkeys/private.key.enc\nencrypted/plain.bin.nkem\n'+PASSWORD+
+            b'4\n1\nkeys/public.key\n5\n')
+        p = self.run_cli('--lang','en',password=commands)
+        self.assertEqual(p.stderr,b'')
+        self.assertEqual((self.root/'plaintext/plain.bin').read_bytes(),data)
+        public = (self.root/'keys/public.key').read_bytes()
+        by_path = self.run_cli('--lang','en',password=b'4\n1\nkeys/public.key\n5\n')
+        pasted = self.run_cli('--lang','en',password=b'4\n2\n'+public+b'5\n')
+        import re
+        pattern = rb'(?:[0-9A-F]{2}:){31}[0-9A-F]{2}'
+        self.assertEqual(re.findall(pattern,pasted.stdout),re.findall(pattern,by_path.stdout))
+        self.assertEqual(pasted.stderr,b'')
     def test_wrong_password_tamper_versions_and_preserved_output(self):
         self.generate()
         (self.root/'plain').write_bytes(b'original\x00\r\n\x1a')

@@ -18,8 +18,13 @@ Run in Windows Terminal with PowerShell or cmd, in a directory owned by your use
 
 Passwords are read from the console with echo disabled, or UTF-8 stdin for automation;
 never put a private-key password on the command line. Five languages share the Linux
-catalogs. Windows uses the OS user language when no locale environment override is
-set, and stores its language choice in the OS LocalAppData/NekoKEM directory.
+catalogs and the exact same argument parser and five-option menu. Double-clicking
+`nekokem.exe`, or running it without arguments, opens that interactive menu directly.
+Windows automatically uses the user's display language (rather than regional date/number
+format), with unsupported languages falling back to English. Language precedence is
+`--lang` > saved `--set-lang` preference > `LC_ALL` > `LC_MESSAGES` > `LANG` > Windows
+display language. `--lang system` bypasses the saved preference; `--set-lang system`
+restores automatic selection. Preferences live in OS LocalAppData/NekoKEM.
 UTF-8 command-line paths are converted through the Unicode Windows APIs.
 
 Security policy: local fixed NTFS drives only. UNC/network paths, FAT/exFAT, device names, named

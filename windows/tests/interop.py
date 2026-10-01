@@ -2,6 +2,7 @@
 All generated keys/passwords are disposable public test fixtures.
 """
 import os
+import json
 import re
 from pathlib import Path
 import shutil
@@ -27,7 +28,23 @@ def fingerprint(path):
     assert len(found) == 1, (p.stdout,p.stderr)
     return found[0]
 
+def cli_contract():
+    """Compare actual Linux/Windows output, normalizing only argv[0]."""
+    cases = [('help', ['--help'], b''), ('menu', [], b'0\n5\n'),
+             ('version', ['--version'], b''), ('invalid', ['unknown'], b''),
+             ('invalid-language', ['--lang=invalid'], b'')]
+    result = {}
+    for language in ['en', 'zh-CN', 'zh-TW', 'ja', 'ko']:
+        for name, args, data in cases:
+            p = subprocess.run([exe, '--lang', language, *args], cwd=root,
+                               input=data, capture_output=True, env=env, timeout=30)
+            result[language + '/' + name] = [p.returncode,
+                p.stdout.decode('utf-8').replace(exe, '<program>'),
+                p.stderr.decode('utf-8').replace(exe, '<program>')]
+    return result
+
 if phase == 'generate':
+    (root/'linux-cli-contract.json').write_text(json.dumps(cli_contract(), ensure_ascii=False), encoding='utf-8')
     run('keygen', password=PASSWORD*2)
     for name, data in [('binary', bytes(range(256))*512),('empty',b'')]:
         (root/name).write_bytes(data)
@@ -38,6 +55,8 @@ if phase == 'generate':
     print('Pre-port Linux main generated v3/NKPR fixtures and fingerprint')
 elif phase == 'windows':
     assert os.name == 'nt'
+    assert cli_contract() == json.loads((root/'linux-cli-contract.json').read_text(encoding='utf-8')), 'Linux CLI help/menu/options differ'
+    print('All five languages: Linux CLI help, menu, version and invalid options match exactly')
     harness = str(Path(exe).with_name('windows_core_tests.exe'))
     subprocess.run([harness,'secure-copy',str(root/'linux-private.enc'),str(root/'imported.enc')],
                    cwd=root, check=True, timeout=30)

@@ -50,7 +50,9 @@ static const char *system_language(void)
 #ifdef _WIN32
     static char system_tag[LOCALE_NAME_MAX_LENGTH * 4];
     wchar_t name[LOCALE_NAME_MAX_LENGTH];
-    if (value == NULL && GetUserDefaultLocaleName(name, LOCALE_NAME_MAX_LENGTH) != 0 &&
+    /* Display language can differ from the user's regional formatting locale. */
+    if (value == NULL && LCIDToLocaleName(MAKELCID(GetUserDefaultUILanguage(), SORT_DEFAULT),
+            name, LOCALE_NAME_MAX_LENGTH, 0) != 0 &&
         WideCharToMultiByte(CP_UTF8, WC_ERR_INVALID_CHARS, name, -1,
             system_tag, (int)sizeof(system_tag), NULL, NULL) != 0) return system_tag;
 #endif
