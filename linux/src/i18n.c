@@ -4,7 +4,13 @@
 #include <ctype.h>
 #include <errno.h>
 #include <fcntl.h>
+#ifndef _WIN32
 #include <langinfo.h>
+#else
+#include <windows.h>
+#include <shlobj.h>
+#include "windows_io.h"
+#endif
 #include <limits.h>
 #include <locale.h>
 #include <stdio.h>
@@ -14,6 +20,7 @@
 #include <sys/stat.h>
 #include <unistd.h>
 
+#include <openssl/crypto.h>
 #include "messages.h"
 
 static size_t selected_language;
@@ -40,6 +47,15 @@ static const char *system_language(void)
     const char *value = environment_value("LC_ALL");
     if (value == NULL) value = environment_value("LC_MESSAGES");
     if (value == NULL) value = environment_value("LANG");
+#ifdef _WIN32
+    static char system_tag[LOCALE_NAME_MAX_LENGTH * 4];
+    wchar_t name[LOCALE_NAME_MAX_LENGTH];
+    /* Display language can differ from the user's regional formatting locale. */
+    if (value == NULL && LCIDToLocaleName(MAKELCID(GetUserDefaultUILanguage(), SORT_DEFAULT),
+            name, LOCALE_NAME_MAX_LENGTH, 0) != 0 &&
+        WideCharToMultiByte(CP_UTF8, WC_ERR_INVALID_CHARS, name, -1,
+            system_tag, (int)sizeof(system_tag), NULL, NULL) != 0) return system_tag;
+#endif
     return value != NULL ? value : "C";
 }
 
@@ -86,6 +102,9 @@ static int explicit_language(const char *tag, size_t *language)
 /* No locale installation is required; C/POSIX and non-UTF-8 terminals use ASCII. */
 static int utf8_output(void)
 {
+#ifdef _WIN32
+    return 1;
+#else
     const char *value = environment_value("LC_ALL");
     if (value == NULL) value = environment_value("LC_CTYPE");
     if (value == NULL) value = environment_value("LANG");
@@ -99,10 +118,30 @@ static int utf8_output(void)
     }
     const char *codeset = nl_langinfo(CODESET);
     return strcmp(codeset, "UTF-8") == 0 || strcmp(codeset, "UTF8") == 0;
+#endif
 }
 
+#ifdef _WIN32
+#undef PATH_MAX
+#define PATH_MAX 98304
+#endif
 static int configuration_path(char *directory, size_t capacity)
 {
+#ifdef _WIN32
+    PWSTR base = NULL;
+    int result = 0;
+    if (SHGetKnownFolderPath(&FOLDERID_LocalAppData, 0, NULL, &base) == S_OK &&
+        capacity > sizeof("/NekoKEM") && capacity <= INT_MAX) {
+        int length = WideCharToMultiByte(CP_UTF8, WC_ERR_INVALID_CHARS, base, -1,
+                directory, (int)(capacity-sizeof("/NekoKEM")), NULL, NULL);
+        if (length > 0) {
+            strcat(directory, "/NekoKEM");
+            result = 1;
+        }
+    }
+    CoTaskMemFree(base);
+    return result;
+#else
     const char *base = environment_value("XDG_CONFIG_HOME");
     int length;
     if (base != NULL && base[0] == '/') {
@@ -113,6 +152,7 @@ static int configuration_path(char *directory, size_t capacity)
         length = snprintf(directory, capacity, "%s/.config/nekokem", base);
     }
     return length >= 0 && (size_t)length < capacity;
+#endif
 }
 
 static void read_preference(size_t *language)
@@ -120,10 +160,20 @@ static void read_preference(size_t *language)
     char directory[PATH_MAX];
     char path[PATH_MAX];
     char value[64];
+#ifndef _WIN32
     struct stat status;
+#endif
     if (!configuration_path(directory, sizeof(directory))) return;
     int length = snprintf(path, sizeof(path), "%s/language", directory);
     if (length < 0 || (size_t)length >= sizeof(path)) return;
+#ifdef _WIN32
+    unsigned char *bytes = NULL;
+    size_t count = 0;
+    if (!windows_read_sensitive_quiet(path, sizeof(value)-1, &bytes, &count)) return;
+    memcpy(value, bytes, count);
+    OPENSSL_clear_free(bytes, count);
+    value[count] = '\0';
+#else
     int descriptor = open(path, O_RDONLY | O_NONBLOCK | O_CLOEXEC | O_NOFOLLOW);
     if (descriptor < 0) return;
     if (fstat(descriptor, &status) != 0 || !S_ISREG(status.st_mode) ||
@@ -137,6 +187,7 @@ static void read_preference(size_t *language)
     int closed = close(descriptor);
     if (count <= 0 || closed != 0 || count != status.st_size) return;
     value[(size_t)count] = '\0';
+#endif
     if (memchr(value, '\0', (size_t)count) != NULL) return;
     if (value[(size_t)count - 1U] == '\n') value[(size_t)count - 1U] = '\0';
     size_t preference;
@@ -145,6 +196,9 @@ static void read_preference(size_t *language)
 
 static int make_parent_directories(char *path)
 {
+#ifdef _WIN32
+    return ensure_directory(path, 0700);
+#else
     /* Parents are user-selected XDG/HOME paths; do not alter existing permissions. */
     for (char *cursor = path + 1; *cursor != '\0'; ++cursor) {
         if (*cursor != '/') continue;
@@ -155,6 +209,7 @@ static int make_parent_directories(char *path)
         if (result != 0 && saved_errno != EEXIST) return 0;
     }
     return ensure_directory(path, 0700);
+#endif
 }
 
 int cli_language_save(const char *language)

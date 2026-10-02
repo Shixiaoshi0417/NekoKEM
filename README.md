@@ -66,6 +66,19 @@ make -C linux
 
 可执行文件位于 `linux/nekokem`。下文的 `./nekokem` 示例假定当前目录为 `linux/`，或已将该可执行文件复制到当前目录。
 
+## Windows CLI（测试构建）
+
+新增原生 Windows 10/11 x64 `nekokem.exe`，构建、使用和导入私钥权限说明见
+[Windows CLI 文档](windows/README.md)，文件安全设计见
+[Windows 文件层说明](windows/SECURITY-DESIGN.md)。运行不需要 MSYS2 或 OpenSSL DLL；
+构建使用 MSYS2 UCRT64 与固定 OpenSSL 3.5.6。测试构建由 Windows CI 提供，尚未加入
+既有 v3.2.0 正式 Release，也没有使用 Android 签名材料。
+
+首版仅支持本地 NTFS，拒绝网络、设备、替代数据流与重解析点路径。协议、密码参数
+及 64 KiB 流式处理不变；Windows 断电持久性不能当作 POSIX 目录 fsync 已验证。
+Windows 语言配置使用系统 LocalAppData/NekoKEM；无 Locale 环境覆盖时读取 Windows
+用户语言。下文的 POSIX 配置路径和终端回退规则适用于 Linux CLI。
+
 ## 语言设置
 
 Android 和 CLI 支持简体中文（`zh-CN`）、繁体中文（`zh-TW`）、英语（`en`）、日语（`ja`）和韩语（`ko`）。默认跟随系统；不支持的语言回退英语。中文 CN/SG 地区匹配简体，TW/HK/MO 匹配繁体；en/ja/ko 的其他地区匹配对应语言。跟随系统时会响应系统语言变化。

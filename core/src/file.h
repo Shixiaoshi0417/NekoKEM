@@ -30,6 +30,9 @@ typedef struct {
     FILE *stream;
     char *temporary_path;
     const char *final_path;
+#ifdef _WIN32
+    void *platform_state;
+#endif
 } AtomicFile;
 
 #ifdef NEKOKEM_TEST_FAULT_INJECTION

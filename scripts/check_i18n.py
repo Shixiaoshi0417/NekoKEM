@@ -92,7 +92,8 @@ def cli():
             if not text or signature(source) != signature(text):
                 raise ValueError(f'CLI placeholder mismatch: {source!r}')
     used = set()
-    paths = list((ROOT/'core/src').glob('*.c'))+list((ROOT/'linux/src').glob('*.c'))
+    paths = (list((ROOT/'core/src').glob('*.c')) + list((ROOT/'core/src').glob('*.inc')) +
+             list((ROOT/'linux/src').glob('*.c')) + list((ROOT/'windows/src').glob('*.c')))
     for path in paths:
         source = path.read_text()
         used.update(decode(m[1]) for m in re.finditer(
