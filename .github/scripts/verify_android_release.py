@@ -29,7 +29,7 @@ rotated = (root/'rotation.txt').read_text() == 'True'
 if not rotated and new_signer != '5a091b86b1cb339f081c1afa2aa71b986c07597343ce336f22d866b05c39fb50':
     raise SystemExit('Release signer does not match the existing v3.2.0 identity')
 badging = subprocess.check_output([str(tools/'aapt'), 'dump', 'badging', str(apk)], text=True)
-if not re.search(r"package: name='com.shixiaoshi0417.nekokem' versionCode='4' versionName='3.2.0'", badging):
+if not re.search(r"package: name='com.shixiaoshi0417.nekokem' versionCode='5' versionName='3.3.0'", badging):
     raise SystemExit('Unexpected application identity/version')
 if "sdkVersion:'26'" not in badging:
     raise SystemExit('Unexpected minimum SDK')
@@ -40,10 +40,12 @@ with zipfile.ZipFile(apk) as archive:
 previous = root/'previous.apk'
 subprocess.run(['curl', '--fail', '--location', '--silent', '--show-error', '--proto', '=https',
                 '--tlsv1.2', '--retry', '3', '-o', str(previous),
-                'https://github.com/Shixiaoshi0417/NekoKEM/releases/download/v3.1.1/app-release.apk'], check=True)
-if hashlib.sha256(previous.read_bytes()).hexdigest() != '00167fd75b79a198e20fb4133ee6383542a3ea564277adbda7e5c7c345f78534':
+                'https://github.com/Shixiaoshi0417/NekoKEM/releases/download/v3.2.0/app-release.apk'], check=True)
+if hashlib.sha256(previous.read_bytes()).hexdigest() != '427b0716cc1ad2773e4a2b6d3dee55a9e5260b806fb280c60d13aa2a140aa511':
     raise SystemExit('Previous APK checksum mismatch')
 old_signer = signer(previous)
+if not rotated and old_signer != new_signer:
+    raise SystemExit('Release signer does not match the previous published APK')
 if rotated and old_signer == new_signer:
     raise SystemExit('Expected signing-key rotation')
 recipient = Path('release/signing-recovery-recipient.pem')
@@ -59,7 +61,7 @@ subprocess.run(['openssl', 'cms', '-encrypt', '-aes-256-gcm', '-binary', '-outfo
                 '-recip', str(recipient), '-keyopt', 'rsa_padding_mode:oaep',
                 '-keyopt', 'rsa_oaep_md:sha256'], check=True)
 metadata = {'source_sha': os.environ['GITHUB_SHA'], 'run_id': int(os.environ['GITHUB_RUN_ID']),
-            'version': '3.2.0', 'version_code': 4, 'core_version': '3.1',
+            'version': '3.3.0', 'version_code': 5, 'core_version': '3.1',
             'apk_sha256': hashlib.sha256(apk.read_bytes()).hexdigest(),
             'signer_sha256': new_signer, 'previous_signer_sha256': old_signer,
             'signing_key_rotated': rotated,

@@ -1,5 +1,25 @@
 # Changelog
 
+## 3.3.0
+
+- 完整中文在上、英文在下的发布说明见 [v3.3.0](../release/v3.3.0.md)。
+- Android、Linux CLI、Windows CLI 与 Rust/Tauri 2/Vue 3/TypeScript GUI 统一为 3.3.0；Core 保持 3.1，NKEM v3/NKPR v1 和密码参数不变。
+- Windows 原生 CLI 共用 Linux 参数与五项菜单，双击直接进入菜单；GUI 提供五语言自动识别、原生文件选择、进度、取消、键盘导航和过渡动画。
+- 改进流式性能，集成固定 OpenSSL 4.0.3，保留编译加固、文件安全和完整 CI 回归；工作流收敛为 CI 构建测试和 Release 仅构建。
+- Android 继续使用现有方形白底图案与 v3.2.0 签名，可直接覆盖升级；Windows EXE 方形图案外部白色区域透明，README 使用独立圆角展示图。
+- 仅旧签名 v3.1.x 用户需要备份公钥、加密 NKPR 私钥并保存密码后卸载重装；Windows 应用未进行 Authenticode 签名。
+
+Full Chinese-then-English notes: [v3.3.0](../release/v3.3.0.md). Android, Linux CLI,
+Windows CLI and Rust/Tauri 2/Vue 3/TypeScript GUI are version 3.3.0; Core remains
+3.1 and NKEM v3/NKPR v1 and cryptographic parameters are unchanged. Windows adds
+the matching CLI/menu and a GUI with five-language detection, file dialogs,
+progress, cancellation, keyboard navigation and transitions. Streaming performance,
+pinned OpenSSL 4.0.3 and the two CI/Release entry points retain security checks.
+Android keeps its square white artwork and v3.2.0 signer for in-place updates;
+Windows EXE icons use transparent outer white areas and README has a separate
+rounded display image. Only old-signer v3.1.x installations need backup and
+uninstall/reinstall. Windows applications are not Authenticode signed.
+
 ## 3.2.0
 
 - 完整中英双语发布日志见 [v3.2.0](../release/v3.2.0.md)。

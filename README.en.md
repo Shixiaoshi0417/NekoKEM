@@ -3,7 +3,7 @@
 # NekoKEM
 
 <p align="center">
-  <img src="icon.png" alt="NekoKEM project icon" width="160">
+  <img src="docs/icon-rounded.png" alt="NekoKEM project icon" width="160">
 </p>
 
 NekoKEM is an experimental post-quantum file encryption tool for learning the OpenSSL EVP API. It supports only NKEM v3 Hybrid file containers.
@@ -14,9 +14,17 @@ NekoKEM is an experimental post-quantum file encryption tool for learning the Op
 
 The project does not implement cryptographic algorithms itself and does not depend on liboqs. **It has not undergone a security audit, must not be considered production-grade software, and must not be used to protect important or sensitive data.**
 
-## Release v3.2.0
+## Release v3.3.0
 
-Android and Linux CLI versions are `3.2.0`; Core remains `3.1`. See the [release notes](release/v3.2.0.md) for five interface languages, system-language selection and security fixes. **The Android signing key has changed: export the public key and encrypted NKPR private key, verify the backup and retain the private-key password before uninstalling and reinstalling. Uninstalling removes app-private keys.** NKEM v3 and NKPR v1 formats are unchanged; NKEM v1/v2 are no longer supported.
+Android, Linux CLI, Windows CLI and Windows GUI versions are all `3.3.0`; Core remains `3.1`. This release adds a native Windows CLI and a Rust + Tauri 2 + Vue 3 + TypeScript GUI, improves interface interactions and streaming performance, and pins OpenSSL 4.0.3. See the complete bilingual [v3.3.0 notes](release/v3.3.0.md) and [GitHub Release](https://github.com/Shixiaoshi0417/NekoKEM/releases/tag/v3.3.0) for downloads. Verify downloaded assets with the attached `SHA256SUMS.txt`.
+
+Android v3.3.0 retains the v3.2.0 signing identity and supports an in-place update; backing up the public key, encrypted NKPR private key and its password is recommended. Only v3.1.x installations with the old signer need backup verification followed by uninstall/reinstall; uninstalling deletes app-private keys. NKEM v3, NKPR v1, cryptographic parameters and fingerprint calculation are unchanged. NKEM v1/v2 are no longer supported.
+
+README uses a dedicated rounded display image. Android retains the existing square artwork with its white background; Windows CLI/GUI EXE icons retain the square artwork with the outer white area made transparent. Windows applications are not Authenticode signed.
+
+## Historical release v3.2.0
+
+v3.2.0 introduced five interface languages, system-language selection and security fixes, and changed the Android release signer. Its migration instructions and historical build records remain in the [v3.2.0 notes](release/v3.2.0.md). Updating from v3.2.0 to v3.3.0 does not require another uninstall.
 
 ## Release v3.1.1
 
@@ -61,25 +69,17 @@ The executable is `linux/nekokem`. The `./nekokem` examples below assume the wor
 
 GitHub Actions uses [CI](.github/workflows/ci.yml) and [Release](.github/workflows/release.yml). CI builds and runs all platform security, language, interoperability, performance and GUI regression checks on PRs and main pushes. Release builds Linux archives, a signed Android APK and Windows CLI/GUI packages through manual runs or `v*` tags. See the [build workflow documentation](release/README.md) for signing identity and artifact details.
 
-## Windows CLI (test builds)
+## Windows CLI and GUI
 
-A native Windows 10/11 x64 `nekokem.exe` is available. See the
-[Windows CLI documentation](windows/README.md) for building, use and imported-key
-permissions, and the [filesystem design](windows/SECURITY-DESIGN.md) for boundaries.
-Running requires no MSYS2 runtime or OpenSSL DLL; building uses MSYS2 UCRT64 and
-pinned OpenSSL 4.0.3. Windows CI provides test builds; these are not added to the
-existing v3.2.0 Release and do not use Android signing material.
+v3.3.0 provides native Windows 10/11 x64 portable packages for `nekokem.exe` and `nekokem-gui.exe`. The CLI shares Linux's complete argument parser and five-option menu; double-clicking the EXE or running it without arguments opens the menu. See the [Windows CLI documentation](windows/README.md) for building, use and imported-key permissions, and the [filesystem design](windows/SECURITY-DESIGN.md) for its boundaries. Running the CLI requires no MSYS2 runtime or OpenSSL DLL; building uses MSYS2 UCRT64 and pinned OpenSSL 4.0.3.
 
-The first version accepts local NTFS only and rejects network/device/ADS/reparse
-paths. Protocols, cryptographic parameters and 64 KiB streaming remain unchanged;
-Windows power-loss durability is not presented as verified POSIX directory fsync.
-Windows stores language preferences in OS LocalAppData/NekoKEM and reads the OS user
-language when no locale environment override exists. The POSIX configuration paths
-and terminal fallback rules below apply to the Linux CLI.
+The Rust + Tauri 2 + Vue 3 + TypeScript GUI calls the same C17 Core through a narrow interface, with native file dialogs, progress, cancellation, keyboard navigation and transitions that follow the system's reduced-motion preference. It requires Microsoft Edge WebView2 Runtime and the bundled `WebView2Loader.dll` beside the EXE; see the [Windows GUI documentation](desktop/README.md). Neither Windows application is Authenticode signed; the build separately verifies the Microsoft SDK loader's signature and provenance.
+
+Windows accepts local fixed NTFS only, checks ownership and ACLs, and rejects network/device/ADS/reparse paths. Protocols, cryptographic parameters and 64 KiB streaming chunks are unchanged; Windows power-loss durability is not presented as verified POSIX directory fsync. Windows stores language preferences in OS LocalAppData/NekoKEM and reads the Windows display language when no locale environment override exists. The POSIX configuration paths and terminal fallback rules below apply to the Linux CLI.
 
 ## Language settings
 
-Android and the CLI support Simplified Chinese (`zh-CN`), Traditional Chinese (`zh-TW`), English (`en`), Japanese (`ja`), and Korean (`ko`). The default follows the system; unsupported languages fall back to English. Chinese CN/SG regions use Simplified Chinese; TW/HK/MO use Traditional Chinese. Other regions of en/ja/ko match their language. Following the system responds to system-language changes.
+Android, Windows GUI and the CLI support Simplified Chinese (`zh-CN`), Traditional Chinese (`zh-TW`), English (`en`), Japanese (`ja`), and Korean (`ko`). The default follows the system; unsupported languages fall back to English. Chinese CN/SG regions use Simplified Chinese; TW/HK/MO use Traditional Chinese. Other regions of en/ja/ko match their language. Android responds to system-language changes when following the system. The CLI and Windows GUI detect language on startup; the GUI can also refresh detection by choosing Follow system in its language selector.
 
 On Android, open **Settings → Language** and select **Follow system** or a language. The choice persists and the interface refreshes. Android 13+ system application-language settings share the same preference; older systems use a private preference. Language changes are available after active file operations finish. Scrollable pages and dialogs accommodate longer text and larger fonts.
 

@@ -6,7 +6,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-#define NEKOKEM_CLI_VERSION "3.2.0"
+#define NEKOKEM_CLI_VERSION "3.3.0"
 
 #ifdef _WIN32
 int cli_main(int argc, char **argv)

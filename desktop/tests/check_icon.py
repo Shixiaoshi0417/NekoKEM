@@ -1,4 +1,4 @@
-"""Check that the EXE embeds the shared Android-derived ICO payloads."""
+"""Check that the EXE embeds the shared transparent Windows ICO payloads."""
 from pathlib import Path
 import hashlib,struct,sys
 exe=Path(sys.argv[1]).read_bytes();ico=Path(sys.argv[2]).read_bytes()
@@ -28,5 +28,5 @@ expected=[]
 for i in range(word(ico,4)):
  size=dword(ico,6+i*16+8);start=dword(ico,6+i*16+12)
  expected.append(hashlib.sha256(ico[start:start+size]).hexdigest())
-assert expected and set(expected).issubset(icons),'Embedded icon differs from Android-derived ICO'
-print('All shared Android icon payloads verified in EXE')
+assert expected and set(expected).issubset(icons),'Embedded icon differs from the shared Windows ICO'
+print('All shared transparent Windows icon payloads verified in EXE')

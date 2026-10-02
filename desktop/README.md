@@ -1,8 +1,10 @@
 # NekoKEM Windows GUI
 
-Rust + Tauri 2 + Vue 3 + TypeScript desktop frontend. This is a Windows x64 test
-build and requires the Microsoft Edge WebView2 Runtime. Open `nekokem-gui.exe` to
-use the app; it opens a native window without a terminal. Keep the included\nMicrosoft `WebView2Loader.dll` beside the EXE. The portable package
+Rust + Tauri 2 + Vue 3 + TypeScript desktop frontend, released as v3.3.0 for
+Windows 10/11 x64. It requires the Microsoft Edge WebView2 Runtime. Open
+`nekokem-gui.exe` to
+use the app; it opens a native window without a terminal. Keep the included
+Microsoft `WebView2Loader.dll` beside the EXE. The portable package
 contains no Android signing material and is not Authenticode signed.
 
 ## Features / 功能
@@ -15,8 +17,10 @@ contains no Android signing material and is not Authenticode signed.
   existing output on failure/cancellation through the same Core checks as the CLI.
 - Automatically detect Windows display language and share the CLI's private saved
   language preference. English, simplified/traditional Chinese, Japanese and Korean.
-- Use the original Android launcher icon for both CLI and GUI. The source PNG is
-  copied byte-for-byte; Windows sizes are converted without changing the artwork.
+- Both CLI and GUI retain the square Android artwork; the outer white area of
+  the Windows EXE icons is transparent. Android keeps its existing square white
+  background; README uses a separate rounded display image.
+  CLI/GUI 图案保持方形，EXE 图标外部白色区域透明；README 圆角只用于展示。
 - Short entry transitions, navigation/button feedback and animated progress follow
   the system's reduced-motion preference. Windows high-contrast mode is supported.
   页面过渡、按钮反馈与进度动画遵循系统减少动态效果设置，支持 Windows 高对比度。
@@ -47,7 +51,10 @@ npm run build
 npm run tauri -- build --target x86_64-pc-windows-gnu --no-bundle
 ```
 
-Checked-in lockfiles are used with npm ci and Cargo --locked. The GNU host\ntoolchain also makes Tauri's resource compiler produce GNU-compatible COFF icons\nand the application manifest. CI verifies the loader DLL against the checksum-locked\nWebView2 SDK crate and its Microsoft Authenticode signature before packaging.
+Checked-in lockfiles are used with npm ci and Cargo --locked. The GNU host
+toolchain also makes Tauri's resource compiler produce GNU-compatible COFF icons
+and the application manifest. CI verifies the loader DLL against the checksum-locked
+WebView2 SDK crate and its Microsoft Authenticode signature before packaging.
 
 ## Security boundary / 安全边界
 
@@ -76,6 +83,14 @@ while cancellation is checked on every Core callback.
 
 Windows power-loss equivalence to POSIX directory fsync is unverified. Pair commits
 are not cross-file crash atomic. Process death may leave protected plaintext/key
-staging files; deletion is not physical erasure. See Windows SECURITY-DESIGN.md for
-the complete backend boundary. This is an unsigned test build, not an audited
-security-equivalent release.
+staging files; deletion is not physical erasure. See the
+[Windows filesystem design](../windows/SECURITY-DESIGN.md) for the complete backend
+boundary. The v3.3.0 Windows application is not Authenticode signed. Verifying the bundled
+Microsoft SDK loader does not sign the application. This experimental project has
+not undergone an independent professional security audit and must not be used to
+protect important or sensitive data.
+
+Download `NekoKEM-Windows-GUI.zip` from the [v3.3.0 Release](https://github.com/Shixiaoshi0417/NekoKEM/releases/tag/v3.3.0)
+and verify it against the release's top-level `SHA256SUMS.txt`. See the complete
+[bilingual release notes](../release/v3.3.0.md). v3.3.0 提供便携 GUI 压缩包；下载后先校验
+SHA-256，再解压并保留 EXE 旁的 Microsoft SDK loader。
