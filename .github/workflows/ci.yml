@@ -518,7 +518,13 @@ jobs:
           export NEKOKEM_OPENSSL_PREFIX="$temporary_root/windows-openssl"
           output="$temporary_root/windows-cli-build-only"
           bash windows/scripts/build-windows-cli.sh "$output"
-          cmp "$output/nekokem.exe" "$temporary_root/windows-cli/nekokem.exe"
+          python - "$output/nekokem.exe" "$temporary_root/windows-cli/nekokem.exe" <<'PY'
+          import filecmp
+          import sys
+          if not filecmp.cmp(sys.argv[1], sys.argv[2], shallow=False):
+              raise SystemExit('Build-only and test modes produced different Windows binaries')
+          print('Build-only and test modes produced byte-identical Windows binaries')
+          PY
           if compgen -G "$output/*_tests.exe" >/dev/null; then
             echo 'Build-only output unexpectedly contains test executables' >&2
             exit 1
