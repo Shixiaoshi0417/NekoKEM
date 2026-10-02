@@ -4,6 +4,8 @@ const messages={
  subtitle:['File encryption, kept on your device','文件加密，始终留在你的设备上','檔案加密，始終留在你的裝置上','ファイル暗号化を、このデバイスで','파일 암호화, 내 기기 안에서'],
  keygen:['Generate keys','生成密钥','產生金鑰','鍵を生成','키 생성'],encrypt:['Encrypt file','加密文件','加密檔案','ファイルを暗号化','파일 암호화'],decrypt:['Decrypt file','解密文件','解密檔案','ファイルを復号','파일 복호화'],fingerprint:['Public key fingerprint','公钥指纹','公開金鑰指紋','公開鍵の指紋','공개 키 지문'],exit:['Exit','退出','結束','終了','종료'],
  language:['Language','语言','語言','言語','언어'],system:['Follow system','跟随系统','跟隨系統','システムに従う','시스템 언어 사용'],
+ navigation:['Operations','操作菜单','操作選單','操作メニュー','작업 메뉴'],keySource:['Key source','密钥来源','金鑰來源','鍵の入力方法','키 입력 방법'],
+ loading:['Loading…','正在加载…','載入中…','読み込み中…','불러오는 중…'],choosing:['Choosing a file…','正在选择文件…','正在選擇檔案…','ファイルを選択中…','파일 선택 중…'],
  keygenHelp:['Create a public key for sharing and an encrypted private key for yourself.','生成可分享的公钥，以及仅供自己保存的加密私钥。','產生可分享的公開金鑰，以及僅供自己保存的加密私密金鑰。','共有用の公開鍵と、ご自身で保管する暗号化秘密鍵を作成します。','공유할 공개 키와 직접 보관할 암호화된 개인 키를 생성합니다.'],
  encryptHelp:['Select a file and the recipient’s public key.','选择文件及接收方的公钥。','選擇檔案及接收者的公開金鑰。','ファイルと受信者の公開鍵を選択します。','파일과 수신자의 공개 키를 선택하세요.'],
  decryptHelp:['Restore an .nkem file with your private key.','使用你的私钥还原 .nkem 文件。','使用你的私密金鑰還原 .nkem 檔案。','秘密鍵で .nkem ファイルを復元します。','개인 키로 .nkem 파일을 복원하세요.'],
