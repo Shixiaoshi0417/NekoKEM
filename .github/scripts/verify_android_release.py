@@ -23,6 +23,11 @@ def signer(path):
         raise SystemExit('Expected exactly one APK signer')
     return hashes[0].lower()
 new_signer = signer(apk)
+root = Path(os.environ['RUNNER_TEMP']) / 'nekokem-release-signing'
+rotated = (root/'rotation.txt').read_text() == 'True'
+# Preserve the identity check from the retired one-time Secrets workflow.
+if not rotated and new_signer != '5a091b86b1cb339f081c1afa2aa71b986c07597343ce336f22d866b05c39fb50':
+    raise SystemExit('Release signer does not match the existing v3.2.0 identity')
 badging = subprocess.check_output([str(tools/'aapt'), 'dump', 'badging', str(apk)], text=True)
 if not re.search(r"package: name='com.shixiaoshi0417.nekokem' versionCode='4' versionName='3.2.0'", badging):
     raise SystemExit('Unexpected application identity/version')
@@ -32,7 +37,6 @@ with zipfile.ZipFile(apk) as archive:
     abis = {name.split('/')[1] for name in archive.namelist() if name.startswith('lib/')}
     if abis != {'arm64-v8a'}:
         raise SystemExit('Release APK must contain only arm64-v8a native code')
-root = Path(os.environ['RUNNER_TEMP']) / 'nekokem-release-signing'
 previous = root/'previous.apk'
 subprocess.run(['curl', '--fail', '--location', '--silent', '--show-error', '--proto', '=https',
                 '--tlsv1.2', '--retry', '3', '-o', str(previous),
@@ -40,7 +44,6 @@ subprocess.run(['curl', '--fail', '--location', '--silent', '--show-error', '--p
 if hashlib.sha256(previous.read_bytes()).hexdigest() != '00167fd75b79a198e20fb4133ee6383542a3ea564277adbda7e5c7c345f78534':
     raise SystemExit('Previous APK checksum mismatch')
 old_signer = signer(previous)
-rotated = (root/'rotation.txt').read_text() == 'True'
 if rotated and old_signer == new_signer:
     raise SystemExit('Expected signing-key rotation')
 recipient = Path('release/signing-recovery-recipient.pem')

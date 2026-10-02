@@ -3,6 +3,11 @@
 set -Eeuo pipefail
 readonly OPENSSL_VERSION=4.0.3
 readonly OPENSSL_SHA256=325b5c806167c13b40b1ffeadfe0248197c00eccc4cf123ec1e28d2d2fd216d9
+build_tests=${NEKOKEM_BUILD_TESTS:-1}
+if [[ "$build_tests" != 0 && "$build_tests" != 1 ]]; then
+    printf 'NEKOKEM_BUILD_TESTS must be 0 or 1\n' >&2
+    exit 2
+fi
 repo_root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../.." && pwd -P)
 output=${1:-"$repo_root/windows/out"}
 mkdir -p -- "$output"
@@ -55,14 +60,22 @@ gcc "${flags[@]}" "${link[@]}" -municode \
     "$repo_root/windows/src/main.c" "$repo_root/linux/src/main.c" \
     "$repo_root/linux/src/cli.c" "$repo_root/linux/src/i18n.c" \
     "${sources[@]}" "$output/app-icon.o" "${libs[@]}" -o "$output/nekokem.exe"
-for test in openssl_version hybrid_kdf gcm_limit aes_stream parser; do
-    gcc "${flags[@]}" "${link[@]}" "$repo_root/core/tests/${test}_tests.c" \
-        "${sources[@]}" "${libs[@]}" -o "$output/${test}_tests.exe"
-done
-gcc "${flags[@]}" "${link[@]}" -DNEKOKEM_TEST_FAULT_INJECTION \
-    "$repo_root/windows/tests/core_tests.c" "${sources[@]}" "${libs[@]}" -o "$output/windows_core_tests.exe"
-gcc "${flags[@]}" "${link[@]}" "$repo_root/windows/tests/console_tests.c" \
-    "${sources[@]}" "${libs[@]}" -o "$output/console_tests.exe"
+# Dependency identity and Argon2 thread support are required in either mode.
+version_probe="$build_root/openssl-version-check.exe"
+gcc "${flags[@]}" "${link[@]}" "$repo_root/core/tests/openssl_version_tests.c" \
+    "${libs[@]}" -o "$version_probe"
+"$version_probe"
+if [[ "$build_tests" == 1 ]]; then
+    cp "$version_probe" "$output/openssl_version_tests.exe"
+    for test in hybrid_kdf gcm_limit aes_stream parser; do
+        gcc "${flags[@]}" "${link[@]}" "$repo_root/core/tests/${test}_tests.c" \
+            "${sources[@]}" "${libs[@]}" -o "$output/${test}_tests.exe"
+    done
+    gcc "${flags[@]}" "${link[@]}" -DNEKOKEM_TEST_FAULT_INJECTION \
+        "$repo_root/windows/tests/core_tests.c" "${sources[@]}" "${libs[@]}" -o "$output/windows_core_tests.exe"
+    gcc "${flags[@]}" "${link[@]}" "$repo_root/windows/tests/console_tests.c" \
+        "${sources[@]}" "${libs[@]}" -o "$output/console_tests.exe"
+fi
 objdump -p "$output/nekokem.exe" > "$output/pe-headers.txt"
 python "$repo_root/windows/tests/check_pe.py" "$output/nekokem.exe" "$output/pe-headers.txt"
 python - "$output" <<'PYMETA'
