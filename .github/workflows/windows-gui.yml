@@ -23,6 +23,7 @@ jobs:
       - name: Install locked frontend dependencies
         run: |
           npm ci --ignore-scripts
+      - run: npm audit --audit-level=moderate
       - run: npm test
       - run: npm run build
       - name: Install screenshot browser
@@ -50,8 +51,9 @@ jobs:
         id: python
         with:
           python-version: '3.13'
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@master
         with:
+          toolchain: stable-x86_64-pc-windows-gnu
           targets: x86_64-pc-windows-gnu
       - uses: msys2/setup-msys2@v2
         with:
@@ -97,6 +99,7 @@ jobs:
           $bin = Split-Path $compiler
           "NEKOKEM_NATIVE_BIN=$bin" >> $env:GITHUB_ENV
           $bin >> $env:GITHUB_PATH
+          "RC_x86_64_pc_windows_gnu=$bin/windres.exe" >> $env:GITHUB_ENV
           "CC_x86_64_pc_windows_gnu=$compiler" >> $env:GITHUB_ENV
           "CARGO_TARGET_X86_64_PC_WINDOWS_GNU_LINKER=$compiler" >> $env:GITHUB_ENV
           "NEKOKEM_OPENSSL_PREFIX=$env:RUNNER_TEMP\windows-openssl" >> $env:GITHUB_ENV
@@ -142,7 +145,13 @@ jobs:
         run: |
           $exe = 'desktop/src-tauri/target/x86_64-pc-windows-gnu/release/nekokem-gui.exe'
           & (Join-Path $env:NEKOKEM_NATIVE_BIN 'objdump.exe') -p $exe | Out-File -Encoding utf8 gui-pe.txt
-          & '${{ steps.python.outputs.python-path }}' desktop/tests/check_gui_pe.py $exe gui-pe.txt
+          $loader = Join-Path (Split-Path $exe) 'WebView2Loader.dll'
+          $sdk = @(Get-ChildItem "$env:CARGO_HOME/registry/src/*/webview2-com-sys-0.39.1/x64/WebView2Loader.dll")
+          if ($sdk.Count -ne 1) { throw 'Locked WebView2 SDK loader reference missing or ambiguous' }
+          & '${{ steps.python.outputs.python-path }}' desktop/tests/check_gui_pe.py $exe gui-pe.txt $sdk[0].FullName
+          $signature = Get-AuthenticodeSignature $loader
+          if ($signature.Status -ne 'Valid' -or $signature.SignerCertificate.Subject -notmatch 'Microsoft Corporation') { throw 'WebView2 SDK loader Microsoft signature verification failed' }
+          @{ sha256=(Get-FileHash $loader -Algorithm SHA256).Hash.ToLowerInvariant(); version='webview2-com-sys 0.39.1'; signature_status=[string]$signature.Status; signer=$signature.SignerCertificate.Subject } | ConvertTo-Json | Set-Content webview2-loader-metadata.json
           if ($LASTEXITCODE -ne 0) { throw 'GUI PE check failed' }
           & '${{ steps.python.outputs.python-path }}' desktop/tests/check_icon.py $exe windows/icons/icon.ico
           if ($LASTEXITCODE -ne 0) { throw 'GUI icon differs from Android' }
@@ -153,11 +162,12 @@ jobs:
         run: |
           $root = Join-Path $env:RUNNER_TEMP 'NekoKEM-Windows-GUI'
           New-Item -ItemType Directory $root | Out-Null
-          Copy-Item desktop/src-tauri/target/x86_64-pc-windows-gnu/release/nekokem-gui.exe $root
+          Copy-Item desktop/src-tauri/target/x86_64-pc-windows-gnu/release/nekokem-gui.exe,desktop/src-tauri/target/x86_64-pc-windows-gnu/release/WebView2Loader.dll,webview2-loader-metadata.json $root
           Copy-Item desktop/README.md,windows/SECURITY-DESIGN.md,LICENSE,gui-pe.txt,desktop/package-lock.json,desktop/src-tauri/Cargo.lock $root
           Copy-Item (Join-Path $env:RUNNER_TEMP 'windows-cli/OPENSSL-LICENSE.txt') $root
           $hash = (Get-FileHash "$root/nekokem-gui.exe" -Algorithm SHA256).Hash.ToLowerInvariant()
-          "$hash  nekokem-gui.exe" | Set-Content "$root/SHA256SUMS.txt"
+          $loaderHash = (Get-FileHash "$root/WebView2Loader.dll" -Algorithm SHA256).Hash.ToLowerInvariant()
+          "$hash  nekokem-gui.exe","$loaderHash  WebView2Loader.dll" | Set-Content "$root/SHA256SUMS.txt"
           @{ source_sha=$env:GITHUB_SHA; run_id=$env:GITHUB_RUN_ID; exe_sha256=$hash; platform='windows-x86_64'; openssl_version='3.5.6'; authenticode_signed=$false; apk_signing_material_used=$false } | ConvertTo-Json | Set-Content "$root/build-metadata.json"
           Compress-Archive -Path "$root/*" -DestinationPath "$env:RUNNER_TEMP/NekoKEM-Windows-GUI.zip"
           Remove-Item $env:TEMP -Recurse -Force
@@ -169,6 +179,7 @@ jobs:
             desktop/src-tauri/Cargo.lock
             desktop/package-lock.json
             gui-pe.txt
+            webview2-loader-metadata.json
           retention-days: 14
       - uses: actions/upload-artifact@v4
         with:

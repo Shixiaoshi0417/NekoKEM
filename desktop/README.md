@@ -2,7 +2,7 @@
 
 Rust + Tauri 2 + Vue 3 + TypeScript desktop frontend. This is a Windows x64 test
 build and requires the Microsoft Edge WebView2 Runtime. Open `nekokem-gui.exe` to
-use the app; it opens a native window without a terminal. The portable package
+use the app; it opens a native window without a terminal. Keep the included\nMicrosoft `WebView2Loader.dll` beside the EXE. The portable package
 contains no Android signing material and is not Authenticode signed.
 
 ## Features / 功能
@@ -30,7 +30,8 @@ pinned static OpenSSL 3.5.6 prefix created by `windows/scripts/build-windows-cli
 The GNU target intentionally matches the existing tested C17 Windows ABI/toolchain.
 
 ```powershell
-rustup target add x86_64-pc-windows-gnu
+rustup toolchain install stable-x86_64-pc-windows-gnu
+rustup default stable-x86_64-pc-windows-gnu
 $env:Path = 'C:\msys64\ucrt64\bin;' + $env:Path
 $env:CC_x86_64_pc_windows_gnu = 'C:\msys64\ucrt64\bin\gcc.exe'
 $env:NEKOKEM_OPENSSL_PREFIX = 'C:\path\to\pinned-windows-openssl'
@@ -41,8 +42,7 @@ npm run build
 npm run tauri -- build --target x86_64-pc-windows-gnu --no-bundle
 ```
 
-The CI bootstrap resolves lockfiles once and archives them with the test build.
-The checked-in final lockfiles are used with npm ci and Cargo --locked.
+Checked-in lockfiles are used with npm ci and Cargo --locked. The GNU host\ntoolchain also makes Tauri's resource compiler produce GNU-compatible COFF icons\nand the application manifest. CI verifies the loader DLL against the checksum-locked\nWebView2 SDK crate and its Microsoft Authenticode signature before packaging.
 
 ## Security boundary / 安全边界
 
