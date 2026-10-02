@@ -163,13 +163,8 @@ int nekokem_encrypt_file_with_progress(
     if (aad == NULL || !atomic_file_open(&output, output_path, 0600)) {
         goto cleanup;
     }
-    if (!file_write_all(output.stream, raw_header, sizeof(raw_header)) ||
-        !file_write_all(output.stream, ephemeral_public,
-                        sizeof(ephemeral_public)) ||
-        !file_write_all(output.stream, kem_ciphertext,
-                        kem_ciphertext_len) ||
-        !file_write_all(output.stream, salt, sizeof(salt)) ||
-        !file_write_all(output.stream, nonce, sizeof(nonce))) {
+    /* The AAD is exactly the on-disk metadata, already in wire order. */
+    if (!file_write_all(output.stream, aad, aad_len)) {
         goto cleanup;
     }
     aes_result = aes_gcm_encrypt_file_with_progress(
