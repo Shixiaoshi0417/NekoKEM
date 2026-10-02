@@ -133,6 +133,15 @@ pub fn execute<F:Fn(u64,u64)>(request:Request,job:Arc<Job>,emit:F)->Result<Outco
 mod tests {
     use super::*;
     use std::{fs,path::PathBuf,time::{SystemTime,UNIX_EPOCH}};
+    extern "C" { fn OpenSSL_version(kind:c_int)->*const c_char; }
+    #[test]
+    fn linked_openssl_runtime_matches_pin() {
+        const OPENSSL_VERSION: c_int = 0;
+        let version = unsafe { OpenSSL_version(OPENSSL_VERSION) };
+        assert!(!version.is_null());
+        assert!(unsafe { CStr::from_ptr(version) }.to_bytes().starts_with(b"OpenSSL 4.0.3 "),
+                "GUI linked runtime does not match pinned OpenSSL 4.0.3");
+    }
     fn request(kind:Kind)->Request {Request{id:"test-job".into(),kind,input:String::new(),output:String::new(),key_path:String::new(),public_path:String::new(),private_path:String::new(),password:Zeroizing::new(String::new()),confirmation:Zeroizing::new(String::new()),key_text:Zeroizing::new(String::new()),paste:false}}
     fn run(backend:&Arc<Backend>,r:Request)->Result<Outcome,Failure>{let job=backend.reserve(&r)?;let _hold=Reservation{backend:backend.clone(),job:job.clone()};execute(r,job,|_,_|{})}
     struct Directory(PathBuf);

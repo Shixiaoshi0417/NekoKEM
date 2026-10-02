@@ -6,7 +6,7 @@
   <img src="icon.png" alt="NekoKEM 项目图标" width="160">
 </p>
 
-NekoKEM 是一个用于学习 OpenSSL 3.5 EVP API 的实验性后量子文件加密工具。仅支持 NKEM v3 Hybrid 文件容器。
+NekoKEM 是一个用于学习 OpenSSL EVP API 的实验性后量子文件加密工具。仅支持 NKEM v3 Hybrid 文件容器。
 
 | 模式 | 密钥建立 | KDF | 文件加密 | 容器 |
 |---|---|---|---|---|
@@ -48,7 +48,7 @@ Debian 13：
 sudo apt install libssl-dev build-essential
 ```
 
-需要 OpenSSL 3.5 或更高版本，因为 ML-KEM 的 EVP 支持从 OpenSSL 3.5 开始提供。
+需要 OpenSSL 3.5 或更高版本，因为 ML-KEM 的 EVP 支持从 OpenSSL 3.5 开始提供。各平台的源码构建与 CI 固定使用 OpenSSL 4.0.3，并校验官方源码 SHA-256。
 
 如需构建 AFL++ parser fuzz harness，额外安装：
 
@@ -62,7 +62,7 @@ sudo apt install afl++
 make -C linux
 ```
 
-构建使用 C17，并链接 OpenSSL `libcrypto`。Hybrid 私钥保护使用 OpenSSL 3.5 provider 提供的 Argon2id，不需要额外安装 `libargon2`。默认构建启用 `-Werror`、`-fstack-protector-strong`、`-D_FORTIFY_SOURCE=3`、`-fPIE` 和 `-pie`。
+构建使用 C17，并链接 OpenSSL `libcrypto`。Hybrid 私钥保护使用 OpenSSL provider 提供的 Argon2id，不需要额外安装 `libargon2`。默认构建启用 `-Werror`、`-fstack-protector-strong`、`-D_FORTIFY_SOURCE=3`、`-fPIE` 和 `-pie`。
 
 可执行文件位于 `linux/nekokem`。下文的 `./nekokem` 示例假定当前目录为 `linux/`，或已将该可执行文件复制到当前目录。
 
@@ -71,7 +71,7 @@ make -C linux
 新增原生 Windows 10/11 x64 `nekokem.exe`，构建、使用和导入私钥权限说明见
 [Windows CLI 文档](windows/README.md)，文件安全设计见
 [Windows 文件层说明](windows/SECURITY-DESIGN.md)。运行不需要 MSYS2 或 OpenSSL DLL；
-构建使用 MSYS2 UCRT64 与固定 OpenSSL 3.5.6。测试构建由 Windows CI 提供，尚未加入
+构建使用 MSYS2 UCRT64 与固定 OpenSSL 4.0.3。测试构建由 Windows CI 提供，尚未加入
 既有 v3.2.0 正式 Release，也没有使用 Android 签名材料。
 
 首版仅支持本地 NTFS，拒绝网络、设备、替代数据流与重解析点路径。协议、密码参数
@@ -254,7 +254,7 @@ v3 使用 X448、ML-KEM-1024、共享秘密组合和 HKDF-SHA512，并将 HKDF s
 
 ### OpenSSL EVP
 
-- X448、ML-KEM-1024、HKDF、Argon2id 和 AES-256-GCM 均使用 OpenSSL 3.5 EVP/provider API，不自行实现密码算法，也不引入 liboqs；
+- X448、ML-KEM-1024、HKDF、Argon2id 和 AES-256-GCM 均使用 OpenSSL EVP/provider API，不自行实现密码算法，也不引入 liboqs；
 - 所有 `EVP_PKEY`、`EVP_PKEY_CTX`、`EVP_CIPHER_CTX`、`EVP_KDF`、`EVP_KDF_CTX`、`EVP_MD_CTX` 和 `BIO` 都有统一的成功/失败释放路径；
 - OpenSSL 错误路径通过 `ERR_get_error()` 循环取出并清空当前线程的错误队列；
 - 私钥保留在 OpenSSL 的不透明 `EVP_PKEY`/provider 对象内，不导出原始私钥副本，并使用 `EVP_PKEY_free()` 释放。

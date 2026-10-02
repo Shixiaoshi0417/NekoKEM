@@ -3,6 +3,11 @@ fn main() {
     assert_eq!(env::var("CARGO_CFG_TARGET_ENV").unwrap(), "gnu", "Use x86_64-pc-windows-gnu with UCRT64 GCC to match the existing C17 Core");
     let root = PathBuf::from(env::var("CARGO_MANIFEST_DIR").unwrap()).join("../..");
     let prefix = PathBuf::from(env::var("NEKOKEM_OPENSSL_PREFIX").expect("Build the pinned static OpenSSL prefix with windows/scripts/build-windows-cli.sh first"));
+    // A dependency upgrade must rebuild the C ABI and relink the GUI even when
+    // the prefix path and workspace source files stay the same.
+    for path in ["include/openssl/opensslv.h", "lib/libcrypto.a", "nekokem-build-manifest.txt"] {
+        println!("cargo:rerun-if-changed={}", prefix.join(path).display());
+    }
     let mut build = cc::Build::new();
     build.include(root.join("core/include")).include(root.join("core/src"))
         .include(root.join("linux/src")).include(prefix.join("include"))

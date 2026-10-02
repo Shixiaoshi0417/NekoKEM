@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # Run in MSYS2 UCRT64. Produces a native x64 EXE with static OpenSSL/runtime.
 set -Eeuo pipefail
-readonly OPENSSL_VERSION=3.5.6
-readonly OPENSSL_SHA256=deae7c80cba99c4b4f940ecadb3c3338b13cb77418409238e57d7f31f2a3b736
+readonly OPENSSL_VERSION=4.0.3
+readonly OPENSSL_SHA256=325b5c806167c13b40b1ffeadfe0248197c00eccc4cf123ec1e28d2d2fd216d9
 repo_root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../.." && pwd -P)
 output=${1:-"$repo_root/windows/out"}
 mkdir -p -- "$output"
@@ -37,7 +37,7 @@ fi
     echo 'Prebuilt OpenSSL configuration/compiler mismatch' >&2
     exit 1
 }
-grep -Eq '^# *define OPENSSL_VERSION_STR "3\.5\.6"' "$prefix/include/openssl/opensslv.h"
+grep -Eq '^# *define OPENSSL_VERSION_STR "4\.0\.3"' "$prefix/include/openssl/opensslv.h"
 cp "$prefix/LICENSE.txt" "$output/OPENSSL-LICENSE.txt"
 flags=(-std=c17 -O2 -Wall -Wextra -Wpedantic -Wconversion -Wshadow -Wformat=2 \
        -Wstrict-prototypes -Werror -fstack-protector-strong -D_FORTIFY_SOURCE=3 \
@@ -55,7 +55,7 @@ gcc "${flags[@]}" "${link[@]}" -municode \
     "$repo_root/windows/src/main.c" "$repo_root/linux/src/main.c" \
     "$repo_root/linux/src/cli.c" "$repo_root/linux/src/i18n.c" \
     "${sources[@]}" "$output/app-icon.o" "${libs[@]}" -o "$output/nekokem.exe"
-for test in hybrid_kdf gcm_limit parser; do
+for test in openssl_version hybrid_kdf gcm_limit parser; do
     gcc "${flags[@]}" "${link[@]}" "$repo_root/core/tests/${test}_tests.c" \
         "${sources[@]}" "${libs[@]}" -o "$output/${test}_tests.exe"
 done
@@ -72,7 +72,7 @@ import subprocess, sys
 root=Path(sys.argv[1])
 metadata={'source_sha':os.environ.get('GITHUB_SHA') or subprocess.check_output(['git','rev-parse','HEAD'],text=True).strip(),
           'run_id':os.environ.get('GITHUB_RUN_ID'), 'platform':'windows-x86_64',
-          'openssl_version':'3.5.6', 'compiler':subprocess.check_output(['gcc','--version'],text=True).splitlines()[0],
+          'openssl_version':'4.0.3', 'compiler':subprocess.check_output(['gcc','--version'],text=True).splitlines()[0],
           'authenticode_signed':False, 'apk_signing_material_used':False,
           'exe_sha256':hashlib.sha256((root/'nekokem.exe').read_bytes()).hexdigest()}
 (root/'build-metadata.json').write_text(json.dumps(metadata,indent=2)+'\n')

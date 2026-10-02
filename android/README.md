@@ -21,7 +21,7 @@ Core 仅处理 NKEM v3 文件容器；NKEM v1/v2 已不再支持。NKPR 是独�
 - Android SDK 35（`minSdk 26`、`targetSdk 35`）
 - Android NDK r28c（`28.2.13676358`）、CMake、C17
 - 仅 `arm64-v8a`
-- Android arm64 OpenSSL 3.5.6 静态 `libcrypto.a`
+- Android arm64 OpenSSL 4.0.3 静态 `libcrypto.a`
 
 不使用 Android 系统 OpenSSL。可复现构建脚本位于
 `scripts/build-openssl-android.sh`。

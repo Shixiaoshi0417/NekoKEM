@@ -2,8 +2,8 @@
 set -Eeuo pipefail
 IFS=$'\n\t'
 
-readonly OPENSSL_VERSION="3.5.6"
-readonly OPENSSL_SHA256="deae7c80cba99c4b4f940ecadb3c3338b13cb77418409238e57d7f31f2a3b736"
+readonly OPENSSL_VERSION="4.0.3"
+readonly OPENSSL_SHA256="325b5c806167c13b40b1ffeadfe0248197c00eccc4cf123ec1e28d2d2fd216d9"
 readonly OPENSSL_URL="https://github.com/openssl/openssl/releases/download/openssl-${OPENSSL_VERSION}/openssl-${OPENSSL_VERSION}.tar.gz"
 
 usage() {
@@ -126,6 +126,11 @@ if [[ ! -s "$openssl_library" || ! -f "$openssl_prefix/include/openssl/evp.h" ]]
     printf 'Static OpenSSL build did not produce the expected files\n' >&2
     exit 1
 fi
+if ! grep -Eq '^# *define OPENSSL_VERSION_STR "4\.0\.3"' \
+    "$openssl_prefix/include/openssl/opensslv.h"; then
+    printf 'OpenSSL headers must match pinned version %s\n' "$OPENSSL_VERSION" >&2
+    exit 1
+fi
 
 build_objects="$build_root/objects"
 binary="$build_root/nekokem"
@@ -171,6 +176,17 @@ c_flags=(
     -fdata-sections
 )
 objects=()
+
+# Verify the linked library as well as the header pin, including supplied prefixes.
+version_probe="$build_root/openssl-version-tests"
+"$cc" "${cpp_flags[@]}" "${c_flags[@]}" -static-pie \
+    "$repo_root/core/tests/openssl_version_tests.c" \
+    "$openssl_library" -ldl -pthread -o "$version_probe"
+if [[ "$host_arch" == "$target_arch" ]]; then
+    "$version_probe"
+else
+    "${NEKOKEM_QEMU:-$default_qemu}" "$version_probe"
+fi
 
 printf 'Building NekoKEM CLI (%s)...\n' "$target_arch"
 for source in "${sources[@]}"; do
