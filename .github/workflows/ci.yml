@@ -28,6 +28,12 @@ jobs:
       - name: Check out source
         uses: actions/checkout@v5
 
+      - name: Check out performance baseline
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ github.event.pull_request.base.sha || 'main' }}
+          path: performance-baseline-source
+
       - name: Install Linux build tools
         run: |
           sudo apt-get update
@@ -67,6 +73,28 @@ jobs:
           CPATH: ${{ runner.temp }}/openssl-4.0.3/include
           LIBRARY_PATH: ${{ runner.temp }}/openssl-4.0.3/lib
         run: make -C linux test
+
+      - name: Compare Linux throughput against the PR base
+        env:
+          CPATH: ${{ runner.temp }}/openssl-3.5.6/include
+          LIBRARY_PATH: ${{ runner.temp }}/openssl-3.5.6/lib
+        run: |
+          set -Eeuo pipefail
+          # Both builds use the same runner, pinned OpenSSL and hardened flags.
+          make -C performance-baseline-source/linux all
+          python3 scripts/benchmark_throughput.py \
+            --baseline performance-baseline-source/linux/nekokem \
+            --candidate linux/nekokem \
+            --json "$RUNNER_TEMP/linux-throughput-comparison.json"
+
+      - name: Preserve Linux before-and-after throughput measurements
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-throughput-comparison
+          path: ${{ runner.temp }}/linux-throughput-comparison.json
+          if-no-files-found: warn
+          retention-days: 14
 
       - name: Test fuzz result and process failure handling
         run: python3 .github/scripts/test_fuzz_smoke.py -v

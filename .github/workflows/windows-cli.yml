@@ -57,6 +57,11 @@ jobs:
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@v5
+      - name: Check out performance baseline
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ github.event.pull_request.base.sha || 'main' }}
+          path: performance-baseline-source
       - uses: msys2/setup-msys2@v2
         with:
           msystem: UCRT64
@@ -80,6 +85,14 @@ jobs:
         run: |
           export NEKOKEM_OPENSSL_PREFIX="$(cygpath -u "$RUNNER_TEMP")/windows-openssl"
           bash windows/scripts/build-windows-cli.sh "$(cygpath -u "$RUNNER_TEMP")/windows-cli"
+      - name: Build performance baseline with the same compiler and OpenSSL
+        shell: msys2 {0}
+        env:
+          GITHUB_SHA: ${{ github.event.pull_request.base.sha || github.sha }}
+        run: |
+          export NEKOKEM_OPENSSL_PREFIX="$(cygpath -u "$RUNNER_TEMP")/windows-openssl"
+          bash performance-baseline-source/windows/scripts/build-windows-cli.sh \
+            "$(cygpath -u "$RUNNER_TEMP")/windows-cli-performance-baseline"
       - uses: actions/cache/save@v4
         if: always() && steps.openssl-cache.outputs.cache-hit != 'true'
         with:
@@ -106,7 +119,7 @@ jobs:
             $ancestor = $ancestor.Parent
           }
           try {
-            foreach ($name in @('openssl_version', 'hybrid_kdf', 'gcm_limit', 'parser', 'windows_core', 'console')) {
+            foreach ($name in @('openssl_version', 'hybrid_kdf', 'gcm_limit', 'aes_stream', 'parser', 'windows_core', 'console')) {
               $testDirectory = Join-Path $work $name
               New-Item -ItemType Directory -Path $testDirectory | Out-Null
               Push-Location $testDirectory
@@ -123,12 +136,26 @@ jobs:
             if ($LASTEXITCODE -ne 0) { throw 'Linux-to-Windows compatibility failed' }
             python windows/tests/benchmark.py (Join-Path $bin 'nekokem.exe') | Tee-Object -FilePath (Join-Path $bin 'benchmark.json')
             if ($LASTEXITCODE -ne 0) { throw 'Native throughput measurement failed' }
+            python scripts/benchmark_throughput.py `
+              --baseline (Join-Path $env:RUNNER_TEMP 'windows-cli-performance-baseline/nekokem.exe') `
+              --candidate (Join-Path $bin 'nekokem.exe') `
+              --work-dir $work `
+              --json (Join-Path $env:RUNNER_TEMP 'windows-throughput-comparison.json')
+            if ($LASTEXITCODE -ne 0) { throw 'Native before-and-after throughput measurement failed' }
             $return = Join-Path $env:RUNNER_TEMP 'windows-fixtures'
             New-Item -ItemType Directory -Path $return | Out-Null
             foreach ($name in @('binary','empty','windows-fingerprint.txt','windows-public.key','windows-private.enc','binary.windows.nkem','empty.windows.nkem')) {
               Copy-Item (Join-Path $interop $name) $return
             }
           } finally { Remove-Item $work -Recurse -Force }
+      - name: Preserve Windows before-and-after throughput measurements
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-throughput-comparison
+          path: ${{ runner.temp }}/windows-throughput-comparison.json
+          retention-days: 14
+          if-no-files-found: warn
       - name: Package unsigned native CLI
         shell: pwsh
         run: |

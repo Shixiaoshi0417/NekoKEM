@@ -29,7 +29,7 @@ DEPS = $(OBJECTS:.o=.d)
 
 .PHONY: all core clean test analyze test-ubsan test-parser fuzz-seeds \
 	fuzz-build test-key-management test-progress test-progress-large \
-	test-file-security test-version-rejection test-gcm-limit \
+	test-file-security test-version-rejection test-gcm-limit test-aes-stream \
 	test-hybrid-kdf test-asan test-input-boundaries test-pem-interaction test-openssl
 
 all: $(TARGET)
@@ -114,6 +114,19 @@ test-openssl:
 	$(CC) $(CPPFLAGS) $(CFLAGS) $(LDFLAGS) \
 		../core/tests/openssl_version_tests.c $(LDLIBS) -o "$$version_binary"; \
 	"$$version_binary"
+
+test-aes-stream:
+	@set -eu; \
+	aes_binary=$$(mktemp /tmp/nekokem-aes-stream-tests.XXXXXX); \
+	cleanup_aes() { rm -f "$$aes_binary"; }; \
+	trap cleanup_aes EXIT INT TERM; \
+	$(CC) $(CPPFLAGS) $(CFLAGS) -O1 -g -fno-omit-frame-pointer \
+		-fsanitize=address,undefined -fno-sanitize-recover=undefined \
+		$(LDFLAGS) ../core/tests/aes_stream_tests.c ../core/src/aes.c \
+		../core/src/file.c ../core/src/file_v3.c ../core/src/secure_mem.c \
+		$(LDLIBS) -fsanitize=address,undefined -o "$$aes_binary"; \
+	ASAN_OPTIONS=detect_leaks=1:halt_on_error=1 \
+		UBSAN_OPTIONS=halt_on_error=1:print_stacktrace=1 "$$aes_binary"
 
 test-hybrid-kdf: $(CORE_LIBRARY)
 	@set -eu; \
@@ -209,7 +222,7 @@ test-progress test-progress-large: $(CORE_LIBRARY)
 		"$$progress_binary"; \
 	fi
 
-test: $(TARGET) test-openssl analyze test-ubsan test-parser test-file-security test-gcm-limit \
+test: $(TARGET) test-openssl analyze test-ubsan test-parser test-file-security test-gcm-limit test-aes-stream \
 	test-key-management test-version-rejection test-progress test-hybrid-kdf test-input-boundaries \
 	test-asan test-pem-interaction test-i18n
 	@set -eu; \
