@@ -91,6 +91,12 @@ jobs:
           GITHUB_SHA: ${{ github.event.pull_request.base.sha || github.sha }}
         run: |
           export NEKOKEM_OPENSSL_PREFIX="$(cygpath -u "$RUNNER_TEMP")/windows-openssl"
+          # Use the same pinned build recipe for both performance builds.
+          # Baseline production Core and CLI sources remain at the requested ref.
+          cp windows/scripts/build-windows-cli.sh \
+            performance-baseline-source/windows/scripts/build-windows-cli.sh
+          cp core/tests/openssl_version_tests.c \
+            performance-baseline-source/core/tests/openssl_version_tests.c
           bash performance-baseline-source/windows/scripts/build-windows-cli.sh \
             "$(cygpath -u "$RUNNER_TEMP")/windows-cli-performance-baseline"
       - uses: actions/cache/save@v4
