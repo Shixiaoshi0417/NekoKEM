@@ -28,6 +28,33 @@ internal fun runLanguageDeviceTests(
     }
     fun node(text: String): AccessibilityNodeInfo? =
         findText(instrumentation.uiAutomation.rootInActiveWindow, text)
+    fun recordMissingTitle(tag: String) {
+        // Capture before finally finishes the Activity, so a system overlay is visible.
+        runCatching {
+            val directory = File(context.cacheDir, "i18n-screens")
+            check(directory.isDirectory || directory.mkdir())
+            val tree = StringBuilder()
+            var count = 0
+            fun dump(root: AccessibilityNodeInfo?, depth: Int = 0) {
+                if (root == null || depth > 50 || count++ >= 512) return
+                tree.append("  ".repeat(depth)).append(root.packageName).append(" | ")
+                    .append(root.className).append(" | ").append(root.text).append(" | ")
+                    .append(root.contentDescription).append('\n')
+                for (i in 0 until root.childCount) dump(root.getChild(i), depth + 1)
+            }
+            dump(instrumentation.uiAutomation.rootInActiveWindow)
+            File(directory, "$screenshotPrefix-$tag-missing-title.txt").writeText(tree.toString())
+            val captured = checkNotNull(instrumentation.uiAutomation.takeScreenshot())
+            val screenshot = if (captured.config == Bitmap.Config.HARDWARE) {
+                checkNotNull(captured.copy(Bitmap.Config.ARGB_8888, false)).also { captured.recycle() }
+            } else captured
+            try {
+                File(directory, "$screenshotPrefix-$tag-missing-title.png").outputStream().use {
+                    check(screenshot.compress(Bitmap.CompressFormat.PNG, 100, it))
+                }
+            } finally { screenshot.recycle() }
+        }
+    }
     fun scrollable(root: AccessibilityNodeInfo?): AccessibilityNodeInfo? {
         if (root == null) return null
         if (root.isScrollable) return root
@@ -143,7 +170,10 @@ internal fun runLanguageDeviceTests(
             instrumentation.waitForIdleSync()
             check(activity.getString(R.string.navigation_files) == label)
             check(AppLanguages.selection(activity) == tag)
-            check(awaitNode(label) != null) { "Localized Compose title did not render: $tag" }
+            if (awaitNode(label) == null) {
+                recordMissingTitle(tag)
+                error("Localized Compose title did not render: $tag")
+            }
             capture(tag)
 
         }
