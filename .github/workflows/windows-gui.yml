@@ -60,7 +60,9 @@ jobs:
       - name: Identify native compiler
         id: compiler
         shell: msys2 {0}
-        run: echo "version=$(gcc -dumpfullversion)" >> "$GITHUB_OUTPUT"
+        run: |
+          echo "version=$(gcc -dumpfullversion)" >> "$GITHUB_OUTPUT"
+          echo "gcc=$(cygpath -m "$(command -v gcc)")" >> "$GITHUB_OUTPUT"
       - uses: actions/cache/restore@v4
         id: openssl-cache
         with:
@@ -70,6 +72,7 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: desktop/src-tauri
+          cache-on-failure: true
       - name: Build original CLI and shared C17 native tests with pinned OpenSSL
         shell: msys2 {0}
         run: |
@@ -83,10 +86,15 @@ jobs:
       - name: Configure the matching Rust/C ABI and private NTFS test root
         shell: pwsh
         run: |
-          $bin = 'C:/msys64/ucrt64/bin'
+          $compiler = '${{ steps.compiler.outputs.gcc }}'
+          if (!(Test-Path -LiteralPath $compiler)) { throw "GCC not found: $compiler" }
+          & $compiler --version
+          if ($LASTEXITCODE -ne 0) { throw 'Cannot execute GCC' }
+          $bin = Split-Path $compiler
+          "NEKOKEM_NATIVE_BIN=$bin" >> $env:GITHUB_ENV
           $bin >> $env:GITHUB_PATH
-          "CC_x86_64_pc_windows_gnu=$bin/gcc.exe" >> $env:GITHUB_ENV
-          "CARGO_TARGET_X86_64_PC_WINDOWS_GNU_LINKER=$bin/gcc.exe" >> $env:GITHUB_ENV
+          "CC_x86_64_pc_windows_gnu=$compiler" >> $env:GITHUB_ENV
+          "CARGO_TARGET_X86_64_PC_WINDOWS_GNU_LINKER=$compiler" >> $env:GITHUB_ENV
           "NEKOKEM_OPENSSL_PREFIX=$env:RUNNER_TEMP\windows-openssl" >> $env:GITHUB_ENV
           $work = Join-Path ([Environment]::GetFolderPath('LocalApplicationData')) "NekoKEM-gui-ci-$env:GITHUB_RUN_ID"
           New-Item -ItemType Directory $work | Out-Null
@@ -129,7 +137,7 @@ jobs:
         shell: pwsh
         run: |
           $exe = 'desktop/src-tauri/target/x86_64-pc-windows-gnu/release/nekokem-gui.exe'
-          & 'C:/msys64/ucrt64/bin/objdump.exe' -p $exe | Out-File -Encoding utf8 gui-pe.txt
+          & (Join-Path $env:NEKOKEM_NATIVE_BIN 'objdump.exe') -p $exe | Out-File -Encoding utf8 gui-pe.txt
           python desktop/tests/check_gui_pe.py $exe gui-pe.txt
           if ($LASTEXITCODE -ne 0) { throw 'GUI PE check failed' }
           python desktop/tests/check_icon.py $exe windows/icons/icon.ico
