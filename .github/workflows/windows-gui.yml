@@ -149,10 +149,10 @@ jobs:
           $sdk = @(Get-ChildItem "$env:CARGO_HOME/registry/src/*/webview2-com-sys-0.39.1/x64/WebView2Loader.dll")
           if ($sdk.Count -ne 1) { throw 'Locked WebView2 SDK loader reference missing or ambiguous' }
           & '${{ steps.python.outputs.python-path }}' desktop/tests/check_gui_pe.py $exe gui-pe.txt $sdk[0].FullName
+          if ($LASTEXITCODE -ne 0) { throw 'GUI PE check failed' }
           $signature = Get-AuthenticodeSignature $loader
           if ($signature.Status -ne 'Valid' -or $signature.SignerCertificate.Subject -notmatch 'Microsoft Corporation') { throw 'WebView2 SDK loader Microsoft signature verification failed' }
           @{ sha256=(Get-FileHash $loader -Algorithm SHA256).Hash.ToLowerInvariant(); version='webview2-com-sys 0.39.1'; signature_status=[string]$signature.Status; signer=$signature.SignerCertificate.Subject } | ConvertTo-Json | Set-Content webview2-loader-metadata.json
-          if ($LASTEXITCODE -ne 0) { throw 'GUI PE check failed' }
           & '${{ steps.python.outputs.python-path }}' desktop/tests/check_icon.py $exe windows/icons/icon.ico
           if ($LASTEXITCODE -ne 0) { throw 'GUI icon differs from Android' }
           & '${{ steps.python.outputs.python-path }}' desktop/tests/launch_windows.py $exe

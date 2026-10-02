@@ -25,6 +25,24 @@ try:
   assert process.poll() is None,'GUI exited before opening a window'
   user.EnumWindows(visit,0);time.sleep(.2)
  assert found,'Visible NekoKEM window not found'
+ # UI Automation verifies the actual WebView form is rendered and enabled after
+ # its real get_settings IPC succeeds; a blank native window cannot pass.
+ script = r"""
+ Add-Type -AssemblyName UIAutomationClient
+ Add-Type -AssemblyName UIAutomationTypes
+ $root = [System.Windows.Automation.AutomationElement]::FromHandle([IntPtr]HANDLE)
+ $deadline = (Get-Date).AddSeconds(20)
+ do {
+   $elements = $root.FindAll([System.Windows.Automation.TreeScope]::Descendants, [System.Windows.Automation.Condition]::TrueCondition)
+   $enabledEdits = @($elements | Where-Object { $_.Current.ControlType -eq [System.Windows.Automation.ControlType]::Edit -and $_.Current.IsEnabled })
+   if ($enabledEdits.Count -ge 3) { Write-Output 'Actual WebView form rendered and real settings IPC ready'; exit 0 }
+   Start-Sleep -Milliseconds 200
+ } while ((Get-Date) -lt $deadline)
+ throw 'WebView form not rendered or settings IPC failed'
+ """.replace('HANDLE',str(found[0]))
+ ready=subprocess.run(['powershell.exe','-NoProfile','-NonInteractive','-Command',script],capture_output=True,text=True,timeout=30)
+ assert ready.returncode==0,ready.stdout+ready.stderr
+ print(ready.stdout.strip())
  time.sleep(5)
  assert process.poll() is None,'GUI failed after initial launch'
  assert user.PostMessageW(found[0],0x10,0,0),'Cannot request normal window close'
