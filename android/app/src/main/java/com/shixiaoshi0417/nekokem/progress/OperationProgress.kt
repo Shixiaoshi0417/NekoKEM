@@ -25,21 +25,34 @@ interface CancellableProgressCallback : NativeProgressCallback {
     fun isCancelled(): Boolean
 }
 
+// A primitive return type avoids boxing a timestamp on every Core callback.
+internal fun interface ProgressClock {
+    fun nanoTime(): Long
+}
+
 /**
- * Receives synchronous Core callbacks on a worker thread. Publishing is
- * throttled to 150 ms and speed is averaged over the most recent two seconds.
+ * Receives synchronous Core callbacks on a worker thread. Every callback checks
+ * cancellation and records byte counts. Sampling and publishing are throttled
+ * to 150 ms; speed is averaged over the most recent two seconds.
  */
-class OperationProgressTracker(
+class OperationProgressTracker internal constructor(
+    private val clock: ProgressClock,
     private val publish: (OperationProgressSnapshot) -> Unit,
 ) : CancellableProgressCallback {
+    constructor(publish: (OperationProgressSnapshot) -> Unit) :
+        this(System::nanoTime, publish)
+
     private data class Sample(val timeNanos: Long, val bytes: Long)
 
     private val cancelled = AtomicBoolean(false)
     private val lock = Any()
     private val samples = ArrayDeque<Sample>()
-    private val startNanos = System.nanoTime()
+    private val startNanos = clock.nanoTime()
+    private var hasProgress = false
     private var lastPublishNanos = 0L
-    private var latest = OperationProgressSnapshot()
+    private var latestProgressNanos = startNanos
+    private var latestProcessedBytes = 0L
+    private var latestTotalBytes = 0L
 
     override fun isCancelled(): Boolean = cancelled.get()
 
@@ -52,44 +65,34 @@ class OperationProgressTracker(
             return false
         }
 
-        val now = System.nanoTime()
+        val now = clock.nanoTime()
         var update: OperationProgressSnapshot? = null
         synchronized(lock) {
             val processed = max(0L, processedBytes)
             val total = max(0L, totalBytes)
-            if (samples.isNotEmpty() && processed < samples.last().bytes) {
+            val first = !hasProgress
+            val phaseChanged = hasProgress &&
+                (processed < latestProcessedBytes || total != latestTotalBytes)
+            if (phaseChanged) {
                 samples.clear()
             }
-            samples.addLast(Sample(now, processed))
-            while (samples.size > 2 &&
-                now - samples.first().timeNanos > SPEED_WINDOW_NANOS
-            ) {
-                samples.removeFirst()
-            }
-
-            val speed = movingSpeed()
-            val elapsedMillis = nanosToMillis(now - startNanos)
-            val etaMillis = if (speed > 0.0 && total > processed) {
-                (((total - processed).toDouble() / speed) * 1000.0)
-                    .toLong()
-                    .coerceAtLeast(0L)
-            } else {
-                null
-            }
-            latest = OperationProgressSnapshot(
-                processedBytes = processed,
-                totalBytes = total,
-                bytesPerSecond = speed,
-                elapsedMillis = elapsedMillis,
-                etaMillis = etaMillis,
-            )
+            hasProgress = true
+            latestProgressNanos = now
+            latestProcessedBytes = processed
+            latestTotalBytes = total
 
             val terminal = total > 0L && processed >= total
-            if (lastPublishNanos == 0L || terminal ||
+            if (first || phaseChanged || terminal ||
                 now - lastPublishNanos >= UPDATE_INTERVAL_NANOS
             ) {
+                samples.addLast(Sample(now, processed))
+                while (samples.size > 2 &&
+                    now - samples.first().timeNanos > SPEED_WINDOW_NANOS
+                ) {
+                    samples.removeFirst()
+                }
                 lastPublishNanos = now
-                update = latest
+                update = createSnapshot(now)
             }
         }
         update?.let(publish)
@@ -97,18 +100,31 @@ class OperationProgressTracker(
     }
 
     fun snapshot(): OperationProgressSnapshot = synchronized(lock) {
-        val now = System.nanoTime()
-        latest.copy(elapsedMillis = nanosToMillis(now - startNanos))
+        createSnapshot(clock.nanoTime())
+    }
+
+    private fun createSnapshot(now: Long): OperationProgressSnapshot {
+        val speed = movingSpeed()
+        val etaMillis = if (speed > 0.0 && latestTotalBytes > latestProcessedBytes) {
+            (((latestTotalBytes - latestProcessedBytes).toDouble() / speed) * 1000.0)
+                .toLong()
+                .coerceAtLeast(0L)
+        } else {
+            null
+        }
+        return OperationProgressSnapshot(
+            processedBytes = latestProcessedBytes,
+            totalBytes = latestTotalBytes,
+            bytesPerSecond = speed,
+            elapsedMillis = nanosToMillis(now - startNanos),
+            etaMillis = etaMillis,
+        )
     }
 
     private fun movingSpeed(): Double {
-        if (samples.size < 2) {
-            return 0.0
-        }
-        val first = samples.first()
-        val last = samples.last()
-        val duration = last.timeNanos - first.timeNanos
-        val bytes = last.bytes - first.bytes
+        val first = samples.firstOrNull() ?: return 0.0
+        val duration = latestProgressNanos - first.timeNanos
+        val bytes = latestProcessedBytes - first.bytes
         return if (duration <= 0L || bytes <= 0L) {
             0.0
         } else {

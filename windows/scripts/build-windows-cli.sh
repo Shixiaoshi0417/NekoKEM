@@ -55,7 +55,7 @@ gcc "${flags[@]}" "${link[@]}" -municode \
     "$repo_root/windows/src/main.c" "$repo_root/linux/src/main.c" \
     "$repo_root/linux/src/cli.c" "$repo_root/linux/src/i18n.c" \
     "${sources[@]}" "$output/app-icon.o" "${libs[@]}" -o "$output/nekokem.exe"
-for test in hybrid_kdf gcm_limit parser; do
+for test in hybrid_kdf gcm_limit aes_stream parser; do
     gcc "${flags[@]}" "${link[@]}" "$repo_root/core/tests/${test}_tests.c" \
         "${sources[@]}" "${libs[@]}" -o "$output/${test}_tests.exe"
 done
