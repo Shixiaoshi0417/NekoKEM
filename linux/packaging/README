@@ -3,7 +3,7 @@ NekoKEM Linux CLI 3.2.0
 
 This archive contains the standalone NekoKEM Linux CLI for the architecture
 named by the archive. The executable is a static PIE and includes its OpenSSL
-3.5.6 cryptographic runtime, so no OpenSSL or other shared-library package is
+4.0.3 cryptographic runtime, so no OpenSSL or other shared-library package is
 required to run it.
 
 Automatic installation

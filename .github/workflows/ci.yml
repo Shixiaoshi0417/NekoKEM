@@ -40,10 +40,10 @@ jobs:
           sudo apt-get install --yes --no-install-recommends \
             afl++ build-essential ca-certificates curl perl
 
-      - name: Build OpenSSL 3.5.6
+      - name: Build OpenSSL 4.0.3
         env:
-          OPENSSL_VERSION: "3.5.6"
-          OPENSSL_SHA256: deae7c80cba99c4b4f940ecadb3c3338b13cb77418409238e57d7f31f2a3b736
+          OPENSSL_VERSION: "4.0.3"
+          OPENSSL_SHA256: 325b5c806167c13b40b1ffeadfe0248197c00eccc4cf123ec1e28d2d2fd216d9
         run: |
           set -Eeuo pipefail
           build_root="$RUNNER_TEMP/openssl-build"
@@ -70,14 +70,14 @@ jobs:
 
       - name: Run complete Linux test suite
         env:
-          CPATH: ${{ runner.temp }}/openssl-3.5.6/include
-          LIBRARY_PATH: ${{ runner.temp }}/openssl-3.5.6/lib
+          CPATH: ${{ runner.temp }}/openssl-4.0.3/include
+          LIBRARY_PATH: ${{ runner.temp }}/openssl-4.0.3/lib
         run: make -C linux test
 
       - name: Compare Linux throughput against the PR base
         env:
-          CPATH: ${{ runner.temp }}/openssl-3.5.6/include
-          LIBRARY_PATH: ${{ runner.temp }}/openssl-3.5.6/lib
+          CPATH: ${{ runner.temp }}/openssl-4.0.3/include
+          LIBRARY_PATH: ${{ runner.temp }}/openssl-4.0.3/lib
         run: |
           set -Eeuo pipefail
           # Both builds use the same runner, pinned OpenSSL and hardened flags.
@@ -110,8 +110,8 @@ jobs:
           AFL_I_DONT_CARE_ABOUT_MISSING_CRASHES: "1"
           AFL_NO_UI: "1"
           AFL_SKIP_CPUFREQ: "1"
-          CPATH: ${{ runner.temp }}/openssl-3.5.6/include
-          LIBRARY_PATH: ${{ runner.temp }}/openssl-3.5.6/lib
+          CPATH: ${{ runner.temp }}/openssl-4.0.3/include
+          LIBRARY_PATH: ${{ runner.temp }}/openssl-4.0.3/lib
         run: |
           set -Eeuo pipefail
           make -C linux fuzz-build \
@@ -180,7 +180,7 @@ jobs:
         with:
           cache-read-only: ${{ github.event_name == 'pull_request' }}
 
-      - name: Build OpenSSL 3.5.6 for Android arm64
+      - name: Build OpenSSL 4.0.3 for Android arm64
         working-directory: android
         env:
           JOBS: "2"

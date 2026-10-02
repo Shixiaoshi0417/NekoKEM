@@ -78,8 +78,8 @@ jobs:
         id: openssl-cache
         with:
           path: ${{ runner.temp }}/windows-openssl
-          key: windows-ucrt64-openssl-3.5.6-${{ steps.compiler.outputs.version }}-${{ hashFiles('windows/scripts/build-windows-cli.sh') }}
-          restore-keys: windows-ucrt64-openssl-3.5.6-${{ steps.compiler.outputs.version }}-
+          key: windows-ucrt64-openssl-4.0.3-${{ steps.compiler.outputs.version }}-${{ hashFiles('windows/scripts/build-windows-cli.sh') }}
+          restore-keys: windows-ucrt64-openssl-4.0.3-${{ steps.compiler.outputs.version }}-
       - name: Build native x64 EXE with pinned OpenSSL and verify PE mitigations
         shell: msys2 {0}
         run: |
@@ -91,6 +91,12 @@ jobs:
           GITHUB_SHA: ${{ github.event.pull_request.base.sha || github.sha }}
         run: |
           export NEKOKEM_OPENSSL_PREFIX="$(cygpath -u "$RUNNER_TEMP")/windows-openssl"
+          # Use the same pinned build recipe for both performance builds.
+          # Baseline production Core and CLI sources remain at the requested ref.
+          cp windows/scripts/build-windows-cli.sh \
+            performance-baseline-source/windows/scripts/build-windows-cli.sh
+          cp core/tests/openssl_version_tests.c \
+            performance-baseline-source/core/tests/openssl_version_tests.c
           bash performance-baseline-source/windows/scripts/build-windows-cli.sh \
             "$(cygpath -u "$RUNNER_TEMP")/windows-cli-performance-baseline"
       - uses: actions/cache/save@v4
@@ -119,7 +125,7 @@ jobs:
             $ancestor = $ancestor.Parent
           }
           try {
-            foreach ($name in @('hybrid_kdf', 'gcm_limit', 'aes_stream', 'parser', 'windows_core', 'console')) {
+            foreach ($name in @('openssl_version', 'hybrid_kdf', 'gcm_limit', 'aes_stream', 'parser', 'windows_core', 'console')) {
               $testDirectory = Join-Path $work $name
               New-Item -ItemType Directory -Path $testDirectory | Out-Null
               Push-Location $testDirectory

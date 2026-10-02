@@ -39,7 +39,7 @@ jobs:
           NEKOKEM_RELEASE_KEY_ALIAS: ${{ secrets.NEKOKEM_RELEASE_KEY_ALIAS }}
           NEKOKEM_RELEASE_KEY_PASSWORD: ${{ secrets.NEKOKEM_RELEASE_KEY_PASSWORD }}
         run: python3 .github/scripts/prepare_release_signing.py
-      - name: Build OpenSSL 3.5.6 for Android arm64
+      - name: Build OpenSSL 4.0.3 for Android arm64
         working-directory: android
         env:
           JOBS: "2"

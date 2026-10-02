@@ -30,7 +30,7 @@ DEPS = $(OBJECTS:.o=.d)
 .PHONY: all core clean test analyze test-ubsan test-parser fuzz-seeds \
 	fuzz-build test-key-management test-progress test-progress-large \
 	test-file-security test-version-rejection test-gcm-limit test-aes-stream \
-	test-hybrid-kdf test-asan test-input-boundaries test-pem-interaction
+	test-hybrid-kdf test-asan test-input-boundaries test-pem-interaction test-openssl
 
 all: $(TARGET)
 
@@ -106,6 +106,14 @@ test-gcm-limit:
 		$(LDLIBS) -fsanitize=undefined -o "$$gcm_binary"; \
 	UBSAN_OPTIONS=halt_on_error=1:print_stacktrace=1 \
 		"$$gcm_binary"
+
+test-openssl:
+	@set -eu; \
+	version_binary=$$(mktemp /tmp/nekokem-openssl-version-tests.XXXXXX); \
+	trap 'rm -f "$$version_binary"' EXIT INT TERM; \
+	$(CC) $(CPPFLAGS) $(CFLAGS) $(LDFLAGS) \
+		../core/tests/openssl_version_tests.c $(LDLIBS) -o "$$version_binary"; \
+	"$$version_binary"
 
 test-aes-stream:
 	@set -eu; \
@@ -214,7 +222,7 @@ test-progress test-progress-large: $(CORE_LIBRARY)
 		"$$progress_binary"; \
 	fi
 
-test: $(TARGET) analyze test-ubsan test-parser test-file-security test-gcm-limit test-aes-stream \
+test: $(TARGET) test-openssl analyze test-ubsan test-parser test-file-security test-gcm-limit test-aes-stream \
 	test-key-management test-version-rejection test-progress test-hybrid-kdf test-input-boundaries \
 	test-asan test-pem-interaction test-i18n
 	@set -eu; \

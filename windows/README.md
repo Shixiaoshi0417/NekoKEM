@@ -54,7 +54,7 @@ Get-Acl -LiteralPath '.\keys\private.key.enc' | Format-List Owner, Access
 ```
 
 NKEM v3, NKPR v1, all algorithms, KDF domains/parameters, header/AAD, fingerprint,
-nonce/tag and GCM limits remain unchanged. OpenSSL 3.5.6 retains assembly acceleration;
+nonce/tag and GCM limits remain unchanged. OpenSSL 4.0.3 retains assembly acceleration;
 file data still uses the same 64 KiB streaming implementation. The Windows backend
 pins ancestors, uses private same-directory temporary files, flushes data before
 handle-based rename, and rolls back paired outputs on ordinary commit failures.

@@ -6,7 +6,7 @@
   <img src="icon.png" alt="NekoKEM project icon" width="160">
 </p>
 
-NekoKEM is an experimental post-quantum file encryption tool for learning the OpenSSL 3.5 EVP API. It supports only NKEM v3 Hybrid file containers.
+NekoKEM is an experimental post-quantum file encryption tool for learning the OpenSSL EVP API. It supports only NKEM v3 Hybrid file containers.
 
 | Mode | Key establishment | KDF | File encryption | Container |
 |---|---|---|---|---|
@@ -41,7 +41,7 @@ Debian 13:
 sudo apt install libssl-dev build-essential
 ```
 
-OpenSSL 3.5 or newer is required because EVP support for ML-KEM begins with OpenSSL 3.5.
+OpenSSL 3.5 or newer is required because EVP support for ML-KEM begins with OpenSSL 3.5. Source builds and CI on all platforms pin OpenSSL 4.0.3 and verify the official source SHA-256.
 
 To build the AFL++ parser fuzz harnesses, also install:
 
@@ -55,7 +55,7 @@ sudo apt install afl++
 make -C linux
 ```
 
-The build uses C17 and links OpenSSL `libcrypto`. Hybrid private-key protection uses Argon2id from the OpenSSL 3.5 provider; no separate `libargon2` installation is needed. The default build enables `-Werror`, `-fstack-protector-strong`, `-D_FORTIFY_SOURCE=3`, `-fPIE`, and `-pie`.
+The build uses C17 and links OpenSSL `libcrypto`. Hybrid private-key protection uses Argon2id from the OpenSSL provider; no separate `libargon2` installation is needed. The default build enables `-Werror`, `-fstack-protector-strong`, `-D_FORTIFY_SOURCE=3`, `-fPIE`, and `-pie`.
 
 The executable is `linux/nekokem`. The `./nekokem` examples below assume the working directory is `linux/`, or another directory containing a copy of that executable.
 
@@ -65,7 +65,7 @@ A native Windows 10/11 x64 `nekokem.exe` is available. See the
 [Windows CLI documentation](windows/README.md) for building, use and imported-key
 permissions, and the [filesystem design](windows/SECURITY-DESIGN.md) for boundaries.
 Running requires no MSYS2 runtime or OpenSSL DLL; building uses MSYS2 UCRT64 and
-pinned OpenSSL 3.5.6. Windows CI provides test builds; these are not added to the
+pinned OpenSSL 4.0.3. Windows CI provides test builds; these are not added to the
 existing v3.2.0 Release and do not use Android signing material.
 
 The first version accepts local NTFS only and rejects network/device/ADS/reparse
@@ -250,7 +250,7 @@ v3 uses X448, ML-KEM-1024, combined shared secrets, and HKDF-SHA512, separating 
 
 ### OpenSSL EVP
 
-- X448, ML-KEM-1024, HKDF, Argon2id, and AES-256-GCM use OpenSSL 3.5 EVP/provider APIs. The project neither implements cryptographic algorithms nor introduces liboqs.
+- X448, ML-KEM-1024, HKDF, Argon2id, and AES-256-GCM use OpenSSL EVP/provider APIs. The project neither implements cryptographic algorithms nor introduces liboqs.
 - Every `EVP_PKEY`, `EVP_PKEY_CTX`, `EVP_CIPHER_CTX`, `EVP_KDF`, `EVP_KDF_CTX`, `EVP_MD_CTX`, and `BIO` has unified success/failure cleanup paths.
 - OpenSSL error paths repeatedly call `ERR_get_error()` to retrieve and clear the current thread's error queue.
 - Private keys remain inside opaque OpenSSL `EVP_PKEY`/provider objects, without exporting raw private-key copies, and are released with `EVP_PKEY_free()`.

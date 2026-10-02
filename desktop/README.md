@@ -31,7 +31,7 @@ frontend has no filesystem, shell, arbitrary process or remote-content access.
 ## Build
 
 Use Node 24, Rust with `x86_64-pc-windows-gnu` target, MSYS2 UCRT64 GCC and the
-pinned static OpenSSL 3.5.6 prefix created by `windows/scripts/build-windows-cli.sh`.
+pinned static OpenSSL 4.0.3 prefix created by `windows/scripts/build-windows-cli.sh`.
 The GNU target intentionally matches the existing tested C17 Windows ABI/toolchain.
 
 ```powershell
