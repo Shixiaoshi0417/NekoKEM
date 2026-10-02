@@ -358,7 +358,8 @@ jobs:
           retention-days: 14
 
   baseline-linux:
-    name: Historical Linux interoperability fixtures
+    name: Historical Linux fixtures and current CLI contract
+    needs: build-linux
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
@@ -376,6 +377,18 @@ jobs:
           test -n "$executable"
           cp "$executable" "$RUNNER_TEMP/baseline-nekokem"
           python3 windows/tests/interop.py generate "$RUNNER_TEMP/baseline-nekokem" "$RUNNER_TEMP/linux-fixtures"
+      - name: Download current Linux CLI build
+        uses: actions/download-artifact@v4
+        with:
+          name: NekoKEM-linux-x86_64
+          path: ${{ runner.temp }}/current-linux-dist
+      - name: Generate current Linux CLI output contract
+        run: |
+          mkdir -p "$RUNNER_TEMP/current-linux-bin"
+          tar -xzf "$RUNNER_TEMP/current-linux-dist/NekoKEM-linux-x86_64.tar.gz" \
+            --strip-components=1 -C "$RUNNER_TEMP/current-linux-bin"
+          python3 windows/tests/interop.py contract \
+            "$RUNNER_TEMP/current-linux-bin/nekokem" "$RUNNER_TEMP/linux-fixtures"
       - uses: actions/upload-artifact@v4
         with:
           name: pre-port-linux-cli
@@ -717,7 +730,7 @@ jobs:
           if ($signature.Status -ne 'Valid' -or $signature.SignerCertificate.Subject -notmatch 'Microsoft Corporation') { throw 'WebView2 SDK loader Microsoft signature verification failed' }
           @{ sha256=(Get-FileHash $loader -Algorithm SHA256).Hash.ToLowerInvariant(); version='webview2-com-sys 0.39.1'; signature_status=[string]$signature.Status; signer=$signature.SignerCertificate.Subject } | ConvertTo-Json | Set-Content webview2-loader-metadata.json
           & '${{ steps.python.outputs.python-path }}' desktop/tests/check_icon.py $exe windows/icons/icon.ico
-          if ($LASTEXITCODE -ne 0) { throw 'GUI icon differs from Android' }
+          if ($LASTEXITCODE -ne 0) { throw 'GUI icon differs from the shared Windows ICO' }
           & '${{ steps.python.outputs.python-path }}' desktop/tests/launch_windows.py $exe
           if ($LASTEXITCODE -ne 0) { throw 'GUI native launch failed' }
       - name: Package unsigned GUI with source metadata

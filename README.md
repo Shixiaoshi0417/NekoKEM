@@ -3,7 +3,7 @@
 # NekoKEM
 
 <p align="center">
-  <img src="icon.png" alt="NekoKEM 项目图标" width="160">
+  <img src="docs/icon-rounded.png" alt="NekoKEM 项目图标" width="160">
 </p>
 
 NekoKEM 是一个用于学习 OpenSSL EVP API 的实验性后量子文件加密工具。仅支持 NKEM v3 Hybrid 文件容器。
@@ -14,9 +14,17 @@ NekoKEM 是一个用于学习 OpenSSL EVP API 的实验性后量子文件加密�
 
 本项目不自行实现任何密码算法，也不依赖 liboqs。**它没有经过安全审计，不应被视为生产级软件，也不应用来保护重要或敏感数据。**
 
-## 发布版本 v3.2.0
+## 发布版本 v3.3.0
 
-Android 和 Linux CLI 版本为 `3.2.0`，Core 保持 `3.1`。五种界面语言、跟随系统选项和安全修复详见 [更新日志](release/v3.2.0.md)。**Android 签名密钥已更换：先导出公钥与加密 NKPR 私钥、验证备份并保存私钥密码，再卸载旧版重装；卸载会删除应用内部密钥。** NKEM v3 和 NKPR v1 格式不变，NKEM v1/v2 不再支持。
+Android、Linux CLI、Windows CLI 和 Windows GUI 版本统一为 `3.3.0`，Core 保持 `3.1`。本版加入 Windows 原生 CLI 与 Rust + Tauri 2 + Vue 3 + TypeScript GUI，改进界面交互和流式处理性能，固定使用 OpenSSL 4.0.3。下载与完整中英更新说明见 [v3.3.0](release/v3.3.0.md) 和 [GitHub Release](https://github.com/Shixiaoshi0417/NekoKEM/releases/tag/v3.3.0)。下载后使用附件 `SHA256SUMS.txt` 校验。
+
+Android v3.3.0 沿用 v3.2.0 签名，可直接覆盖升级；建议先备份公钥、加密 NKPR 私钥和私钥密码。仅使用旧签名的 v3.1.x 用户需要在验证备份后卸载重装；卸载会删除应用内部密钥。NKEM v3、NKPR v1、密码参数和指纹计算不变，NKEM v1/v2 不再支持。
+
+README 使用专用圆角展示图；Android 保留现有方形白底图案，Windows CLI/GUI EXE 保留方形图案并将外部白色区域改为透明。Windows 应用未进行 Authenticode 签名。
+
+## 历史版本 v3.2.0
+
+v3.2.0 引入五种界面语言、跟随系统选项和安全修复，并更换 Android 发布签名。该次迁移说明与历史构建记录见 [v3.2.0 更新日志](release/v3.2.0.md)；从 v3.2.0 升级至 v3.3.0 不需要再次卸载。
 
 ## 发布版本 v3.1.1
 
@@ -68,22 +76,17 @@ make -C linux
 
 GitHub Actions 统一使用 [CI](.github/workflows/ci.yml) 和 [Release](.github/workflows/release.yml)。CI 在 PR 和 main 推送时构建并执行所有平台的安全、语言、互操作、性能和 GUI 回归检查；Release 通过手动运行或 `v*` 标签构建 Linux 归档、Android 签名 APK 和 Windows CLI/GUI 压缩包。签名身份与构建产物说明见[构建工作流文档](release/README.md)。
 
-## Windows CLI（测试构建）
+## Windows CLI 与 GUI
 
-新增原生 Windows 10/11 x64 `nekokem.exe`，构建、使用和导入私钥权限说明见
-[Windows CLI 文档](windows/README.md)，文件安全设计见
-[Windows 文件层说明](windows/SECURITY-DESIGN.md)。运行不需要 MSYS2 或 OpenSSL DLL；
-构建使用 MSYS2 UCRT64 与固定 OpenSSL 4.0.3。测试构建由 Windows CI 提供，尚未加入
-既有 v3.2.0 正式 Release，也没有使用 Android 签名材料。
+v3.3.0 提供原生 Windows 10/11 x64 `nekokem.exe` 和 `nekokem-gui.exe` 便携包。CLI 与 Linux 共用完整参数解析和五项菜单；双击 EXE 或不带参数运行即可进入菜单。构建、使用和导入私钥权限说明见 [Windows CLI 文档](windows/README.md)，文件安全设计见 [Windows 文件层说明](windows/SECURITY-DESIGN.md)。CLI 运行不需要 MSYS2 或 OpenSSL DLL；构建使用 MSYS2 UCRT64 与固定 OpenSSL 4.0.3。
 
-首版仅支持本地 NTFS，拒绝网络、设备、替代数据流与重解析点路径。协议、密码参数
-及 64 KiB 流式处理不变；Windows 断电持久性不能当作 POSIX 目录 fsync 已验证。
-Windows 语言配置使用系统 LocalAppData/NekoKEM；无 Locale 环境覆盖时读取 Windows
-用户语言。下文的 POSIX 配置路径和终端回退规则适用于 Linux CLI。
+GUI 使用 Rust + Tauri 2 + Vue 3 + TypeScript，通过窄接口调用同一 C17 Core，提供原生文件选择、进度、取消、键盘导航和遵循系统减少动态效果设置的过渡动画。运行需要 Microsoft Edge WebView2 Runtime，并将包内 `WebView2Loader.dll` 放在 EXE 旁；详见 [Windows GUI 文档](desktop/README.md)。两种 Windows 应用均未进行 Authenticode 签名；构建时单独验证 Microsoft SDK loader 的签名与来源。
+
+Windows 仅支持本地固定 NTFS，检查所有者与 ACL，并拒绝网络、设备、替代数据流及重解析点路径。协议、密码参数及 64 KiB 流式分块不变；Windows 断电持久性不能当作 POSIX 目录 fsync 已验证。Windows 语言配置使用系统 LocalAppData/NekoKEM；无 Locale 环境覆盖时读取 Windows 显示语言。下文的 POSIX 配置路径和终端回退规则适用于 Linux CLI。
 
 ## 语言设置
 
-Android 和 CLI 支持简体中文（`zh-CN`）、繁体中文（`zh-TW`）、英语（`en`）、日语（`ja`）和韩语（`ko`）。默认跟随系统；不支持的语言回退英语。中文 CN/SG 地区匹配简体，TW/HK/MO 匹配繁体；en/ja/ko 的其他地区匹配对应语言。跟随系统时会响应系统语言变化。
+Android、Windows GUI 和 CLI 支持简体中文（`zh-CN`）、繁体中文（`zh-TW`）、英语（`en`）、日语（`ja`）和韩语（`ko`）。默认跟随系统；不支持的语言回退英语。中文 CN/SG 地区匹配简体，TW/HK/MO 匹配繁体；en/ja/ko 的其他地区匹配对应语言。Android 跟随系统时会响应系统语言变化；CLI 和 Windows GUI 启动时检测语言，GUI 也可在语言选择器中重新选择跟随系统。
 
 Android 在 **设置 → 语言** 中选择 **跟随系统** 或指定语言。选择会持久保存并刷新界面。Android 13 及以上与系统级应用语言设置共用同一偏好；旧系统使用私有偏好设置。文件操作结束后可切换语言。页面和对话框支持滚动，以容纳长文本及较大字体。
 

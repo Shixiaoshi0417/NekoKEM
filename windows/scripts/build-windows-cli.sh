@@ -78,6 +78,7 @@ if [[ "$build_tests" == 1 ]]; then
 fi
 objdump -p "$output/nekokem.exe" > "$output/pe-headers.txt"
 python "$repo_root/windows/tests/check_pe.py" "$output/nekokem.exe" "$output/pe-headers.txt"
+python "$repo_root/desktop/tests/check_icon.py" "$output/nekokem.exe" "$repo_root/windows/icons/icon.ico"
 python - "$output" <<'PYMETA'
 import hashlib, json, os
 from pathlib import Path

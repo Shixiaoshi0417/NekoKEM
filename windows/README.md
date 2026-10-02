@@ -1,6 +1,15 @@
 # Windows x64 CLI / Windows x64 命令行
 
-Native Windows 10/11 x64 EXE; no MSYS2 runtime or OpenSSL DLL is required to run it.
+v3.3.0 provides a native Windows 10/11 x64 EXE; no MSYS2 runtime or OpenSSL DLL
+is required to run it. Download `NekoKEM-windows-x86_64.zip` from the
+[v3.3.0 Release](https://github.com/Shixiaoshi0417/NekoKEM/releases/tag/v3.3.0) and verify
+the archive against its top-level `SHA256SUMS.txt`. The companion
+[Windows GUI](../desktop/README.md) has a separate portable package. See the
+[bilingual release notes](../release/v3.3.0.md).
+
+CLI/GUI EXE icons keep the square Android artwork with the outer white area made
+transparent; Android retains its existing square white background. Rounded README
+artwork is a separate display asset.
 Build in MSYS2 UCRT64 with GCC, Perl, Make, curl and Python:
 
 ```sh
@@ -69,11 +78,17 @@ cancellation, and exchanges binary/empty NKEM files and NKPR keys with pre-port
 Linux main. Generated interoperability keys/passwords are public test data only.
 Benchmark results are comparative measurements, not an identical-speed guarantee
 across operating systems. This experimental project has no independent professional
-security audit. The EXE is not Authenticode signed; Android signing keys are not used.
+security audit and must not be used to protect important or sensitive data.
+The EXE is not Authenticode signed; Android signing keys are not used.
 
 ---
 
-本版本是原生 Windows 10/11 x64 CLI，运行无需 MSYS2 或 OpenSSL DLL。使用现有
+v3.3.0 提供原生 Windows 10/11 x64 CLI，运行无需 MSYS2 或 OpenSSL DLL。公开包为
+`NekoKEM-windows-x86_64.zip`，下载后用 Release 顶层 `SHA256SUMS.txt` 校验。
+[Windows GUI](../desktop/README.md) 使用独立便携包，完整更新见
+[v3.3.0 中英双语发布说明](../release/v3.3.0.md)。Windows EXE 图标保留方形图案，
+将外部白色区域改为透明；Android 方形白底图案不变，README 圆角图仅用于展示。
+Windows 应用未进行 Authenticode 签名，不使用 Android 签名材料。使用现有
 五语言目录；密码从关闭回显的终端或 UTF-8 标准输入读取，不放入命令行参数。
 首版只接受本地固定 NTFS 磁盘，拒绝网络/设备路径、重解析点及替代数据流。私钥、暂存明文
 和输出在创建时设置仅当前用户可访问的 ACL；所有文件路径都检查父目录的可信
@@ -82,4 +97,5 @@ security audit. The EXE is not Authenticode signed; Android signing keys are not
 
 协议及密码参数不变；保留 OpenSSL 汇编加速和 64 KiB 流式处理。Windows 提交
 机制的断电持久性、跨文件崩溃原子性及进程死亡清理仍需验证，不能等同于 POSIX
-目录 fsync。此适配不代表已完成全项目专业安全审计，也不承诺跨系统速度完全相同。
+目录 fsync。本项目是未经独立专业安全审计的实验性工具，不应用于保护重要或敏感数据，
+也不承诺跨系统速度完全相同。

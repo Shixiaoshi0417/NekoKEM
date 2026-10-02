@@ -197,7 +197,7 @@ jobs:
           if ($signature.Status -ne 'Valid' -or $signature.SignerCertificate.Subject -notmatch 'Microsoft Corporation') { throw 'WebView2 SDK loader Microsoft signature verification failed' }
           @{ sha256=(Get-FileHash $loader -Algorithm SHA256).Hash.ToLowerInvariant(); version='webview2-com-sys 0.39.1'; signature_status=[string]$signature.Status; signer=$signature.SignerCertificate.Subject } | ConvertTo-Json | Set-Content webview2-loader-metadata.json
           & '${{ steps.python.outputs.python-path }}' desktop/tests/check_icon.py $exe windows/icons/icon.ico
-          if ($LASTEXITCODE -ne 0) { throw 'GUI icon differs from Android' }
+          if ($LASTEXITCODE -ne 0) { throw 'GUI icon differs from the shared Windows ICO' }
       - name: Package unsigned Windows CLI
         shell: pwsh
         run: |

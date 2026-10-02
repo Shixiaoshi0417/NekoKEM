@@ -1,7 +1,7 @@
-# NekoKEM Android v3.2.0
+# NekoKEM Android v3.3.0
 
 <p align="center">
-  <img src="../icon.png" alt="NekoKEM App icon" width="160">
+  <img src="../docs/icon-rounded.png" alt="NekoKEM App icon" width="160">
 </p>
 
 Android App 通过窄 JNI Bridge 调用可复用的 NekoKEM C17 Core。Kotlin 和
@@ -9,11 +9,13 @@ JNI 不实现或解析 X448、ML-KEM-1024、HKDF、AES-GCM、NKEM 或 NKPR。
 Core 仅处理 NKEM v3 文件容器；NKEM v1/v2 已不再支持。NKPR 是独立的
 私钥容器，仍由 Core 处理且格式不变。
 
-当前正式 App 版本为 `3.2.0`，Core 版本保持 `3.1`，Android application ID
+当前正式 App 版本为 `3.3.0`，Core 版本保持 `3.1`，Android application ID
 与 namespace 均为 `com.shixiaoshi0417.nekokem`。协议容器版本仍为
 **NKEM v3**，与 App 版本号相互独立；NKPR 格式保持不变。
 
-**v3.2.0 更换发布签名：先导出公钥和加密 NKPR 私钥、验证备份并保存私钥密码，再卸载旧版重装。卸载会删除内部密钥。** 详见 [中英双语更新日志](../release/v3.2.0.md)。
+v3.3.0 沿用 v3.2.0 发布签名，可直接覆盖升级。升级前建议导出公钥和加密 NKPR 私钥，验证备份并保存私钥密码。仅旧签名 v3.1.x 用户需要在完成备份后卸载重装；卸载会删除内部密钥。详见 [v3.3.0 中英双语更新日志](../release/v3.3.0.md)，历史签名迁移记录保留在 [v3.2.0](../release/v3.2.0.md)。
+
+README 图标仅使用专用圆角展示图，Android launcher 继续使用现有方形白底图案。应用是未经独立专业安全审计的实验性工具，不应用于保护重要或敏感数据。
 
 ## 工具链
 
@@ -120,3 +122,5 @@ JNI 只做路径、字符串、字节数组、回调和返回值转换；不解�
 
 APK 输出到 `app/build/outputs/apk/debug/app-debug.apk`。Android CMake 不编译
 `main.c` 或 `cli.c`。
+
+正式 APK 使用 [Release 工作流](../.github/workflows/release.yml) 构建并校验现有签名；JVM、JNI/SAF 和 API 26/35 模拟器回归统一由 [CI 工作流](../.github/workflows/ci.yml) 执行。公开附件为 `app-release.apk`，使用 Release 顶层 `SHA256SUMS.txt` 校验；签名恢复包不作为公开附件。

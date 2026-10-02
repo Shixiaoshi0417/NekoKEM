@@ -1,4 +1,4 @@
-"""Actual CLI interoperability against the pre-port main executable.
+"""Historical format interoperability and current Linux/Windows CLI equality.
 All generated keys/passwords are disposable public test fixtures.
 """
 import os
@@ -43,7 +43,10 @@ def cli_contract():
                 p.stderr.decode('utf-8').replace(exe, '<program>')]
     return result
 
-if phase == 'generate':
+if phase == 'contract':
+    (root/'linux-cli-contract.json').write_text(json.dumps(cli_contract(), ensure_ascii=False), encoding='utf-8')
+    print('Current Linux CLI generated the exact five-language output contract')
+elif phase == 'generate':
     (root/'linux-cli-contract.json').write_text(json.dumps(cli_contract(), ensure_ascii=False), encoding='utf-8')
     run('keygen', password=PASSWORD*2)
     for name, data in [('binary', bytes(range(256))*512),('empty',b'')]:
