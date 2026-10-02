@@ -17,6 +17,11 @@ contains no Android signing material and is not Authenticode signed.
   language preference. English, simplified/traditional Chinese, Japanese and Korean.
 - Use the original Android launcher icon for both CLI and GUI. The source PNG is
   copied byte-for-byte; Windows sizes are converted without changing the artwork.
+- Short entry transitions, navigation/button feedback and animated progress follow
+  the system's reduced-motion preference. Windows high-contrast mode is supported.
+  页面过渡、按钮反馈与进度动画遵循系统减少动态效果设置，支持 Windows 高对比度。
+- Navigate operations with Up/Down, Home/End; validation focuses the affected field.
+  Native file dialogs lock editing until they return. 支持键盘导航与错误字段定位。
 
 Production cryptography stays in the shared C17 Core. Rust validates requests,
 serializes Core calls, owns zeroizing secrets, bridges progress/cancellation and
@@ -55,8 +60,10 @@ and 16384 UTF-8 bytes per line, matching the CLI, and remain subject to Core for
 Only bundled local content runs in an InPrivate main WebView. CSP blocks remote scripts,
 frames and network requests. Only native open/save dialogs and the listed Rust
 commands are exposed. Developer tools are unavailable in the production release.
-Passwords/key text are not stored in browser storage, configuration or logs. Form
-references clear at operation start; Rust uses Zeroizing<String> and Core borrows
+Passwords/key text are not stored in browser storage, configuration or logs. Both
+form references and live secret input values clear before native invocation,
+operation switches and unmounting. Switching away from pasted keys discards their
+text. Entry animations do not retain outgoing forms. Rust uses Zeroizing<String> and Core borrows
 password bytes only for the call. JavaScript/IPC can make temporary string copies;
 reliable zeroization of the WebView heap is not guaranteed. This extra UI/IPC
 boundary has not received an independent professional audit.
