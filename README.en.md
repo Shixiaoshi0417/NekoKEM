@@ -59,6 +59,8 @@ The build uses C17 and links OpenSSL `libcrypto`. Hybrid private-key protection 
 
 The executable is `linux/nekokem`. The `./nekokem` examples below assume the working directory is `linux/`, or another directory containing a copy of that executable.
 
+GitHub Actions uses [CI](.github/workflows/ci.yml) and [Release](.github/workflows/release.yml). CI builds and runs all platform security, language, interoperability, performance and GUI regression checks on PRs and main pushes. Release builds Linux archives, a signed Android APK and Windows CLI/GUI packages through manual runs or `v*` tags. See the [build workflow documentation](release/README.md) for signing identity and artifact details.
+
 ## Windows CLI (test builds)
 
 A native Windows 10/11 x64 `nekokem.exe` is available. See the

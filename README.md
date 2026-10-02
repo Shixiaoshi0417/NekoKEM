@@ -66,6 +66,8 @@ make -C linux
 
 可执行文件位于 `linux/nekokem`。下文的 `./nekokem` 示例假定当前目录为 `linux/`，或已将该可执行文件复制到当前目录。
 
+GitHub Actions 统一使用 [CI](.github/workflows/ci.yml) 和 [Release](.github/workflows/release.yml)。CI 在 PR 和 main 推送时构建并执行所有平台的安全、语言、互操作、性能和 GUI 回归检查；Release 通过手动运行或 `v*` 标签构建 Linux 归档、Android 签名 APK 和 Windows CLI/GUI 压缩包。签名身份与构建产物说明见[构建工作流文档](release/README.md)。
+
 ## Windows CLI（测试构建）
 
 新增原生 Windows 10/11 x64 `nekokem.exe`，构建、使用和导入私钥权限说明见

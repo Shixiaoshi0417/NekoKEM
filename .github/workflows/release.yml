@@ -1,45 +1,107 @@
-name: Windows Tauri GUI
+name: Release
+
 on:
-  pull_request:
-    branches: [main, feat/windows-cli]
   workflow_dispatch:
+  push:
+    tags: ["v*"]
+
 permissions:
   contents: read
+
 concurrency:
-  group: windows-gui-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: true
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  NEKOKEM_BUILD_TESTS: "0"
+
 jobs:
-  frontend:
-    runs-on: ubuntu-24.04
-    timeout-minutes: 15
-    defaults:
-      run:
-        working-directory: desktop
+  build-linux:
+    name: Build Linux ${{ matrix.arch }}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: x86_64
+            runner: ubuntu-24.04
+          - arch: aarch64
+            runner: ubuntu-24.04-arm
+
     steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-node@v5
-        with:
-          node-version: '24'
-      - name: Install locked frontend dependencies
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Install build tools
         run: |
-          npm ci --ignore-scripts
-      - run: npm audit --audit-level=moderate
-      - run: npm test
-      - run: npm run build
-      - name: Install screenshot browser
-        run: npx playwright install --with-deps chromium
-      - name: Verify rendered layouts in all five languages
-        run: npx playwright test
-      - uses: actions/upload-artifact@v4
-        if: always()
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends \
+            build-essential ca-certificates curl perl
+
+      - name: Build, verify, and package
+        run: bash linux/scripts/build-linux-release.sh "${{ matrix.arch }}" "$GITHUB_WORKSPACE/dist"
+
+      - name: Upload Linux archive
+        uses: actions/upload-artifact@v4
         with:
-          name: windows-gui-frontend-evidence
-          path: |
-            desktop/test-results/
-            desktop/package-lock.json
+          name: NekoKEM-linux-${{ matrix.arch }}
+          path: dist/NekoKEM-linux-${{ matrix.arch }}.tar.gz
+          if-no-files-found: error
+          compression-level: 0
           retention-days: 14
 
-  native-windows:
+  signed-apk:
+    environment: NekoKEM
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "17"
+      - name: Install pinned Android toolchain
+        run: |
+          set -Eeuo pipefail
+          sdk_root="${ANDROID_SDK_ROOT:-${ANDROID_HOME:-/usr/local/lib/android/sdk}}"
+          sdkmanager_path=$(find "$sdk_root/cmdline-tools" -maxdepth 3 -type f -name sdkmanager -print -quit)
+          test -n "$sdkmanager_path"
+          "$sdkmanager_path" "platform-tools" "platforms;android-35" "build-tools;35.0.0" "ndk;28.2.13676358" "cmake;3.22.1"
+          printf 'ANDROID_SDK_ROOT=%s\nANDROID_NDK_ROOT=%s/ndk/28.2.13676358\n' "$sdk_root" "$sdk_root" >> "$GITHUB_ENV"
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Prepare protected release signing
+        env:
+          ROTATE_SIGNING: "false"
+          NEKOKEM_RELEASE_KEYSTORE_BASE64: ${{ secrets.NEKOKEM_RELEASE_KEYSTORE_BASE64 }}
+          NEKOKEM_RELEASE_STORE_PASSWORD: ${{ secrets.NEKOKEM_RELEASE_STORE_PASSWORD }}
+          NEKOKEM_RELEASE_KEY_ALIAS: ${{ secrets.NEKOKEM_RELEASE_KEY_ALIAS }}
+          NEKOKEM_RELEASE_KEY_PASSWORD: ${{ secrets.NEKOKEM_RELEASE_KEY_PASSWORD }}
+        run: python3 .github/scripts/prepare_release_signing.py
+      - name: Build OpenSSL 4.0.3 for Android arm64
+        working-directory: android
+        env:
+          JOBS: "2"
+        run: sh scripts/build-openssl-android.sh
+      - name: Build signed APK
+        working-directory: android
+        run: bash ./gradlew --no-daemon --stacktrace assembleRelease
+      - name: Verify APK and encrypt signing recovery
+        run: python3 .github/scripts/verify_android_release.py
+      - name: Preserve signed APK and encrypted recovery only
+        uses: actions/upload-artifact@v4
+        with:
+          name: NekoKEM-android-signed
+          path: release-output/*
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 14
+      - name: Remove plaintext signing material
+        if: always()
+        run: rm -rf -- "$RUNNER_TEMP/nekokem-release-signing"
+
+  build-windows:
+    name: Build Windows CLI and GUI
     runs-on: windows-2022
     timeout-minutes: 60
     steps:
@@ -79,7 +141,7 @@ jobs:
         with:
           workspaces: desktop/src-tauri
           cache-on-failure: true
-      - name: Build original CLI and shared C17 native tests with pinned OpenSSL
+      - name: Build Windows CLI with pinned OpenSSL
         shell: msys2 {0}
         run: |
           export NEKOKEM_OPENSSL_PREFIX="$(cygpath -u "$RUNNER_TEMP")/windows-openssl"
@@ -89,7 +151,7 @@ jobs:
         with:
           path: ${{ runner.temp }}/windows-openssl
           key: ${{ steps.openssl-cache.outputs.cache-primary-key }}
-      - name: Configure the matching Rust/C ABI and private NTFS test root
+      - name: Configure the matching Rust/C ABI
         shell: pwsh
         run: |
           $compiler = '${{ steps.compiler.outputs.gcc }}'
@@ -103,23 +165,10 @@ jobs:
           "CC_x86_64_pc_windows_gnu=$compiler" >> $env:GITHUB_ENV
           "CARGO_TARGET_X86_64_PC_WINDOWS_GNU_LINKER=$compiler" >> $env:GITHUB_ENV
           "NEKOKEM_OPENSSL_PREFIX=$env:RUNNER_TEMP\windows-openssl" >> $env:GITHUB_ENV
-          $work = Join-Path ([Environment]::GetFolderPath('LocalApplicationData')) "NekoKEM-gui-ci-$env:GITHUB_RUN_ID"
+          $work = Join-Path ([Environment]::GetFolderPath('LocalApplicationData')) "NekoKEM-release-$env:GITHUB_RUN_ID"
           New-Item -ItemType Directory $work | Out-Null
           "TEMP=$work" >> $env:GITHUB_ENV
           "TMP=$work" >> $env:GITHUB_ENV
-      - name: Run native C and CLI security gates
-        shell: pwsh
-        run: |
-          $ErrorActionPreference = 'Stop'
-          $bin = Join-Path $env:RUNNER_TEMP 'windows-cli'
-          foreach ($name in @('openssl_version','hybrid_kdf','gcm_limit','parser','windows_core','console')) {
-            $work = Join-Path $env:TEMP $name
-            New-Item -ItemType Directory $work | Out-Null
-            Push-Location $work
-            try { & (Join-Path $bin "${name}_tests.exe"); if ($LASTEXITCODE -ne 0) { throw "$name failed" } } finally { Pop-Location }
-          }
-          & '${{ steps.python.outputs.python-path }}' windows/tests/cli_tests.py (Join-Path $bin 'nekokem.exe')
-          if ($LASTEXITCODE -ne 0) { throw 'CLI gates failed' }
       - name: Install locked frontend dependencies
         working-directory: desktop
         shell: pwsh
@@ -128,19 +177,13 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'npm install failed' }
           npm run build
           if ($LASTEXITCODE -ne 0) { throw 'Frontend build failed' }
-      - name: Run actual Rust to C17 Core integration tests
-        working-directory: desktop/src-tauri
-        shell: pwsh
-        run: |
-          cargo test --locked --target x86_64-pc-windows-gnu --bin nekokem-gui -- --test-threads=1
-          if ($LASTEXITCODE -ne 0) { throw 'Rust/Core tests failed' }
       - name: Build production native GUI EXE
         working-directory: desktop
         shell: pwsh
         run: |
           npm run tauri -- build --target x86_64-pc-windows-gnu --no-bundle -- --locked
           if ($LASTEXITCODE -ne 0) { throw 'GUI build failed' }
-      - name: Check actual GUI executable and native window launch
+      - name: Verify GUI binary, SDK loader and icon
         shell: pwsh
         run: |
           $exe = 'desktop/src-tauri/target/x86_64-pc-windows-gnu/release/nekokem-gui.exe'
@@ -155,8 +198,20 @@ jobs:
           @{ sha256=(Get-FileHash $loader -Algorithm SHA256).Hash.ToLowerInvariant(); version='webview2-com-sys 0.39.1'; signature_status=[string]$signature.Status; signer=$signature.SignerCertificate.Subject } | ConvertTo-Json | Set-Content webview2-loader-metadata.json
           & '${{ steps.python.outputs.python-path }}' desktop/tests/check_icon.py $exe windows/icons/icon.ico
           if ($LASTEXITCODE -ne 0) { throw 'GUI icon differs from Android' }
-          & '${{ steps.python.outputs.python-path }}' desktop/tests/launch_windows.py $exe
-          if ($LASTEXITCODE -ne 0) { throw 'GUI native launch failed' }
+      - name: Package unsigned Windows CLI
+        shell: pwsh
+        run: |
+          $bin = Join-Path $env:RUNNER_TEMP 'windows-cli'
+          Compress-Archive -Path "$bin/nekokem.exe","$bin/README.md","$bin/SECURITY-DESIGN.md","$bin/LICENSE","$bin/OPENSSL-LICENSE.txt","$bin/SHA256SUMS.txt","$bin/pe-headers.txt","$bin/build-metadata.json" -DestinationPath "$env:RUNNER_TEMP/NekoKEM-windows-x86_64.zip"
+          (Get-FileHash "$env:RUNNER_TEMP/NekoKEM-windows-x86_64.zip" -Algorithm SHA256).Hash.ToLower() + '  NekoKEM-windows-x86_64.zip' | Set-Content "$env:RUNNER_TEMP/windows-SHA256SUMS.txt" -Encoding ascii
+      - uses: actions/upload-artifact@v4
+        with:
+          name: NekoKEM-windows-x86_64
+          path: |
+            ${{ runner.temp }}/NekoKEM-windows-x86_64.zip
+            ${{ runner.temp }}/windows-SHA256SUMS.txt
+          retention-days: 14
+          if-no-files-found: error
       - name: Package unsigned GUI with source metadata
         shell: pwsh
         run: |
@@ -171,16 +226,6 @@ jobs:
           @{ source_sha=$env:GITHUB_SHA; run_id=$env:GITHUB_RUN_ID; exe_sha256=$hash; platform='windows-x86_64'; openssl_version='4.0.3'; authenticode_signed=$false; apk_signing_material_used=$false } | ConvertTo-Json | Set-Content "$root/build-metadata.json"
           Compress-Archive -Path "$root/*" -DestinationPath "$env:RUNNER_TEMP/NekoKEM-Windows-GUI.zip"
           Remove-Item $env:TEMP -Recurse -Force
-      - uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: windows-gui-native-evidence
-          path: |
-            desktop/src-tauri/Cargo.lock
-            desktop/package-lock.json
-            gui-pe.txt
-            webview2-loader-metadata.json
-          retention-days: 14
       - uses: actions/upload-artifact@v4
         with:
           name: NekoKEM-windows-gui-x86_64

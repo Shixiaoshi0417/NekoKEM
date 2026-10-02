@@ -5,6 +5,11 @@ IFS=$'\n\t'
 readonly OPENSSL_VERSION="4.0.3"
 readonly OPENSSL_SHA256="325b5c806167c13b40b1ffeadfe0248197c00eccc4cf123ec1e28d2d2fd216d9"
 readonly OPENSSL_URL="https://github.com/openssl/openssl/releases/download/openssl-${OPENSSL_VERSION}/openssl-${OPENSSL_VERSION}.tar.gz"
+build_tests=${NEKOKEM_BUILD_TESTS:-1}
+if [[ "$build_tests" != 0 && "$build_tests" != 1 ]]; then
+    printf 'NEKOKEM_BUILD_TESTS must be 0 or 1\n' >&2
+    exit 2
+fi
 
 usage() {
     printf 'Usage: %s <x86_64|aarch64> [output-directory]\n' "$0" >&2
@@ -216,44 +221,46 @@ if "$readelf_tool" -d "$binary" 2>/dev/null | grep -F '(NEEDED)' >/dev/null; the
     exit 1
 fi
 
-if [[ "$host_arch" == "$target_arch" ]]; then
-    run_command=("$binary")
-else
-    qemu_command=${NEKOKEM_QEMU:-$default_qemu}
-    if ! command -v "$qemu_command" >/dev/null 2>&1; then
-        printf 'Cross-built binary requires %s for the smoke test\n' \
-            "$qemu_command" >&2
-        exit 1
+if [[ "$build_tests" == 1 ]]; then
+    if [[ "$host_arch" == "$target_arch" ]]; then
+        run_command=("$binary")
+    else
+        qemu_command=${NEKOKEM_QEMU:-$default_qemu}
+        if ! command -v "$qemu_command" >/dev/null 2>&1; then
+            printf 'Cross-built binary requires %s for the smoke test\n' \
+                "$qemu_command" >&2
+            exit 1
+        fi
+        run_command=("$qemu_command" "$binary")
     fi
-    run_command=("$qemu_command" "$binary")
-fi
 
-test_root=$(mktemp -d "$build_root/smoke.XXXXXX")
-password='test-only-linux-release-password'
-printf 'NekoKEM Linux release test\nBinary:\000\001\377\n' > "$test_root/input.bin"
-(
-    cd -- "$test_root"
-    export OPENSSL_CONF=/dev/null
-    export OPENSSL_MODULES="$test_root/no-external-modules"
-    export LD_LIBRARY_PATH="$test_root/no-shared-libraries"
-    test "$("${run_command[@]}" --version)" = "NekoKEM 3.2.0"
-    printf '%s\n%s\n' "$password" "$password" | \
-        "${run_command[@]}" keygen
-    test -s keys/public.key
-    test -s keys/private.key.enc
-    test ! -e keys/private.key
-    test "$(dd if=keys/private.key.enc bs=1 count=4 status=none)" = NKPR
-    "${run_command[@]}" encrypt hybrid input.bin output.nkem keys/public.key
-    test "$(dd if=output.nkem bs=1 count=4 status=none)" = NKEM
-    test "$(od -An -tu1 -j4 -N1 output.nkem | tr -d ' ')" = 3
-    printf '%s\n' "$password" | \
-        "${run_command[@]}" decrypt hybrid output.nkem recovered.bin \
-            keys/private.key.enc
-    cmp input.bin recovered.bin
-    sha256sum input.bin recovered.bin
-)
-unset password
-printf 'Hybrid NKEM v3 smoke test passed (%s).\n' "$target_arch"
+    test_root=$(mktemp -d "$build_root/smoke.XXXXXX")
+    password='test-only-linux-release-password'
+    printf 'NekoKEM Linux release test\nBinary:\000\001\377\n' > "$test_root/input.bin"
+    (
+        cd -- "$test_root"
+        export OPENSSL_CONF=/dev/null
+        export OPENSSL_MODULES="$test_root/no-external-modules"
+        export LD_LIBRARY_PATH="$test_root/no-shared-libraries"
+        test "$("${run_command[@]}" --version)" = "NekoKEM 3.2.0"
+        printf '%s\n%s\n' "$password" "$password" | \
+            "${run_command[@]}" keygen
+        test -s keys/public.key
+        test -s keys/private.key.enc
+        test ! -e keys/private.key
+        test "$(dd if=keys/private.key.enc bs=1 count=4 status=none)" = NKPR
+        "${run_command[@]}" encrypt hybrid input.bin output.nkem keys/public.key
+        test "$(dd if=output.nkem bs=1 count=4 status=none)" = NKEM
+        test "$(od -An -tu1 -j4 -N1 output.nkem | tr -d ' ')" = 3
+        printf '%s\n' "$password" | \
+            "${run_command[@]}" decrypt hybrid output.nkem recovered.bin \
+                keys/private.key.enc
+        cmp input.bin recovered.bin
+        sha256sum input.bin recovered.bin
+    )
+    unset password
+    printf 'Hybrid NKEM v3 smoke test passed (%s).\n' "$target_arch"
+fi
 
 package_name="NekoKEM-linux-${target_arch}"
 stage_parent="$build_root/stage"
