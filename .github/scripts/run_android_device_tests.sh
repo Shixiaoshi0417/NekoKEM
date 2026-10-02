@@ -31,8 +31,19 @@ done
 
 # The helper exists only in the test APK and runs outside the app as emulator root.
 # The production manifest does not request CHANGE_CONFIGURATION or hidden API access.
-adb root
-adb wait-for-device
+root_log="$report_dir/adb-root.txt"
+if ! timeout 30s adb root > "$root_log" 2>&1; then
+    cat "$root_log" >&2
+    # adbd may close the transport while restarting successfully as root.
+    grep -Fxq 'adb: unable to connect for root: closed' "$root_log" || exit 1
+fi
+cat "$root_log"
+timeout 60s adb wait-for-device
+root_uid=$(timeout 10s adb shell id -u | tr -d '\r')
+if [[ "$root_uid" != 0 ]]; then
+    printf 'Emulator root identity was not verified: %s\n' "$root_uid" >&2
+    exit 1
+fi
 adb push android/app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk /data/local/tmp/nekokem-locale-tests.apk
 for system_locale in ja-JP de-DE; do
     language=${system_locale%%-*}
