@@ -74,3 +74,4 @@ main{padding:25px 26px}
 }
 @media(prefers-reduced-motion:no-preference){.primary,nav button{transition:background .15s ease}
 }
+.key-secret{-webkit-text-security:disc}

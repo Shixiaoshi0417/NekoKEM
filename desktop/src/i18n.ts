@@ -19,6 +19,7 @@ const messages={
  'password-limit':['Password must be at most 1024 UTF-8 bytes.','密码最多为 1024 个 UTF-8 字节。','密碼最多為 1024 個 UTF-8 位元組。','パスワードは UTF-8 で最大 1024 バイトです。','암호는 UTF-8 기준 최대 1024바이트입니다.'],
  'password-mismatch':['Passwords do not match.','两次输入的密码不一致。','兩次輸入的密碼不一致。','パスワードが一致しません。','암호가 일치하지 않습니다.'],
  'key-limit':['Paste a complete key of at most 1 MiB.','请粘贴完整密钥，大小不超过 1 MiB。','請貼上完整金鑰，大小不超過 1 MiB。','最大 1 MiB の完全な鍵を貼り付けてください。','최대 1 MiB의 완전한 키를 붙여넣으세요.'],
+ 'key-line-limit':['Each pasted key line must be at most 16384 UTF-8 bytes.','粘贴密钥的每行最多为 16384 个 UTF-8 字节。','貼上金鑰的每行最多為 16384 個 UTF-8 位元組。','貼り付ける鍵の各行は UTF-8 で最大 16384 バイトです。','붙여넣은 키의 각 줄은 UTF-8 기준 최대 16384바이트입니다.'],
  'core-error':['Operation failed. Check the password, key/file format, local NTFS paths and private-key permissions.','操作失败。请检查密码、密钥/文件格式、本地 NTFS 路径及私钥权限。','操作失敗。請檢查密碼、金鑰/檔案格式、本機 NTFS 路徑及私密金鑰權限。','失敗しました。パスワード、鍵・ファイル形式、ローカル NTFS パスと秘密鍵の権限を確認してください。','작업에 실패했습니다. 암호, 키/파일 형식, 로컬 NTFS 경로와 개인 키 권한을 확인하세요.'],
  cancelled:['Cancelled; no new output was committed.','已取消，未提交新的输出文件。','已取消，未提交新的輸出檔案。','キャンセルしました。新しい出力は保存されていません。','취소되었습니다. 새 출력은 저장되지 않았습니다.'],
  'cleanup-error':['Temporary key cleanup failed. A protected temporary key may remain; the output may already exist.','临时密钥清理失败，受保护的临时密钥可能残留，输出文件也可能已经生成。','暫存金鑰清理失敗，受保護的暫存金鑰可能殘留，輸出檔案也可能已產生。','一時鍵の削除に失敗しました。保護された一時鍵と出力が残っている可能性があります。','임시 키 정리에 실패했습니다. 보호된 임시 키와 출력 파일이 남아 있을 수 있습니다.'],

@@ -49,8 +49,8 @@ The checked-in final lockfiles are used with npm ci and Cargo --locked.
 The same local fixed-NTFS, owner/ACL, ancestor pinning, regular-file, hard-link,
 reparse-point, device/pipe/ADS and atomic-output checks apply. The frontend cannot
 relax them. Existing outputs must already satisfy the CLI's private output policy.
-Passwords retain the CLI's 1024 UTF-8 byte limit. Pasted keys are capped at 1 MiB
-and remain subject to Core format/component/tail validation.
+Passwords retain the CLI's 1024 UTF-8 byte limit. Private PEM text is obscured in the paste field. Pasted keys are capped at 1 MiB
+and 16384 UTF-8 bytes per line, matching the CLI, and remain subject to Core format/component/tail validation.
 
 Only bundled local content runs in an InPrivate main WebView. CSP blocks remote scripts,
 frames and network requests. Only native open/save dialogs and the listed Rust

@@ -1,6 +1,6 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 mod core;
-use core::{Backend,Failure,Request,Reservation,Outcome,CORE_LOCK};
+use crate::core::{Backend,Failure,Request,Reservation,Outcome,CORE_LOCK};
 use serde::Serialize;
 use std::sync::Arc;
 use tauri::{Emitter,Manager,State};

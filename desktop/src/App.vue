@@ -92,7 +92,7 @@ onUnmounted(()=>{unlisten?.();clearSecrets();});
      <template v-else>
       <div class="key-source"><label><input v-model="form.paste" type="radio" :value="false">{{t('path')}}</label><label><input v-model="form.paste" type="radio" :value="true">{{t('paste')}}</label></div>
       <label v-if="!form.paste" class="field">{{t('key')}}<div class="path-input"><input v-model="form.keyPath" name="keyPath" spellcheck="false" autocomplete="off"><button type="button" @click="browse('keyPath')">{{t('browse')}}</button></div></label>
-      <label v-else class="field">{{t('paste')}}<textarea v-model="form.keyText" name="keyText" rows="5" spellcheck="false" autocomplete="off" :placeholder="t('pasteHint')"></textarea></label>
+      <label v-else class="field">{{t('paste')}}<textarea v-model="form.keyText" :class="{'key-secret':operation==='decrypt'}" name="keyText" rows="5" spellcheck="false" autocomplete="off" :placeholder="t('pasteHint')"></textarea></label>
       <template v-if="operation!=='fingerprint'">
        <label class="field">{{t('input')}}<div class="path-input"><input v-model="form.input" name="input" spellcheck="false" autocomplete="off"><button type="button" @click="browse('input')">{{t('browse')}}</button></div></label>
        <label class="field">{{t('output')}}<div class="path-input"><input v-model="form.output" name="output" spellcheck="false" autocomplete="off"><button type="button" @click="browse('output')">{{t('browse')}}</button></div></label>

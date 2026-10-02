@@ -20,9 +20,9 @@ jobs:
       - uses: actions/setup-node@v5
         with:
           node-version: '24'
-      - name: Resolve or install locked frontend dependencies
+      - name: Install locked frontend dependencies
         run: |
-          if [ -f package-lock.json ]; then npm ci --ignore-scripts; else npm install --ignore-scripts; fi
+          npm ci --ignore-scripts
       - run: npm test
       - run: npm run build
       - name: Install screenshot browser
@@ -62,6 +62,7 @@ jobs:
         shell: msys2 {0}
         run: echo "version=$(gcc -dumpfullversion)" >> "$GITHUB_OUTPUT"
       - uses: actions/cache/restore@v4
+        id: openssl-cache
         with:
           path: ${{ runner.temp }}/windows-openssl
           key: windows-ucrt64-openssl-3.5.6-${{ steps.compiler.outputs.version }}-${{ hashFiles('windows/scripts/build-windows-cli.sh') }}
@@ -74,13 +75,18 @@ jobs:
         run: |
           export NEKOKEM_OPENSSL_PREFIX="$(cygpath -u "$RUNNER_TEMP")/windows-openssl"
           bash windows/scripts/build-windows-cli.sh "$(cygpath -u "$RUNNER_TEMP")/windows-cli"
+      - uses: actions/cache/save@v4
+        if: steps.openssl-cache.outputs.cache-hit != 'true'
+        with:
+          path: ${{ runner.temp }}/windows-openssl
+          key: ${{ steps.openssl-cache.outputs.cache-primary-key }}
       - name: Configure the matching Rust/C ABI and private NTFS test root
         shell: pwsh
         run: |
-          $bin = 'C:\msys64\ucrt64\bin'
+          $bin = 'C:/msys64/ucrt64/bin'
           $bin >> $env:GITHUB_PATH
-          "CC_x86_64_pc_windows_gnu=$bin\gcc.exe" >> $env:GITHUB_ENV
-          "CARGO_TARGET_X86_64_PC_WINDOWS_GNU_LINKER=$bin\gcc.exe" >> $env:GITHUB_ENV
+          "CC_x86_64_pc_windows_gnu=$bin/gcc.exe" >> $env:GITHUB_ENV
+          "CARGO_TARGET_X86_64_PC_WINDOWS_GNU_LINKER=$bin/gcc.exe" >> $env:GITHUB_ENV
           "NEKOKEM_OPENSSL_PREFIX=$env:RUNNER_TEMP\windows-openssl" >> $env:GITHUB_ENV
           $work = Join-Path ([Environment]::GetFolderPath('LocalApplicationData')) "NekoKEM-gui-ci-$env:GITHUB_RUN_ID"
           New-Item -ItemType Directory $work | Out-Null
@@ -99,11 +105,11 @@ jobs:
           }
           python windows/tests/cli_tests.py (Join-Path $bin 'nekokem.exe')
           if ($LASTEXITCODE -ne 0) { throw 'CLI gates failed' }
-      - name: Resolve or install frontend dependencies
+      - name: Install locked frontend dependencies
         working-directory: desktop
         shell: pwsh
         run: |
-          if (Test-Path package-lock.json) { npm ci --ignore-scripts } else { npm install --ignore-scripts }
+          npm ci --ignore-scripts
           if ($LASTEXITCODE -ne 0) { throw 'npm install failed' }
           npm run build
           if ($LASTEXITCODE -ne 0) { throw 'Frontend build failed' }
@@ -111,16 +117,12 @@ jobs:
         working-directory: desktop/src-tauri
         shell: pwsh
         run: |
-          $locked = @()
-          if (Test-Path Cargo.lock) { $locked = @('--locked') }
-          cargo test @locked --target x86_64-pc-windows-gnu --bin nekokem-gui -- --test-threads=1
+          cargo test --locked --target x86_64-pc-windows-gnu --bin nekokem-gui -- --test-threads=1
           if ($LASTEXITCODE -ne 0) { throw 'Rust/Core tests failed' }
       - name: Build production native GUI EXE
         working-directory: desktop
         shell: pwsh
         run: |
-          $locked = @()
-          if (Test-Path src-tauri/Cargo.lock) { $locked = @('--locked') }
           npm run tauri -- build --target x86_64-pc-windows-gnu --no-bundle -- --locked
           if ($LASTEXITCODE -ne 0) { throw 'GUI build failed' }
       - name: Check actual GUI executable and native window launch
@@ -130,6 +132,8 @@ jobs:
           & 'C:/msys64/ucrt64/bin/objdump.exe' -p $exe | Out-File -Encoding utf8 gui-pe.txt
           python desktop/tests/check_gui_pe.py $exe gui-pe.txt
           if ($LASTEXITCODE -ne 0) { throw 'GUI PE check failed' }
+          python desktop/tests/check_icon.py $exe windows/icons/icon.ico
+          if ($LASTEXITCODE -ne 0) { throw 'GUI icon differs from Android' }
           python desktop/tests/launch_windows.py $exe
           if ($LASTEXITCODE -ne 0) { throw 'GUI native launch failed' }
       - name: Package unsigned GUI with source metadata

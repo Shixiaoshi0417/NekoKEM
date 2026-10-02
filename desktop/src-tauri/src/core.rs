@@ -78,6 +78,7 @@ struct Staged(*mut c_char);
 impl Staged {
     fn new(text:&str)->Result<Self,Failure> {
         if text.is_empty() || text.len()>1048576 {return Err(Failure::new("key-limit"));}
+        if text.as_bytes().split(|byte|*byte==b'\n').any(|line|line.len()>16384){return Err(Failure::new("key-line-limit"));}
         let pointer=unsafe{desktop_stage_key(text.as_ptr(),text.len())};
         if pointer.is_null() {return Err(Failure::new("core-error"));} Ok(Self(pointer))
     }
