@@ -11,9 +11,15 @@ This adaptation also builds native Apple Silicon `aarch64-apple-darwin`
 `NekoKEM.app` and DMG using macOS's system WKWebView. macOS 11.0 is the deployment
 target; native CI runs on macOS 15. These new macOS packages come from this
 branch's CI/Release builds and are not assets of the already published v3.3.0
-Release. Intel Macs and Linux GUI builds are not supported.
+Release. Intel Macs are not supported.
 本次适配提供 Apple Silicon 原生应用与 DMG，最低部署目标为 macOS 11.0，
 实际 CI 使用 macOS 15；已发布的 v3.3.0 尚不包含这些 Mac 附件。
+
+Linux GUI builds target native x86_64 and ARM64 with system GTK3 and WebKitGTK 4.1.
+Ubuntu 24.04 is the build/test baseline. Each architecture provides a `.deb` and
+portable `.tar.gz`; these packages also come from CI/subsequent Release builds,
+and are not assets of the existing v3.3.0 Release. Linux 原生 GUI 提供 x86_64 与
+ARM64 安装包和便携包，实际验证基线为 Ubuntu 24.04。
 
 ## Features / 功能
 
@@ -23,13 +29,14 @@ Release. Intel Macs and Linux GUI builds are not supported.
   支持系统文件选择器及粘贴 PEM 密钥。
 - Display progress and cancel file operations safely. Show errors and preserve
   existing output on failure/cancellation through the same Core checks as the CLI.
-- Automatically detect Windows/macOS display language and share the CLI's private saved
+- Automatically detect Windows/macOS display language or Linux locale and share the CLI's private saved
   language preference. English, simplified/traditional Chinese, Japanese and Korean.
 - Both CLI and GUI retain the square Android artwork; the outer white area of
   the Windows EXE icons is transparent. Android keeps its existing square white
   background; README uses a separate rounded display image.
   macOS ICNS contains the same transparent square PNG artwork without editing pixels.
-  CLI/GUI 图案保持方形，EXE 与 macOS 图标外部白色区域透明；README 圆角只用于展示。
+  Linux uses the existing transparent square PNGs directly.
+  CLI/GUI 图案保持方形，EXE、macOS 与 Linux 图标外部白色区域透明；README 圆角只用于展示。
 - Short entry transitions, navigation/button feedback and animated progress follow
   the system's reduced-motion preference. Windows high-contrast mode is supported.
   页面过渡、按钮反馈与进度动画遵循系统减少动态效果设置，支持 Windows 高对比度。
@@ -108,6 +115,88 @@ Gatekeeper may block downloaded packages. This project does not disable or bypas
 macOS security protections. Mac 应用使用 ad-hoc 签名与 hardened runtime，未经
 Developer ID 签名或 Apple 公证，系统可能阻止启动；这不是可信开发者身份认证。
 
+## Linux installation and build / Linux 安装与构建
+
+Use the package matching `uname -m`: `x86_64` (Debian `amd64`) or `aarch64`
+(Debian `arm64`). On Ubuntu 24.04 install the `.deb` with apt, then open **NekoKEM**
+from the application menu; no terminal is required. Its installed desktop entry
+uses the existing square app icon.
+
+```sh
+sudo apt install ./NekoKEM-linux-x86_64-GUI.deb
+```
+
+Fedora 44 uses the native `.rpm`; DNF resolves GTK3/WebKitGTK 4.1 and the
+versioned glibc requirement from declared library capabilities. Change the
+architecture to `aarch64` for ARM64. Fedora 可安装 RPM，并从应用菜单启动。
+
+```sh
+sudo dnf install ./NekoKEM-linux-x86_64-GUI.rpm
+```
+
+The RPM is built directly by Tauri, with the same application, desktop entry,
+icons and licenses as the DEB; only Tauri's three-byte bundle-format marker
+differs in the executable. It is not developer GPG signed. Verify package
+SHA-256 hashes; these and RPM digests check integrity, not developer identity.
+Only generated public resource copies have their permissions normalized to
+`0644`; private keys and configuration retain `0600`/`0700`.
+
+For the portable archive, install system dependencies, extract it and run the
+launcher. Change `x86_64` to `aarch64` for ARM64. A graphical session is required;
+the archive does not bundle GTK, WebKit or glibc; the supported baseline requires
+glibc 2.39 or newer.
+Keep the package tree together. Linux 便携包需要系统图形运行库；安装包可从系统应用菜单打开。
+
+```sh
+sudo apt install libgtk-3-0t64 libwebkit2gtk-4.1-0 libayatana-appindicator3-1
+tar -xzf NekoKEM-linux-x86_64-GUI.tar.gz
+./NekoKEM-linux-x86_64-GUI/NekoKEM-GUI.sh
+```
+
+Automatic language detection uses the CLI's saved preference, then `LC_ALL`,
+`LC_MESSAGES`, `LANG`, falling back to English. Five languages and **Follow system**
+are available. CLI and GUI share `$XDG_CONFIG_HOME/nekokem/language`, or
+`$HOME/.config/nekokem/language` when XDG is unset/relative, with mode `0600`.
+The GUI renders UTF-8 even when launched with a `C/POSIX` terminal locale; the
+CLI's ASCII/non-UTF-8 terminal fallback continues to apply to terminal output.
+GUI 在 C/POSIX 环境下仍可手动选择五种语言。
+
+Build on the native Ubuntu 24.04 architecture with Node 24 and Rust stable:
+
+```sh
+sudo apt install build-essential curl perl pkg-config libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev patchelf rpm
+architecture=$(uname -m)
+bash desktop/scripts/build-linux-openssl.sh "$architecture" /absolute/path/to/pinned-linux-gui-openssl
+export NEKOKEM_OPENSSL_PREFIX=/absolute/path/to/pinned-linux-gui-openssl
+rustup target add "$architecture-unknown-linux-gnu"
+cd desktop
+npm ci --ignore-scripts
+npm test
+npm run build
+TAURI_CONFIG="$(cat src-tauri/tauri.linux.conf.json)" cargo test --locked --target "$architecture-unknown-linux-gnu" --manifest-path src-tauri/Cargo.toml --bin nekokem-gui -- --test-threads=1
+bash scripts/build-linux-gui.sh "$architecture"
+cd ..
+python3 desktop/scripts/package-linux-gui.py \
+  --bundle-dir "desktop/src-tauri/target/$architecture-unknown-linux-gnu/release/bundle" \
+  --output linux/gui-dist --arch "$architecture" \
+  --openssl-prefix "$NEKOKEM_OPENSSL_PREFIX" --source-sha "$(git rev-parse HEAD)"
+```
+
+The helper verifies the official OpenSSL 4.0.3 source checksum and builds native
+static PIC libcrypto with assembly/threads, Fortify and stack protection. Core and
+OpenSSL symbols stay hidden from WebKit's dynamic TLS libraries. Packaging checks
+ELF PIE/full RELRO/nonexecutable stack, dependencies, licenses, the unchanged PNG
+icon, desktop entry and hashes of all three packages. RPM validation checks
+native architecture, digests, every ELF dependency, installed file permissions,
+absence of installation scripts and matching DEB resources. CI installs the
+`.deb` on Ubuntu 24.04 and the `.rpm` through DNF in native Fedora 44 containers,
+then runs actual X11 WebKit startup/normal-close checks as ordinary users on both
+architectures with sandboxing retained. Rust/Core and private-file tests remain.
+Wayland and distributions other than this Ubuntu/Fedora baseline have not
+received equivalent native testing.
+The build wrapper adds AArch64's dynamic-loader capability only to ARM64 RPMs.
+See [Linux GUI security boundaries](LINUX-SECURITY.md).
+
 ## Security boundary / 安全边界
 
 On Windows, the same local fixed-NTFS, owner/ACL, ancestor pinning, regular-file, hard-link,
@@ -124,8 +213,14 @@ keys use a new 0700 directory, an exclusive 0600 no-follow file and descriptor-r
 operations. Cleanup rejects symlinks, extra hard links and unsafe permissions.
 See the [macOS filesystem design](../macos/SECURITY-DESIGN.md) for platform limits.
 
+On Linux, the same Core POSIX file checks and descriptor-relative pasted-key
+staging apply, requiring private `0700` directories, `0600` regular files, current
+ownership, one hard link, no symlinks and successful `fsync`. System WebKitGTK
+keeps its sandbox enabled and uses a temporary data store. See the
+[Linux GUI design](LINUX-SECURITY.md) for limits and the native test baseline.
+
 Only bundled local content runs with incognito enabled in the main WebView
-(Windows InPrivate/macOS nonpersistent WKWebView storage). CSP blocks remote scripts,
+(Windows InPrivate/macOS nonpersistent WKWebView/Linux ephemeral WebKitGTK storage). CSP blocks remote scripts,
 frames and network requests. Only native open/save dialogs and the listed Rust
 commands are exposed. Developer tools are unavailable in the production release.
 Passwords/key text are not stored in browser storage, configuration or logs. Both

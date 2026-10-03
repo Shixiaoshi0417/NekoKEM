@@ -6,7 +6,7 @@ use std::sync::Arc;
 use tauri::{Emitter,Manager,State};
 #[derive(Serialize)] struct Settings {language:String,selection:String,version:&'static str}
 #[derive(Clone,Serialize)]#[serde(rename_all="camelCase")]struct ProgressEvent{id:String,processed:u64,total:u64}
-#[cfg(target_os="macos")]
+#[cfg(any(target_os="macos",target_os="linux"))]
 fn native_startup_evidence(stage:&str){
     // Opt-in native CI diagnostics contain only fixed startup markers, never
     // paths, language preferences, requests, passwords or key material.
@@ -20,7 +20,7 @@ fn get_settings(state:State<'_,Arc<Backend>>)->Result<Settings,Failure>{
     if active.is_some(){return Err(Failure::new("busy"));}
     let _core=CORE_LOCK.lock().map_err(|_|Failure::new("internal"))?;
     let language=core::language();
-    #[cfg(target_os="macos")]
+    #[cfg(any(target_os="macos",target_os="linux"))]
     native_startup_evidence("settings-ready");
     Ok(Settings{language,selection:core::preference(),version:env!("CARGO_PKG_VERSION")})
 }
@@ -61,7 +61,7 @@ fn main(){
                     (cfg!(debug_assertions)&&url.scheme()=="http"&&url.host_str()==Some("127.0.0.1")&&url.port()==Some(1420))
                 })
                 .on_new_window(|_,_|tauri::webview::NewWindowResponse::Deny);
-            #[cfg(target_os="macos")]
+            #[cfg(any(target_os="macos",target_os="linux"))]
             let builder=builder.on_page_load(|_,payload|{
                 if payload.event()==tauri::webview::PageLoadEvent::Finished{
                     native_startup_evidence("page-loaded");
@@ -77,10 +77,10 @@ fn main(){
         }})
         .build(tauri::generate_context!()).expect("Cannot start NekoKEM desktop")
         .run(|_app,_event|{
-            #[cfg(target_os="macos")]
+            #[cfg(any(target_os="macos",target_os="linux"))]
             if let tauri::RunEvent::ExitRequested{api,..}=_event{
-                // Application-menu Quit and Cmd+Q are application exit events,
-                // not window-close events. Keep Core cleanup ahead of exit.
+                // Application-level exits also need Core cleanup before exit
+                // (including macOS application-menu Quit and Cmd+Q).
                 if _app.state::<Arc<Backend>>().defer_close(){api.prevent_exit();}
             }
         });
