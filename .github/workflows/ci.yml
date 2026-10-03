@@ -846,6 +846,7 @@ jobs:
           node-version: '24'
       - uses: dtolnay/rust-toolchain@master
         with:
+          toolchain: stable
           targets: aarch64-apple-darwin
       - name: Identify native Apple compiler and SDK
         id: compiler
