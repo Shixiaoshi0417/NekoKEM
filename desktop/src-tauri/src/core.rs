@@ -198,6 +198,47 @@ mod tests {
     }
     #[cfg(unix)]
     #[test]
+    fn gui_language_preferences_and_locale_are_independent_of_terminal_encoding() {
+        use std::ffi::OsString;
+        use std::os::unix::fs::PermissionsExt;
+        struct Environment(Vec<(&'static str, Option<OsString>)>);
+        impl Drop for Environment {
+            fn drop(&mut self) {
+                for (name, value) in &self.0 {
+                    match value { Some(value) => std::env::set_var(name, value),
+                                  None => std::env::remove_var(name) }
+                }
+                language();
+            }
+        }
+        let _core = CORE_LOCK.lock().unwrap();
+        let directory = Directory::new();
+        let _environment = Environment(["XDG_CONFIG_HOME", "LC_ALL", "LC_MESSAGES", "LC_CTYPE", "LANG"]
+            .iter().map(|&name| (name, std::env::var_os(name))).collect());
+        std::env::set_var("XDG_CONFIG_HOME", &directory.0);
+        std::env::set_var("LC_ALL", "C");
+        for tag in ["en", "zh-CN", "zh-TW", "ja", "ko"] {
+            assert_eq!(save_language(tag).unwrap(), tag);
+            assert_eq!(preference(), tag);
+        }
+        assert_eq!(fs::metadata(directory.0.join("nekokem/language")).unwrap().permissions().mode() & 0o777, 0o600);
+        std::env::set_var("LC_ALL", "");
+        std::env::set_var("LC_CTYPE", "C");
+        std::env::set_var("LC_MESSAGES", "zh_HK.UTF-8");
+        std::env::set_var("LANG", "ko_KR.UTF-8");
+        assert_eq!(save_language("system").unwrap(), "zh-TW");
+        assert_eq!(preference(), "system");
+        std::env::set_var("LC_ALL", "ja_JP.UTF-8");
+        assert_eq!(language(), "ja");
+        std::env::set_var("LC_ALL", "");
+        std::env::set_var("LC_MESSAGES", "");
+        assert_eq!(language(), "ko");
+        std::env::set_var("LANG", "de_DE.UTF-8");
+        assert_eq!(language(), "en");
+    }
+
+    #[cfg(unix)]
+    #[test]
     fn posix_staging_permissions_cleanup_and_link_rejection() {
         use std::os::unix::fs::{symlink, MetadataExt, PermissionsExt};
         let bytes = "public staging test fixture\n";

@@ -128,6 +128,7 @@ static int explicit_language(const char *tag, size_t *language)
     return 0;
 }
 
+#ifndef NEKOKEM_DESKTOP_UTF8_UI
 /* No locale installation is required; C/POSIX and non-UTF-8 terminals use ASCII. */
 static int utf8_output(void)
 {
@@ -154,6 +155,7 @@ static int utf8_output(void)
     return strcmp(codeset, "UTF-8") == 0 || strcmp(codeset, "UTF8") == 0;
 #endif
 }
+#endif
 
 #ifdef _WIN32
 #undef PATH_MAX
@@ -301,7 +303,11 @@ int cli_language_init(int *argc, char **argv)
     }
     argv[output] = NULL;
     *argc = output;
+    /* Desktop WebViews always render UTF-8, independently of terminal encoding.
+     * CLI builds retain their ASCII/non-UTF-8 terminal fallback. */
+#ifndef NEKOKEM_DESKTOP_UTF8_UI
     if (!utf8_output()) selected_language = 0U;
+#endif
     file_set_message_translator(translated_message);
     if (!valid) fprintf(stderr, file_message("Invalid language; use system, en, zh-CN, zh-TW, ja or ko\n"));
     return valid;

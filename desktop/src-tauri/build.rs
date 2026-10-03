@@ -29,7 +29,8 @@ fn main() {
         .flag("-std=c17").flag("-O2").flag("-Wall").flag("-Wextra")
         .flag("-Wpedantic").flag("-Wconversion").flag("-Wshadow").flag("-Wformat=2")
         .flag("-Wstrict-prototypes").flag("-Werror").flag("-fstack-protector-strong")
-        .define("_FORTIFY_SOURCE", "3");
+        .define("_FORTIFY_SOURCE", "3")
+        .define("NEKOKEM_DESKTOP_UTF8_UI", "1");
     if windows {
         build.define("_WIN32_WINNT", "0x0A00").define("__USE_MINGW_ANSI_STDIO", "1");
     } else if macos {

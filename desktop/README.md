@@ -142,6 +142,9 @@ Automatic language detection uses the CLI's saved preference, then `LC_ALL`,
 `LC_MESSAGES`, `LANG`, falling back to English. Five languages and **Follow system**
 are available. CLI and GUI share `$XDG_CONFIG_HOME/nekokem/language`, or
 `$HOME/.config/nekokem/language` when XDG is unset/relative, with mode `0600`.
+The GUI renders UTF-8 even when launched with a `C/POSIX` terminal locale; the
+CLI's ASCII/non-UTF-8 terminal fallback continues to apply to terminal output.
+GUI 在 C/POSIX 环境下仍可手动选择五种语言。
 
 Build on the native Ubuntu 24.04 architecture with Node 24 and Rust stable:
 
