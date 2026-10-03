@@ -73,7 +73,15 @@ fn main(){
         .invoke_handler(tauri::generate_handler![get_settings,set_language,run_operation,cancel_operation,close_app])
         .on_window_event(|window,event|{if let tauri::WindowEvent::CloseRequested{api,..}=event{
             let state=window.state::<Arc<Backend>>();
-            if let Ok(active)=state.active.lock(){if let Some(job)=active.as_ref(){state.close_after.store(true,std::sync::atomic::Ordering::Release);job.cancelled.store(true,std::sync::atomic::Ordering::Release);api.prevent_close();}};
+            if state.defer_close(){api.prevent_close();}
         }})
-        .run(tauri::generate_context!()).expect("Cannot start NekoKEM desktop");
+        .build(tauri::generate_context!()).expect("Cannot start NekoKEM desktop")
+        .run(|_app,_event|{
+            #[cfg(target_os="macos")]
+            if let tauri::RunEvent::ExitRequested{api,..}=_event{
+                // Application-menu Quit and Cmd+Q are application exit events,
+                // not window-close events. Keep Core cleanup ahead of exit.
+                if _app.state::<Arc<Backend>>().defer_close(){api.prevent_exit();}
+            }
+        });
 }

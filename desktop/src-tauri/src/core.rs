@@ -45,6 +45,15 @@ impl Backend {
     pub fn finish(&self,job:&Arc<Job>) {
         if let Ok(mut active)=self.active.lock() { if active.as_ref().is_some_and(|j|Arc::ptr_eq(j,job)) { *active=None; } }
     }
+    // Return true while native shutdown must wait for Core/secret cleanup.
+    pub fn defer_close(&self)->bool {
+        let Ok(active)=self.active.lock() else { return true; };
+        if let Some(job)=active.as_ref() {
+            self.close_after.store(true,Ordering::Release);
+            job.cancelled.store(true,Ordering::Release);
+            true
+        } else { false }
+    }
 }
 pub struct Reservation { pub backend:Arc<Backend>, pub job:Arc<Job> }
 impl Drop for Reservation { fn drop(&mut self){ self.backend.finish(&self.job); } }
@@ -137,6 +146,22 @@ mod tests {
         fn OpenSSL_version(kind:c_int)->*const c_char;
         fn protected_private_key_read(path:*const c_char,password:*const u8,length:usize,pem:*mut *mut u8,pem_length:*mut usize)->c_int;
         fn CRYPTO_clear_free(memory:*mut c_void,length:usize,file:*const c_char,line:c_int);
+    }
+    #[test]
+    fn shutdown_waits_for_reservation_cleanup() {
+        for kind in [Kind::Encrypt, Kind::Keygen] {
+            let backend=Arc::new(Backend::default());
+            assert!(!backend.defer_close());
+            let request=request(kind);
+            let job=backend.reserve(&request).unwrap();
+            let reservation=Reservation{backend:backend.clone(),job:job.clone()};
+            assert!(backend.defer_close());
+            assert!(backend.close_after.load(Ordering::Acquire));
+            assert!(job.cancelled.load(Ordering::Acquire));
+            assert!(backend.reserve(&request).is_err());
+            drop(reservation);
+            assert!(!backend.defer_close());
+        }
     }
     #[test]
     fn linked_openssl_runtime_matches_pin() {

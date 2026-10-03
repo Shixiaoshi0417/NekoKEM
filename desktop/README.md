@@ -136,7 +136,8 @@ password bytes only for the call. JavaScript/IPC can make temporary string copie
 reliable zeroization of the WebView heap is not guaranteed. This extra UI/IPC
 boundary has not received an independent professional audit.
 
-Closing the window during an operation requests cancellation and waits for Core
+Closing the window, or quitting the macOS application from its menu or ⌘Q,
+during an operation requests cancellation and waits for Core
 cleanup; key generation finishes safely before closing. C17 algorithms, KDF
 parameters/domains, NKEM/NKPR formats, fingerprints, AAD, GCM limits and 64 KiB
 streaming stay unchanged. Progress UI updates are throttled to about 10 per second,
