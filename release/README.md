@@ -6,16 +6,17 @@ GitHub Actions has two workflow definitions:
   `main`, and manual runs. It contains the Linux Core/analyzer/sanitizer/fuzz
   suite, x86_64/aarch64 release-package and installer tests, Android JVM and
   API 26/35 device tests, native Windows CLI security/interoperability/performance
-  checks, and Windows GUI frontend/Rust/Core/EXE-launch checks.
+  checks, Windows GUI frontend/Rust/Core/EXE-launch checks, and native macOS
+  arm64 CLI/Core/sanitizer/filesystem/interoperability and GUI/app/package checks.
 - `release.yml` (`Release`) builds artifacts on `v*` tags and manual runs. It
   produces Linux x86_64/aarch64 archives, a signed Android arm64 APK, and Windows
-  CLI/GUI packages. Regression suites run in CI. Source checksums, dependency
+  CLI/GUI packages and macOS arm64 CLI/GUI packages. Regression suites run in CI. Source checksums, dependency
   versions, compiler hardening, binary imports/protections, SDK loader signature,
   icons, APK identity/signature and package checksums remain build requirements.
 
-The shared Linux/Windows build scripts default to `NEKOKEM_BUILD_TESTS=1`.
+The shared Linux/Windows/macOS CLI build scripts default to `NEKOKEM_BUILD_TESTS=1`.
 Release sets it to `0`, which omits the Linux cryptographic smoke test and Windows
-test executables while retaining the required dependency and artifact checks.
+test executables and macOS regression suites while retaining the required dependency and artifact checks.
 CI verifies that both modes produce identical CLI binaries/packages.
 
 Run Release from the Actions page or with `gh workflow run release.yml --ref main`.
@@ -67,3 +68,34 @@ for Windows EXE icons, and a separate rounded image for README display.
 The v3.2.0 bootstrap key rotation and publication records remain historical audit
 data. Their one-time workflows and hard-coded publication automation have been
 retired in favor of these two entry points.
+
+## macOS Apple Silicon build artifacts
+
+The existing public v3.3.0 Release has no macOS assets. This port keeps application
+version `3.3.0` and adds macOS packages to CI and subsequent Release builds;
+it does not change the historical release assets or notes:
+
+- `NekoKEM-macos-arm64.tar.gz`: native CLI and Terminal menu launcher.
+- `NekoKEM-macos-arm64-GUI.zip`: `NekoKEM.app`, documentation, licenses,
+  checksums and build metadata.
+- `NekoKEM-macos-arm64-GUI.dmg`: Tauri DMG checked and exported under a stable
+  package name; its initial Tauri filename is `NekoKEM_3.3.0_aarch64.dmg`.
+
+Builds use native Apple Silicon and set a macOS 11.0 deployment target. The actual
+native CI runner is `macos-15`; the target does not establish compatibility on
+macOS 11.0 hardware or every M-series generation. OpenSSL 4.0.3 is statically
+linked with arm64 assembly acceleration; macOS system libraries/frameworks remain
+runtime dependencies. The GUI uses system WKWebView without a WebView2 loader.
+
+CLI and GUI use ad-hoc hardened-runtime signatures, with no Developer ID or Apple
+notarization. The build verifies their structure and integrity; this does not
+authenticate the publisher or guarantee Gatekeeper acceptance. Android signing
+material is not used. Native architecture, PIE, deployment target, allowable
+system dylibs, signatures, icons, metadata and package checksums remain build
+requirements in Release mode. Regression suites stay in CI.
+
+See [macOS usage](../macos/README.md), [filesystem boundaries](../macos/SECURITY-DESIGN.md)
+and [GUI build instructions](../desktop/README.md). A future public release must
+use the successful Release artifacts for its exact CI-validated source and add
+every published macOS package to the top-level `SHA256SUMS.txt`; do not reuse a
+pre-port build or imply that the existing v3.3.0 assets include macOS support.

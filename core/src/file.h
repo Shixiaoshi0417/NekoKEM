@@ -41,6 +41,7 @@ typedef enum {
     FILE_TEST_FAULT_SHORT_WRITE,
     FILE_TEST_FAULT_ENOSPC,
     FILE_TEST_FAULT_FSYNC,
+    FILE_TEST_FAULT_FULLFSYNC,
     FILE_TEST_FAULT_RENAME,
     FILE_TEST_FAULT_FOREIGN_OWNER
 } FileTestFault;
@@ -66,6 +67,12 @@ int file_get_size(FILE *stream, uint64_t *size);
 int file_read_exact(FILE *stream, void *buffer, size_t length);
 int file_write_all(FILE *stream, const void *buffer, size_t length);
 int file_disable_buffering(FILE *stream);
+#ifndef _WIN32
+/* fsync-style result. Darwin also requires F_FULLFSYNC for regular files. */
+int file_sync_regular_fd(int descriptor);
+/* Darwin private files/directories must not have an ACL that grants access. */
+int file_private_acl_is_safe(int descriptor);
+#endif
 int file_read_regular(const char *path,
                       size_t maximum_size,
                       unsigned char **buffer,
