@@ -116,14 +116,14 @@ Release runs produce, for each `x86_64`/`aarch64` architecture:
   build metadata and inner checksums.
 - `gui-SHA256SUMS.txt`: hashes of both distributable packages.
 
-The GUI uses system GTK3, WebKitGTK 4.1 and compatible glibc; the portable archive
+The GUI uses system GTK3, WebKitGTK 4.1 and glibc 2.39 or newer; the portable archive
 does not bundle these runtimes. This differs from the existing fully static CLI
 archives, whose build path is retained. Core uses pinned static PIC OpenSSL 4.0.3
 with assembly/threads and hidden symbols to isolate it from system WebKit TLS.
 Native ELF architecture, PIE/full RELRO/nonexecutable stack, no RPATH/TEXTREL or
 OpenSSL dynamic exports, licenses, unchanged icons and hashes remain Release
-build requirements. Actual Rust/Core/private-file and sandboxed WebKit X11
-startup/normal-close tests run only in CI. Other distributions and native Wayland
+build requirements. Actual `.deb` installation, Rust/Core/private-file and
+sandboxed WebKit X11 startup/normal-close tests run only in CI. Other distributions and native Wayland
 are not established by these tests. Android signing material is not used.
 
 See [Linux GUI installation and building](../desktop/README.md#linux-installation-and-build--linux-安装与构建)

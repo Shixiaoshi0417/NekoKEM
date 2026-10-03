@@ -29,7 +29,9 @@ def package(bundle, output, arch, prefix, source):
     expected_arch = 'arm64' if arch == 'aarch64' else 'amd64'
     field = lambda name: subprocess.check_output(['dpkg-deb', '-f', str(deb), name], text=True).strip()
     assert field('Architecture') == expected_arch and field('Version') == '3.3.0'
-    assert set(['libgtk-3-0','libwebkit2gtk-4.1-0']) <= set(field('Depends').split(', '))
+    dependencies = {name.strip() for name in field('Depends').split(',')}
+    assert {'libc6 (>= 2.39)', 'libgcc-s1', 'libdbus-1-3', 'libgtk-3-0t64',
+            'libwebkit2gtk-4.1-0', 'libayatana-appindicator3-1'} <= dependencies
     output.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(prefix='nekokem-linux-gui-package-') as temporary:
         stage = Path(temporary)/f'NekoKEM-linux-{arch}-GUI'
@@ -46,9 +48,18 @@ def package(bundle, output, arch, prefix, source):
         assert len(entries) == 1
         desktop = entries[0].read_text()
         assert 'Exec=nekokem-gui' in desktop and 'Terminal=false' in desktop
-        icons = list(stage.glob('usr/share/icons/hicolor/256x256/apps/*.png'))
-        assert len(icons) == 1 and icons[0].read_bytes() == (ROOT/'windows/icons/128x128@2x.png').read_bytes()
-        metadata['icon_sha256'] = digest(icons[0])
+        # Tauri preserves the @2x source's HiDPI designation in the hicolor
+        # directory name. Verify every installed icon against the source bytes.
+        icon_root = stage/'usr/share/icons/hicolor'
+        expected_icons = {'32x32': '32x32.png', '128x128': '128x128.png',
+                          '256x256@2': '128x128@2x.png'}
+        installed_icons = set(icon_root.glob('*/apps/*.png'))
+        assert installed_icons == {icon_root/size/'apps/nekokem-gui.png' for size in expected_icons}
+        metadata['icon_hashes'] = {}
+        for size, source_name in expected_icons.items():
+            icon = icon_root/size/'apps/nekokem-gui.png'
+            assert icon.read_bytes() == (ROOT/'windows/icons'/source_name).read_bytes()
+            metadata['icon_hashes'][size] = digest(icon)
         for name, origin in [('README.md',ROOT/'desktop/README.md'),
                              ('LINUX-SECURITY.md',ROOT/'desktop/LINUX-SECURITY.md'),
                              ('LICENSE',ROOT/'LICENSE'),('OPENSSL-LICENSE.txt',prefix/'LICENSE.txt'),

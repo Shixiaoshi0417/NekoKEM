@@ -128,7 +128,8 @@ sudo apt install ./NekoKEM-linux-x86_64-GUI.deb
 
 For the portable archive, install system dependencies, extract it and run the
 launcher. Change `x86_64` to `aarch64` for ARM64. A graphical session is required;
-the archive does not bundle GTK, WebKit or glibc and is not the fully static CLI.
+the archive does not bundle GTK, WebKit or glibc; the supported baseline requires
+glibc 2.39 or newer.
 Keep the package tree together. Linux 便携包需要系统图形运行库；安装包可从系统应用菜单打开。
 
 ```sh
@@ -167,8 +168,9 @@ The helper verifies the official OpenSSL 4.0.3 source checksum and builds native
 static PIC libcrypto with assembly/threads, Fortify and stack protection. Core and
 OpenSSL symbols stay hidden from WebKit's dynamic TLS libraries. Packaging checks
 ELF PIE/full RELRO/nonexecutable stack, dependencies, licenses, the unchanged PNG
-icon, desktop entry and archive hashes. CI runs actual Rust/Core and native X11
-WebKit startup/normal-close tests on both architectures with sandboxing retained.
+icon, desktop entry and archive hashes. CI installs the `.deb` and runs actual
+Rust/Core and native X11 WebKit startup/normal-close tests on both architectures
+with sandboxing retained.
 Wayland and other distributions have not received equivalent native testing.
 See [Linux GUI security boundaries](LINUX-SECURITY.md).
 

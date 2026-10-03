@@ -969,11 +969,13 @@ jobs:
             --bundle-dir 'desktop/src-tauri/target/${{ matrix.arch }}-unknown-linux-gnu/release/bundle' \
             --output "$RUNNER_TEMP/linux-gui" --arch '${{ matrix.arch }}' \
             --openssl-prefix "$NEKOKEM_OPENSSL_PREFIX" --source-sha "$GITHUB_SHA"
-      - name: Verify the actual sandboxed WebKit window and normal close
+      - name: Install the verified native Debian package
+        run: sudo apt-get install --yes "$RUNNER_TEMP/linux-gui/NekoKEM-linux-${{ matrix.arch }}-GUI.deb"
+      - name: Verify the actual installed sandboxed WebKit window and normal close
         run: |
           dbus-run-session -- xvfb-run -a -s '-screen 0 1280x1024x24' \
             python3 desktop/tests/launch_linux.py \
-            'desktop/src-tauri/target/${{ matrix.arch }}-unknown-linux-gnu/release/nekokem-gui' \
+            /usr/bin/nekokem-gui \
             --log "$RUNNER_TEMP/linux-gui/startup.log"
       - uses: actions/upload-artifact@v4
         if: always()
