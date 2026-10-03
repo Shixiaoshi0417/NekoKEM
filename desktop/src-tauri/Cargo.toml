@@ -1,6 +1,6 @@
 [package]
 name = "nekokem-gui"
-version = "3.3.0"
+version = "3.3.1"
 description = "NekoKEM desktop frontend using the unchanged C17 cryptographic Core"
 authors = ["Shixiaoshi0417"]
 edition = "2021"

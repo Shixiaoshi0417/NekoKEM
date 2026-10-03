@@ -1,5 +1,21 @@
 # Changelog
 
+## 3.3.1
+
+- 完整中文在上、英文在下的发布说明见 [v3.3.1](../release/v3.3.1.md)。
+- 新增 M 系列 Mac 原生 CLI/GUI ZIP/DMG；Linux x86_64、aarch64 GUI 提供 DEB、RPM 和便携包。
+- 全平台应用版本为 3.3.1，Android versionCode 为 6，沿用 v3.2.0/v3.3.0 签名，可覆盖升级。
+- Core 3.1、NKEM v3、NKPR v1、Argon2id 成本、64 KiB 流式处理及固定 OpenSSL 4.0.3 不变；保留文件权限、认证后提交和编译加固。
+- CI 增加原生 macOS 与 Linux GUI 回归，以及 Ubuntu DEB、Fedora RPM 的实际安装启动检查；Release 只构建，README 更新全部 14 个正式包。
+
+Full Chinese-then-English notes: [v3.3.1](../release/v3.3.1.md). Adds native M-series
+Mac CLI/GUI ZIP/DMG and Linux x86_64/aarch64 GUI DEB, RPM and portable packages.
+Every app is 3.3.1; Android versionCode is 6 and retains the v3.2.0/v3.3.0 signer
+for in-place updates. Core 3.1, NKEM v3, NKPR v1, Argon2id costs, 64 KiB streaming,
+pinned OpenSSL 4.0.3, file protection and authenticated commits remain unchanged.
+CI covers native macOS/Linux GUI regressions and actual Ubuntu DEB/Fedora RPM
+installation and launch; Release builds only. READMEs document all 14 packages.
+
 ## 3.3.0
 
 - 完整中文在上、英文在下的发布说明见 [v3.3.0](../release/v3.3.0.md)。

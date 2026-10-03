@@ -26,7 +26,7 @@ def verify_rpm(rpm, deb_stage, arch, prefix):
     def query(format):
         return subprocess.check_output(['rpm', '-qp', '--queryformat', format, str(rpm)], text=True)
     name, version, release, machine, license = query('%{NAME}\n%{VERSION}\n%{RELEASE}\n%{ARCH}\n%{LICENSE}\n').splitlines()
-    assert (name, version, release, machine, license) == ('neko-kem', '3.3.0', '1', arch, 'Apache-2.0')
+    assert (name, version, release, machine, license) == ('neko-kem', '3.3.1', '1', arch, 'Apache-2.0')
     subprocess.run(['rpm', '--checksig', '--nosignature', str(rpm)], check=True)
     assert all(value == '(none)' for value in query('%{PREIN}\n%{POSTIN}\n%{PREUN}\n%{POSTUN}\n').splitlines())
     signatures = query('%{RSAHEADER:pgpsig}\n%{DSAHEADER:pgpsig}\n%{SIGPGP:pgpsig}\n%{SIGGPG:pgpsig}\n').splitlines()
@@ -101,7 +101,7 @@ def package(bundle, output, arch, prefix, source):
     rpm = rpm_candidates[0]
     expected_arch = 'arm64' if arch == 'aarch64' else 'amd64'
     field = lambda name: subprocess.check_output(['dpkg-deb', '-f', str(deb), name], text=True).strip()
-    assert field('Architecture') == expected_arch and field('Version') == '3.3.0'
+    assert field('Architecture') == expected_arch and field('Version') == '3.3.1'
     dependencies = {name.strip() for name in field('Depends').split(',')}
     assert {'libc6 (>= 2.39)', 'libgcc-s1', 'libdbus-1-3', 'libgtk-3-0t64',
             'libwebkit2gtk-4.1-0', 'libayatana-appindicator3-1'} <= dependencies
