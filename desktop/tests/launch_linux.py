@@ -24,6 +24,18 @@ if __name__ == '__main__':
     environment['GDK_BACKEND'] = 'x11'
     window_manager = subprocess.Popen(['openbox'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     try:
+        # Start the application only after the isolated X11 window manager
+        # publishes its desktop properties, avoiding an initial map race.
+        deadline = time.monotonic()+10
+        while time.monotonic() < deadline:
+            assert window_manager.poll() is None, 'Test window manager exited'
+            desktops = subprocess.run(['xdotool','get_num_desktops'],
+                                      capture_output=True, text=True, timeout=5)
+            if desktops.returncode == 0 and desktops.stdout.strip().isdigit() and int(desktops.stdout) > 0:
+                break
+            time.sleep(0.1)
+        else:
+            raise AssertionError('Test window manager did not become ready')
         with args.log.open('wb') as log:
             process = subprocess.Popen([str(args.binary.resolve())], env=environment,
                                        stdout=log, stderr=subprocess.STDOUT)
@@ -37,15 +49,25 @@ if __name__ == '__main__':
                     time.sleep(0.2)
                 else:
                     raise AssertionError('Real WebKit page-load and settings IPC did not become ready')
-                windows = command('xdotool','search','--onlyvisible','--pid',str(process.pid)).splitlines()
-                assert windows, 'No visible native window belongs to the GUI process'
                 found = None
-                for window in windows:
-                    name = command('xdotool','getwindowname',window)
-                    geometry = dict(line.split('=',1) for line in command('xdotool','getwindowgeometry','--shell',window).splitlines())
-                    if name == 'NekoKEM' and int(geometry['WIDTH']) >= 760 and int(geometry['HEIGHT']) >= 620:
-                        found = window
+                # WebKit can finish IPC before the window manager maps the
+                # GTK window and publishes its PID. Wait for the same visible
+                # window requirements, with a bounded deadline.
+                deadline = time.monotonic()+15
+                while time.monotonic() < deadline:
+                    assert process.poll() is None, 'Native GUI exited before its window became visible'
+                    search = subprocess.run(['xdotool','search','--onlyvisible','--pid',str(process.pid)],
+                                            capture_output=True, text=True, timeout=5)
+                    assert search.returncode in {0, 1}, search.stderr
+                    for window in search.stdout.splitlines():
+                        name = command('xdotool','getwindowname',window)
+                        geometry = dict(line.split('=',1) for line in command('xdotool','getwindowgeometry','--shell',window).splitlines())
+                        if name == 'NekoKEM' and int(geometry['WIDTH']) >= 760 and int(geometry['HEIGHT']) >= 620:
+                            found = window
+                            break
+                    if found:
                         break
+                    time.sleep(0.1)
                 assert found, 'NekoKEM native window has the wrong title or dimensions'
                 print('Actual Linux NekoKEM window, local WebKit page and real settings IPC passed')
                 # A normal WM close reaches Tauri's cleanup path; no SIGKILL.
