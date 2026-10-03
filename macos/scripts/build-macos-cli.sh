@@ -29,7 +29,7 @@ export SDKROOT
 SDKROOT=$(xcrun --sdk macosx --show-sdk-path)
 export MACOSX_DEPLOYMENT_TARGET=11.0
 flags=(-std=c17 -O2 -arch arm64 -mmacosx-version-min=11.0 -isysroot "$SDKROOT"
-       -D_POSIX_C_SOURCE=200809L -D_DARWIN_C_SOURCE=1 -D_FORTIFY_SOURCE=3
+       -D_POSIX_C_SOURCE=200809L -D_DARWIN_C_SOURCE=1 -U_FORTIFY_SOURCE -D_FORTIFY_SOURCE=3
        -Wall -Wextra -Wpedantic -Wconversion -Wshadow -Wformat=2
        -Wstrict-prototypes -Werror -fstack-protector-strong -fPIE
        -I"$prefix/include" -I"$repo_root/core/include" -I"$repo_root/core/src"
