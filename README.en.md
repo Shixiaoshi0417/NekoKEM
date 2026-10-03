@@ -67,7 +67,7 @@ The build uses C17 and links OpenSSL `libcrypto`. Hybrid private-key protection 
 
 The executable is `linux/nekokem`. The `./nekokem` examples below assume the working directory is `linux/`, or another directory containing a copy of that executable.
 
-GitHub Actions uses [CI](.github/workflows/ci.yml) and [Release](.github/workflows/release.yml). CI builds and runs all platform security, language, interoperability, performance and GUI regression checks on PRs and main pushes. Release builds Linux archives, a signed Android APK, Windows CLI/GUI packages and macOS arm64 packages through manual runs or `v*` tags. See the [build workflow documentation](release/README.md) for signing identity and artifact details.
+GitHub Actions uses [CI](.github/workflows/ci.yml) and [Release](.github/workflows/release.yml). CI builds and runs all platform security, language, interoperability, performance and GUI regression checks on PRs and main pushes. Release builds Linux CLI archives and GUI installation/portable packages, a signed Android APK, Windows CLI/GUI packages and macOS arm64 packages through manual runs or `v*` tags. See the [build workflow documentation](release/README.md) for signing identity and artifact details.
 
 ## Windows CLI and GUI
 
@@ -85,9 +85,17 @@ The CLI shares Linux's argument parser, five-option menu and language catalogs. 
 
 The macOS file layer preserves strict ownership, permissions, symbolic-link and hard-link checks, permits only empty or deny-only extended ACLs on protected files/directories, and checks APFS/HFS+ case and Unicode name aliases. Regular output files require `fsync` and `F_FULLFSYNC`; commits require parent-directory `fsync`, without silent fallback on failure. See the [macOS filesystem design](macos/SECURITY-DESIGN.md) for limits and test boundaries. Core 3.1, NKEM v3, NKPR v1, cryptographic parameters and 64 KiB streaming chunks are unchanged. Packages use ad-hoc signing only, without Developer ID or Apple notarization; this neither authenticates the publisher nor guarantees Gatekeeper acceptance.
 
+## Linux GUI
+
+The native Linux GUI supports `x86_64` and `aarch64` (ARM64), reusing Rust + Tauri 2 + Vue 3 + TypeScript, five-language automatic detection, native file dialogs, progress/cancellation, keyboard navigation and animations honoring reduced motion. Each architecture provides `NekoKEM-linux-<architecture>-GUI.deb` and `NekoKEM-linux-<architecture>-GUI.tar.gz`. The installed app opens from the system application menu; the portable package uses `NekoKEM-GUI.sh`. Icons directly reuse the existing square PNG artwork with transparent outer white areas; README keeps its rounded display image.
+
+Builds and native CI use Ubuntu 24.04. Running requires system GTK3, WebKitGTK 4.1 and compatible glibc; portable GUI packages retain these runtime dependencies. OpenSSL 4.0.3 is statically linked with hidden symbols to avoid interposing on WebKit's system TLS libraries, retaining assembly, threads, Fortify, stack protection, PIE and full RELRO. Linux permissions, authenticated commit and cancellation cleanup reuse the CLI/Core. Core 3.1, NKEM v3, NKPR v1, KDF parameters and 64 KiB streaming are unchanged. See [Linux installation and building](desktop/README.md#linux-installation-and-build--linux-安装与构建) and [Linux GUI security boundaries](desktop/LINUX-SECURITY.md).
+
+These Linux GUI packages come from CI and subsequent Release builds, keeping version `3.3.0`; the published v3.3.0 has no Linux GUI assets. Existing static Linux CLI packages remain available. Native window tests use X11 and do not establish testing on every Linux distribution or physical Wayland session.
+
 ## Language settings
 
-Android, Windows/macOS GUI and the CLI support Simplified Chinese (`zh-CN`), Traditional Chinese (`zh-TW`), English (`en`), Japanese (`ja`), and Korean (`ko`). The default follows the system; unsupported languages fall back to English. Chinese CN/SG regions use Simplified Chinese; TW/HK/MO use Traditional Chinese. Other regions of en/ja/ko match their language. Android responds to system-language changes when following the system. The CLI and desktop GUI detect language on startup; the GUI can also refresh detection by choosing Follow system in its language selector.
+Android, Windows/macOS/Linux GUI and the CLI support Simplified Chinese (`zh-CN`), Traditional Chinese (`zh-TW`), English (`en`), Japanese (`ja`), and Korean (`ko`). The default follows the system; unsupported languages fall back to English. Chinese CN/SG regions use Simplified Chinese; TW/HK/MO use Traditional Chinese. Other regions of en/ja/ko match their language. Android responds to system-language changes when following the system. The CLI and desktop GUI detect language on startup; the GUI can also refresh detection by choosing Follow system in its language selector.
 
 On Android, open **Settings → Language** and select **Follow system** or a language. The choice persists and the interface refreshes. Android 13+ system application-language settings share the same preference; older systems use a private preference. Language changes are available after active file operations finish. Scrollable pages and dialogs accommodate longer text and larger fonts.
 

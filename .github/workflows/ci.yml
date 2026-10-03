@@ -902,3 +902,95 @@ jobs:
             ${{ runner.temp }}/macos-gui/gui-SHA256SUMS.txt
           retention-days: 14
           if-no-files-found: error
+
+  linux-gui:
+    name: Linux ${{ matrix.arch }} GUI build and native tests
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: x86_64
+            runner: ubuntu-24.04
+          - arch: aarch64
+            runner: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '24'
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: stable
+          targets: ${{ matrix.arch }}-unknown-linux-gnu
+      - name: Install native GTK/WebKit and desktop test tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends \
+            build-essential ca-certificates curl perl pkg-config binutils \
+            libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev \
+            patchelf xvfb xauth xdotool openbox dbus-x11
+      - name: Identify native compiler and libc
+        id: compiler
+        run: |
+          set -Eeuo pipefail
+          test "$(uname -m)" = '${{ matrix.arch }}'
+          identity=$({ gcc --version; getconf GNU_LIBC_VERSION; } | sha256sum | cut -d ' ' -f 1)
+          echo "identity=$identity" >> "$GITHUB_OUTPUT"
+          echo "NEKOKEM_OPENSSL_PREFIX=$RUNNER_TEMP/linux-gui-openssl" >> "$GITHUB_ENV"
+      - uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}/linux-gui-openssl
+          key: linux-gui-${{ matrix.arch }}-openssl-4.0.3-${{ steps.compiler.outputs.identity }}-${{ hashFiles('desktop/scripts/build-linux-openssl.sh') }}
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: desktop/src-tauri
+          cache-on-failure: true
+      - name: Build and verify the pinned static PIC dependency
+        run: bash desktop/scripts/build-linux-openssl.sh '${{ matrix.arch }}' "$NEKOKEM_OPENSSL_PREFIX"
+      - name: Install and build the locked shared frontend
+        working-directory: desktop
+        run: |
+          npm ci --ignore-scripts
+          npm run build
+      - name: Run actual Rust to C17 Core integration and private staging tests
+        working-directory: desktop/src-tauri
+        run: TAURI_CONFIG="$(cat tauri.linux.conf.json)" cargo test --locked --target '${{ matrix.arch }}-unknown-linux-gnu' --bin nekokem-gui -- --test-threads=1
+      - name: Build the native Linux desktop package
+        working-directory: desktop
+        run: npm run tauri -- build --target '${{ matrix.arch }}-unknown-linux-gnu' --config src-tauri/tauri.linux.conf.json --bundles deb -- --locked
+      - name: Verify ELF hardening and package the exact installed application
+        run: |
+          python3 desktop/scripts/package-linux-gui.py \
+            --bundle-dir 'desktop/src-tauri/target/${{ matrix.arch }}-unknown-linux-gnu/release/bundle' \
+            --output "$RUNNER_TEMP/linux-gui" --arch '${{ matrix.arch }}' \
+            --openssl-prefix "$NEKOKEM_OPENSSL_PREFIX" --source-sha "$GITHUB_SHA"
+      - name: Verify the actual sandboxed WebKit window and normal close
+        run: |
+          dbus-run-session -- xvfb-run -a -s '-screen 0 1280x1024x24' \
+            python3 desktop/tests/launch_linux.py \
+            'desktop/src-tauri/target/${{ matrix.arch }}-unknown-linux-gnu/release/nekokem-gui' \
+            --log "$RUNNER_TEMP/linux-gui/startup.log"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: linux-gui-${{ matrix.arch }}-native-evidence
+          path: |
+            ${{ runner.temp }}/linux-gui/gui-build-metadata.json
+            ${{ runner.temp }}/linux-gui/startup.log
+            desktop/src-tauri/Cargo.lock
+          retention-days: 14
+      - uses: actions/upload-artifact@v4
+        with:
+          name: NekoKEM-linux-${{ matrix.arch }}-gui
+          path: |
+            ${{ runner.temp }}/linux-gui/NekoKEM-linux-${{ matrix.arch }}-GUI.tar.gz
+            ${{ runner.temp }}/linux-gui/NekoKEM-linux-${{ matrix.arch }}-GUI.deb
+            ${{ runner.temp }}/linux-gui/gui-SHA256SUMS.txt
+          compression-level: 0
+          retention-days: 14
+          if-no-files-found: error

@@ -297,3 +297,75 @@ jobs:
             ${{ runner.temp }}/macos-gui/gui-SHA256SUMS.txt
           retention-days: 14
           if-no-files-found: error
+
+  build-linux-gui:
+    name: Build Linux ${{ matrix.arch }} GUI
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: x86_64
+            runner: ubuntu-24.04
+          - arch: aarch64
+            runner: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '24'
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: stable
+          targets: ${{ matrix.arch }}-unknown-linux-gnu
+      - name: Install native GTK/WebKit build tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends \
+            build-essential ca-certificates curl perl pkg-config binutils \
+            libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev patchelf
+      - name: Identify native compiler and libc
+        id: compiler
+        run: |
+          set -Eeuo pipefail
+          test "$(uname -m)" = '${{ matrix.arch }}'
+          identity=$({ gcc --version; getconf GNU_LIBC_VERSION; } | sha256sum | cut -d ' ' -f 1)
+          echo "identity=$identity" >> "$GITHUB_OUTPUT"
+          echo "NEKOKEM_OPENSSL_PREFIX=$RUNNER_TEMP/linux-gui-openssl" >> "$GITHUB_ENV"
+      - uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}/linux-gui-openssl
+          key: linux-gui-${{ matrix.arch }}-openssl-4.0.3-${{ steps.compiler.outputs.identity }}-${{ hashFiles('desktop/scripts/build-linux-openssl.sh') }}
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: desktop/src-tauri
+          cache-on-failure: true
+      - name: Build and verify the pinned static PIC dependency
+        run: bash desktop/scripts/build-linux-openssl.sh '${{ matrix.arch }}' "$NEKOKEM_OPENSSL_PREFIX"
+      - name: Install locked frontend dependencies
+        working-directory: desktop
+        run: npm ci --ignore-scripts
+      - name: Build the native Linux desktop package
+        working-directory: desktop
+        run: npm run tauri -- build --target '${{ matrix.arch }}-unknown-linux-gnu' --config src-tauri/tauri.linux.conf.json --bundles deb -- --locked
+      - name: Verify ELF hardening and package the exact installed application
+        run: |
+          python3 desktop/scripts/package-linux-gui.py \
+            --bundle-dir 'desktop/src-tauri/target/${{ matrix.arch }}-unknown-linux-gnu/release/bundle' \
+            --output "$RUNNER_TEMP/linux-gui" --arch '${{ matrix.arch }}' \
+            --openssl-prefix "$NEKOKEM_OPENSSL_PREFIX" --source-sha "$GITHUB_SHA"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: NekoKEM-linux-${{ matrix.arch }}-gui
+          path: |
+            ${{ runner.temp }}/linux-gui/NekoKEM-linux-${{ matrix.arch }}-GUI.tar.gz
+            ${{ runner.temp }}/linux-gui/NekoKEM-linux-${{ matrix.arch }}-GUI.deb
+            ${{ runner.temp }}/linux-gui/gui-SHA256SUMS.txt
+            ${{ runner.temp }}/linux-gui/gui-build-metadata.json
+          compression-level: 0
+          retention-days: 14
+          if-no-files-found: error

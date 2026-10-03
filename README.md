@@ -74,7 +74,7 @@ make -C linux
 
 可执行文件位于 `linux/nekokem`。下文的 `./nekokem` 示例假定当前目录为 `linux/`，或已将该可执行文件复制到当前目录。
 
-GitHub Actions 统一使用 [CI](.github/workflows/ci.yml) 和 [Release](.github/workflows/release.yml)。CI 在 PR 和 main 推送时构建并执行所有平台的安全、语言、互操作、性能和 GUI 回归检查；Release 通过手动运行或 `v*` 标签构建 Linux 归档、Android 签名 APK、Windows CLI/GUI 压缩包及 macOS arm64 包。签名身份与构建产物说明见[构建工作流文档](release/README.md)。
+GitHub Actions 统一使用 [CI](.github/workflows/ci.yml) 和 [Release](.github/workflows/release.yml)。CI 在 PR 和 main 推送时构建并执行所有平台的安全、语言、互操作、性能和 GUI 回归检查；Release 通过手动运行或 `v*` 标签构建 Linux CLI 归档和 GUI 安装/便携包、Android 签名 APK、Windows CLI/GUI 压缩包及 macOS arm64 包。签名身份与构建产物说明见[构建工作流文档](release/README.md)。
 
 ## Windows CLI 与 GUI
 
@@ -92,9 +92,17 @@ CLI 与 Linux 共用参数解析、五项菜单和语言目录。GUI 使用系�
 
 macOS 文件层保留严格的所有者、权限、符号链接和硬链接检查，受保护文件与目录只允许空或 deny-only 扩展 ACL，并检查 APFS/HFS+ 大小写及 Unicode 名称别名。普通输出文件要求 `fsync` 与 `F_FULLFSYNC`，提交后要求父目录 `fsync`，失败时不静默降级；详细限制与测试边界见 [macOS 文件安全设计](macos/SECURITY-DESIGN.md)。Core 3.1、NKEM v3、NKPR v1、密码参数及 64 KiB 流式分块不变。包只有 ad-hoc 签名，未使用 Developer ID，也未进行 Apple 公证；这不能证明发布者身份或保证通过 Gatekeeper。
 
+## Linux GUI
+
+Linux 原生 GUI 支持 `x86_64` 与 `aarch64`（ARM64），复用 Rust + Tauri 2 + Vue 3 + TypeScript 界面、五语言自动检测、原生文件选择、进度/取消、键盘导航和遵循系统减少动态效果设置的动画。每种架构提供 `NekoKEM-linux-<架构>-GUI.deb` 与 `NekoKEM-linux-<架构>-GUI.tar.gz`，安装后可从系统应用菜单打开；便携包使用 `NekoKEM-GUI.sh` 启动。图标直接使用现有透明外部白色区域的方形 PNG，README 仍用圆角展示图。
+
+构建与原生 CI 基线为 Ubuntu 24.04。运行需要系统 GTK3、WebKitGTK 4.1 和兼容 glibc；GUI 便携包仍依赖这些系统库。OpenSSL 4.0.3 静态链接并隐藏符号，避免影响 WebKit 系统 TLS 库，保留汇编、线程、Fortify、栈保护、PIE 和完整 RELRO。Linux 文件权限、认证后提交及取消清理沿用 CLI/Core，Core 3.1、NKEM v3、NKPR v1、KDF 参数与 64 KiB 流式处理不变。详见 [Linux 安装与构建](desktop/README.md#linux-installation-and-build--linux-安装与构建) 和 [Linux GUI 安全边界](desktop/LINUX-SECURITY.md)。
+
+这些 Linux GUI 包来自 CI 和后续 Release 构建，版本保持 `3.3.0`；已发布的 v3.3.0 尚无 Linux GUI 附件。现有静态 Linux CLI 包继续保留。原生窗口测试使用 X11 会话，不代表已验证所有 Linux 发行版或 Wayland 实机。
+
 ## 语言设置
 
-Android、Windows/macOS GUI 和 CLI 支持简体中文（`zh-CN`）、繁体中文（`zh-TW`）、英语（`en`）、日语（`ja`）和韩语（`ko`）。默认跟随系统；不支持的语言回退英语。中文 CN/SG 地区匹配简体，TW/HK/MO 匹配繁体；en/ja/ko 的其他地区匹配对应语言。Android 跟随系统时会响应系统语言变化；CLI 和桌面 GUI 启动时检测语言，GUI 也可在语言选择器中重新选择跟随系统。
+Android、Windows/macOS/Linux GUI 和 CLI 支持简体中文（`zh-CN`）、繁体中文（`zh-TW`）、英语（`en`）、日语（`ja`）和韩语（`ko`）。默认跟随系统；不支持的语言回退英语。中文 CN/SG 地区匹配简体，TW/HK/MO 匹配繁体；en/ja/ko 的其他地区匹配对应语言。Android 跟随系统时会响应系统语言变化；CLI 和桌面 GUI 启动时检测语言，GUI 也可在语言选择器中重新选择跟随系统。
 
 Android 在 **设置 → 语言** 中选择 **跟随系统** 或指定语言。选择会持久保存并刷新界面。Android 13 及以上与系统级应用语言设置共用同一偏好；旧系统使用私有偏好设置。文件操作结束后可切换语言。页面和对话框支持滚动，以容纳长文本及较大字体。
 

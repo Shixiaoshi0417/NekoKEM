@@ -1,0 +1,27 @@
+# Linux GUI 安全边界 / Linux GUI security boundary
+
+Linux x86_64 与 ARM64 GUI 使用现有 Rust + Tauri 2 + Vue 3 + TypeScript 界面和同一 C17 Core。Core 3.1、NKEM v3、NKPR v1、X448 + ML-KEM-1024、HKDF-SHA512、Argon2id 参数、AES-256-GCM、AAD、指纹和 GCM 限额不变。文件仍按 64 KiB 分块流式处理，不缓存解锁后的私钥，也不降低 KDF 成本。
+
+私有文件沿用 Linux CLI 的当前用户所有、普通文件、`0600`、单个硬链接和符号链接拒绝策略；私有目录要求 `0700`。粘贴的密钥最多 1 MiB，每行最多 16384 UTF-8 字节，口令最多 1024 UTF-8 字节。密钥暂存于新建的 `0700` 目录，通过目录描述符和 `O_EXCL | O_NOFOLLOW | O_CLOEXEC` 创建 `0600` 文件，检查所有者、文件类型与硬链接数量，再写入并要求 `fsync` 成功。清理同样拒绝不安全目录、符号链接和额外硬链接，失败会报告。
+
+Core 沿用认证后提交、目标目录中的私有暂存、普通文件和父目录 `fsync`、失败回滚以及取消清理。Linux 的权限策略依赖 POSIX mode；没有添加 macOS 的扩展 ACL 策略或 Windows 的祖先目录固定机制。既有 POSIX 路径层不固定所有祖先目录，不能宣称排除了同一 UID 恶意进程替换父目录。管理员、能够读取进程内存的主体、不能兑现同步语义的存储设备也不在常规权限隔离保证内。配对公私钥提交不是跨文件崩溃原子事务；进程被强制终止可能留下当前用户可读的暂存明文，删除不保证物理擦除。
+
+GUI 只加载包内页面，使用 WebKitGTK 的临时数据存储和原有 CSP。前端只获得列出的 Rust 命令与原生文件对话框权限，没有通用文件系统、shell、远程页面或任意进程接口；发布构建不开放开发者工具。WebKit 使用系统更新的 GTK/WebKitGTK 4.1 运行库，以普通用户启动，不关闭 WebKit 沙箱。窗口关闭和退出会请求取消并等待 Core 清理；生成密钥会安全完成后退出。表单和输入控件清除敏感内容，Rust 使用 `Zeroizing`，Core 清理敏感缓冲区；JavaScript/IPC 临时字符串副本无法保证可靠清零，也不保证交换区或浏览器堆的物理擦除。
+
+固定 OpenSSL 4.0.3 以 PIC 静态链接，保留汇编加速、线程、栈保护和 Fortify。链接器隐藏静态 OpenSSL 与 Core 符号，防止它们替代 WebKit 系统 TLS 库的符号。构建检查 ELF 原生架构、PIE、完整 RELRO、不可执行栈、没有 RPATH/RUNPATH/TEXTREL、没有直接动态 OpenSSL 依赖以及零 OpenSSL 动态导出。系统 WebKit 的传递依赖可以包含由发行版维护的其他版本 OpenSSL，它不用于 Core 加密。
+
+原生 CI 在 Ubuntu 24.04 的 x86_64 与 ARM64 runner 上执行实际 Rust/Core 加解密、错误口令、取消和私钥暂存权限/链接检查，并在 Xvfb + DBus 会话中检查真实窗口、WebKit 页面加载、设置 IPC 和正常关闭。既有 Linux Core 的 ASan/UBSan/LSan、文件故障注入、互操作和性能门槛继续保留。Release 只构建，保留依赖来源、运行时版本/线程、ELF、图标、许可证和包哈希检查。便携包仍依赖系统 GTK3、WebKitGTK 4.1 和兼容 glibc；没有宣称覆盖所有 Linux 发行版或完成 Wayland 实机测试。Android 签名材料不进入 Linux 包。本项目尚未经过独立专业安全审计，不应用于保护重要或敏感数据。
+
+---
+
+The x86_64 and ARM64 Linux GUI uses the existing Rust + Tauri 2 + Vue 3 + TypeScript frontend and the same C17 Core. Core 3.1, NKEM v3, NKPR v1, X448 + ML-KEM-1024, HKDF-SHA512, Argon2id parameters, AES-256-GCM, AAD, fingerprints and GCM limits are unchanged. Files still stream in 64 KiB chunks. No unlocked-key cache or weaker KDF is introduced.
+
+Private files retain Linux CLI checks for current-user ownership, regular files, mode `0600`, one hard link and rejection of symbolic links; private directories require `0700`. Pasted keys are capped at 1 MiB and 16384 UTF-8 bytes per line; passwords at 1024 UTF-8 bytes. Staging creates a new `0700` directory and uses its descriptor with `O_EXCL | O_NOFOLLOW | O_CLOEXEC` to create a `0600` file. Ownership, type and link count are checked before writing and requiring successful `fsync`. Cleanup also rejects unsafe directories, symlinks and extra hard links, and reports failure.
+
+Core retains authenticated commit, private temporary files in the destination directory, regular-file/parent-directory `fsync`, rollback and cancellation cleanup. Linux permission checks use POSIX mode; the port adds neither macOS extended ACL policy nor Windows ancestor-directory pinning. The existing POSIX path layer does not pin every ancestor and cannot exclude malicious same-UID processes replacing parents. Administrators, parties able to read process memory and storage that does not honor sync semantics remain outside normal permission guarantees. Paired key commits are not cross-file crash atomic. Forced process termination may leave current-user-only temporary plaintext; deletion is not physical erasure.
+
+The GUI loads only bundled pages, using WebKitGTK ephemeral storage and the existing CSP. The frontend receives only the listed Rust commands and native file-dialog capabilities, without general filesystem, shell, remote-page or arbitrary-process access. Production developer tools are unavailable. System-maintained GTK/WebKitGTK 4.1 runs as an ordinary user without disabling the WebKit sandbox. Closing or quitting requests cancellation and waits for Core cleanup; key generation completes safely before exit. Forms and live inputs discard secrets, Rust uses `Zeroizing`, and Core clears sensitive buffers. Temporary JavaScript/IPC string copies cannot be reliably zeroized; swap and browser-heap physical erasure are not guaranteed.
+
+Pinned OpenSSL 4.0.3 is statically linked as PIC, retaining assembly, threads, stack protection and Fortify. The linker hides static OpenSSL and Core symbols to prevent interposition on WebKit's system TLS libraries. Builds check native ELF architecture, PIE, full RELRO, a nonexecutable stack, no RPATH/RUNPATH/TEXTREL, no direct dynamic OpenSSL dependency and zero OpenSSL dynamic exports. WebKit's transitive dependencies may include a distribution-maintained OpenSSL version, which is not used for Core cryptography.
+
+Native CI runs real Rust/Core encryption/decryption, wrong-password, cancellation and private-staging permission/link checks on Ubuntu 24.04 x86_64 and ARM64. Xvfb + DBus tests observe the actual window, WebKit page load, settings IPC and normal close. Existing Linux Core ASan/UBSan/LSan, filesystem fault injection, interoperability and performance gates remain. Release builds only, retaining dependency-source, runtime/threading, ELF, icon, license and package-hash checks. Portable packages still require system GTK3, WebKitGTK 4.1 and compatible glibc. This does not claim every Linux distribution or completed native Wayland testing. Android signing material does not enter Linux packages. The project has no independent professional security audit and must not protect important or sensitive data.

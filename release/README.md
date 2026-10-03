@@ -7,10 +7,13 @@ GitHub Actions has two workflow definitions:
   suite, x86_64/aarch64 release-package and installer tests, Android JVM and
   API 26/35 device tests, native Windows CLI security/interoperability/performance
   checks, Windows GUI frontend/Rust/Core/EXE-launch checks, and native macOS
-  arm64 CLI/Core/sanitizer/filesystem/interoperability and GUI/app/package checks.
+  arm64 CLI/Core/sanitizer/filesystem/interoperability and GUI/app/package checks,
+  plus Linux x86_64/ARM64 GUI Rust/Core, private staging, ELF/package and actual
+  WebKit window/normal-close checks.
 - `release.yml` (`Release`) builds artifacts on `v*` tags and manual runs. It
   produces Linux x86_64/aarch64 archives, a signed Android arm64 APK, and Windows
-  CLI/GUI packages and macOS arm64 CLI/GUI packages. Regression suites run in CI. Source checksums, dependency
+  CLI/GUI packages, macOS arm64 CLI/GUI packages and Linux x86_64/ARM64 GUI
+  `.deb`/portable archives. Regression suites run in CI. Source checksums, dependency
   versions, compiler hardening, binary imports/protections, SDK loader signature,
   icons, APK identity/signature and package checksums remain build requirements.
 
@@ -99,3 +102,31 @@ and [GUI build instructions](../desktop/README.md). A future public release must
 use the successful Release artifacts for its exact CI-validated source and add
 every published macOS package to the top-level `SHA256SUMS.txt`; do not reuse a
 pre-port build or imply that the existing v3.3.0 assets include macOS support.
+
+## Linux GUI build artifacts
+
+Linux GUI version remains `3.3.0`, using native Ubuntu 24.04 x86_64 and ARM64
+build/test runners. The published v3.3.0 has no Linux GUI assets. CI and subsequent
+Release runs produce, for each `x86_64`/`aarch64` architecture:
+
+- `NekoKEM-linux-<architecture>-GUI.deb`: native application, desktop entry,
+  existing transparent square PNG icons and project/OpenSSL licenses.
+- `NekoKEM-linux-<architecture>-GUI.tar.gz`: the exact installed application
+  tree, executable `NekoKEM-GUI.sh`, documentation, licenses, dependency lockfiles,
+  build metadata and inner checksums.
+- `gui-SHA256SUMS.txt`: hashes of both distributable packages.
+
+The GUI uses system GTK3, WebKitGTK 4.1 and compatible glibc; the portable archive
+does not bundle these runtimes. This differs from the existing fully static CLI
+archives, whose build path is retained. Core uses pinned static PIC OpenSSL 4.0.3
+with assembly/threads and hidden symbols to isolate it from system WebKit TLS.
+Native ELF architecture, PIE/full RELRO/nonexecutable stack, no RPATH/TEXTREL or
+OpenSSL dynamic exports, licenses, unchanged icons and hashes remain Release
+build requirements. Actual Rust/Core/private-file and sandboxed WebKit X11
+startup/normal-close tests run only in CI. Other distributions and native Wayland
+are not established by these tests. Android signing material is not used.
+
+See [Linux GUI installation and building](../desktop/README.md#linux-installation-and-build--linux-安装与构建)
+and [security boundaries](../desktop/LINUX-SECURITY.md). Future public releases
+must use artifacts from the exact successful CI-validated source and include
+every published Linux GUI package in top-level release checksums.
