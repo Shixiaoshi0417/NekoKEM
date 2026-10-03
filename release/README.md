@@ -111,10 +111,13 @@ Release runs produce, for each `x86_64`/`aarch64` architecture:
 
 - `NekoKEM-linux-<architecture>-GUI.deb`: native application, desktop entry,
   existing transparent square PNG icons and project/OpenSSL licenses.
+- `NekoKEM-linux-<architecture>-GUI.rpm`: native RPM with the same application
+  resources, release `1` and shared-library capability dependencies, including
+  glibc 2.39 or newer. It is not developer GPG signed.
 - `NekoKEM-linux-<architecture>-GUI.tar.gz`: the exact installed application
   tree, executable `NekoKEM-GUI.sh`, documentation, licenses, dependency lockfiles,
   build metadata and inner checksums.
-- `gui-SHA256SUMS.txt`: hashes of both distributable packages.
+- `gui-SHA256SUMS.txt`: hashes of all three distributable packages.
 
 The GUI uses system GTK3, WebKitGTK 4.1 and glibc 2.39 or newer; the portable archive
 does not bundle these runtimes. This differs from the existing fully static CLI
@@ -122,8 +125,12 @@ archives, whose build path is retained. Core uses pinned static PIC OpenSSL 4.0.
 with assembly/threads and hidden symbols to isolate it from system WebKit TLS.
 Native ELF architecture, PIE/full RELRO/nonexecutable stack, no RPATH/TEXTREL or
 OpenSSL dynamic exports, licenses, unchanged icons and hashes remain Release
-build requirements. Actual `.deb` installation, Rust/Core/private-file and
-sandboxed WebKit X11 startup/normal-close tests run only in CI. Other distributions and native Wayland
+build requirements. RPM validation additionally checks declared ELF dependencies,
+digests, public file permissions, absence of installation scripts and byte-identical
+DEB resources; only Tauri's bundle-format marker differs in the executable.
+Actual `.deb` installation on Ubuntu 24.04, `.rpm` installation through DNF in
+native Fedora 44 containers, Rust/Core/private-file and sandboxed WebKit X11
+startup/normal-close tests run only in CI. Other distributions and native Wayland
 are not established by these tests. Android signing material is not used.
 
 See [Linux GUI installation and building](../desktop/README.md#linux-installation-and-build--linux-安装与构建)

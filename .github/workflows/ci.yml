@@ -933,7 +933,7 @@ jobs:
           sudo apt-get install --yes --no-install-recommends \
             build-essential ca-certificates curl perl pkg-config binutils \
             libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev \
-            patchelf xvfb xauth xdotool openbox dbus-x11
+            patchelf rpm xvfb xauth xdotool openbox dbus-x11
       - name: Identify native compiler and libc
         id: compiler
         run: |
@@ -962,7 +962,7 @@ jobs:
         run: TAURI_CONFIG="$(cat tauri.linux.conf.json)" cargo test --locked --target '${{ matrix.arch }}-unknown-linux-gnu' --bin nekokem-gui -- --test-threads=1
       - name: Build the native Linux desktop package
         working-directory: desktop
-        run: npm run tauri -- build --target '${{ matrix.arch }}-unknown-linux-gnu' --config src-tauri/tauri.linux.conf.json --bundles deb -- --locked
+        run: npm run tauri -- build --target '${{ matrix.arch }}-unknown-linux-gnu' --config src-tauri/tauri.linux.conf.json --bundles deb,rpm -- --locked
       - name: Verify ELF hardening and package the exact installed application
         run: |
           python3 desktop/scripts/package-linux-gui.py \
@@ -977,6 +977,16 @@ jobs:
             python3 desktop/tests/launch_linux.py \
             /usr/bin/nekokem-gui \
             --log "$RUNNER_TEMP/linux-gui/startup.log"
+      - name: Install and launch the native RPM on Fedora 44
+        run: |
+          set -Eeuo pipefail
+          mkdir -p "$RUNNER_TEMP/linux-gui/rpm-evidence"
+          docker run --rm \
+            --mount "type=bind,src=$GITHUB_WORKSPACE/desktop/tests,dst=/nekokem-tests,readonly" \
+            --mount "type=bind,src=$RUNNER_TEMP/linux-gui,dst=/packages,readonly" \
+            --mount "type=bind,src=$RUNNER_TEMP/linux-gui/rpm-evidence,dst=/evidence" \
+            fedora:44 bash /nekokem-tests/install_rpm_fedora.sh \
+            '/packages/NekoKEM-linux-${{ matrix.arch }}-GUI.rpm' /evidence "$(id -u)"
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -984,6 +994,7 @@ jobs:
           path: |
             ${{ runner.temp }}/linux-gui/gui-build-metadata.json
             ${{ runner.temp }}/linux-gui/startup.log
+            ${{ runner.temp }}/linux-gui/rpm-evidence/rpm-startup.log
             desktop/src-tauri/Cargo.lock
           retention-days: 14
       - uses: actions/upload-artifact@v4
@@ -992,6 +1003,7 @@ jobs:
           path: |
             ${{ runner.temp }}/linux-gui/NekoKEM-linux-${{ matrix.arch }}-GUI.tar.gz
             ${{ runner.temp }}/linux-gui/NekoKEM-linux-${{ matrix.arch }}-GUI.deb
+            ${{ runner.temp }}/linux-gui/NekoKEM-linux-${{ matrix.arch }}-GUI.rpm
             ${{ runner.temp }}/linux-gui/gui-SHA256SUMS.txt
           compression-level: 0
           retention-days: 14

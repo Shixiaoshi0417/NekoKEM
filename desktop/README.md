@@ -126,6 +126,21 @@ uses the existing square app icon.
 sudo apt install ./NekoKEM-linux-x86_64-GUI.deb
 ```
 
+Fedora 44 uses the native `.rpm`; DNF resolves GTK3/WebKitGTK 4.1 and the
+versioned glibc requirement from declared library capabilities. Change the
+architecture to `aarch64` for ARM64. Fedora 可安装 RPM，并从应用菜单启动。
+
+```sh
+sudo dnf install ./NekoKEM-linux-x86_64-GUI.rpm
+```
+
+The RPM is built directly by Tauri, with the same application, desktop entry,
+icons and licenses as the DEB; only Tauri's three-byte bundle-format marker
+differs in the executable. It is not developer GPG signed. Verify package
+SHA-256 hashes; these and RPM digests check integrity, not developer identity.
+Only generated public resource copies have their permissions normalized to
+`0644`; private keys and configuration retain `0600`/`0700`.
+
 For the portable archive, install system dependencies, extract it and run the
 launcher. Change `x86_64` to `aarch64` for ARM64. A graphical session is required;
 the archive does not bundle GTK, WebKit or glibc; the supported baseline requires
@@ -149,7 +164,7 @@ GUI 在 C/POSIX 环境下仍可手动选择五种语言。
 Build on the native Ubuntu 24.04 architecture with Node 24 and Rust stable:
 
 ```sh
-sudo apt install build-essential curl perl pkg-config libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev patchelf
+sudo apt install build-essential curl perl pkg-config libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev patchelf rpm
 architecture=$(uname -m)
 bash desktop/scripts/build-linux-openssl.sh "$architecture" /absolute/path/to/pinned-linux-gui-openssl
 export NEKOKEM_OPENSSL_PREFIX=/absolute/path/to/pinned-linux-gui-openssl
@@ -159,7 +174,7 @@ npm ci --ignore-scripts
 npm test
 npm run build
 TAURI_CONFIG="$(cat src-tauri/tauri.linux.conf.json)" cargo test --locked --target "$architecture-unknown-linux-gnu" --manifest-path src-tauri/Cargo.toml --bin nekokem-gui -- --test-threads=1
-npm run tauri -- build --target "$architecture-unknown-linux-gnu" --config src-tauri/tauri.linux.conf.json --bundles deb -- --locked
+npm run tauri -- build --target "$architecture-unknown-linux-gnu" --config src-tauri/tauri.linux.conf.json --bundles deb,rpm -- --locked
 cd ..
 python3 desktop/scripts/package-linux-gui.py \
   --bundle-dir "desktop/src-tauri/target/$architecture-unknown-linux-gnu/release/bundle" \
@@ -171,10 +186,14 @@ The helper verifies the official OpenSSL 4.0.3 source checksum and builds native
 static PIC libcrypto with assembly/threads, Fortify and stack protection. Core and
 OpenSSL symbols stay hidden from WebKit's dynamic TLS libraries. Packaging checks
 ELF PIE/full RELRO/nonexecutable stack, dependencies, licenses, the unchanged PNG
-icon, desktop entry and archive hashes. CI installs the `.deb` and runs actual
-Rust/Core and native X11 WebKit startup/normal-close tests on both architectures
-with sandboxing retained.
-Wayland and other distributions have not received equivalent native testing.
+icon, desktop entry and hashes of all three packages. RPM validation checks
+native architecture, digests, every ELF dependency, installed file permissions,
+absence of installation scripts and matching DEB resources. CI installs the
+`.deb` on Ubuntu 24.04 and the `.rpm` through DNF in native Fedora 44 containers,
+then runs actual X11 WebKit startup/normal-close checks as ordinary users on both
+architectures with sandboxing retained. Rust/Core and private-file tests remain.
+Wayland and distributions other than this Ubuntu/Fedora baseline have not
+received equivalent native testing.
 See [Linux GUI security boundaries](LINUX-SECURITY.md).
 
 ## Security boundary / 安全边界

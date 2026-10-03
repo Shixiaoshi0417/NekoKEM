@@ -20,8 +20,29 @@ fn main() {
         // source is the same verified prefix used to link static libcrypto.
         let resources = PathBuf::from(env::var("CARGO_MANIFEST_DIR").unwrap()).join("build-resources");
         fs::create_dir_all(&resources).expect("Cannot create desktop license resources");
-        fs::copy(prefix.join("LICENSE.txt"), resources.join("openssl-LICENSE.txt"))
-            .expect("Pinned OpenSSL prefix must include its LICENSE.txt");
+        let mut public_resources = vec![(prefix.join("LICENSE.txt"), "openssl-LICENSE.txt")];
+        if linux {
+            public_resources.extend([
+                (root.join("LICENSE"), "NekoKEM-LICENSE.txt"),
+                (root.join("windows/icons/32x32.png"), "linux-32x32.png"),
+                (root.join("windows/icons/128x128.png"), "linux-128x128.png"),
+                (root.join("windows/icons/128x128@2x.png"), "linux-128x128@2x.png"),
+            ]);
+        }
+        for (source, name) in public_resources {
+            println!("cargo:rerun-if-changed={}", source.display());
+            let destination = resources.join(name);
+            fs::copy(&source, &destination).expect("Cannot copy public desktop resource");
+            // RPM inherits source modes. Normalize only generated public
+            // copies, even when the checkout has a private umask; never touch
+            // source files or the Core's private key/config permissions.
+            #[cfg(unix)]
+            if linux {
+                use std::os::unix::fs::PermissionsExt;
+                fs::set_permissions(&destination, fs::Permissions::from_mode(0o644))
+                    .expect("Cannot set public desktop resource permissions");
+            }
+        }
     }
     let mut build = cc::Build::new();
     build.include(root.join("core/include")).include(root.join("core/src"))
