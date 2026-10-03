@@ -66,7 +66,8 @@ def verify_rpm(rpm, deb_stage, arch, prefix):
         stage = Path(directory)
         binary = stage/'usr/bin/nekokem-gui'
         metadata = checker.verify(binary, arch, prefix)
-        assert {f'{name}()(64bit)' for name in metadata['elf_dependencies']} <= requirements
+        missing_dependencies = {f'{name}()(64bit)' for name in metadata['elf_dependencies']} - requirements
+        assert not missing_dependencies, f'RPM lacks ELF dependencies: {sorted(missing_dependencies)}'
         deb_binary = (deb_stage/'usr/bin/nekokem-gui').read_bytes()
         rpm_binary = binary.read_bytes()
         assert len(deb_binary) == len(rpm_binary)

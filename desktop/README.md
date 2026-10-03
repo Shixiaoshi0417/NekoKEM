@@ -174,7 +174,7 @@ npm ci --ignore-scripts
 npm test
 npm run build
 TAURI_CONFIG="$(cat src-tauri/tauri.linux.conf.json)" cargo test --locked --target "$architecture-unknown-linux-gnu" --manifest-path src-tauri/Cargo.toml --bin nekokem-gui -- --test-threads=1
-npm run tauri -- build --target "$architecture-unknown-linux-gnu" --config src-tauri/tauri.linux.conf.json --bundles deb,rpm -- --locked
+bash scripts/build-linux-gui.sh "$architecture"
 cd ..
 python3 desktop/scripts/package-linux-gui.py \
   --bundle-dir "desktop/src-tauri/target/$architecture-unknown-linux-gnu/release/bundle" \
@@ -194,6 +194,7 @@ then runs actual X11 WebKit startup/normal-close checks as ordinary users on bot
 architectures with sandboxing retained. Rust/Core and private-file tests remain.
 Wayland and distributions other than this Ubuntu/Fedora baseline have not
 received equivalent native testing.
+The build wrapper adds AArch64's dynamic-loader capability only to ARM64 RPMs.
 See [Linux GUI security boundaries](LINUX-SECURITY.md).
 
 ## Security boundary / 安全边界

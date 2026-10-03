@@ -351,7 +351,7 @@ jobs:
         run: npm ci --ignore-scripts
       - name: Build the native Linux desktop package
         working-directory: desktop
-        run: npm run tauri -- build --target '${{ matrix.arch }}-unknown-linux-gnu' --config src-tauri/tauri.linux.conf.json --bundles deb,rpm -- --locked
+        run: bash scripts/build-linux-gui.sh '${{ matrix.arch }}'
       - name: Verify ELF hardening and package the exact installed application
         run: |
           python3 desktop/scripts/package-linux-gui.py \
