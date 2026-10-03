@@ -10,6 +10,12 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
+#ifdef __APPLE__
+#include <grp.h>
+#include <membership.h>
+#include <sys/acl.h>
+#include <uuid/uuid.h>
+#endif
 #include <sys/types.h>
 #include <unistd.h>
 
@@ -361,6 +367,37 @@ cleanup:
     return success;
 }
 
+static int test_single_file_flush_failure(const char *root, FileTestFault fault)
+{
+    static const unsigned char old_data[] = "old-data";
+    static const unsigned char new_data[] = "new-data";
+    char output_path[256];
+    AtomicFile output = {0};
+    int success = 0;
+
+    if (!make_path(output_path, sizeof(output_path), root, "flush.bin") ||
+        !write_plain_file(output_path, old_data, sizeof(old_data), 0600) ||
+        !stage_bytes(&output, output_path, new_data, sizeof(new_data))) {
+        goto cleanup;
+    }
+    file_test_fault_set(fault, 1U);
+    if (atomic_file_commit(&output) != 0) {
+        goto cleanup;
+    }
+    file_test_fault_reset();
+    if (!file_equals(output_path, old_data, sizeof(old_data)) ||
+        has_transaction_artifact(root)) {
+        goto cleanup;
+    }
+    success = 1;
+
+cleanup:
+    file_test_fault_reset();
+    atomic_file_abort(&output);
+    (void)unlink(output_path);
+    return success;
+}
+
 static int test_symlink_output_replacement(const char *root)
 {
     static const unsigned char target_data[] = "target-data";
@@ -519,6 +556,165 @@ cleanup:
     return success;
 }
 
+#ifdef __APPLE__
+static int test_filesystem_alias_rejection(const char *root,
+                                          const char *first_name,
+                                          const char *second_name)
+{
+    static const unsigned char old_data[] = "old-data";
+    static const unsigned char public_data[] = "public";
+    static const unsigned char private_data[] = "private";
+    char first_path[256] = {0};
+    char second_path[256] = {0};
+    AtomicFile first = {0};
+    AtomicFile second = {0};
+    struct stat first_status;
+    struct stat second_status;
+    int success = 0;
+
+    if (!make_path(first_path, sizeof(first_path), root, first_name) ||
+        !make_path(second_path, sizeof(second_path), root, second_name) ||
+        !write_plain_file(first_path, old_data, sizeof(old_data), 0600) ||
+        lstat(first_path, &first_status) != 0) {
+        goto cleanup;
+    }
+    if (lstat(second_path, &second_status) != 0) {
+        if (errno != ENOENT) {
+            goto cleanup;
+        }
+        /* A case-sensitive/normalization-sensitive volume has distinct names. */
+        if (!stage_bytes(&first, first_path, public_data, sizeof(public_data)) ||
+            !stage_bytes(&second, second_path, private_data, sizeof(private_data)) ||
+            !atomic_file_commit_pair(&first, &second) ||
+            !file_equals(first_path, public_data, sizeof(public_data)) ||
+            !file_equals(second_path, private_data, sizeof(private_data))) {
+            goto cleanup;
+        }
+        success = 1;
+        goto cleanup;
+    }
+    if (first_status.st_dev != second_status.st_dev ||
+        first_status.st_ino != second_status.st_ino ||
+        !stage_bytes(&first, first_path, public_data, sizeof(public_data)) ||
+        !stage_bytes(&second, second_path, private_data, sizeof(private_data)) ||
+        atomic_file_commit_pair(&first, &second) != 0 ||
+        !file_equals(first_path, old_data, sizeof(old_data)) ||
+        !file_equals(second_path, old_data, sizeof(old_data)) ||
+        has_transaction_artifact(root) || unlink(first_path) != 0) {
+        goto cleanup;
+    }
+    /* Also reject aliases when neither output existed before the transaction. */
+    if (!stage_bytes(&first, first_path, public_data, sizeof(public_data)) ||
+        !stage_bytes(&second, second_path, private_data, sizeof(private_data)) ||
+        atomic_file_commit_pair(&first, &second) != 0 ||
+        access(first_path, F_OK) == 0 || access(second_path, F_OK) == 0 ||
+        has_transaction_artifact(root)) {
+        goto cleanup;
+    }
+    success = 1;
+
+cleanup:
+    atomic_file_abort(&second);
+    atomic_file_abort(&first);
+    (void)unlink(second_path);
+    (void)unlink(first_path);
+    return success;
+}
+
+static int set_test_acl(const char *path, acl_tag_t tag,
+                        acl_perm_t permission, int inherit)
+{
+    struct group *everyone = getgrnam("everyone");
+    uuid_t qualifier;
+    acl_t acl = acl_init(tag == ACL_UNDEFINED_TAG ? 0 : 1);
+    acl_entry_t entry;
+    acl_permset_t permissions;
+    int success = 0;
+
+    if (acl == NULL) {
+        return 0;
+    }
+    if (tag != ACL_UNDEFINED_TAG) {
+        if (everyone == NULL ||
+            mbr_gid_to_uuid(everyone->gr_gid, qualifier) != 0 ||
+            acl_create_entry(&acl, &entry) != 0 ||
+            acl_set_tag_type(entry, tag) != 0 ||
+            acl_set_qualifier(entry, qualifier) != 0 ||
+            acl_get_permset(entry, &permissions) != 0 ||
+            acl_add_perm(permissions, permission) != 0 ||
+            acl_set_permset(entry, permissions) != 0) {
+            goto cleanup;
+        }
+        if (inherit != 0) {
+            acl_flagset_t flags;
+
+            if (acl_get_flagset_np(entry, &flags) != 0 ||
+                acl_add_flag_np(flags, ACL_ENTRY_FILE_INHERIT) != 0 ||
+                acl_set_flagset_np(entry, flags) != 0) {
+                goto cleanup;
+            }
+        }
+    }
+    success = acl_set_file(path, ACL_TYPE_EXTENDED, acl) == 0;
+
+cleanup:
+    (void)acl_free(acl);
+    return success;
+}
+
+static int test_darwin_acl_validation(const char *root)
+{
+    static const unsigned char contents[] = "acl-test";
+    char file_path[256] = {0};
+    char directory_path[256] = {0};
+    char output_path[256] = {0};
+    unsigned char *bytes = NULL;
+    size_t length = 0U;
+    AtomicFile output = {0};
+    int directory_descriptor = -1;
+    int success = 0;
+
+    if (!make_path(file_path, sizeof(file_path), root, "acl.key") ||
+        !make_path(directory_path, sizeof(directory_path), root, "acl-dir") ||
+        !make_path(output_path, sizeof(output_path), directory_path, "output.key") ||
+        !write_plain_file(file_path, contents, sizeof(contents), 0600) ||
+        mkdir(directory_path, 0700) != 0 ||
+        !set_test_acl(file_path, ACL_EXTENDED_ALLOW, ACL_READ_DATA, 0) ||
+        file_read_sensitive(file_path, sizeof(contents), &bytes, &length) != 0 ||
+        bytes != NULL || length != 0U ||
+        !set_test_acl(file_path, ACL_EXTENDED_DENY, ACL_EXECUTE, 0) ||
+        !file_read_sensitive(file_path, sizeof(contents), &bytes, &length) ||
+        length != sizeof(contents) || memcmp(bytes, contents, length) != 0 ||
+        !set_test_acl(directory_path, ACL_EXTENDED_ALLOW, ACL_LIST_DIRECTORY, 1) ||
+        ensure_directory(directory_path, 0700) != 0 ||
+        atomic_file_open(&output, output_path, 0600) != 0 ||
+        has_transaction_artifact(directory_path) ||
+        !set_test_acl(directory_path, ACL_UNDEFINED_TAG, ACL_READ_DATA, 0) ||
+        !ensure_directory(directory_path, 0700)) {
+        goto cleanup;
+    }
+    directory_descriptor = open(directory_path, O_RDONLY | O_DIRECTORY | O_CLOEXEC);
+    if (directory_descriptor < 0 ||
+        file_sync_regular_fd(directory_descriptor) != -1 || errno != EINVAL) {
+        goto cleanup;
+    }
+    success = 1;
+
+cleanup:
+    if (directory_descriptor >= 0) {
+        (void)close(directory_descriptor);
+    }
+    atomic_file_abort(&output);
+    secure_free(bytes, length);
+    (void)set_test_acl(file_path, ACL_UNDEFINED_TAG, ACL_READ_DATA, 0);
+    (void)set_test_acl(directory_path, ACL_UNDEFINED_TAG, ACL_READ_DATA, 0);
+    (void)unlink(output_path);
+    (void)unlink(file_path);
+    (void)rmdir(directory_path);
+    return success;
+}
+#endif
+
 int main(void)
 {
     char test_directory[] = "/tmp/nekokem-file-security.XXXXXX";
@@ -552,6 +748,27 @@ int main(void)
         fprintf(stderr, "Single-file fsync rollback subtest failed\n");
         goto cleanup;
     }
+    if (!test_single_file_flush_failure(test_directory, FILE_TEST_FAULT_FSYNC)) {
+        fprintf(stderr, "Temporary-file fsync failure subtest failed\n");
+        goto cleanup;
+    }
+#ifdef __APPLE__
+    if (!test_single_file_flush_failure(test_directory, FILE_TEST_FAULT_FULLFSYNC) ||
+        !test_pair_rollback(test_directory, FILE_TEST_FAULT_FULLFSYNC, 2U)) {
+        fprintf(stderr, "Darwin device-cache flush failure subtest failed\n");
+        goto cleanup;
+    }
+    if (!test_darwin_acl_validation(test_directory)) {
+        fprintf(stderr, "Darwin extended ACL subtest failed\n");
+        goto cleanup;
+    }
+    if (!test_filesystem_alias_rejection(test_directory, "Case.key", "case.key") ||
+        !test_filesystem_alias_rejection(test_directory,
+                                         "caf\xc3\xa9.key", "cafe\xcc\x81.key")) {
+        fprintf(stderr, "Darwin filesystem alias rollback subtest failed\n");
+        goto cleanup;
+    }
+#endif
     if (!test_symlink_output_replacement(test_directory)) {
         fprintf(stderr, "Symlink output replacement subtest failed\n");
         goto cleanup;

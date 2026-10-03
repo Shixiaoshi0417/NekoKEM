@@ -74,7 +74,7 @@ make -C linux
 
 可执行文件位于 `linux/nekokem`。下文的 `./nekokem` 示例假定当前目录为 `linux/`，或已将该可执行文件复制到当前目录。
 
-GitHub Actions 统一使用 [CI](.github/workflows/ci.yml) 和 [Release](.github/workflows/release.yml)。CI 在 PR 和 main 推送时构建并执行所有平台的安全、语言、互操作、性能和 GUI 回归检查；Release 通过手动运行或 `v*` 标签构建 Linux 归档、Android 签名 APK 和 Windows CLI/GUI 压缩包。签名身份与构建产物说明见[构建工作流文档](release/README.md)。
+GitHub Actions 统一使用 [CI](.github/workflows/ci.yml) 和 [Release](.github/workflows/release.yml)。CI 在 PR 和 main 推送时构建并执行所有平台的安全、语言、互操作、性能和 GUI 回归检查；Release 通过手动运行或 `v*` 标签构建 Linux 归档、Android 签名 APK、Windows CLI/GUI 压缩包及 macOS arm64 包。签名身份与构建产物说明见[构建工作流文档](release/README.md)。
 
 ## Windows CLI 与 GUI
 
@@ -82,11 +82,19 @@ v3.3.0 提供原生 Windows 10/11 x64 `nekokem.exe` 和 `nekokem-gui.exe` 便携
 
 GUI 使用 Rust + Tauri 2 + Vue 3 + TypeScript，通过窄接口调用同一 C17 Core，提供原生文件选择、进度、取消、键盘导航和遵循系统减少动态效果设置的过渡动画。运行需要 Microsoft Edge WebView2 Runtime，并将包内 `WebView2Loader.dll` 放在 EXE 旁；详见 [Windows GUI 文档](desktop/README.md)。两种 Windows 应用均未进行 Authenticode 签名；构建时单独验证 Microsoft SDK loader 的签名与来源。
 
-Windows 仅支持本地固定 NTFS，检查所有者与 ACL，并拒绝网络、设备、替代数据流及重解析点路径。协议、密码参数及 64 KiB 流式分块不变；Windows 断电持久性不能当作 POSIX 目录 fsync 已验证。Windows 语言配置使用系统 LocalAppData/NekoKEM；无 Locale 环境覆盖时读取 Windows 显示语言。下文的 POSIX 配置路径和终端回退规则适用于 Linux CLI。
+Windows 仅支持本地固定 NTFS，检查所有者与 ACL，并拒绝网络、设备、替代数据流及重解析点路径。协议、密码参数及 64 KiB 流式分块不变；Windows 断电持久性不能当作 POSIX 目录 fsync 已验证。Windows 语言配置使用系统 LocalAppData/NekoKEM；无 Locale 环境覆盖时读取 Windows 显示语言。下文的 POSIX 配置路径适用于 Linux 和 macOS CLI。
+
+## macOS Apple Silicon CLI 与 GUI
+
+macOS 适配提供原生 `arm64` CLI 和 Rust + Tauri 2 + Vue 3 + TypeScript GUI，面向 M 系列 Apple Silicon Mac，应用版本保持 `3.3.0`。已公开的 [v3.3.0 Release](https://github.com/Shixiaoshi0417/NekoKEM/releases/tag/v3.3.0) 没有 macOS 附件；本次适配的包通过 CI 和后续 Release 构建提供。CLI 包名为 `NekoKEM-macos-arm64.tar.gz`；GUI 包为 `NekoKEM-macos-arm64-GUI.zip`（包含 `.app`）和 `NekoKEM-macos-arm64-GUI.dmg`，详见 [macOS 构建与使用说明](macos/README.md) 和 [桌面 GUI 文档](desktop/README.md)。
+
+CLI 与 Linux 共用参数解析、五项菜单和语言目录。GUI 使用系统 WKWebView，不需要 Windows 的 WebView2 Runtime 或 loader。两者静态链接固定 OpenSSL 4.0.3，保留其 arm64 汇编加速；运行仍依赖 macOS 系统库与框架。构建设置 macOS 11.0 deployment target；原生 CI 在 `macos-15` 上运行，这不代表已验证 macOS 11.0 实机或每代 M 系列芯片的兼容性、性能。
+
+macOS 文件层保留严格的所有者、权限、符号链接和硬链接检查，受保护文件与目录只允许空或 deny-only 扩展 ACL，并检查 APFS/HFS+ 大小写及 Unicode 名称别名。普通输出文件要求 `fsync` 与 `F_FULLFSYNC`，提交后要求父目录 `fsync`，失败时不静默降级；详细限制与测试边界见 [macOS 文件安全设计](macos/SECURITY-DESIGN.md)。Core 3.1、NKEM v3、NKPR v1、密码参数及 64 KiB 流式分块不变。包只有 ad-hoc 签名，未使用 Developer ID，也未进行 Apple 公证；这不能证明发布者身份或保证通过 Gatekeeper。
 
 ## 语言设置
 
-Android、Windows GUI 和 CLI 支持简体中文（`zh-CN`）、繁体中文（`zh-TW`）、英语（`en`）、日语（`ja`）和韩语（`ko`）。默认跟随系统；不支持的语言回退英语。中文 CN/SG 地区匹配简体，TW/HK/MO 匹配繁体；en/ja/ko 的其他地区匹配对应语言。Android 跟随系统时会响应系统语言变化；CLI 和 Windows GUI 启动时检测语言，GUI 也可在语言选择器中重新选择跟随系统。
+Android、Windows/macOS GUI 和 CLI 支持简体中文（`zh-CN`）、繁体中文（`zh-TW`）、英语（`en`）、日语（`ja`）和韩语（`ko`）。默认跟随系统；不支持的语言回退英语。中文 CN/SG 地区匹配简体，TW/HK/MO 匹配繁体；en/ja/ko 的其他地区匹配对应语言。Android 跟随系统时会响应系统语言变化；CLI 和桌面 GUI 启动时检测语言，GUI 也可在语言选择器中重新选择跟随系统。
 
 Android 在 **设置 → 语言** 中选择 **跟随系统** 或指定语言。选择会持久保存并刷新界面。Android 13 及以上与系统级应用语言设置共用同一偏好；旧系统使用私有偏好设置。文件操作结束后可切换语言。页面和对话框支持滚动，以容纳长文本及较大字体。
 
@@ -100,7 +108,7 @@ CLI 示例：
 ./nekokem --lang system --help
 ```
 
-`--lang` 仅影响本次命令。`--set-lang` 将默认语言保存到 `$XDG_CONFIG_HOME/nekokem/language`；XDG_CONFIG_HOME 未设置或为相对路径时使用 `$HOME/.config/nekokem/language`。配置文件权限为 `0600`，无需 root 权限。优先级为 `--lang` → 已保存设置 → `LC_ALL` → `LC_MESSAGES` → `LANG` → 英语。`system` 恢复自动检测；无效或损坏的设置安全回退系统检测。系统检测支持 `zh_CN.UTF-8`、`ja_JP.UTF-8` 等常见 POSIX Locale。ASCII 或非 UTF-8 终端下 CLI 提示回退英语。全局语言选项放在命令之前；命令之后的文件参数按原样处理。可使用 `--` 显式结束全局选项解析。语言配置和帮助不会交互询问语言。
+`--lang` 仅影响本次命令。Linux 和 macOS 的 `--set-lang` 将默认语言保存到 `$XDG_CONFIG_HOME/nekokem/language`；XDG_CONFIG_HOME 未设置或为相对路径时使用 `$HOME/.config/nekokem/language`。配置文件权限为 `0600`，无需 root 权限。优先级为 `--lang` → 已保存设置 → `LC_ALL` → `LC_MESSAGES` → `LANG` → 平台默认语言（Linux 为英语，macOS 通过 CoreFoundation 读取首选语言）。`system` 恢复自动检测；无效或损坏的设置安全回退系统检测。系统检测支持 `zh_CN.UTF-8`、`ja_JP.UTF-8` 等常见 POSIX Locale。显式 ASCII 或非 UTF-8 终端设置下 CLI 提示回退英语；macOS 未设置 Locale 环境变量的原生应用按 UTF-8 处理。全局语言选项放在命令之前；命令之后的文件参数按原样处理。可使用 `--` 显式结束全局选项解析。语言配置和帮助不会交互询问语言。
 
 协议标识、密码学算法名、CLI 参数、环境变量名及 `--version` 输出保持不变。上游 OpenSSL/操作系统的诊断细节保留原文。这些语言参数从 v3.2.0 开始提供，旧版二进制可能不支持。
 

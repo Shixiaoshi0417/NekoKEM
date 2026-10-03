@@ -564,8 +564,8 @@ jobs:
           if-no-files-found: error
 
   verify-return-linux:
-    name: Windows to historical Linux interoperability
-    needs: windows-native
+    name: Windows and macOS to historical Linux interoperability
+    needs: [windows-native, macos-cli]
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
@@ -578,13 +578,18 @@ jobs:
         with:
           name: public-windows-interop-fixtures
           path: ${{ runner.temp }}/windows-fixtures
+      - uses: actions/download-artifact@v4
+        with:
+          name: public-macos-interop-fixtures
+          path: ${{ runner.temp }}/macos-fixtures
       - name: Execute Windows-to-pre-port-Linux compatibility tests
         run: |
           chmod 755 "$RUNNER_TEMP/baseline-bin/baseline-nekokem"
           python3 windows/tests/interop.py verify "$RUNNER_TEMP/baseline-bin/baseline-nekokem" "$RUNNER_TEMP/windows-fixtures"
+          python3 macos/tests/interop.py verify "$RUNNER_TEMP/baseline-bin/baseline-nekokem" "$RUNNER_TEMP/macos-fixtures"
 
   frontend:
-    name: Windows GUI frontend tests
+    name: Desktop GUI frontend tests
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     defaults:
@@ -761,5 +766,139 @@ jobs:
         with:
           name: NekoKEM-windows-gui-x86_64
           path: ${{ runner.temp }}/NekoKEM-Windows-GUI.zip
+          retention-days: 14
+          if-no-files-found: error
+
+  macos-cli:
+    name: Apple Silicon CLI security and interoperability tests
+    needs: baseline-linux
+    runs-on: macos-15
+    timeout-minutes: 60
+    env:
+      MACOSX_DEPLOYMENT_TARGET: '11.0'
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
+      - name: Identify native Apple compiler and SDK
+        id: compiler
+        run: |
+          set -Eeuo pipefail
+          test "$(uname -m)" = arm64
+          identity=$({ xcrun clang --version; xcrun --sdk macosx --show-sdk-version; } | shasum -a 256 | cut -d ' ' -f 1)
+          echo "identity=$identity" >> "$GITHUB_OUTPUT"
+          echo "NEKOKEM_OPENSSL_PREFIX=$RUNNER_TEMP/macos-openssl" >> "$GITHUB_ENV"
+      - uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}/macos-openssl
+          key: macos-arm64-openssl-4.0.3-${{ steps.compiler.outputs.identity }}-${{ hashFiles('macos/scripts/build-openssl.sh') }}
+      - name: Build and test native arm64 CLI with ASan and UBSan
+        run: bash macos/scripts/build-macos-cli.sh "$RUNNER_TEMP/macos-cli"
+      - name: Verify build-only mode preserves the release binary and package
+        env:
+          NEKOKEM_BUILD_TESTS: '0'
+        run: |
+          set -Eeuo pipefail
+          bash macos/scripts/build-macos-cli.sh "$RUNNER_TEMP/macos-cli-build-only"
+          cmp "$RUNNER_TEMP/macos-cli/nekokem" "$RUNNER_TEMP/macos-cli-build-only/nekokem"
+          cmp "$RUNNER_TEMP/macos-cli/NekoKEM-macos-arm64.tar.gz" "$RUNNER_TEMP/macos-cli-build-only/NekoKEM-macos-arm64.tar.gz"
+      - uses: actions/download-artifact@v4
+        with:
+          name: public-linux-interop-fixtures
+          path: ${{ runner.temp }}/macos-fixtures
+      - name: Compare all current CLI options and exchange historical Linux containers
+        run: python3 macos/tests/interop.py macos "$RUNNER_TEMP/macos-cli/nekokem" "$RUNNER_TEMP/macos-fixtures"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: NekoKEM-macos-arm64
+          path: |
+            ${{ runner.temp }}/macos-cli/NekoKEM-macos-arm64.tar.gz
+            ${{ runner.temp }}/macos-cli/macos-SHA256SUMS.txt
+          retention-days: 14
+          if-no-files-found: error
+      - uses: actions/upload-artifact@v4
+        with:
+          name: public-macos-interop-fixtures
+          path: |
+            ${{ runner.temp }}/macos-fixtures/binary
+            ${{ runner.temp }}/macos-fixtures/empty
+            ${{ runner.temp }}/macos-fixtures/macos-public.key
+            ${{ runner.temp }}/macos-fixtures/macos-private.enc
+            ${{ runner.temp }}/macos-fixtures/macos-fingerprint.txt
+            ${{ runner.temp }}/macos-fixtures/*.macos.nkem
+          retention-days: 14
+          if-no-files-found: error
+
+  macos-gui:
+    name: Apple Silicon GUI build and native tests
+    runs-on: macos-15
+    timeout-minutes: 60
+    env:
+      MACOSX_DEPLOYMENT_TARGET: '11.0'
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '24'
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: stable
+          targets: aarch64-apple-darwin
+      - name: Identify native Apple compiler and SDK
+        id: compiler
+        run: |
+          set -Eeuo pipefail
+          test "$(uname -m)" = arm64
+          identity=$({ xcrun clang --version; xcrun --sdk macosx --show-sdk-version; } | shasum -a 256 | cut -d ' ' -f 1)
+          echo "identity=$identity" >> "$GITHUB_OUTPUT"
+          echo "NEKOKEM_OPENSSL_PREFIX=$RUNNER_TEMP/macos-openssl" >> "$GITHUB_ENV"
+      - uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}/macos-openssl
+          key: macos-arm64-openssl-4.0.3-${{ steps.compiler.outputs.identity }}-${{ hashFiles('macos/scripts/build-openssl.sh') }}
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: desktop/src-tauri
+          cache-on-failure: true
+      - name: Build the pinned native static dependency
+        run: bash macos/scripts/build-openssl.sh "$NEKOKEM_OPENSSL_PREFIX"
+      - name: Install and build the locked shared frontend
+        working-directory: desktop
+        run: |
+          npm ci --ignore-scripts
+          npm run build
+      - name: Run actual Rust to C17 Core integration and private staging tests
+        working-directory: desktop/src-tauri
+        run: TAURI_CONFIG="$(cat tauri.macos.conf.json)" cargo test --locked --target aarch64-apple-darwin --bin nekokem-gui -- --test-threads=1
+      - name: Build ad-hoc signed arm64 application and DMG
+        working-directory: desktop
+        run: npm run tauri -- build --target aarch64-apple-darwin --config src-tauri/tauri.macos.conf.json --bundles app,dmg -- --locked
+      - name: Validate application and disk image, then package the GUI
+        run: |
+          python3 desktop/scripts/package-macos-gui.py \
+            --bundle-dir desktop/src-tauri/target/aarch64-apple-darwin/release/bundle \
+            --output "$RUNNER_TEMP/macos-gui" --version 3.3.0 --source-sha "$GITHUB_SHA"
+      - name: Verify the actual native macOS window launches
+        run: python3 desktop/tests/launch_macos.py desktop/src-tauri/target/aarch64-apple-darwin/release/bundle/macos/NekoKEM.app --log "$RUNNER_TEMP/macos-gui/startup.log"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: macos-gui-native-evidence
+          path: |
+            ${{ runner.temp }}/macos-gui/gui-build-metadata.json
+            ${{ runner.temp }}/macos-gui/startup.log
+            desktop/src-tauri/Cargo.lock
+          retention-days: 14
+      - uses: actions/upload-artifact@v4
+        with:
+          name: NekoKEM-macos-arm64-gui
+          path: |
+            ${{ runner.temp }}/macos-gui/NekoKEM-macos-arm64-GUI.zip
+            ${{ runner.temp }}/macos-gui/NekoKEM-macos-arm64-GUI.dmg
+            ${{ runner.temp }}/macos-gui/gui-SHA256SUMS.txt
           retention-days: 14
           if-no-files-found: error

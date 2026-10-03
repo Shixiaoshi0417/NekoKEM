@@ -6,6 +6,9 @@
 #include <fcntl.h>
 #ifndef _WIN32
 #include <langinfo.h>
+#ifdef __APPLE__
+#include <CoreFoundation/CoreFoundation.h>
+#endif
 #else
 #include <windows.h>
 #include <shlobj.h>
@@ -66,6 +69,21 @@ static const char *system_language(void)
             name, LOCALE_NAME_MAX_LENGTH, 0) != 0 &&
         WideCharToMultiByte(CP_UTF8, WC_ERR_INVALID_CHARS, name, -1,
             system_tag, (int)sizeof(system_tag), NULL, NULL) != 0) return system_tag;
+#elif defined(__APPLE__)
+    if (value == NULL) {
+        static char system_tag[64];
+        CFArrayRef languages = CFLocaleCopyPreferredLanguages();
+        int copied = 0;
+        if (languages != NULL && CFArrayGetCount(languages) > 0) {
+            CFTypeRef first = CFArrayGetValueAtIndex(languages, 0);
+            if (first != NULL && CFGetTypeID(first) == CFStringGetTypeID()) {
+                copied = CFStringGetCString((CFStringRef)first, system_tag,
+                    (CFIndex)sizeof(system_tag), kCFStringEncodingUTF8) != 0;
+            }
+        }
+        if (languages != NULL) CFRelease(languages);
+        if (copied != 0 && system_tag[0] != '\0') return system_tag;
+    }
 #endif
     return value != NULL ? value : "C";
 }
@@ -127,6 +145,11 @@ static int utf8_output(void)
         if (strstr(normalized, "utf-8") != NULL || strstr(normalized, "utf8") != NULL) return 1;
         if (strcmp(value, "C") == 0 || strcmp(value, "POSIX") == 0) return 0;
     }
+#ifdef __APPLE__
+    /* Finder has no locale environment; native UI and macOS terminals use UTF-8.
+     * An explicitly supplied ASCII locale still takes the fallback above. */
+    if (value == NULL) return 1;
+#endif
     const char *codeset = nl_langinfo(CODESET);
     return strcmp(codeset, "UTF-8") == 0 || strcmp(codeset, "UTF8") == 0;
 #endif
@@ -189,6 +212,7 @@ static void read_preference(size_t *language)
     if (descriptor < 0) return;
     if (fstat(descriptor, &status) != 0 || !S_ISREG(status.st_mode) ||
         status.st_uid != getuid() || status.st_nlink != 1 ||
+        !file_private_acl_is_safe(descriptor) ||
         (status.st_mode & (mode_t)0777) != (mode_t)0600 ||
         status.st_size <= 0 || (uintmax_t)status.st_size >= sizeof(value)) {
         (void)close(descriptor);

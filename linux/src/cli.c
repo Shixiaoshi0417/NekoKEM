@@ -435,7 +435,8 @@ static int collect_pasted_key(int private_key, char **temporary_path)
         print_system_error("Cannot create temporary key file");
         goto cleanup;
     }
-    if (fchmod(descriptor, 0600) != 0) {
+    if (fchmod(descriptor, 0600) != 0 ||
+        !file_private_acl_is_safe(descriptor)) {
         print_system_error("Cannot protect temporary key file");
         goto cleanup;
     }
@@ -500,7 +501,11 @@ static int collect_pasted_key(int private_key, char **temporary_path)
             goto cleanup;
         }
     }
+#ifdef _WIN32
     if (fflush(output) != 0 || fsync(fileno(output)) != 0) {
+#else
+    if (fflush(output) != 0 || file_sync_regular_fd(fileno(output)) != 0) {
+#endif
         print_system_error("Cannot flush temporary key file");
         goto cleanup;
     }

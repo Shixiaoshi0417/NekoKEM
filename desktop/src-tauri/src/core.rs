@@ -45,6 +45,15 @@ impl Backend {
     pub fn finish(&self,job:&Arc<Job>) {
         if let Ok(mut active)=self.active.lock() { if active.as_ref().is_some_and(|j|Arc::ptr_eq(j,job)) { *active=None; } }
     }
+    // Return true while native shutdown must wait for Core/secret cleanup.
+    pub fn defer_close(&self)->bool {
+        let Ok(active)=self.active.lock() else { return true; };
+        if let Some(job)=active.as_ref() {
+            self.close_after.store(true,Ordering::Release);
+            job.cancelled.store(true,Ordering::Release);
+            true
+        } else { false }
+    }
 }
 pub struct Reservation { pub backend:Arc<Backend>, pub job:Arc<Job> }
 impl Drop for Reservation { fn drop(&mut self){ self.backend.finish(&self.job); } }
@@ -133,7 +142,27 @@ pub fn execute<F:Fn(u64,u64)>(request:Request,job:Arc<Job>,emit:F)->Result<Outco
 mod tests {
     use super::*;
     use std::{fs,path::PathBuf,time::{SystemTime,UNIX_EPOCH}};
-    extern "C" { fn OpenSSL_version(kind:c_int)->*const c_char; }
+    extern "C" {
+        fn OpenSSL_version(kind:c_int)->*const c_char;
+        fn protected_private_key_read(path:*const c_char,password:*const u8,length:usize,pem:*mut *mut u8,pem_length:*mut usize)->c_int;
+        fn CRYPTO_clear_free(memory:*mut c_void,length:usize,file:*const c_char,line:c_int);
+    }
+    #[test]
+    fn shutdown_waits_for_reservation_cleanup() {
+        for kind in [Kind::Encrypt, Kind::Keygen] {
+            let backend=Arc::new(Backend::default());
+            assert!(!backend.defer_close());
+            let request=request(kind);
+            let job=backend.reserve(&request).unwrap();
+            let reservation=Reservation{backend:backend.clone(),job:job.clone()};
+            assert!(backend.defer_close());
+            assert!(backend.close_after.load(Ordering::Acquire));
+            assert!(job.cancelled.load(Ordering::Acquire));
+            assert!(backend.reserve(&request).is_err());
+            drop(reservation);
+            assert!(!backend.defer_close());
+        }
+    }
     #[test]
     fn linked_openssl_runtime_matches_pin() {
         const OPENSSL_VERSION: c_int = 0;
@@ -157,6 +186,61 @@ mod tests {
         let mut r=request(Kind::Decrypt);r.input=dir.file("cipher.nkem");r.output=dir.file("output");r.key_path=dir.file("private.key.enc");r.password=Zeroizing::new("wrong".into());assert_eq!(run(&backend,r).err().unwrap().code,"core-error");assert_eq!(fs::read(dir.file("output")).unwrap(),data);
         let mut r=request(Kind::Fingerprint);r.key_path=dir.file("public.key");let fingerprint=run(&backend,r).unwrap().fingerprint;
         let mut r=request(Kind::Fingerprint);r.paste=true;r.key_text=Zeroizing::new(fs::read_to_string(dir.file("public.key")).unwrap());assert_eq!(run(&backend,r).unwrap().fingerprint,fingerprint);
+        // NKPR is a binary container. Extract this generated public test fixture
+        // through the real Core solely to exercise the private-PEM paste path.
+        let encrypted=path(&dir.file("private.key.enc")).unwrap();let password=b"public-test-\xe4\xb8\xad\xe6\x96\x87-\xf0\x9f\x98\x80";
+        let mut pem=std::ptr::null_mut();let mut length=0;
+        assert_eq!(unsafe{protected_private_key_read(encrypted.as_ptr(),password.as_ptr(),password.len(),&mut pem,&mut length)},1);
+        let text=unsafe{String::from_utf8(std::slice::from_raw_parts(pem,length).to_vec()).unwrap()};
+        unsafe{CRYPTO_clear_free(pem.cast(),length,std::ptr::null(),0)};
+        let mut r=request(Kind::Decrypt);r.input=dir.file("cipher.nkem");r.output=dir.file("pasted-output");r.paste=true;r.key_text=Zeroizing::new(text);run(&backend,r).unwrap();assert_eq!(fs::read(dir.file("pasted-output")).unwrap(),data);
         let mut r=request(Kind::Encrypt);r.input=dir.file("plain");r.output=dir.file("cipher.nkem");r.key_path=dir.file("public.key");let before=fs::read(&r.output).unwrap();let job=backend.reserve(&r).unwrap();let _hold=Reservation{backend:backend.clone(),job:job.clone()};let cancel=job.clone();assert_eq!(execute(r,job,move|_,_|{cancel.cancelled.store(true,Ordering::Release);}).err().unwrap().code,"cancelled");assert_eq!(fs::read(dir.file("cipher.nkem")).unwrap(),before);
+    }
+    #[cfg(unix)]
+    #[test]
+    fn posix_staging_permissions_cleanup_and_link_rejection() {
+        use std::os::unix::fs::{symlink, MetadataExt, PermissionsExt};
+        let bytes = "public staging test fixture\n";
+        let mut staged = Staged::new(bytes).unwrap();
+        let name = unsafe { CStr::from_ptr(staged.0) }.to_str().unwrap();
+        let file = PathBuf::from(name);
+        let directory = file.parent().unwrap().to_owned();
+        assert_eq!(fs::metadata(&file).unwrap().mode() & 0o777, 0o600);
+        assert_eq!(fs::metadata(&file).unwrap().nlink(), 1);
+        assert_eq!(fs::metadata(&directory).unwrap().mode() & 0o777, 0o700);
+        assert_eq!(fs::read(&file).unwrap(), bytes.as_bytes());
+        assert!(staged.close());
+        assert!(!file.exists());
+        assert!(!directory.exists());
+
+        let dir = Directory::new();
+        fs::set_permissions(&dir.0, fs::Permissions::from_mode(0o755)).unwrap();
+        let cdir = path(dir.0.to_str().unwrap()).unwrap();
+        assert_eq!(unsafe { desktop_private_directory(cdir.as_ptr()) }, 0);
+        fs::set_permissions(&dir.0, fs::Permissions::from_mode(0o700)).unwrap();
+        let destination = dir.file("output");
+        fs::write(&destination, b"must survive").unwrap();
+        symlink(&destination, dir.file("public-link")).unwrap();
+        let backend = Arc::new(Backend::default());
+        let mut r = request(Kind::Keygen);
+        r.public_path = dir.file("public-link");
+        r.private_path = dir.file("private.key.enc");
+        r.password = Zeroizing::new("public test password".into());
+        r.confirmation = r.password.clone();
+        // POSIX Core safely replaces the symlink itself without following it.
+        run(&backend, r).unwrap();
+        assert_eq!(fs::read(destination).unwrap(), b"must survive");
+        assert!(!fs::symlink_metadata(dir.file("public-link")).unwrap().file_type().is_symlink());
+        assert_eq!(fs::metadata(dir.file("private.key.enc")).unwrap().mode() & 0o777, 0o600);
+
+        let mut staged = Staged::new(bytes).unwrap();
+        let file = PathBuf::from(unsafe { CStr::from_ptr(staged.0) }.to_str().unwrap());
+        let directory = file.parent().unwrap().to_owned();
+        fs::hard_link(&file, dir.file("key-hard-link")).unwrap();
+        assert!(!staged.close());
+        assert_eq!(fs::read(&file).unwrap(), bytes.as_bytes());
+        fs::remove_file(dir.file("key-hard-link")).unwrap();
+        fs::remove_file(file).unwrap();
+        fs::remove_dir(directory).unwrap();
     }
 }

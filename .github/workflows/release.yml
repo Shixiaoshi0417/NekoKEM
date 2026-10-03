@@ -232,3 +232,68 @@ jobs:
           path: ${{ runner.temp }}/NekoKEM-Windows-GUI.zip
           retention-days: 14
           if-no-files-found: error
+
+  build-macos:
+    name: Build Apple Silicon CLI and GUI
+    runs-on: macos-15
+    timeout-minutes: 60
+    env:
+      MACOSX_DEPLOYMENT_TARGET: '11.0'
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '24'
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: stable
+          targets: aarch64-apple-darwin
+      - name: Identify native Apple compiler and SDK
+        id: compiler
+        run: |
+          set -Eeuo pipefail
+          test "$(uname -m)" = arm64
+          identity=$({ xcrun clang --version; xcrun --sdk macosx --show-sdk-version; } | shasum -a 256 | cut -d ' ' -f 1)
+          echo "identity=$identity" >> "$GITHUB_OUTPUT"
+          echo "NEKOKEM_OPENSSL_PREFIX=$RUNNER_TEMP/macos-openssl" >> "$GITHUB_ENV"
+      - uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}/macos-openssl
+          key: macos-arm64-openssl-4.0.3-${{ steps.compiler.outputs.identity }}-${{ hashFiles('macos/scripts/build-openssl.sh') }}
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: desktop/src-tauri
+          cache-on-failure: true
+      - name: Build and verify native arm64 CLI package
+        run: bash macos/scripts/build-macos-cli.sh "$RUNNER_TEMP/macos-cli"
+      - name: Install locked frontend dependencies
+        working-directory: desktop
+        run: npm ci --ignore-scripts
+      - name: Build ad-hoc signed arm64 application and DMG
+        working-directory: desktop
+        run: npm run tauri -- build --target aarch64-apple-darwin --config src-tauri/tauri.macos.conf.json --bundles app,dmg -- --locked
+      - name: Validate application and disk image, then package the GUI
+        run: |
+          python3 desktop/scripts/package-macos-gui.py \
+            --bundle-dir desktop/src-tauri/target/aarch64-apple-darwin/release/bundle \
+            --output "$RUNNER_TEMP/macos-gui" --version 3.3.0 --source-sha "$GITHUB_SHA"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: NekoKEM-macos-arm64
+          path: |
+            ${{ runner.temp }}/macos-cli/NekoKEM-macos-arm64.tar.gz
+            ${{ runner.temp }}/macos-cli/macos-SHA256SUMS.txt
+          retention-days: 14
+          if-no-files-found: error
+      - uses: actions/upload-artifact@v4
+        with:
+          name: NekoKEM-macos-arm64-gui
+          path: |
+            ${{ runner.temp }}/macos-gui/NekoKEM-macos-arm64-GUI.zip
+            ${{ runner.temp }}/macos-gui/NekoKEM-macos-arm64-GUI.dmg
+            ${{ runner.temp }}/macos-gui/gui-SHA256SUMS.txt
+          retention-days: 14
+          if-no-files-found: error

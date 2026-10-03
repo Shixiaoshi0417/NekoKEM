@@ -8,6 +8,9 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
+#ifdef __APPLE__
+#include <sys/acl.h>
+#endif
 #ifndef _WIN32
 #include <unistd.h>
 #endif
@@ -60,6 +63,84 @@ static int file_fsync(int descriptor)
     }
 #endif
     return fsync(descriptor);
+}
+
+int file_sync_regular_fd(int descriptor)
+{
+#ifdef __APPLE__
+    struct stat status;
+
+    /* F_FULLFSYNC is a regular-file durability barrier, not a directory API. */
+    if (fstat(descriptor, &status) != 0) {
+        return -1;
+    }
+    if (!S_ISREG(status.st_mode)) {
+        errno = EINVAL;
+        return -1;
+    }
+#endif
+    if (file_fsync(descriptor) != 0) {
+        return -1;
+    }
+#ifdef __APPLE__
+#ifdef NEKOKEM_TEST_FAULT_INJECTION
+    if (test_fault_should_fail(FILE_TEST_FAULT_FULLFSYNC)) {
+        errno = EIO;
+        return -1;
+    }
+#endif
+    /* Never turn an unsupported or failed device-cache flush into success. */
+    return fcntl(descriptor, F_FULLFSYNC);
+#else
+    return 0;
+#endif
+}
+
+int file_private_acl_is_safe(int descriptor)
+{
+#ifdef __APPLE__
+    acl_t acl;
+    acl_entry_t entry;
+    int entry_id = ACL_FIRST_ENTRY;
+    int saved_errno;
+    int success = 0;
+
+    errno = 0;
+    acl = acl_get_fd_np(descriptor, ACL_TYPE_EXTENDED);
+    if (acl == NULL) {
+        /* Darwin reports an absent extended ACL as ENOENT. */
+        return errno == ENOENT;
+    }
+    if (acl_valid(acl) != 0) {
+        goto cleanup;
+    }
+    while (acl_get_entry(acl, entry_id, &entry) == 0) {
+        acl_tag_t tag;
+
+        if (acl_get_tag_type(entry, &tag) != 0) {
+            goto cleanup;
+        }
+        /* Mode 0600/0700 cannot mask a Darwin allow ACE. Deny ACEs are safe. */
+        if (tag != ACL_EXTENDED_DENY) {
+            errno = EACCES;
+            goto cleanup;
+        }
+        entry_id = ACL_NEXT_ENTRY;
+    }
+    /* Unlike POSIX ACL iterators, Darwin returns -1/EINVAL at the end. */
+    if (errno == EINVAL) {
+        success = 1;
+    }
+
+cleanup:
+    saved_errno = errno;
+    (void)acl_free(acl);
+    errno = saved_errno;
+    return success;
+#else
+    (void)descriptor;
+    return 1;
+#endif
 }
 
 static int file_rename(const char *old_path, const char *new_path)
@@ -145,6 +226,29 @@ int ensure_directory(const char *path, mode_t mode)
                 path, (unsigned int)requested_mode);
         return 0;
     }
+#ifdef __APPLE__
+    {
+        int descriptor = open(path, O_RDONLY | O_CLOEXEC |
+                                    O_NOFOLLOW | O_DIRECTORY);
+        struct stat opened_status;
+        int safe = descriptor >= 0 &&
+                   fstat(descriptor, &opened_status) == 0 &&
+                   opened_status.st_dev == status.st_dev &&
+                   opened_status.st_ino == status.st_ino &&
+                   file_private_acl_is_safe(descriptor);
+        int saved_errno = errno;
+
+        if (descriptor >= 0 && close(descriptor) != 0 && safe != 0) {
+            saved_errno = errno;
+            safe = 0;
+        }
+        if (safe == 0) {
+            errno = saved_errno != 0 ? saved_errno : EACCES;
+            print_system_error("Cannot inspect directory");
+            return 0;
+        }
+    }
+#endif
     return 1;
 }
 
@@ -441,6 +545,10 @@ int file_read_sensitive(const char *path,
         fprintf(stderr, file_message("Sensitive input must have exactly one hard link\n"));
         goto cleanup;
     }
+    if (!file_private_acl_is_safe(descriptor)) {
+        print_system_error("Cannot inspect sensitive file");
+        goto cleanup;
+    }
     if ((uintmax_t)status.st_size > (uintmax_t)maximum_size ||
         (uintmax_t)status.st_size > (uintmax_t)SIZE_MAX) {
         fprintf(stderr, file_message("Sensitive input exceeds the size limit\n"));
@@ -555,7 +663,8 @@ int atomic_file_open(AtomicFile *file, const char *final_path, mode_t mode)
         atomic_file_abort(file);
         return 0;
     }
-    if (fchmod(descriptor, mode) != 0) {
+    if (fchmod(descriptor, mode) != 0 ||
+        !file_private_acl_is_safe(descriptor)) {
         print_system_error("Cannot set output file permissions");
         (void)close(descriptor);
         atomic_file_abort(file);
@@ -588,7 +697,7 @@ int atomic_file_prepare(AtomicFile *file)
     }
     if (fflush(file->stream) != 0) {
         saved_errno = errno;
-    } else if (file_fsync(fileno(file->stream)) != 0) {
+    } else if (file_sync_regular_fd(fileno(file->stream)) != 0) {
         saved_errno = errno;
     }
     if (fclose(file->stream) != 0 && saved_errno == 0) {
@@ -830,6 +939,28 @@ int atomic_file_commit_pair(AtomicFile *first, AtomicFile *second)
         }
     }
     for (index = 0U; index < count; ++index) {
+#ifdef __APPLE__
+        if (index != 0U) {
+            struct stat first_status;
+            struct stat next_status;
+
+            /* Let APFS/HFS+ resolve case folding and Unicode normalization. */
+            if (lstat(files[0]->final_path, &first_status) != 0) {
+                saved_errno = errno;
+                goto rollback;
+            }
+            if (lstat(files[index]->final_path, &next_status) == 0) {
+                if (first_status.st_dev == next_status.st_dev &&
+                    first_status.st_ino == next_status.st_ino) {
+                    saved_errno = EINVAL;
+                    goto rollback;
+                }
+            } else if (errno != ENOENT) {
+                saved_errno = errno;
+                goto rollback;
+            }
+        }
+#endif
         if (file_rename(files[index]->temporary_path,
                         files[index]->final_path) != 0) {
             saved_errno = errno;

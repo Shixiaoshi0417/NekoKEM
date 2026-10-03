@@ -1,4 +1,4 @@
-# NekoKEM Windows GUI
+# NekoKEM Desktop GUI
 
 Rust + Tauri 2 + Vue 3 + TypeScript desktop frontend, released as v3.3.0 for
 Windows 10/11 x64. It requires the Microsoft Edge WebView2 Runtime. Open
@@ -6,6 +6,14 @@ Windows 10/11 x64. It requires the Microsoft Edge WebView2 Runtime. Open
 use the app; it opens a native window without a terminal. Keep the included
 Microsoft `WebView2Loader.dll` beside the EXE. The portable package
 contains no Android signing material and is not Authenticode signed.
+
+This adaptation also builds native Apple Silicon `aarch64-apple-darwin`
+`NekoKEM.app` and DMG using macOS's system WKWebView. macOS 11.0 is the deployment
+target; native CI runs on macOS 15. These new macOS packages come from this
+branch's CI/Release builds and are not assets of the already published v3.3.0
+Release. Intel Macs and Linux GUI builds are not supported.
+本次适配提供 Apple Silicon 原生应用与 DMG，最低部署目标为 macOS 11.0，
+实际 CI 使用 macOS 15；已发布的 v3.3.0 尚不包含这些 Mac 附件。
 
 ## Features / 功能
 
@@ -15,12 +23,13 @@ contains no Android signing material and is not Authenticode signed.
   支持系统文件选择器及粘贴 PEM 密钥。
 - Display progress and cancel file operations safely. Show errors and preserve
   existing output on failure/cancellation through the same Core checks as the CLI.
-- Automatically detect Windows display language and share the CLI's private saved
+- Automatically detect Windows/macOS display language and share the CLI's private saved
   language preference. English, simplified/traditional Chinese, Japanese and Korean.
 - Both CLI and GUI retain the square Android artwork; the outer white area of
   the Windows EXE icons is transparent. Android keeps its existing square white
   background; README uses a separate rounded display image.
-  CLI/GUI 图案保持方形，EXE 图标外部白色区域透明；README 圆角只用于展示。
+  macOS ICNS contains the same transparent square PNG artwork without editing pixels.
+  CLI/GUI 图案保持方形，EXE 与 macOS 图标外部白色区域透明；README 圆角只用于展示。
 - Short entry transitions, navigation/button feedback and animated progress follow
   the system's reduced-motion preference. Windows high-contrast mode is supported.
   页面过渡、按钮反馈与进度动画遵循系统减少动态效果设置，支持 Windows 高对比度。
@@ -29,10 +38,10 @@ contains no Android signing material and is not Authenticode signed.
 
 Production cryptography stays in the shared C17 Core. Rust validates requests,
 serializes Core calls, owns zeroizing secrets, bridges progress/cancellation and
-creates protected temporary pasted-key files through the Windows backend. The Vue
+creates protected temporary pasted-key files through the platform backend. The Vue
 frontend has no filesystem, shell, arbitrary process or remote-content access.
 
-## Build
+## Windows build
 
 Use Node 24, Rust with `x86_64-pc-windows-gnu` target, MSYS2 UCRT64 GCC and the
 pinned static OpenSSL 4.0.3 prefix created by `windows/scripts/build-windows-cli.sh`.
@@ -56,15 +65,67 @@ toolchain also makes Tauri's resource compiler produce GNU-compatible COFF icons
 and the application manifest. CI verifies the loader DLL against the checksum-locked
 WebView2 SDK crate and its Microsoft Authenticode signature before packaging.
 
+## Apple Silicon macOS build
+
+Build on an arm64 Mac with Xcode Command Line Tools, Node 24 and Rust stable.
+The macOS helper builds the pinned static OpenSSL 4.0.3 prefix and checks its
+official source checksum, compiler/SDK manifest, runtime and Argon2 thread support.
+GUI builds reuse that prefix. OpenSSL and project licenses enter the app before
+its resources are sealed and signed.
+
+```sh
+bash macos/scripts/build-openssl.sh /absolute/path/to/pinned-macos-openssl
+export NEKOKEM_OPENSSL_PREFIX=/absolute/path/to/pinned-macos-openssl
+export MACOSX_DEPLOYMENT_TARGET=11.0
+rustup target add aarch64-apple-darwin
+cd desktop
+npm ci --ignore-scripts
+npm test
+npm run build
+TAURI_CONFIG="$(cat src-tauri/tauri.macos.conf.json)" cargo test --locked --target aarch64-apple-darwin --manifest-path src-tauri/Cargo.toml --bin nekokem-gui -- --test-threads=1
+npm run tauri -- build --target aarch64-apple-darwin --config src-tauri/tauri.macos.conf.json --bundles app,dmg -- --locked
+cd ..
+python3 desktop/scripts/package-macos-gui.py \
+  --bundle-dir desktop/src-tauri/target/aarch64-apple-darwin/release/bundle \
+  --output macos/dist \
+  --version 3.3.0 --source-sha "$(git rev-parse HEAD)"
+```
+
+`NekoKEM-macos-arm64-GUI.zip` contains `NekoKEM.app`, documentation, licenses,
+source/build metadata and checksums. `NekoKEM-macos-arm64-GUI.dmg` contains the
+same app. Packaging verifies thin arm64 Mach-O, PIE, minimum OS, system-only
+dynamic imports, embedded ICNS and licenses, then mounts the DMG read-only to
+confirm the same sealed app is present. CI runs real Rust/Core roundtrips,
+wrong-password, pasted-key and cancellation tests, POSIX permission/link checks,
+and visible native window startup with local WKWebView page-load and real
+settings IPC evidence. Windows retains its original GNU/UCRT64 toolchain,
+loader and PE checks.
+
+The macOS app has an **ad-hoc signature with hardened runtime**. This is not an
+Apple Developer ID signature, and the application is not notarized. The signature
+checks sealed resources without establishing a trusted developer identity.
+Gatekeeper may block downloaded packages. This project does not disable or bypass
+macOS security protections. Mac 应用使用 ad-hoc 签名与 hardened runtime，未经
+Developer ID 签名或 Apple 公证，系统可能阻止启动；这不是可信开发者身份认证。
+
 ## Security boundary / 安全边界
 
-The same local fixed-NTFS, owner/ACL, ancestor pinning, regular-file, hard-link,
+On Windows, the same local fixed-NTFS, owner/ACL, ancestor pinning, regular-file, hard-link,
 reparse-point, device/pipe/ADS and atomic-output checks apply. The frontend cannot
 relax them. Existing outputs must already satisfy the CLI's private output policy.
 Passwords retain the CLI's 1024 UTF-8 byte limit. Private PEM text is obscured in the paste field. Pasted keys are capped at 1 MiB
 and 16384 UTF-8 bytes per line, matching the CLI, and remain subject to Core format/component/tail validation.
 
-Only bundled local content runs in an InPrivate main WebView. CSP blocks remote scripts,
+On macOS, operations use Core's POSIX regular-file, ownership, private mode,
+link/output and atomic-commit checks. Private files/directories reject extended
+allow ACLs even when their mode is 0600/0700. Regular-file commits and pasted-key
+staging require successful fsync and F_FULLFSYNC; failure is reported. Pasted
+keys use a new 0700 directory, an exclusive 0600 no-follow file and descriptor-relative
+operations. Cleanup rejects symlinks, extra hard links and unsafe permissions.
+See the [macOS filesystem design](../macos/SECURITY-DESIGN.md) for platform limits.
+
+Only bundled local content runs with incognito enabled in the main WebView
+(Windows InPrivate/macOS nonpersistent WKWebView storage). CSP blocks remote scripts,
 frames and network requests. Only native open/save dialogs and the listed Rust
 commands are exposed. Developer tools are unavailable in the production release.
 Passwords/key text are not stored in browser storage, configuration or logs. Both
@@ -75,7 +136,8 @@ password bytes only for the call. JavaScript/IPC can make temporary string copie
 reliable zeroization of the WebView heap is not guaranteed. This extra UI/IPC
 boundary has not received an independent professional audit.
 
-Closing the window during an operation requests cancellation and waits for Core
+Closing the window, or quitting the macOS application from its menu or ⌘Q,
+during an operation requests cancellation and waits for Core
 cleanup; key generation finishes safely before closing. C17 algorithms, KDF
 parameters/domains, NKEM/NKPR formats, fingerprints, AAD, GCM limits and 64 KiB
 streaming stay unchanged. Progress UI updates are throttled to about 10 per second,
