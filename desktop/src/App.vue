@@ -7,7 +7,7 @@ import { languageNames, translate, errorCode, type Language, type Message } from
 const operation = ref<bridge.Operation>('encrypt');
 const language = ref<Language>('en');
 const selectedLanguage = ref('system');
-const version = ref('3.3.0');
+const version = ref('3.3.1');
 const busy = ref(false), loaded = ref(false), cancelling = ref(false), jobId = ref('');
 const cancelPending = ref(false);
 const result = ref<bridge.Outcome | null>(null);

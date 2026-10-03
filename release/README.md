@@ -13,7 +13,7 @@ GitHub Actions has two workflow definitions:
 - `release.yml` (`Release`) builds artifacts on `v*` tags and manual runs. It
   produces Linux x86_64/aarch64 archives, a signed Android arm64 APK, and Windows
   CLI/GUI packages, macOS arm64 CLI/GUI packages and Linux x86_64/ARM64 GUI
-  `.deb`/portable archives. Regression suites run in CI. Source checksums, dependency
+  `.deb`/`.rpm`/portable archives. Regression suites run in CI. Source checksums, dependency
   versions, compiler hardening, binary imports/protections, SDK loader signature,
   icons, APK identity/signature and package checksums remain build requirements.
 
@@ -46,27 +46,29 @@ pinned public recovery recipient. The recipient's private key stays outside the
 repository. Plaintext signing keys/passwords and the recovery private key must
 never be uploaded. Plaintext signing material is removed even when the job fails.
 
-The v3.3.0 public release assets are:
+The v3.3.1 public release contains 14 packages:
 
-- `app-release.apk`
-- `NekoKEM-linux-x86_64.tar.gz`
-- `NekoKEM-linux-aarch64.tar.gz`
-- `NekoKEM-windows-x86_64.zip`
-- `NekoKEM-Windows-GUI.zip`
-- `SHA256SUMS.txt`
+| Platform | Public assets |
+|---|---|
+| Android ARM64 | `app-release.apk` |
+| Windows x64 | `NekoKEM-windows-x86_64.zip`, `NekoKEM-Windows-GUI.zip` |
+| macOS Apple Silicon | `NekoKEM-macos-arm64.tar.gz`, `NekoKEM-macos-arm64-GUI.zip`, `NekoKEM-macos-arm64-GUI.dmg` |
+| Linux x86_64 | `NekoKEM-linux-x86_64.tar.gz`, `NekoKEM-linux-x86_64-GUI.deb`, `NekoKEM-linux-x86_64-GUI.rpm`, `NekoKEM-linux-x86_64-GUI.tar.gz` |
+| Linux ARM64 | `NekoKEM-linux-aarch64.tar.gz`, `NekoKEM-linux-aarch64-GUI.deb`, `NekoKEM-linux-aarch64-GUI.rpm`, `NekoKEM-linux-aarch64-GUI.tar.gz` |
 
-Publish these packages from the successful Release run for the exact v3.3.0 source,
-after that source passes CI. Generate the top-level `SHA256SUMS.txt` from the five
-published packages. Record the source commit, CI/Release run links, Android signer
-and public asset hashes in the [Chinese-then-English v3.3.0 notes](v3.3.0.md).
+Publish only packages from the successful Release run for the exact CI-validated
+v3.3.1 source. Generate the fifteenth asset, top-level `SHA256SUMS.txt`, from all
+14 packages. Record the source commit, CI/Release run links, Android signer and
+public asset hashes in the [Chinese-then-English v3.3.1 notes](v3.3.1.md).
 The encrypted signing recovery envelope remains a protected Actions artifact;
 **do not attach it to the public GitHub Release**. Windows application EXEs are
 unsigned; verification of the Microsoft SDK loader's signature is separate.
 
-v3.3.0 keeps the v3.2.0 Android signing identity and supports an in-place update.
-Only old-signer v3.1.x installations need backup verification and uninstall/reinstall.
-Keep the existing square artwork for Android, use transparent outer white areas
-for Windows EXE icons, and a separate rounded image for README display.
+Android v3.3.1 uses versionCode `6`, keeps the v3.2.0/v3.3.0 signing identity and
+supports an in-place update. Only old-signer v3.1.x installations need backup
+verification and uninstall/reinstall. Keep the existing square artwork for Android,
+use transparent outer white areas for Windows EXE icons, reuse those PNGs for
+macOS/Linux, and use a separate rounded image for README display.
 
 The v3.2.0 bootstrap key rotation and publication records remain historical audit
 data. Their one-time workflows and hard-coded publication automation have been
@@ -74,15 +76,13 @@ retired in favor of these two entry points.
 
 ## macOS Apple Silicon build artifacts
 
-The existing public v3.3.0 Release has no macOS assets. This port keeps application
-version `3.3.0` and adds macOS packages to CI and subsequent Release builds;
-it does not change the historical release assets or notes:
+v3.3.1 includes the following native macOS packages in CI and Release:
 
 - `NekoKEM-macos-arm64.tar.gz`: native CLI and Terminal menu launcher.
 - `NekoKEM-macos-arm64-GUI.zip`: `NekoKEM.app`, documentation, licenses,
   checksums and build metadata.
 - `NekoKEM-macos-arm64-GUI.dmg`: Tauri DMG checked and exported under a stable
-  package name; its initial Tauri filename is `NekoKEM_3.3.0_aarch64.dmg`.
+  package name; its initial Tauri filename is `NekoKEM_3.3.1_aarch64.dmg`.
 
 Builds use native Apple Silicon and set a macOS 11.0 deployment target. The actual
 native CI runner is `macos-15`; the target does not establish compatibility on
@@ -98,16 +98,13 @@ system dylibs, signatures, icons, metadata and package checksums remain build
 requirements in Release mode. Regression suites stay in CI.
 
 See [macOS usage](../macos/README.md), [filesystem boundaries](../macos/SECURITY-DESIGN.md)
-and [GUI build instructions](../desktop/README.md). A future public release must
-use the successful Release artifacts for its exact CI-validated source and add
-every published macOS package to the top-level `SHA256SUMS.txt`; do not reuse a
-pre-port build or imply that the existing v3.3.0 assets include macOS support.
+and [GUI build instructions](../desktop/README.md). Every published macOS package
+is included in top-level `SHA256SUMS.txt`; historical v3.3.0 assets remain unchanged.
 
 ## Linux GUI build artifacts
 
-Linux GUI version remains `3.3.0`, using native Ubuntu 24.04 x86_64 and ARM64
-build/test runners. The published v3.3.0 has no Linux GUI assets. CI and subsequent
-Release runs produce, for each `x86_64`/`aarch64` architecture:
+Linux GUI v3.3.1 uses native Ubuntu 24.04 x86_64 and ARM64 build/test runners.
+CI and Release produce, for each `x86_64`/`aarch64` architecture:
 
 - `NekoKEM-linux-<architecture>-GUI.deb`: native application, desktop entry,
   existing transparent square PNG icons and project/OpenSSL licenses.
@@ -134,6 +131,6 @@ startup/normal-close tests run only in CI. Other distributions and native Waylan
 are not established by these tests. Android signing material is not used.
 
 See [Linux GUI installation and building](../desktop/README.md#linux-installation-and-build--linux-安装与构建)
-and [security boundaries](../desktop/LINUX-SECURITY.md). Future public releases
-must use artifacts from the exact successful CI-validated source and include
-every published Linux GUI package in top-level release checksums.
+and [security boundaries](../desktop/LINUX-SECURITY.md). Every published Linux GUI
+package is included in top-level release checksums. Historical v3.3.0 assets remain
+unchanged.

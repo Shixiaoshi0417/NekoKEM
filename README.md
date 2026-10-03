@@ -14,11 +14,21 @@ NekoKEM 是一个用于学习 OpenSSL EVP API 的实验性后量子文件加密�
 
 本项目不自行实现任何密码算法，也不依赖 liboqs。**它没有经过安全审计，不应被视为生产级软件，也不应用来保护重要或敏感数据。**
 
-## 发布版本 v3.3.0
+## 发布版本 v3.3.1
 
-Android、Linux CLI、Windows CLI 和 Windows GUI 版本统一为 `3.3.0`，Core 保持 `3.1`。本版加入 Windows 原生 CLI 与 Rust + Tauri 2 + Vue 3 + TypeScript GUI，改进界面交互和流式处理性能，固定使用 OpenSSL 4.0.3。下载与完整中英更新说明见 [v3.3.0](release/v3.3.0.md) 和 [GitHub Release](https://github.com/Shixiaoshi0417/NekoKEM/releases/tag/v3.3.0)。下载后使用附件 `SHA256SUMS.txt` 校验。
+Android 和各平台 CLI/GUI 版本统一为 `3.3.1`，Core 保持 `3.1`。本版新增 M 系列 Mac 原生 CLI/GUI，以及 Linux x86_64、ARM64 GUI 的 DEB、RPM 和便携包，沿用 Rust + Tauri 2 + Vue 3 + TypeScript 界面、五语言自动检测和过渡动画。固定使用 OpenSSL 4.0.3，保持原有密码参数、文件安全检查和流式处理。完整中文在上、英文在下的更新说明见 [v3.3.1](release/v3.3.1.md) 和 [GitHub Release](https://github.com/Shixiaoshi0417/NekoKEM/releases/tag/v3.3.1)。
 
-Android v3.3.0 沿用 v3.2.0 签名，可直接覆盖升级；建议先备份公钥、加密 NKPR 私钥和私钥密码。仅使用旧签名的 v3.1.x 用户需要在验证备份后卸载重装；卸载会删除应用内部密钥。NKEM v3、NKPR v1、密码参数和指纹计算不变，NKEM v1/v2 不再支持。
+Android v3.3.1 沿用 v3.2.0/v3.3.0 签名，可直接覆盖升级；建议先备份公钥、加密 NKPR 私钥和私钥密码。仅使用旧签名的 v3.1.x 用户需要在验证备份后卸载重装；卸载会删除应用内部密钥。NKEM v3、NKPR v1、密码参数和指纹计算不变，NKEM v1/v2 不再支持。
+
+| 平台与架构 | CLI / Android | GUI |
+|---|---|---|
+| Android 8.0+ ARM64 | [APK](https://github.com/Shixiaoshi0417/NekoKEM/releases/download/v3.3.1/app-release.apk) | APK 内置界面 |
+| Windows 10/11 x64 | [CLI ZIP](https://github.com/Shixiaoshi0417/NekoKEM/releases/download/v3.3.1/NekoKEM-windows-x86_64.zip) | [GUI ZIP](https://github.com/Shixiaoshi0417/NekoKEM/releases/download/v3.3.1/NekoKEM-Windows-GUI.zip) |
+| macOS Apple Silicon arm64 | [CLI TAR.GZ](https://github.com/Shixiaoshi0417/NekoKEM/releases/download/v3.3.1/NekoKEM-macos-arm64.tar.gz) | [GUI ZIP](https://github.com/Shixiaoshi0417/NekoKEM/releases/download/v3.3.1/NekoKEM-macos-arm64-GUI.zip) · [DMG](https://github.com/Shixiaoshi0417/NekoKEM/releases/download/v3.3.1/NekoKEM-macos-arm64-GUI.dmg) |
+| Linux x86_64 | [静态 CLI](https://github.com/Shixiaoshi0417/NekoKEM/releases/download/v3.3.1/NekoKEM-linux-x86_64.tar.gz) | [DEB](https://github.com/Shixiaoshi0417/NekoKEM/releases/download/v3.3.1/NekoKEM-linux-x86_64-GUI.deb) · [RPM](https://github.com/Shixiaoshi0417/NekoKEM/releases/download/v3.3.1/NekoKEM-linux-x86_64-GUI.rpm) · [便携包](https://github.com/Shixiaoshi0417/NekoKEM/releases/download/v3.3.1/NekoKEM-linux-x86_64-GUI.tar.gz) |
+| Linux ARM64 / aarch64 | [静态 CLI](https://github.com/Shixiaoshi0417/NekoKEM/releases/download/v3.3.1/NekoKEM-linux-aarch64.tar.gz) | [DEB](https://github.com/Shixiaoshi0417/NekoKEM/releases/download/v3.3.1/NekoKEM-linux-aarch64-GUI.deb) · [RPM](https://github.com/Shixiaoshi0417/NekoKEM/releases/download/v3.3.1/NekoKEM-linux-aarch64-GUI.rpm) · [便携包](https://github.com/Shixiaoshi0417/NekoKEM/releases/download/v3.3.1/NekoKEM-linux-aarch64-GUI.tar.gz) |
+
+下载后先用 [SHA256SUMS.txt](https://github.com/Shixiaoshi0417/NekoKEM/releases/download/v3.3.1/SHA256SUMS.txt) 校验对应归档，再校验包内文件。Linux GUI 需要 glibc 2.39+、GTK3 和 WebKitGTK 4.1；macOS 实际验证于 macOS 15，部署目标为 11.0。安装步骤与签名限制见下文各平台说明。
 
 README 使用专用圆角展示图；Android 保留现有方形白底图案，Windows CLI/GUI EXE 保留方形图案并将外部白色区域改为透明。Windows 应用未进行 Authenticode 签名。
 
@@ -78,7 +88,7 @@ GitHub Actions 统一使用 [CI](.github/workflows/ci.yml) 和 [Release](.github
 
 ## Windows CLI 与 GUI
 
-v3.3.0 提供原生 Windows 10/11 x64 `nekokem.exe` 和 `nekokem-gui.exe` 便携包。CLI 与 Linux 共用完整参数解析和五项菜单；双击 EXE 或不带参数运行即可进入菜单。构建、使用和导入私钥权限说明见 [Windows CLI 文档](windows/README.md)，文件安全设计见 [Windows 文件层说明](windows/SECURITY-DESIGN.md)。CLI 运行不需要 MSYS2 或 OpenSSL DLL；构建使用 MSYS2 UCRT64 与固定 OpenSSL 4.0.3。
+v3.3.1 提供原生 Windows 10/11 x64 `nekokem.exe` 和 `nekokem-gui.exe` 便携包。CLI 与 Linux 共用完整参数解析和五项菜单；双击 EXE 或不带参数运行即可进入菜单。构建、使用和导入私钥权限说明见 [Windows CLI 文档](windows/README.md)，文件安全设计见 [Windows 文件层说明](windows/SECURITY-DESIGN.md)。CLI 运行不需要 MSYS2 或 OpenSSL DLL；构建使用 MSYS2 UCRT64 与固定 OpenSSL 4.0.3。
 
 GUI 使用 Rust + Tauri 2 + Vue 3 + TypeScript，通过窄接口调用同一 C17 Core，提供原生文件选择、进度、取消、键盘导航和遵循系统减少动态效果设置的过渡动画。运行需要 Microsoft Edge WebView2 Runtime，并将包内 `WebView2Loader.dll` 放在 EXE 旁；详见 [Windows GUI 文档](desktop/README.md)。两种 Windows 应用均未进行 Authenticode 签名；构建时单独验证 Microsoft SDK loader 的签名与来源。
 
@@ -86,7 +96,7 @@ Windows 仅支持本地固定 NTFS，检查所有者与 ACL，并拒绝网络、
 
 ## macOS Apple Silicon CLI 与 GUI
 
-macOS 适配提供原生 `arm64` CLI 和 Rust + Tauri 2 + Vue 3 + TypeScript GUI，面向 M 系列 Apple Silicon Mac，应用版本保持 `3.3.0`。已公开的 [v3.3.0 Release](https://github.com/Shixiaoshi0417/NekoKEM/releases/tag/v3.3.0) 没有 macOS 附件；本次适配的包通过 CI 和后续 Release 构建提供。CLI 包名为 `NekoKEM-macos-arm64.tar.gz`；GUI 包为 `NekoKEM-macos-arm64-GUI.zip`（包含 `.app`）和 `NekoKEM-macos-arm64-GUI.dmg`，详见 [macOS 构建与使用说明](macos/README.md) 和 [桌面 GUI 文档](desktop/README.md)。
+v3.3.1 提供面向 M 系列 Apple Silicon Mac 的原生 `arm64` CLI 和 Rust + Tauri 2 + Vue 3 + TypeScript GUI。CLI 包名为 `NekoKEM-macos-arm64.tar.gz`；GUI 包为 `NekoKEM-macos-arm64-GUI.zip`（包含 `.app`）和 `NekoKEM-macos-arm64-GUI.dmg`，可从本版 Release 下载。详见 [macOS 构建与使用说明](macos/README.md) 和 [桌面 GUI 文档](desktop/README.md)。不提供 Intel/Rosetta 构建。
 
 CLI 与 Linux 共用参数解析、五项菜单和语言目录。GUI 使用系统 WKWebView，不需要 Windows 的 WebView2 Runtime 或 loader。两者静态链接固定 OpenSSL 4.0.3，保留其 arm64 汇编加速；运行仍依赖 macOS 系统库与框架。构建设置 macOS 11.0 deployment target；原生 CI 在 `macos-15` 上运行，这不代表已验证 macOS 11.0 实机或每代 M 系列芯片的兼容性、性能。
 
@@ -98,7 +108,7 @@ Linux 原生 GUI 支持 `x86_64` 与 `aarch64`（ARM64），复用 Rust + Tauri 
 
 构建与原生 CI 基线为 Ubuntu 24.04，CI 另在同架构 Fedora 44 容器中安装并启动 RPM。RPM 原生构建，以共享库能力声明依赖；运行需要系统 GTK3、WebKitGTK 4.1 和 glibc 2.39 或更新版本，GUI 便携包仍依赖这些系统库。OpenSSL 4.0.3 静态链接并隐藏符号，避免影响 WebKit 系统 TLS 库，保留汇编、线程、Fortify、栈保护、PIE 和完整 RELRO。Linux 文件权限、认证后提交及取消清理沿用 CLI/Core，Core 3.1、NKEM v3、NKPR v1、KDF 参数与 64 KiB 流式处理不变。详见 [Linux 安装与构建](desktop/README.md#linux-installation-and-build--linux-安装与构建) 和 [Linux GUI 安全边界](desktop/LINUX-SECURITY.md)。
 
-这些 Linux GUI 包来自 CI 和后续 Release 构建，版本保持 `3.3.0`；已发布的 v3.3.0 尚无 Linux GUI 附件。现有静态 Linux CLI 包继续保留。原生窗口测试使用 X11 会话，不代表已验证所有 Linux 发行版或 Wayland 实机。
+v3.3.1 Release 包含上述两种架构的全部 Linux GUI 安装包和便携包，现有静态 Linux CLI 包继续保留。原生窗口测试使用 X11 会话，不代表已验证所有 Linux 发行版或 Wayland 实机。
 
 ## 语言设置
 
