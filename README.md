@@ -318,6 +318,14 @@ v3 使用 X448、ML-KEM-1024、共享秘密组合和 HKDF-SHA512，并将 HKDF s
 - CLI 的 Core 接口当前是路径式 API。粘贴 PEM 因而使用 `/tmp` 下独占 `0700` 目录中的 `0600`、`O_NOFOLLOW|O_CLOEXEC` 临时文件，并在所有返回路径删除文件和目录。直接 memory BIO 需要新增内部 Core 适配层，memfd 的 `/proc/self/fd` 路径又会与私钥 `O_NOFOLLOW` 策略冲突；本阶段不改变公开 Core API，后续可在独立 API 设计中消除该临时路径；
 - `secure_free()` 只用于 `OPENSSL_malloc()` 分配的敏感缓冲区，普通路径字符串和公开元数据仍由匹配的常规分配器释放。
 
+## 性能测量
+
+[大文件性能基线与复现方法](performance/README.md)记录 v3.3.1 Linux x86_64
+正式发布 CLI 的 1 GiB / 8 GiB 原始样本、CPU 时间、内存和 I/O 数据。
+`scripts/profile_large_files.py` 使用一次性受口令保护的密钥，逐轮验证 SHA-256，
+最多同时保留两份大文件。跨版本、Linux/Windows 吞吐比较继续使用
+`scripts/benchmark_throughput.py`；具体速度取决于机器、文件系统和缓存状态。
+
 ## 自动测试
 
 ```sh

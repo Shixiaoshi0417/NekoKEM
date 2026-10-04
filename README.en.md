@@ -311,6 +311,15 @@ v3 uses X448, ML-KEM-1024, combined shared secrets, and HKDF-SHA512, separating 
 - The CLI currently uses a path-based Core API. Pasted PEM therefore uses a `0600`, `O_NOFOLLOW|O_CLOEXEC` temporary file inside an exclusive `0700` directory under `/tmp`, and deletes both on all return paths. Direct memory BIO use would require a new internal Core adapter; memfd's `/proc/self/fd` paths conflict with the private-key `O_NOFOLLOW` policy. This stage does not change the public Core API; a separate future API design can eliminate the temporary path.
 - `secure_free()` is used only for sensitive buffers allocated by `OPENSSL_malloc()`; ordinary path strings and public metadata are released by their matching normal allocators.
 
+## Performance measurements
+
+[Large-file baseline and reproduction](performance/README.md) records the
+v3.3.1 released Linux x86_64 CLI's raw 1 GiB / 8 GiB samples, CPU time, memory
+and I/O accounting. `scripts/profile_large_files.py` uses disposable
+password-protected keys, verifies SHA-256 every round, and keeps at most two
+large files. Use `scripts/benchmark_throughput.py` for paired version comparisons
+on Linux/Windows. Speed depends on hardware, filesystems and cache state.
+
 ## Automated tests
 
 ```sh
