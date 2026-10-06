@@ -156,7 +156,8 @@ function invalid(message: Message, field: Field): Message {
   return message;
 }
 function invalidNote(note: string) {
-  // Same rule as the native store: 512 characters, no control characters.
+  // Same rule as the native store: 512 code points, no control characters. Inputs
+  // carry no HTML maxlength, which would count UTF-16 units and cut emoji at 256.
   return characters(note.trim()) > 512 || /[\u0000-\u0008\u000b-\u001f\u007f-\u009f]/.test(note);
 }
 function validate(): Message | null {
@@ -390,7 +391,7 @@ onUnmounted(() => unlisten?.());
               <div class="key-source" role="group" :aria-label="t('keySource')"><label :class="{ selected: !contactForm.paste }"><input type="radio" name="contactKeySource" :checked="!contactForm.paste" @change="setContactSource(false)">{{ t('path') }}</label><label :class="{ selected: contactForm.paste }"><input type="radio" name="contactKeySource" :checked="contactForm.paste" @change="setContactSource(true)">{{ t('paste') }}</label></div>
               <label v-if="!contactForm.paste" class="field enter-field">{{ t('publicKey') }}<div class="path-input"><input v-model="contactForm.keyPath" v-bind="fieldAttrs('contactKeyPath')" name="contactKeyPath" spellcheck="false" autocomplete="off"><button type="button" :aria-label="`${t('browse')} ${t('publicKey')}`" @click="browse('contactKeyPath')">{{ choosing === 'contactKeyPath' ? t('choosing') : t('browse') }}</button></div></label>
               <label v-else class="field enter-field">{{ t('paste') }}<textarea v-model="contactForm.keyText" v-bind="fieldAttrs('contactKeyText')" name="contactKeyText" rows="4" spellcheck="false" autocomplete="off" :placeholder="t('pastePublicHint')"></textarea></label>
-              <label class="field">{{ t('note') }}<input v-model="contactForm.note" v-bind="fieldAttrs('note')" name="note" maxlength="512" spellcheck="false" autocomplete="off"></label>
+              <label class="field">{{ t('note') }}<input v-model="contactForm.note" v-bind="fieldAttrs('note')" name="note" spellcheck="false" autocomplete="off"></label>
               <p id="note-hint" class="hint">{{ t('noteHint') }}</p>
             </template>
             <template v-else>
@@ -439,7 +440,7 @@ onUnmounted(() => unlisten?.());
               <code class="contact-fingerprint" :aria-label="t('fingerprint')">{{ contact.fingerprint }}</code>
             </div>
             <div v-if="editing === contact.id" class="contact-actions editing">
-              <input v-model="noteDraft" v-bind="fieldAttrs('noteDraft')" name="noteDraft" maxlength="512" spellcheck="false" autocomplete="off" :aria-label="`${t('note')} · ${label(contact)}`" :disabled="locked" @input="editNoteDraft" @keydown.enter.prevent="saveNote(contact)" @keydown.esc.prevent="editing = null">
+              <input v-model="noteDraft" v-bind="fieldAttrs('noteDraft')" name="noteDraft" spellcheck="false" autocomplete="off" :aria-label="`${t('note')} · ${label(contact)}`" :disabled="locked" @input="editNoteDraft" @keydown.enter.prevent="saveNote(contact)" @keydown.esc.prevent="editing = null">
               <button type="button" class="secondary" :disabled="locked" @click="saveNote(contact)">{{ t('saveNote') }}</button>
               <button type="button" class="text-button" :disabled="locked" @click="editing = null">{{ t('cancel') }}</button>
             </div>

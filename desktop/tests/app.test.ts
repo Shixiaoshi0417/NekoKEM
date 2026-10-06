@@ -186,6 +186,12 @@ describe('Desktop public-key contacts',()=>{
   expect(app.get('[role=alert]').text()).toContain('512 characters');
   expect(app.get('[name=note]').attributes('aria-invalid')).toBe('true');
   expect(bridge.saveContact).not.toHaveBeenCalled();
+  // The limit counts code points: 512 emoji are accepted, and no UTF-16 maxlength cuts them.
+  expect(app.get('[name=note]').attributes('maxlength')).toBeUndefined();
+  vi.mocked(bridge.saveContact).mockResolvedValue({...alice,note:'😀'.repeat(512)});
+  await app.get('[name=note]').setValue('😀'.repeat(512));
+  await app.get('form').trigger('submit');await flushPromises();
+  expect(bridge.saveContact).toHaveBeenCalledWith({keyPath:'alice.pub',keyText:'',paste:false,note:'😀'.repeat(512)});
  });
  it('scrubs pasted contact text before the native call and when its source is hidden',async()=>{
   const app=await ready();await contactsPage(app);
