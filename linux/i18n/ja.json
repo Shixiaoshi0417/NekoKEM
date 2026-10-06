@@ -238,6 +238,7 @@
   "Sensitive input must have exactly one hard link\n": "機密入力にはハードリンクが1つだけ必要です\n",
   "Sensitive input must have mode 0600\n": "機密入力の権限は 0600 である必要があります\n",
   "Temporary key path is too long\n": "一時鍵のパスが長すぎます\n",
+  "The X448 private key is degenerate and cannot be used\n": "X448 秘密鍵が縮退しているため使用できません\n",
   "Two public keys are the same or share a key component\n": "2 つの公開鍵が同一か、鍵の構成要素を共有しています\n",
   "This file is not encrypted for this private key, or it was modified\n": "このファイルはこの秘密鍵向けに暗号化されていないか、変更されています\n",
   "Unexpected SHA-256 fingerprint length\n": "SHA-256 フィンガープリントの長さが想定外です\n",

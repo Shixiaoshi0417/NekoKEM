@@ -131,16 +131,20 @@ The payload is processed in 64 KiB chunks exactly as in v3 and keeps the
 
 1. Validate the version, algorithm ID, fixed lengths, recipient count,
    reserved fields, total size and absence of trailing data.
-2. Unlock the private key. For every entry, decapsulate X448 and
+2. Unlock the private key. Loading rejects the one X448 private key whose
+   public key is the all-zero point (the clamped scalar four times the
+   prime subgroup order); see step 3. For every entry, decapsulate X448 and
    ML-KEM-1024, derive the wrap key and try to unwrap the file key. ML-KEM
    rejects implicitly, so another recipient's entry fails at the wrap tag.
    Every entry is tried, including after a match, and the first match is
    kept with a constant-time select. Nothing is reported per entry.
 3. If any entry's X448 ephemeral key is rejected, the whole container is
-   rejected as malformed, wherever that entry is. OpenSSL rejects a key
-   whose shared secret is all zero, which only a small-order key produces
-   whatever the private key, and no correct encryptor writes one. This
-   check depends on the container alone.
+   rejected as malformed, wherever that entry is. Only OpenSSL's rejection
+   of an all-zero shared secret counts as a rejection; any other OpenSSL
+   failure, such as an allocation, aborts decryption as an error. With the
+   degenerate private key refused in step 2, only a small-order ephemeral
+   key gives an all-zero secret, whatever the private key, and no correct
+   encryptor writes one, so this check depends on the container alone.
 4. Recompute the header MAC and compare it in constant time before reading
    any ciphertext. When no entry unwrapped, the MAC is still computed, over
    an all-zero file key, and the file is rejected.
@@ -150,10 +154,16 @@ The payload is processed in 64 KiB chunks exactly as in v3 and keeps the
 
 A key with no entry and a file whose entries or MAC were modified take the
 same path through step 4 and report the same error. Neither the error nor
-the time taken shows which entry belongs to the key, or whether one does.
-Otherwise someone who can submit modified files for decryption could break
-one wrap tag at a time and learn which entry is whose. No output is created
-on any failure.
+the time taken shows which entry belongs to the key. Otherwise someone who
+can submit modified files for decryption could break one wrap tag at a time
+and learn which entry is whose. No output is created on any failure.
+
+This protects which entry is whose, not whether a key can decrypt the file
+at all. Anyone who can submit a file for decryption and see the result
+learns that from the unmodified file, which simply decrypts. Likewise, a
+file whose header verifies but whose payload was modified is processed and
+fails at the payload tag, with the payload authentication error and
+progress reports, while a key with no entry stops at step 4.
 
 ## Limits and boundaries
 

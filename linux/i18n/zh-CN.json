@@ -238,6 +238,7 @@
   "Sensitive input must have exactly one hard link\n": "敏感输入必须恰好只有一个硬链接\n",
   "Sensitive input must have mode 0600\n": "敏感输入权限必须为 0600\n",
   "Temporary key path is too long\n": "临时密钥路径过长\n",
+  "The X448 private key is degenerate and cannot be used\n": "X448 私钥已退化，无法使用\n",
   "Two public keys are the same or share a key component\n": "有两个公钥相同，或共用了同一个密钥组件\n",
   "This file is not encrypted for this private key, or it was modified\n": "此文件不是为该私钥加密的，或已被修改\n",
   "Unexpected SHA-256 fingerprint length\n": "SHA-256 指纹长度异常\n",

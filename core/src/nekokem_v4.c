@@ -12,6 +12,7 @@
 #include <openssl/evp.h>
 #include <openssl/kdf.h>
 #include <openssl/params.h>
+#include <openssl/proverr.h>
 #include <openssl/rand.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -339,9 +340,10 @@ enum {
 
 /*
  * X448 for one entry without printing anything, since trial decryption must
- * not report per entry. Returns 1, 0 when OpenSSL rejects the ephemeral key or
- * its all-zero shared secret, or -1 on another error. Only a small-order
- * ephemeral key gives an all-zero secret, whatever the private key, so a
+ * not report per entry. Returns 1, 0 when OpenSSL rejects the all-zero shared
+ * secret, or -1 on any other failure, such as an allocation. Only a
+ * small-order ephemeral key gives an all-zero secret: hybrid key loading
+ * rejects the one private key that would give one for other keys too, so a
  * rejection depends on the container alone.
  */
 static int entry_x448_secret(EVP_PKEY *private_key,
@@ -360,12 +362,16 @@ static int entry_x448_secret(EVP_PKEY *private_key,
     if (peer != NULL) {
         context = EVP_PKEY_CTX_new_from_pkey(NULL, private_key, NULL);
     }
-    if (context != NULL && EVP_PKEY_derive_init(context) > 0) {
-        result = EVP_PKEY_derive_set_peer(context, peer) > 0 &&
-                         EVP_PKEY_derive(context, secret, &secret_len) > 0 &&
-                         secret_len == X448_SHARED_SECRET_SIZE
-                     ? 1
-                     : 0;
+    if (context != NULL && EVP_PKEY_derive_init(context) > 0 &&
+        EVP_PKEY_derive_set_peer(context, peer) > 0) {
+        if (EVP_PKEY_derive(context, secret, &secret_len) > 0) {
+            result = secret_len == X448_SHARED_SECRET_SIZE ? 1 : -1;
+        } else if (ERR_GET_LIB(ERR_peek_last_error()) == ERR_LIB_PROV &&
+                   ERR_GET_REASON(ERR_peek_last_error()) ==
+                       PROV_R_FAILED_DURING_DERIVATION) {
+            /* How OpenSSL's X448 reports an all-zero shared secret. */
+            result = 0;
+        }
     }
     if (result < 0) {
         (void)ERR_clear_last_mark();

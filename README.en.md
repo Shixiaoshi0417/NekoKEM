@@ -424,6 +424,7 @@ Both harnesses accept an `argv[1]` file path, reject inputs above 2 MiB, and do 
 - Hybrid private keys are now password-protected, but security still depends on strong, unique passwords and operating-system protection of process memory, terminals, and files.
 - Container metadata such as file length and the selected algorithms is not confidential. NKEM v4 also reveals the number of recipients, but not who they are.
 - NKEM does not authenticate senders. v4 recipients share the file key, so any recipient can create a new file reusing the same recipient list; the list does not prove who sent a file.
+- v4 hides which entry belongs to which key, not whether a key can decrypt the file: anyone who can submit the file for decryption and see the result learns that from the unmodified file.
 - The X448/ML-KEM combination and this project's KDF/AAD binding are experimental designs, not a standardized hybrid KEM.
 - Project-internal parser fuzzing has been performed, but there has been no independent third-party audit or broad interoperability testing.
 - This implementation is not a substitute for mature, audited file encryption protocols and key management systems.

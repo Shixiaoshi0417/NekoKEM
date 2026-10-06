@@ -194,6 +194,50 @@ static int swap_entries(const char *source, const char *destination)
     return success;
 }
 
+static void put_be(unsigned char *output, uint64_t value, size_t length)
+{
+    while (length-- > 0U) {
+        output[length] = (unsigned char)(value & 0xffU);
+        value >>= 8U;
+    }
+}
+
+/* The fixed header exactly as docs/NKEM-v4.md lists it, without Core's encoder. */
+static void spec_header(unsigned char header[NKEM_V4_HEADER_SIZE],
+                        size_t count, uint64_t ciphertext_len)
+{
+    memset(header, 0, NKEM_V4_HEADER_SIZE);
+    memcpy(header, "NKEM", 4U);
+    header[4] = 4U;  /* version */
+    header[5] = 4U;  /* algorithm ID */
+    put_be(header + 6, 32U, 2U);
+    put_be(header + 8, count, 2U);
+    put_be(header + 10, 1672U, 2U);
+    put_be(header + 16, ciphertext_len, 8U);
+    header[24] = 32U;  /* salt */
+    header[25] = 12U;  /* nonce */
+    header[26] = 16U;  /* tag */
+    header[27] = 64U;  /* header MAC; bytes 12-15 and 28-31 stay zero */
+}
+
+/* Two recipients and DATA_SIZE bytes of ciphertext, written out by hand. */
+static const unsigned char two_recipient_header[NKEM_V4_HEADER_SIZE] = {
+    'N', 'K', 'E', 'M', 0x04, 0x04, 0x00, 0x20,
+    0x00, 0x02, 0x06, 0x88, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x03, 0x04, 0xd2,
+    0x20, 0x0c, 0x10, 0x40, 0x00, 0x00, 0x00, 0x00};
+
+/* Little-endian X448 scalar 4 * subgroup order; clamping leaves it unchanged. */
+static const unsigned char degenerate_x448[56] = {
+    0xcc, 0x13, 0x61, 0xad, 0x4a, 0x0a, 0xe3, 0x8d,
+    0x54, 0x3d, 0x16, 0x37, 0xca, 0x09, 0xb3, 0x85,
+    0x40, 0xda, 0x58, 0xbb, 0x26, 0x6d, 0x3b, 0x11,
+    0xa7, 0x8f, 0x28, 0xf3, 0xfd, 0xff, 0xff, 0xff,
+    0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
+    0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
+    0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
+};
+
 static EVP_PKEY *read_public(const char *path, const char *algorithm)
 {
     BIO *input = BIO_new_file(path, "rb");
@@ -231,6 +275,45 @@ static int splice_public(const char *x448_from, const char *mlkem_from,
                   BIO_get_mem_ptr(pem, &buffer) > 0 &&
                   write_private(output, buffer->data, buffer->length);
 
+    BIO_free(pem);
+    EVP_PKEY_free(x448);
+    EVP_PKEY_free(mlkem);
+    return success;
+}
+
+/* A private-key file with the degenerate X448 key and a valid ML-KEM key. */
+static int write_degenerate_private(const char *mlkem_from, const char *output)
+{
+    EVP_PKEY *x448 = EVP_PKEY_new_raw_private_key_ex(
+        NULL, "X448", NULL, degenerate_x448, sizeof(degenerate_x448));
+    EVP_PKEY *mlkem = NULL;
+    BIO *input = BIO_new_file(mlkem_from, "rb");
+    BIO *pem = BIO_new(BIO_s_mem());
+    BUF_MEM *buffer = NULL;
+    int success;
+
+    while (input != NULL && mlkem == NULL) {
+        EVP_PKEY *next = PEM_read_bio_PrivateKey(input, NULL, NULL, NULL);
+
+        if (next == NULL) {
+            break;
+        }
+        if (EVP_PKEY_is_a(next, "ML-KEM-1024") == 1) {
+            mlkem = next;
+        } else {
+            EVP_PKEY_free(next);
+        }
+    }
+    ERR_clear_error();
+    success = x448 != NULL && mlkem != NULL && pem != NULL &&
+              PEM_write_bio_PrivateKey(pem, x448, NULL, NULL, 0, NULL, NULL) == 1 &&
+              PEM_write_bio_PrivateKey(pem, mlkem, NULL, NULL, 0, NULL, NULL) == 1 &&
+              BIO_get_mem_ptr(pem, &buffer) > 0 &&
+              write_private(output, buffer->data, buffer->length);
+    if (buffer != NULL) {
+        OPENSSL_cleanse(buffer->data, buffer->max);
+    }
+    BIO_free(input);
     BIO_free(pem);
     EVP_PKEY_free(x448);
     EVP_PKEY_free(mlkem);
@@ -391,7 +474,7 @@ static int build_container(const char *const *keys, size_t count,
     if (bytes == NULL) {
         return 0;
     }
-    nkem_v4_header_encode(bytes, (uint16_t)count, DATA_SIZE);
+    spec_header(bytes, count, DATA_SIZE);
     if (RAND_bytes(file_key, (int)sizeof(file_key)) != 1 ||
         RAND_bytes(salt, (int)NKEM_V4_SALT_SIZE) != 1 ||
         RAND_bytes(bytes + mac_offset + NKEM_V4_MAC_SIZE,
@@ -436,7 +519,7 @@ cleanup:
 
 #ifndef _WIN32
 /* Decrypts with stderr captured; 1 when it failed, printed and wrote nothing. */
-static int failure_message(size_t index, const char *input, char *message,
+static int failure_message(const char *key, const char *input, char *message,
                            size_t size)
 {
     FILE *capture = tmpfile();
@@ -453,7 +536,7 @@ static int failure_message(size_t index, const char *input, char *message,
         (void)fclose(capture);
         return 0;
     }
-    failed = !decrypt_as(index, input, "fresh-out");
+    failed = !nekokem_decrypt_file(input, "fresh-out", key, NULL, 0U);
     (void)fflush(stderr);
     (void)dup2(saved, fileno(stderr));
     (void)close(saved);
@@ -503,6 +586,13 @@ static int test_round_trips(const unsigned char *data)
                                NKEM_TAG_SIZE);
     CHECK(nkem_v4_header_decode(container, &header));
     CHECK(header.recipient_count == 2U && header.ciphertext_len == DATA_SIZE);
+    {
+        unsigned char expected[NKEM_V4_HEADER_SIZE];
+
+        spec_header(expected, 2U, DATA_SIZE);
+        CHECK(memcmp(expected, two_recipient_header, sizeof(expected)) == 0);
+        CHECK(memcmp(container, two_recipient_header, sizeof(expected)) == 0);
+    }
     CHECK(nkem_v4_container_parse(container, container_len));
     CHECK(!nkem_v3_container_parse(container, container_len));
     OPENSSL_free(container);
@@ -678,6 +768,9 @@ static int test_trial_decryption(const unsigned char *data)
         }
     }
 
+    CHECK(encrypt_to("plain", "pair-v4.nkem", pair, 2U) ==
+          NEKOKEM_OPERATION_SUCCESS);
+
     /* Two keys sharing one component are rejected, not only identical keys;
      * the spliced key alone is a valid public key. */
     CHECK(splice_public(public_paths[1], public_paths[3], "spliced.pub"));
@@ -690,6 +783,15 @@ static int test_trial_decryption(const unsigned char *data)
           NEKOKEM_OPERATION_ERROR);
     CHECK(!exists("fresh.nkem"));
 
+    /* The private key whose X448 secret is zero with every curve point is
+     * refused when it is loaded, before any container is read. */
+    CHECK(write_degenerate_private(private_paths[1], "degenerate.key"));
+    CHECK(!nekokem_decrypt_file("pair-v4.nkem", "fresh-out", "degenerate.key",
+                                NULL, 0U));
+    CHECK(!nekokem_decrypt_file("v3.nkem", "fresh-out", "degenerate.key",
+                                NULL, 0U));
+    CHECK(!exists("fresh-out"));
+
 #ifndef _WIN32
     {
         char first[512];
@@ -701,17 +803,29 @@ static int test_trial_decryption(const unsigned char *data)
          * failed, and a key that is not listed sees it too. */
         CHECK(encrypt_to("plain", "pair.nkem", pair, 2U) ==
               NEKOKEM_OPERATION_SUCCESS);
-        CHECK(failure_message(3U, "pair.nkem", first, sizeof(first)));
+        CHECK(failure_message(private_paths[3], "pair.nkem", first,
+                              sizeof(first)));
         for (entry = 0U; entry < 2U; ++entry) {
             CHECK(mutate("pair.nkem", "tampered.nkem",
                          ENTRY_OFFSET(entry) + NKEM_V4_ENTRY_SIZE - 1U,
                          0x01U, 0));
             for (index = 1U; index <= 2U; ++index) {
-                CHECK(failure_message(index, "tampered.nkem", other,
-                                      sizeof(other)));
+                CHECK(failure_message(private_paths[index], "tampered.nkem",
+                                      other, sizeof(other)));
                 CHECK(strcmp(first, other) == 0);
             }
         }
+        /* The degenerate key fails the same way for v3, v4 and malformed
+         * containers: its result no longer depends on the container. */
+        CHECK(failure_message("degenerate.key", "pair-v4.nkem", first,
+                              sizeof(first)));
+        CHECK(build_container(pair, 2U, 1U, data, "built.nkem"));
+        CHECK(failure_message("degenerate.key", "built.nkem", other,
+                              sizeof(other)));
+        CHECK(strcmp(first, other) == 0);
+        CHECK(failure_message("degenerate.key", "v3.nkem", other,
+                              sizeof(other)));
+        CHECK(strcmp(first, other) == 0);
     }
 #endif
     return 1;
@@ -797,7 +911,7 @@ static void remove_fixtures(void)
         "empty.nkem", "v3.nkem", "max.nkem", "existing.nkem",
         "tampered.nkem", "progress.nkem", "fresh-out", "fresh.nkem",
         "cancelled.nkem", "cancelled-out", "built.nkem", "spliced.pub",
-        "spliced.nkem", "pair.nkem"};
+        "spliced.nkem", "pair.nkem", "pair-v4.nkem", "degenerate.key"};
     size_t index;
 
     for (index = 0U; index < sizeof(names) / sizeof(names[0]); ++index) {
