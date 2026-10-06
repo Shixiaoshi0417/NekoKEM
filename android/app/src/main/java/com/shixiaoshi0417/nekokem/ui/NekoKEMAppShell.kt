@@ -2,7 +2,16 @@ package com.shixiaoshi0417.nekokem.ui
 
 import android.app.Activity
 import android.os.Build
+import androidx.activity.BackEventCompat
+import androidx.activity.compose.PredictiveBackHandler
 import androidx.annotation.StringRes
+import androidx.compose.animation.core.Animatable
+import androidx.compose.foundation.background
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.runtime.derivedStateOf
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.RadioButton
 import androidx.compose.foundation.selection.selectable
@@ -59,6 +68,7 @@ import androidx.compose.ui.unit.dp
 import com.shixiaoshi0417.nekokem.R
 import com.shixiaoshi0417.nekokem.keys.PublicKeyContact
 import com.shixiaoshi0417.nekokem.keys.PublicKeyContactsState
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 
 data class NekoKEMUiState(
@@ -124,12 +134,37 @@ fun NekoKEMAppShell(
     var destination by rememberSaveable { mutableStateOf(AppDestination.FILES) }
     val fontScale = LocalDensity.current.fontScale.coerceAtLeast(1f)
     val menuDescription = stringResource(R.string.navigation_open_menu)
+    // Predictive back: a secondary page follows the system back gesture and
+    // reveals Files beneath it. Files itself leaves back to the system, which
+    // shows its back-to-home animation; the open drawer handles its own gesture.
+    val backProgress = remember { Animatable(0f) }
+    var backEdge by remember { mutableIntStateOf(BackEventCompat.EDGE_LEFT) }
+    val previewingFiles by remember { derivedStateOf { backProgress.value > 0f } }
+    val drawerClosed = drawerState.currentValue == DrawerValue.Closed &&
+        drawerState.targetValue == DrawerValue.Closed
+    PredictiveBackHandler(
+        enabled = destination != AppDestination.FILES && drawerClosed && !state.running,
+    ) { events ->
+        try {
+            events.collect { event ->
+                backEdge = event.swipeEdge
+                backProgress.snapTo(event.progress)
+            }
+            destination = AppDestination.FILES
+            backProgress.snapTo(0f)
+        } catch (error: CancellationException) {
+            // A cancelled gesture returns the page to its resting position.
+            scope.launch { backProgress.animateTo(0f) }
+            throw error
+        }
+    }
 
     ModalNavigationDrawer(
         drawerState = drawerState,
         gesturesEnabled = !state.running,
         drawerContent = {
-            ModalDrawerSheet {
+            // Passing the state enables Material's predictive back for the drawer.
+            ModalDrawerSheet(drawerState = drawerState) {
                 Text(
                     modifier = Modifier.padding(24.dp),
                     text = stringResource(R.string.app_name),
@@ -182,15 +217,41 @@ fun NekoKEMAppShell(
                     .fillMaxSize()
                     .padding(padding),
             ) {
-                when (destination) {
-                    AppDestination.FILES -> FileOperationsPage(state, actions)
-                    AppDestination.KEYS -> KeyManagementPage(state, actions)
-                    AppDestination.CONTACTS -> PublicKeyContactsPage(state, actions) { contact ->
-                        actions.onSelectContact(contact)
-                        destination = AppDestination.FILES
+                if (previewingFiles && destination != AppDestination.FILES) {
+                    // Visual preview only; the page being left keeps the semantics.
+                    Box(modifier = Modifier.fillMaxSize().clearAndSetSemantics {}) {
+                        FileOperationsPage(state, actions)
                     }
-                    AppDestination.SETTINGS -> SettingsPage(state.running)
-                    AppDestination.ABOUT -> AboutPage(state)
+                }
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .graphicsLayer {
+                            // Material predictive back: shrink to 90%, shift away from the
+                            // swipe edge and round the corners as the finger moves.
+                            val progress = backProgress.value
+                            val scale = 1f - 0.1f * progress
+                            scaleX = scale
+                            scaleY = scale
+                            val direction = if (backEdge == BackEventCompat.EDGE_RIGHT) -1f else 1f
+                            translationX = direction * progress *
+                                (size.width / 20f - 8.dp.toPx()).coerceAtLeast(0f)
+                            shape = RoundedCornerShape(28.dp * progress)
+                            clip = progress > 0f
+                            shadowElevation = 6.dp.toPx() * progress
+                        }
+                        .background(MaterialTheme.colorScheme.background),
+                ) {
+                    when (destination) {
+                        AppDestination.FILES -> FileOperationsPage(state, actions)
+                        AppDestination.KEYS -> KeyManagementPage(state, actions)
+                        AppDestination.CONTACTS -> PublicKeyContactsPage(state, actions) { contact ->
+                            actions.onSelectContact(contact)
+                            destination = AppDestination.FILES
+                        }
+                        AppDestination.SETTINGS -> SettingsPage(state.running)
+                        AppDestination.ABOUT -> AboutPage(state)
+                    }
                 }
             }
         }

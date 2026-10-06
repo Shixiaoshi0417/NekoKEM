@@ -41,7 +41,10 @@ use validates the key and fingerprint with the existing Core; an unavailable ent
 requires an explicit new selection. Notes are labels; verify fingerprints with recipients.
 Contacts are separate from local default keys. Cryptographic parameters and file formats
 remain unchanged. See the [Android documentation](android/README.md#公钥通讯录开发分支)
-for behavior and device tests. The published v3.3.1 APK does not contain this development feature.
+for behavior and device tests. The development branch also supports Android predictive back:
+secondary pages and the navigation drawer follow the back gesture; see
+[predictive back](android/README.md#预测性返回开发分支). The published v3.3.1 APK does not
+contain these development features.
 
 ## Desktop GUI public-key contacts (development branch)
 

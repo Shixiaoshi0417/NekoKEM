@@ -42,6 +42,7 @@ class TemporaryKeyInstrumentation : Instrumentation() {
             val publicKeyTrace = if (languagePhase == null) runTemporaryKeyTests(targetContext) else "language-only"
             runLanguageDeviceTests(this, languagePhase, expectedSystemLanguage, screenshotPrefix)
             if (languagePhase == null) runPublicKeyContactsUiTests(this)
+            if (languagePhase == null) runPredictiveBackUiTests(this)
             results.putString(RESULT_KEY, RESULT_SUCCESS)
             results.putString(PUBLIC_KEY_TRACE_KEY, publicKeyTrace)
             Activity.RESULT_OK
