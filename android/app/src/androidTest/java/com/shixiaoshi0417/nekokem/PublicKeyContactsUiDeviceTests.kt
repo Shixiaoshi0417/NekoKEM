@@ -4,6 +4,7 @@ import android.app.Activity
 import android.app.Instrumentation
 import android.content.Intent
 import android.graphics.Bitmap
+import android.graphics.Rect
 import android.net.Uri
 import android.os.Bundle
 import android.os.SystemClock
@@ -39,14 +40,18 @@ internal fun runPublicKeyContactsUiTests(instrumentation: Instrumentation) {
     fun text(value: String): AccessibilityNodeInfo? = find(instrumentation.uiAutomation.rootInActiveWindow) {
         it.text?.toString()?.contains(value) == true || it.contentDescription?.toString() == value
     }
+    // Three steps forward, three back: reaches content on either side of the viewport.
+    fun scroll(step: Int) {
+        find(instrumentation.uiAutomation.rootInActiveWindow) { it.isScrollable }
+            ?.performAction(if ((step / 3) % 2 == 0)
+                AccessibilityNodeInfo.ACTION_SCROLL_FORWARD else AccessibilityNodeInfo.ACTION_SCROLL_BACKWARD)
+    }
     fun awaitText(value: String): AccessibilityNodeInfo {
         val deadline = SystemClock.uptimeMillis() + 10000
         var attempts = 0
         while (SystemClock.uptimeMillis() < deadline) {
             text(value)?.let { return it }
-            find(instrumentation.uiAutomation.rootInActiveWindow) { it.isScrollable }
-                ?.performAction(if ((attempts++ / 3) % 2 == 0)
-                    AccessibilityNodeInfo.ACTION_SCROLL_FORWARD else AccessibilityNodeInfo.ACTION_SCROLL_BACKWARD)
+            scroll(attempts++)
             instrumentation.waitForIdleSync()
             SystemClock.sleep(100)
         }
@@ -55,15 +60,25 @@ internal fun runPublicKeyContactsUiTests(instrumentation: Instrumentation) {
     fun click(value: String) {
         awaitText(value)
         // The page may recompose between lookup and click, leaving a stale node that
-        // refuses the action or briefly lacks the exact label. Retry until it succeeds.
-        val deadline = SystemClock.uptimeMillis() + 10000
+        // refuses the action or briefly lacks the exact label. A snackbar can also
+        // cover the target, which Compose then leaves out of the accessibility tree.
+        // Retry, and keep scrolling while it fails so the target moves back into an
+        // uncovered part of the page.
+        val deadline = SystemClock.uptimeMillis() + 20000
+        var attempts = 0
         while (true) {
             var target = find(instrumentation.uiAutomation.rootInActiveWindow) {
                 it.text?.toString() == value || it.contentDescription?.toString() == value
             }
+            var observed = if (target == null) "not in tree" else "label found"
             while (target != null && !target.isClickable) target = target.parent
-            if (target != null && target.performAction(AccessibilityNodeInfo.ACTION_CLICK)) break
-            check(SystemClock.uptimeMillis() < deadline) { "Missing exact contacts action: $value" }
+            if (target != null) {
+                observed = "enabled=${target.isEnabled}, visible=${target.isVisibleToUser}, " +
+                    "click=${target.actionList.any { it.id == AccessibilityNodeInfo.ACTION_CLICK }}"
+                if (target.performAction(AccessibilityNodeInfo.ACTION_CLICK)) break
+            }
+            check(SystemClock.uptimeMillis() < deadline) { "Missing exact contacts action: $value ($observed)" }
+            if (++attempts % 5 == 0) scroll(attempts / 5 - 1)
             instrumentation.waitForIdleSync()
             SystemClock.sleep(100)
         }
@@ -195,8 +210,12 @@ internal fun runPublicKeyContactsUiTests(instrumentation: Instrumentation) {
             var count = 0
             fun dump(node: AccessibilityNodeInfo?, depth: Int) {
                 if (node == null || depth > 50 || count++ >= 512) return
+                val bounds = Rect().also { node.getBoundsInScreen(it) }
                 tree.append("  ".repeat(depth)).append(node.className).append(" | ")
-                    .append(node.text).append(" | ").append(node.contentDescription).append('\n')
+                    .append(node.text).append(" | ").append(node.contentDescription).append(" | ")
+                    .append(bounds.toShortString()).append(" clickable=").append(node.isClickable)
+                    .append(" enabled=").append(node.isEnabled).append(" visible=").append(node.isVisibleToUser)
+                    .append('\n')
                 for (index in 0 until node.childCount) dump(node.getChild(index), depth + 1)
             }
             dump(instrumentation.uiAutomation.rootInActiveWindow, 0)

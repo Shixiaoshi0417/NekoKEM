@@ -14,6 +14,11 @@ collect_evidence() {
     adb shell dumpsys activity activities > "$report_dir/activities.txt" || true
     adb shell dumpsys activity lastanr > "$report_dir/last-anr.txt" || true
     adb shell dumpsys window > "$report_dir/windows.txt" || true
+    # Also print a failed contacts UI run's accessibility tree into the job log.
+    if adb shell "run-as com.shixiaoshi0417.nekokem sh -c 'test -f cache/i18n-screens/contacts-failure.txt'"; then
+        echo '--- contacts UI accessibility tree at failure ---'
+        adb exec-out run-as com.shixiaoshi0417.nekokem cat cache/i18n-screens/contacts-failure.txt || true
+    fi
 }
 # Failure collection preserves test status; successful runs verify the complete archive.
 trap 'collect_evidence || true' EXIT
