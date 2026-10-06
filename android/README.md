@@ -74,6 +74,20 @@ context.filesDir/
 无效记录、指纹不符、链接与权限检查，以及真实 Compose 页面中的备注编辑、选择、
 Activity 重建和删除。NKEM/NKPR、密码算法与参数、JNI 接口均保持原有行为。
 
+## 预测性返回（开发分支）
+
+App 启用 Android 预测性返回（`android:enableOnBackInvokedCallback="true"`）。在密钥管理、
+公钥通讯录、设置或关于页面侧滑返回时，当前页面跟随手指缩小、向内平移并显示圆角，
+下方预览文件加密页；松手完成返回文件页，取消手势则页面复原。侧边菜单打开时，返回手势
+由 Material 抽屉跟手关闭菜单，不会退出 App。文件页不拦截返回，由系统显示返回桌面动画。
+文件操作进行中不拦截返回，原有进度对话框行为不变。Android 14 及以上提供跟手进度；
+Android 8–13 收到返回时直接回到文件页或关闭菜单。
+
+预览层只用于显示，不进入无障碍树。API 26/35 设备测试通过 Activity 的
+`OnBackPressedDispatcher` 发送开始、进度、取消和完成事件，校验页面随进度缩放平移、
+取消后复原、完成后回到文件页且 Activity 不结束，以及菜单关闭和无进度返回，
+并保存一张手势进行中的截图。
+
 ## Storage Access Framework
 
 文件选择使用 `OpenDocument`，输出使用 `CreateDocument`。Manifest 不申请
