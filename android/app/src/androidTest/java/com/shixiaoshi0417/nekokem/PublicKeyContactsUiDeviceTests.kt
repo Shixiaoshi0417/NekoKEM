@@ -54,11 +54,19 @@ internal fun runPublicKeyContactsUiTests(instrumentation: Instrumentation) {
     }
     fun click(value: String) {
         awaitText(value)
-        var target = checkNotNull(find(instrumentation.uiAutomation.rootInActiveWindow) {
-            it.text?.toString() == value || it.contentDescription?.toString() == value
-        }) { "Missing exact contacts action: $value" }
-        while (!target.isClickable) target = checkNotNull(target.parent)
-        check(target.performAction(AccessibilityNodeInfo.ACTION_CLICK))
+        // The page may recompose between lookup and click, leaving a stale node that
+        // refuses the action or briefly lacks the exact label. Retry until it succeeds.
+        val deadline = SystemClock.uptimeMillis() + 10000
+        while (true) {
+            var target = find(instrumentation.uiAutomation.rootInActiveWindow) {
+                it.text?.toString() == value || it.contentDescription?.toString() == value
+            }
+            while (target != null && !target.isClickable) target = target.parent
+            if (target != null && target.performAction(AccessibilityNodeInfo.ACTION_CLICK)) break
+            check(SystemClock.uptimeMillis() < deadline) { "Missing exact contacts action: $value" }
+            instrumentation.waitForIdleSync()
+            SystemClock.sleep(100)
+        }
         instrumentation.waitForIdleSync()
     }
     fun openDialog(value: String) {
