@@ -89,9 +89,11 @@ with tarfile.open(sys.argv[1], 'r:gz') as archive:
     for name in ('large-dark-system-ja', 'small-light-system-de'):
         image = archive.extractfile(f'i18n-screens/{name}.png')
         assert image is not None and image.read(8) == b'\x89PNG\r\n\x1a\n'
+    image = archive.extractfile('i18n-screens/contacts-selected.png')
+    assert image is not None and image.read(8) == b'\x89PNG\r\n\x1a\n'
     # Consume the complete gzip stream, including its trailer.
     archive.getmembers()
-print('All 16 rendered language/layout screenshots archived')
+print('All 16 language/layout screenshots and the contact selection screenshot archived')
 PY
 gzip -t "$report_dir/screens.tar.gz"
 trap - EXIT

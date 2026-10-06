@@ -96,7 +96,16 @@ internal fun runPublicKeyContactsUiTests(instrumentation: Instrumentation) {
         awaitText("CI recipient")
         awaitText(contact.fingerprint)
         click(checkNotNull(activity).getString(R.string.action_edit_contact_note))
-        val field = checkNotNull(find(instrumentation.uiAutomation.rootInActiveWindow) { it.isEditable })
+        val editorDeadline = SystemClock.uptimeMillis() + 10000
+        var editor: AccessibilityNodeInfo? = null
+        while (editor == null && SystemClock.uptimeMillis() < editorDeadline) {
+            editor = find(instrumentation.uiAutomation.rootInActiveWindow) { it.isEditable }
+            if (editor == null) {
+                instrumentation.waitForIdleSync()
+                SystemClock.sleep(100)
+            }
+        }
+        val field = checkNotNull(editor) { "Contact note editor did not render" }
         val editedNote = "CI updated / 备注 🐈"
         check(field.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, Bundle().apply {
             putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, editedNote)

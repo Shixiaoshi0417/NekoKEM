@@ -1325,7 +1325,8 @@ private fun NekoKEMRoute(
             selectedFileName = selectedInputName,
             publicKeyTemporary = temporaryPublicKey != null,
             publicKeyFileName = temporaryPublicKey?.displayName
-                ?: if (selectedContactId != null) selectedContact?.displayName.orEmpty()
+                ?: if (selectedContactId != null) selectedContact?.displayName
+                    ?: context.getString(R.string.not_available)
                 else context.getString(R.string.default_public_key_filename),
             publicKeyFingerprint = if (selectedContactId != null) selectedContact?.fingerprint
                 else temporaryPublicKey?.fingerprint ?: keyState.fingerprint,
