@@ -884,7 +884,7 @@ jobs:
         run: |
           python3 desktop/scripts/package-macos-gui.py \
             --bundle-dir desktop/src-tauri/target/aarch64-apple-darwin/release/bundle \
-            --output "$RUNNER_TEMP/macos-gui" --version 3.3.1 --source-sha "$GITHUB_SHA"
+            --output "$RUNNER_TEMP/macos-gui" --version 3.3.2 --source-sha "$GITHUB_SHA"
       - name: Verify the actual native macOS window launches
         run: python3 desktop/tests/launch_macos.py desktop/src-tauri/target/aarch64-apple-darwin/release/bundle/macos/NekoKEM.app --log "$RUNNER_TEMP/macos-gui/startup.log"
       - uses: actions/upload-artifact@v4
