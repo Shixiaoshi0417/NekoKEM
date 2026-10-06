@@ -9,6 +9,7 @@ import android.net.Uri
 import android.os.Bundle
 import android.os.SystemClock
 import android.system.Os
+import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
 import com.shixiaoshi0417.nekokem.files.SafFileWorkflow
 import com.shixiaoshi0417.nekokem.i18n.AppLanguages
@@ -42,12 +43,24 @@ internal fun runPublicKeyContactsUiTests(instrumentation: Instrumentation) {
     }
     // Three steps forward, three back: reaches content on either side of the viewport.
     fun scroll(step: Int) {
-        find(instrumentation.uiAutomation.rootInActiveWindow) { it.isScrollable }
-            ?.performAction(if ((step / 3) % 2 == 0)
-                AccessibilityNodeInfo.ACTION_SCROLL_FORWARD else AccessibilityNodeInfo.ACTION_SCROLL_BACKWARD)
+        val scrollable = find(instrumentation.uiAutomation.rootInActiveWindow) { it.isScrollable } ?: return
+        val action = if ((step / 3) % 2 == 0)
+            AccessibilityNodeInfo.ACTION_SCROLL_FORWARD else AccessibilityNodeInfo.ACTION_SCROLL_BACKWARD
+        // Compose offers only the directions it can still scroll.
+        if (scrollable.actionList.none { it.id == action }) return
+        // Compose applies the scroll on its next frame, which a loaded emulator can
+        // delay by seconds. Wait for the scroll event so no later lookup sees, and no
+        // later scroll queues behind, a position that is about to change.
+        runCatching {
+            instrumentation.uiAutomation.executeAndWaitForEvent(
+                { scrollable.performAction(action) },
+                { it.eventType == AccessibilityEvent.TYPE_VIEW_SCROLLED },
+                5000,
+            )
+        }
     }
     fun awaitText(value: String): AccessibilityNodeInfo {
-        val deadline = SystemClock.uptimeMillis() + 10000
+        val deadline = SystemClock.uptimeMillis() + 20000
         var attempts = 0
         while (SystemClock.uptimeMillis() < deadline) {
             text(value)?.let { return it }
@@ -60,10 +73,9 @@ internal fun runPublicKeyContactsUiTests(instrumentation: Instrumentation) {
     fun click(value: String) {
         awaitText(value)
         // The page may recompose between lookup and click, leaving a stale node that
-        // refuses the action or briefly lacks the exact label. A snackbar can also
-        // cover the target, which Compose then leaves out of the accessibility tree.
-        // Retry, and keep scrolling while it fails so the target moves back into an
-        // uncovered part of the page.
+        // refuses the action or briefly lacks the exact label, or move the target out
+        // of view, where Compose leaves it out of the accessibility tree. Retry, and
+        // keep scrolling while it fails so the target comes back into view.
         val deadline = SystemClock.uptimeMillis() + 20000
         var attempts = 0
         while (true) {
