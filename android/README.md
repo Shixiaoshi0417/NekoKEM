@@ -1,4 +1,4 @@
-# NekoKEM Android v3.3.1
+# NekoKEM Android v3.3.2
 
 <p align="center">
   <img src="../docs/icon-rounded.png" alt="NekoKEM App icon" width="160">
@@ -9,11 +9,11 @@ JNI 不实现或解析 X448、ML-KEM-1024、HKDF、AES-GCM、NKEM 或 NKPR。
 Core 仅处理 NKEM v3 文件容器；NKEM v1/v2 已不再支持。NKPR 是独立的
 私钥容器，仍由 Core 处理且格式不变。
 
-当前正式 App 版本为 `3.3.1`，Core 版本保持 `3.1`，Android application ID
+当前正式 App 版本为 `3.3.2`，Core 版本保持 `3.1`，Android application ID
 与 namespace 均为 `com.shixiaoshi0417.nekokem`。协议容器版本仍为
 **NKEM v3**，与 App 版本号相互独立；NKPR 格式保持不变。
 
-v3.3.1 沿用 v3.2.0 发布签名，可直接覆盖升级。升级前建议导出公钥和加密 NKPR 私钥，验证备份并保存私钥密码。仅旧签名 v3.1.x 用户需要在完成备份后卸载重装；卸载会删除内部密钥。详见 [v3.3.1 中英双语更新日志](../release/v3.3.1.md)，历史签名迁移记录保留在 [v3.2.0](../release/v3.2.0.md)。
+v3.3.2 沿用 v3.2.0 发布签名，可直接覆盖升级。升级前建议导出公钥和加密 NKPR 私钥，验证备份并保存私钥密码。仅旧签名 v3.1.x 用户需要在完成备份后卸载重装；卸载会删除内部密钥。详见 [v3.3.2 中英双语更新日志](../release/v3.3.2.md)，历史签名迁移记录保留在 [v3.2.0](../release/v3.2.0.md)。
 
 README 图标仅使用专用圆角展示图，Android launcher 继续使用现有方形白底图案。应用是未经独立专业安全审计的实验性工具，不应用于保护重要或敏感数据。
 
@@ -52,7 +52,7 @@ context.filesDir/
 口令，成功后才用原子重命名替换现有私钥；错误、取消或认证失败不会覆盖旧
 私钥。删除私钥前显示确认对话框，并清除 `cacheDir/nekokem-work` 暂存文件。
 
-## 公钥通讯录（开发分支）
+## 公钥通讯录
 
 侧边菜单的“公钥通讯录”支持导入接收方公钥、添加或编辑备注、删除条目。
 加密页可选择已保存的公钥；“用于加密”也会返回文件页并选中对应条目。
@@ -76,7 +76,7 @@ context.filesDir/
 无效记录、指纹不符、链接与权限检查，以及真实 Compose 页面中的备注编辑、选择、
 Activity 重建和删除。NKEM/NKPR、密码算法与参数、JNI 接口均保持原有行为。
 
-## 预测性返回（开发分支）
+## 预测性返回
 
 App 启用 Android 预测性返回（`android:enableOnBackInvokedCallback="true"`）。在密钥管理、
 公钥通讯录、设置或关于页面侧滑返回时，当前页面跟随手指缩小、向内平移并显示圆角，

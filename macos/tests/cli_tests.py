@@ -57,7 +57,7 @@ class Tests(unittest.TestCase):
                              for path in self.root.rglob('*')))
 
     def test_version_and_unicode_paths(self):
-        self.assertEqual(self.run_cli('--version').stdout, b'NekoKEM 3.3.1\n')
+        self.assertEqual(self.run_cli('--version').stdout, b'NekoKEM 3.3.2\n')
         self.generate()
         plain = self.root/'中文-日本語-한국어-😀.bin'
         plain.write_bytes(bytes(range(256))*4096)

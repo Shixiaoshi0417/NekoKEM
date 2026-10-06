@@ -46,7 +46,7 @@ pinned public recovery recipient. The recipient's private key stays outside the
 repository. Plaintext signing keys/passwords and the recovery private key must
 never be uploaded. Plaintext signing material is removed even when the job fails.
 
-The v3.3.1 public release contains 14 packages:
+The v3.3.2 public release contains 14 packages:
 
 | Platform | Public assets |
 |---|---|
@@ -57,14 +57,14 @@ The v3.3.1 public release contains 14 packages:
 | Linux ARM64 | `NekoKEM-linux-aarch64.tar.gz`, `NekoKEM-linux-aarch64-GUI.deb`, `NekoKEM-linux-aarch64-GUI.rpm`, `NekoKEM-linux-aarch64-GUI.tar.gz` |
 
 Publish only packages from the successful Release run for the exact CI-validated
-v3.3.1 source. Generate the fifteenth asset, top-level `SHA256SUMS.txt`, from all
+v3.3.2 source. Generate the fifteenth asset, top-level `SHA256SUMS.txt`, from all
 14 packages. Record the source commit, CI/Release run links, Android signer and
-public asset hashes in the [Chinese-then-English v3.3.1 notes](v3.3.1.md).
+public asset hashes in the [Chinese-then-English v3.3.2 notes](v3.3.2.md).
 The encrypted signing recovery envelope remains a protected Actions artifact;
 **do not attach it to the public GitHub Release**. Windows application EXEs are
 unsigned; verification of the Microsoft SDK loader's signature is separate.
 
-Android v3.3.1 uses versionCode `6`, keeps the v3.2.0/v3.3.0 signing identity and
+Android v3.3.2 uses versionCode `7`, keeps the v3.2.0/v3.3.0 signing identity and
 supports an in-place update. Only old-signer v3.1.x installations need backup
 verification and uninstall/reinstall. Keep the existing square artwork for Android,
 use transparent outer white areas for Windows EXE icons, reuse those PNGs for
@@ -76,13 +76,13 @@ retired in favor of these two entry points.
 
 ## macOS Apple Silicon build artifacts
 
-v3.3.1 includes the following native macOS packages in CI and Release:
+v3.3.2 includes the following native macOS packages in CI and Release:
 
 - `NekoKEM-macos-arm64.tar.gz`: native CLI and Terminal menu launcher.
 - `NekoKEM-macos-arm64-GUI.zip`: `NekoKEM.app`, documentation, licenses,
   checksums and build metadata.
 - `NekoKEM-macos-arm64-GUI.dmg`: Tauri DMG checked and exported under a stable
-  package name; its initial Tauri filename is `NekoKEM_3.3.1_aarch64.dmg`.
+  package name; its initial Tauri filename is `NekoKEM_3.3.2_aarch64.dmg`.
 
 Builds use native Apple Silicon and set a macOS 11.0 deployment target. The actual
 native CI runner is `macos-15`; the target does not establish compatibility on
@@ -103,7 +103,7 @@ is included in top-level `SHA256SUMS.txt`; historical v3.3.0 assets remain uncha
 
 ## Linux GUI build artifacts
 
-Linux GUI v3.3.1 uses native Ubuntu 24.04 x86_64 and ARM64 build/test runners.
+Linux GUI v3.3.2 uses native Ubuntu 24.04 x86_64 and ARM64 build/test runners.
 CI and Release produce, for each `x86_64`/`aarch64` architecture:
 
 - `NekoKEM-linux-<architecture>-GUI.deb`: native application, desktop entry,

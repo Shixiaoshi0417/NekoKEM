@@ -1,5 +1,19 @@
 # Changelog
 
+## 3.3.2
+
+- 完整中文在上、英文在下的发布说明见 [v3.3.2](../release/v3.3.2.md)。
+- 新增 Android 预测性返回：页面和侧边菜单随返回手势跟手移动；修复公钥通讯录备注按 Unicode 码点计数，并剔除文件名中的双向控制字符。
+- 桌面 GUI 新增公钥通讯录；全平台应用版本为 3.3.2，Android versionCode 为 7，沿用 v3.2.0/v3.3.0 签名，可覆盖升级。
+- Core 3.1、NKEM v3、NKPR v1、Argon2id 成本、64 KiB 流式处理及固定 OpenSSL 4.0.3 不变。
+
+Full Chinese-then-English notes: [v3.3.2](../release/v3.3.2.md). Adds Android predictive
+back (pages and the drawer follow the back gesture) and fixes contact notes to count
+Unicode code points and strip bidirectional controls from file names. The desktop GUI
+gains public-key contacts. Every app is 3.3.2; Android versionCode is 7 and retains the
+v3.2.0/v3.3.0 signer for in-place updates. Core 3.1, NKEM v3, NKPR v1, Argon2id costs,
+64 KiB streaming and pinned OpenSSL 4.0.3 are unchanged.
+
 ## 3.3.1
 
 - 完整中文在上、英文在下的发布说明见 [v3.3.1](../release/v3.3.1.md)。

@@ -1,11 +1,11 @@
 # Windows x64 CLI / Windows x64 命令行
 
-v3.3.1 provides a native Windows 10/11 x64 EXE; no MSYS2 runtime or OpenSSL DLL
+v3.3.2 provides a native Windows 10/11 x64 EXE; no MSYS2 runtime or OpenSSL DLL
 is required to run it. Download `NekoKEM-windows-x86_64.zip` from the
-[v3.3.1 Release](https://github.com/Shixiaoshi0417/NekoKEM/releases/tag/v3.3.1) and verify
+[v3.3.2 Release](https://github.com/Shixiaoshi0417/NekoKEM/releases/tag/v3.3.2) and verify
 the archive against its top-level `SHA256SUMS.txt`. The companion
 [Windows GUI](../desktop/README.md) has a separate portable package. See the
-[bilingual release notes](../release/v3.3.1.md).
+[bilingual release notes](../release/v3.3.2.md).
 
 CLI/GUI EXE icons keep the square Android artwork with the outer white area made
 transparent; Android retains its existing square white background. Rounded README
@@ -83,10 +83,10 @@ The EXE is not Authenticode signed; Android signing keys are not used.
 
 ---
 
-v3.3.1 提供原生 Windows 10/11 x64 CLI，运行无需 MSYS2 或 OpenSSL DLL。公开包为
+v3.3.2 提供原生 Windows 10/11 x64 CLI，运行无需 MSYS2 或 OpenSSL DLL。公开包为
 `NekoKEM-windows-x86_64.zip`，下载后用 Release 顶层 `SHA256SUMS.txt` 校验。
 [Windows GUI](../desktop/README.md) 使用独立便携包，完整更新见
-[v3.3.1 中英双语发布说明](../release/v3.3.1.md)。Windows EXE 图标保留方形图案，
+[v3.3.2 中英双语发布说明](../release/v3.3.2.md)。Windows EXE 图标保留方形图案，
 将外部白色区域改为透明；Android 方形白底图案不变，README 圆角图仅用于展示。
 Windows 应用未进行 Authenticode 签名，不使用 Android 签名材料。使用现有
 五语言目录；密码从关闭回显的终端或 UTF-8 标准输入读取，不放入命令行参数。
