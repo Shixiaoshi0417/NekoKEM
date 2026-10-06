@@ -59,6 +59,17 @@ internal fun runPublicKeyContactsUiTests(instrumentation: Instrumentation) {
         check(target.performAction(AccessibilityNodeInfo.ACTION_CLICK))
         instrumentation.waitForIdleSync()
     }
+    fun openDialog(value: String) {
+        val previousWindow = checkNotNull(instrumentation.uiAutomation.rootInActiveWindow).windowId
+        click(value)
+        val deadline = SystemClock.uptimeMillis() + 10000
+        while (SystemClock.uptimeMillis() < deadline) {
+            val current = instrumentation.uiAutomation.rootInActiveWindow
+            if (current != null && current.windowId != previousWindow) return
+            SystemClock.sleep(100)
+        }
+        error("Contact dialog did not open: $value")
+    }
     fun recreate() {
         val monitor = instrumentation.addMonitor(MainActivity::class.java.name, null, false)
         try {
@@ -95,7 +106,7 @@ internal fun runPublicKeyContactsUiTests(instrumentation: Instrumentation) {
         openContacts()
         awaitText("CI recipient")
         awaitText(contact.fingerprint)
-        click(checkNotNull(activity).getString(R.string.action_edit_contact_note))
+        openDialog(checkNotNull(activity).getString(R.string.action_edit_contact_note))
         val editorDeadline = SystemClock.uptimeMillis() + 10000
         var editor: AccessibilityNodeInfo? = null
         while (editor == null && SystemClock.uptimeMillis() < editorDeadline) {
@@ -119,7 +130,7 @@ internal fun runPublicKeyContactsUiTests(instrumentation: Instrumentation) {
         click(checkNotNull(activity).getString(R.string.action_use_contact))
         awaitText(checkNotNull(activity).getString(R.string.key_source_contacts))
         awaitText(editedNote)
-        click(checkNotNull(activity).getString(R.string.action_choose_contact))
+        openDialog(checkNotNull(activity).getString(R.string.action_choose_contact))
         awaitText(checkNotNull(activity).getString(R.string.contact_picker_title))
         var recipient = awaitText(contact.fingerprint)
         while (!recipient.isClickable) recipient = checkNotNull(recipient.parent)
@@ -131,7 +142,7 @@ internal fun runPublicKeyContactsUiTests(instrumentation: Instrumentation) {
         awaitText(editedNote)
         capture("contacts-selected")
         openContacts()
-        click(checkNotNull(activity).getString(R.string.action_delete))
+        openDialog(checkNotNull(activity).getString(R.string.action_delete))
         awaitText(checkNotNull(activity).getString(R.string.contact_delete_title))
         click(checkNotNull(activity).getString(R.string.action_delete))
         awaitText(checkNotNull(activity).getString(R.string.contact_empty))
