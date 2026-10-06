@@ -37,6 +37,9 @@ import com.shixiaoshi0417.nekokem.files.encryptedPrivateKeyExportRequest
 import com.shixiaoshi0417.nekokem.files.publicKeyExportRequest
 import com.shixiaoshi0417.nekokem.keys.LocalKeyManager
 import com.shixiaoshi0417.nekokem.keys.LocalKeyState
+import com.shixiaoshi0417.nekokem.keys.PublicKeyContact
+import com.shixiaoshi0417.nekokem.keys.PublicKeyContacts
+import com.shixiaoshi0417.nekokem.keys.PublicKeyContactsState
 import com.shixiaoshi0417.nekokem.keys.PendingTemporaryPrivateKey
 import com.shixiaoshi0417.nekokem.keys.TemporaryPrivateKey
 import com.shixiaoshi0417.nekokem.keys.TemporaryPublicKey
@@ -54,6 +57,9 @@ import com.shixiaoshi0417.nekokem.ui.OperationErrorDialog
 import com.shixiaoshi0417.nekokem.ui.OperationProgressDialog
 import com.shixiaoshi0417.nekokem.ui.OperationResultDetail
 import com.shixiaoshi0417.nekokem.ui.SinglePasswordDialog
+import com.shixiaoshi0417.nekokem.ui.PublicKeyContactPicker
+import com.shixiaoshi0417.nekokem.ui.PublicKeyContactNoteDialog
+import com.shixiaoshi0417.nekokem.ui.DeletePublicKeyContactDialog
 import com.shixiaoshi0417.nekokem.ui.runWithUiBusyReset
 import com.shixiaoshi0417.nekokem.ui.theme.NekoKEMTheme
 import kotlinx.coroutines.Dispatchers
@@ -69,6 +75,7 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         val keyManager = LocalKeyManager(applicationContext)
         val fileWorkflow = SafFileWorkflow(this, keyManager)
+        val publicKeyContacts = PublicKeyContacts(applicationContext, keyManager)
 
         setContent {
             NekoKEMTheme {
@@ -78,6 +85,7 @@ class MainActivity : ComponentActivity() {
                     nativeVersion = nativeStatus.version,
                     keyManager = keyManager,
                     fileWorkflow = fileWorkflow,
+                    publicKeyContacts = publicKeyContacts,
                 )
             }
         }
@@ -154,11 +162,19 @@ private fun NekoKEMRoute(
     nativeVersion: String?,
     keyManager: LocalKeyManager,
     fileWorkflow: SafFileWorkflow,
+    publicKeyContacts: PublicKeyContacts,
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val snackbarHostState = remember { SnackbarHostState() }
     var keyState by remember { mutableStateOf(LocalKeyState(false, null)) }
+    var contactsState by remember { mutableStateOf(PublicKeyContactsState()) }
+    var selectedContactId by rememberSaveable { mutableStateOf<String?>(null) }
+    var contactAwaitingSave by remember { mutableStateOf<TemporaryPublicKey?>(null) }
+    var contactToEdit by remember { mutableStateOf<PublicKeyContact?>(null) }
+    var contactToDelete by remember { mutableStateOf<PublicKeyContact?>(null) }
+    var showContactPicker by remember { mutableStateOf(false) }
+    val selectedContact = contactsState.contacts.firstOrNull { it.id == selectedContactId }
     var selectedInputState by rememberSaveable(
         stateSaver = FileInputState.Saver,
     ) {
@@ -249,6 +265,7 @@ private fun NekoKEMRoute(
                 LocalKeyState(false, null)
             }
         }
+        contactsState = withContext(Dispatchers.IO) { publicKeyContacts.readState() }
     }
 
     fun reportFailure(@StringRes operationResource: Int, code: Int) {
@@ -266,6 +283,23 @@ private fun NekoKEMRoute(
             operationResource,
             context.getString(reasonResource),
         )
+    }
+
+    fun runContactOperation(@StringRes operation: Int, @StringRes success: Int, action: () -> Int) {
+        if (running) return
+        running = true
+        scope.launch {
+            try {
+                val code = withContext(Dispatchers.IO) { action() }
+                refreshState()
+                if (code == NativeBridge.RESULT_SUCCESS) showSnackbar(success)
+                else reportFailure(operation, code)
+            } catch (_: Exception) {
+                reportFailure(operation, LocalKeyManager.RESULT_STORAGE_ERROR)
+            } finally {
+                running = false
+            }
+        }
     }
 
     fun keyCompletionDetails(
@@ -471,6 +505,30 @@ private fun NekoKEMRoute(
                         R.string.operation_select_temporary_public_key,
                         outcome?.code ?: LocalKeyManager.RESULT_STORAGE_ERROR,
                     )
+                }
+            }
+        }
+    }
+
+    val importContactLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocument(),
+    ) { uri ->
+        if (uri != null && !running) {
+            running = true
+            scope.launch {
+                try {
+                    val outcome = withContext(Dispatchers.IO) {
+                        fileWorkflow.stageTemporaryPublicKey(uri, fileWorkflow.describe(uri).displayName)
+                    }
+                    if (outcome.code == NativeBridge.RESULT_SUCCESS && outcome.key != null) {
+                        contactAwaitingSave = outcome.key
+                    } else {
+                        reportFailure(R.string.operation_save_contact, outcome.code)
+                    }
+                } catch (_: Exception) {
+                    reportFailure(R.string.operation_save_contact, LocalKeyManager.RESULT_STORAGE_ERROR)
+                } finally {
+                    running = false
                 }
             }
         }
@@ -684,10 +742,19 @@ private fun NekoKEMRoute(
     }
 
     fun prepareEncryption(source: SelectedDocument) {
-        val selectedKey = temporaryPublicKey
+        var selectedKey = temporaryPublicKey
+        val contactId = selectedContactId
         val tracker = beginProgress(R.string.operation_encrypt_file)
         scope.launch {
             try {
+                if (contactId != null) {
+                    val staged = withContext(Dispatchers.IO) { publicKeyContacts.stageForEncryption(contactId) }
+                    if (staged.code != NativeBridge.RESULT_SUCCESS || staged.key == null) {
+                        reportFailure(R.string.operation_select_contact, staged.code)
+                        return@launch
+                    }
+                    selectedKey = staged.key
+                }
                 val outcome = withContext(Dispatchers.IO) {
                     fileWorkflow.prepareEncryption(
                         source.uri,
@@ -823,6 +890,7 @@ private fun NekoKEMRoute(
         withContext(Dispatchers.IO) {
             keyManager.clearWorkCache()
             fileWorkflow.clearTemporaryKeyCache()
+            publicKeyContacts.clearWorkCache()
         }
         refreshState()
     }
@@ -1028,6 +1096,7 @@ private fun NekoKEMRoute(
                         publicKeyAwaitingConfirmation = null
                         val previous = temporaryPublicKey
                         temporaryPublicKey = candidate
+                        selectedContactId = null
                         transitionInputSelection(
                             InputSelectionEvent.KEY_SELECTION_CHANGED,
                         )
@@ -1054,6 +1123,78 @@ private fun NekoKEMRoute(
                     Text(stringResource(R.string.action_cancel))
                 }
             },
+        )
+    }
+
+    contactAwaitingSave?.let { candidate ->
+        val existing = contactsState.contacts.firstOrNull { it.fingerprint == candidate.fingerprint }
+        PublicKeyContactNoteDialog(
+            displayName = candidate.displayName,
+            fingerprint = candidate.fingerprint,
+            initialNote = existing?.note.orEmpty(),
+            editing = false,
+            duplicate = existing != null,
+            onSave = { note ->
+                contactAwaitingSave = null
+                runContactOperation(R.string.operation_save_contact, R.string.contact_saved) {
+                    try { publicKeyContacts.save(candidate, note).code }
+                    finally { fileWorkflow.discardTemporaryPublicKey(candidate) }
+                }
+            },
+            onDismiss = {
+                contactAwaitingSave = null
+                scope.launch(Dispatchers.IO) { fileWorkflow.discardTemporaryPublicKey(candidate) }
+            },
+        )
+    }
+
+    contactToEdit?.let { contact ->
+        PublicKeyContactNoteDialog(
+            displayName = contact.displayName,
+            fingerprint = contact.fingerprint,
+            initialNote = contact.note,
+            editing = true,
+            onSave = { note ->
+                contactToEdit = null
+                runContactOperation(R.string.operation_update_contact, R.string.contact_updated) {
+                    publicKeyContacts.updateNote(contact.id, note).code
+                }
+            },
+            onDismiss = { contactToEdit = null },
+        )
+    }
+
+    contactToDelete?.let { contact ->
+        DeletePublicKeyContactDialog(
+            contact,
+            onConfirm = {
+                contactToDelete = null
+                runContactOperation(R.string.operation_delete_contact, R.string.contact_deleted) {
+                    publicKeyContacts.delete(contact.id)
+                }
+            },
+            onDismiss = { contactToDelete = null },
+        )
+    }
+
+    if (showContactPicker) {
+        PublicKeyContactPicker(
+            state = contactsState,
+            selectedId = selectedContactId,
+            onSelect = { contact ->
+                showContactPicker = false
+                val previous = temporaryPublicKey
+                temporaryPublicKey = null
+                selectedContactId = contact.id
+                transitionInputSelection(InputSelectionEvent.KEY_SELECTION_CHANGED)
+                scope.launch(Dispatchers.IO) { fileWorkflow.discardTemporaryPublicKey(previous) }
+                showSnackbar(R.string.contact_selected)
+            },
+            onImport = {
+                showContactPicker = false
+                importContactLauncher.launch(arrayOf(ANY_MIME_TYPE))
+            },
+            onDismiss = { showContactPicker = false },
         )
     }
 
@@ -1184,15 +1325,20 @@ private fun NekoKEMRoute(
             selectedFileName = selectedInputName,
             publicKeyTemporary = temporaryPublicKey != null,
             publicKeyFileName = temporaryPublicKey?.displayName
-                ?: context.getString(R.string.default_public_key_filename),
-            publicKeyFingerprint = temporaryPublicKey?.fingerprint
-                ?: keyState.fingerprint,
+                ?: if (selectedContactId != null) selectedContact?.displayName
+                    ?: context.getString(R.string.not_available)
+                else context.getString(R.string.default_public_key_filename),
+            publicKeyFingerprint = if (selectedContactId != null) selectedContact?.fingerprint
+                else temporaryPublicKey?.fingerprint ?: keyState.fingerprint,
             privateKeyTemporary = temporaryPrivateKey != null,
             privateKeyFileName = temporaryPrivateKey?.displayName
                 ?: context.getString(R.string.default_private_key_filename),
             privateKeyFingerprint = temporaryPrivateKey?.fingerprint
                 ?: keyState.fingerprint,
             running = running,
+            contactsState = contactsState,
+            publicKeyContactId = selectedContactId,
+            publicKeyNote = selectedContact?.note,
         ),
         actions = NekoKEMActions(
             onGenerate = { showGeneratePasswordDialog = true },
@@ -1236,6 +1382,7 @@ private fun NekoKEMRoute(
             onRestoreDefaultPublicKey = {
                 val abandoned = temporaryPublicKey
                 temporaryPublicKey = null
+                selectedContactId = null
                 transitionInputSelection(
                     InputSelectionEvent.KEY_SELECTION_CHANGED,
                 )
@@ -1268,6 +1415,7 @@ private fun NekoKEMRoute(
                         R.string.error_select_file_first,
                     )
                     temporaryPublicKey == null &&
+                        selectedContactId == null &&
                         keyState.fingerprint == null -> reportFailureReason(
                         R.string.operation_encrypt_file,
                         R.string.error_public_key_not_found,
@@ -1289,6 +1437,18 @@ private fun NekoKEMRoute(
                     else -> passwordPrompt = PasswordPrompt.DECRYPT_FILE
                 }
             },
+            onImportContact = { importContactLauncher.launch(arrayOf(ANY_MIME_TYPE)) },
+            onChooseContact = { showContactPicker = true },
+            onSelectContact = { contact ->
+                val previous = temporaryPublicKey
+                temporaryPublicKey = null
+                selectedContactId = contact.id
+                transitionInputSelection(InputSelectionEvent.KEY_SELECTION_CHANGED)
+                scope.launch(Dispatchers.IO) { fileWorkflow.discardTemporaryPublicKey(previous) }
+                showSnackbar(R.string.contact_selected)
+            },
+            onEditContact = { contactToEdit = it },
+            onDeleteContact = { contactToDelete = it },
         ),
         snackbarHostState = snackbarHostState,
     )
@@ -1317,6 +1477,7 @@ private fun resultReason(
         LocalKeyManager.RESULT_STORAGE_ERROR -> when (operationResource) {
             R.string.operation_delete_public_key,
             R.string.operation_delete_private_key,
+            R.string.operation_delete_contact,
             R.string.operation_delete_keypair -> R.string.error_reason_delete
             else -> R.string.error_reason_storage
         }
@@ -1347,7 +1508,9 @@ private fun resultReason(
             R.string.operation_decrypt_file -> R.string.error_reason_decrypt
             R.string.operation_import_public_key ->
                 R.string.error_reason_public_key
-            R.string.operation_select_temporary_public_key ->
+            R.string.operation_select_temporary_public_key,
+            R.string.operation_save_contact,
+            R.string.operation_select_contact ->
                 R.string.error_reason_public_key
             R.string.operation_select_temporary_private_key ->
                 R.string.error_reason_authentication
@@ -1355,6 +1518,7 @@ private fun resultReason(
             R.string.operation_export_private_key -> R.string.error_reason_export
             R.string.operation_delete_public_key,
             R.string.operation_delete_private_key,
+            R.string.operation_delete_contact,
             R.string.operation_delete_keypair -> R.string.error_reason_delete
             else -> R.string.error_reason_core
         }

@@ -5,8 +5,15 @@ use std::time::{Duration,Instant};
 
 pub static CORE_LOCK: Mutex<()> = Mutex::new(());
 #[derive(Debug,Serialize)]
-pub struct Failure { pub code: &'static str }
-impl Failure { pub fn new(code: &'static str) -> Self { Self{code} } }
+pub struct Failure {
+    pub code: &'static str,
+    // Identifies the saved contact that already holds an imported public key.
+    #[serde(skip_serializing_if="Option::is_none")] pub contact: Option<String>,
+}
+impl Failure {
+    pub fn new(code: &'static str) -> Self { Self{code,contact:None} }
+    pub fn existing(contact: String) -> Self { Self{code:"contact-exists",contact:Some(contact)} }
+}
 #[derive(Deserialize,PartialEq,Eq)]
 #[serde(rename_all="lowercase")]
 pub enum Kind { Keygen, Encrypt, Decrypt, Fingerprint }
@@ -23,6 +30,8 @@ pub struct Request {
     #[serde(default)] pub confirmation:Zeroizing<String>,
     #[serde(default)] pub key_text:Zeroizing<String>,
     #[serde(default)] pub paste:bool,
+    // Saved recipient contact (encryption only). Never combined with another key source.
+    #[serde(default)] pub contact:String,
 }
 #[derive(Serialize)]
 #[serde(rename_all="camelCase")]
@@ -33,9 +42,14 @@ impl Default for Backend { fn default()->Self { Self{active:Mutex::new(None),clo
 impl Backend {
     pub fn reserve(&self, request:&Request)->Result<Arc<Job>,Failure> {
         if request.id.is_empty() || request.id.len()>64 || !request.id.bytes().all(|c|c.is_ascii_alphanumeric()||c==b'-') { return Err(Failure::new("invalid-request")); }
+        self.claim(request.id.clone(),matches!(request.kind,Kind::Encrypt|Kind::Decrypt))
+    }
+    // Contact-store changes share the same exclusive slot as Core operations.
+    pub fn reserve_internal(&self)->Result<Arc<Job>,Failure> { self.claim("contacts".into(),false) }
+    fn claim(&self,id:String,cancellable:bool)->Result<Arc<Job>,Failure> {
         let mut active=self.active.lock().map_err(|_|Failure::new("internal"))?;
         if active.is_some() { return Err(Failure::new("busy")); }
-        let job=Arc::new(Job{id:request.id.clone(),cancellable:matches!(request.kind,Kind::Encrypt|Kind::Decrypt),cancelled:AtomicBool::new(false)});
+        let job=Arc::new(Job{id,cancellable,cancelled:AtomicBool::new(false)});
         *active=Some(job.clone()); Ok(job)
     }
     pub fn cancel(&self,id:&str)->bool {
@@ -65,6 +79,7 @@ extern "C" {
     fn nekokem_decrypt_file_with_progress(input:*const c_char,output:*const c_char,key:*const c_char,password:*const u8,length:usize,callback:Option<Progress>,data:*mut c_void)->c_int;
     fn nekokem_public_key_fingerprint(key:*const c_char,output:*mut c_char,size:usize)->c_int;
     fn desktop_stage_key(bytes:*const u8,length:usize)->*mut c_char;
+    fn desktop_stage_output()->*mut c_char;
     fn desktop_remove_staged_key(path:*mut c_char)->c_int;
     fn desktop_language()->*const c_char;
     fn cli_language_save(language:*const c_char)->c_int;
@@ -75,6 +90,12 @@ pub fn path(value:&str)->Result<CString,Failure> {
     if value.is_empty() || value.len()>32767 {return Err(Failure::new("invalid-path"));}
     CString::new(value).map_err(|_|Failure::new("invalid-path"))
 }
+// Core parses and validates both hybrid public components before hashing them.
+pub fn fingerprint(key:&CStr)->Option<String> {
+    let mut output=[0 as c_char;96];
+    if unsafe{nekokem_public_key_fingerprint(key.as_ptr(),output.as_mut_ptr(),output.len())}!=1 {return None;}
+    Some(unsafe{CStr::from_ptr(output.as_ptr()).to_string_lossy().into_owned()})
+}
 pub fn language()->String { unsafe{CStr::from_ptr(desktop_language()).to_string_lossy().into_owned()} }
 pub fn preference()->String { unsafe{CStr::from_ptr(cli_language_preference()).to_string_lossy().into_owned()} }
 pub fn save_language(value:&str)->Result<String,Failure> {
@@ -83,15 +104,21 @@ pub fn save_language(value:&str)->Result<String,Failure> {
     if unsafe{cli_language_save(tag.as_ptr())}!=1 {return Err(Failure::new("core-error"));}
     Ok(language())
 }
-struct Staged(*mut c_char);
+pub struct Staged(*mut c_char);
 impl Staged {
-    fn new(text:&str)->Result<Self,Failure> {
+    pub fn new(text:&str)->Result<Self,Failure> {
         if text.is_empty() || text.len()>1048576 {return Err(Failure::new("key-limit"));}
         if text.as_bytes().split(|byte|*byte==b'\n').any(|line|line.len()>16384){return Err(Failure::new("key-line-limit"));}
         let pointer=unsafe{desktop_stage_key(text.as_ptr(),text.len())};
         if pointer.is_null() {return Err(Failure::new("core-error"));} Ok(Self(pointer))
     }
-    fn close(&mut self)->bool {if self.0.is_null(){return true;} let p=std::mem::replace(&mut self.0,std::ptr::null_mut());unsafe{desktop_remove_staged_key(p)==1}}
+    // A private path that Core creates atomically; cleanup removes it and its directory.
+    pub fn output()->Result<Self,Failure> {
+        let pointer=unsafe{desktop_stage_output()};
+        if pointer.is_null() {return Err(Failure::new("core-error"));} Ok(Self(pointer))
+    }
+    pub fn path(&self)->&CStr {unsafe{CStr::from_ptr(self.0)}}
+    pub fn close(&mut self)->bool {if self.0.is_null(){return true;} let p=std::mem::replace(&mut self.0,std::ptr::null_mut());unsafe{desktop_remove_staged_key(p)==1}}
 }
 impl Drop for Staged {fn drop(&mut self){let _=self.close();}}
 struct ProgressContext<F:Fn(u64,u64)> { job:Arc<Job>, emit:F, last_emit:Option<Instant> }
@@ -108,6 +135,9 @@ unsafe extern "C" fn progress<F:Fn(u64,u64)>(done:u64,total:u64,data:*mut c_void
 pub fn execute<F:Fn(u64,u64)>(request:Request,job:Arc<Job>,emit:F)->Result<Outcome,Failure> {
     let _guard=CORE_LOCK.lock().map_err(|_|Failure::new("internal"))?;
     if request.password.len()>1024 || request.confirmation.len()>1024 {return Err(Failure::new("password-limit"));}
+    if !request.contact.is_empty() && (request.kind!=Kind::Encrypt || request.paste || !request.key_path.is_empty() || !request.key_text.is_empty()) {
+        return Err(Failure::new("invalid-request"));
+    }
     if request.kind==Kind::Keygen {
         if request.password.is_empty(){return Err(Failure::new("password-empty"));}
         if request.password.as_str()!=request.confirmation.as_str(){return Err(Failure::new("password-mismatch"));}
@@ -115,15 +145,19 @@ pub fn execute<F:Fn(u64,u64)>(request:Request,job:Arc<Job>,emit:F)->Result<Outco
         let result=unsafe{nekokem_generate_keypair(public.as_ptr(),private.as_ptr(),request.password.as_ptr(),request.password.len())};
         return if result==1 {Ok(Outcome{output:Some(request.private_path),fingerprint:None})}else{Err(Failure::new("core-error"))};
     }
-    let mut staged=if request.paste{Some(Staged::new(&request.key_text)?)}else{None};
-    let key=if let Some(stage)=staged.as_ref(){unsafe{CStr::from_ptr(stage.0).to_owned()}}else{path(&request.key_path)?};
+    // A saved contact is re-read and re-validated by Core for every encryption.
+    // Missing or damaged contacts fail here; there is no fallback key.
+    let mut recipient=None;
+    let mut staged=if !request.contact.is_empty() {
+        let (stage,fingerprint)=crate::contacts::Store::open()?.stage(&request.contact)?;
+        recipient=Some(fingerprint); Some(stage)
+    } else if request.paste{Some(Staged::new(&request.key_text)?)}else{None};
+    let key=if let Some(stage)=staged.as_ref(){stage.path().to_owned()}else{path(&request.key_path)?};
     let mut state=ProgressContext{job,emit,last_emit:None};
     let data=&mut state as *mut _ as *mut c_void;
     let result=(|| {
         if request.kind==Kind::Fingerprint {
-            let mut output=[0 as c_char;96];
-            if unsafe{nekokem_public_key_fingerprint(key.as_ptr(),output.as_mut_ptr(),output.len())}!=1 {return Err(Failure::new("core-error"));}
-            let fingerprint=unsafe{CStr::from_ptr(output.as_ptr()).to_string_lossy().into_owned()};
+            let fingerprint=fingerprint(&key).ok_or_else(||Failure::new("core-error"))?;
             return Ok(Outcome{output:None,fingerprint:Some(fingerprint)});
         }
         let input=path(&request.input)?; let output=path(&request.output)?;
@@ -132,7 +166,7 @@ pub fn execute<F:Fn(u64,u64)>(request:Request,job:Arc<Job>,emit:F)->Result<Outco
             Kind::Decrypt=>nekokem_decrypt_file_with_progress(input.as_ptr(),output.as_ptr(),key.as_ptr(),request.password.as_ptr(),request.password.len(),Some(progress::<F>),data),
             _=>unreachable!(),
         }};
-        match status {1=>Ok(Outcome{output:Some(request.output),fingerprint:None}),-1=>Err(Failure::new("cancelled")),_=>Err(Failure::new("core-error"))}
+        match status {1=>Ok(Outcome{output:Some(request.output),fingerprint:recipient}),-1=>Err(Failure::new("cancelled")),_=>Err(Failure::new("core-error"))}
     })();
     if staged.as_mut().is_some_and(|s|!s.close()){return Err(Failure::new("cleanup-error"));}
     result
@@ -171,7 +205,7 @@ mod tests {
         assert!(unsafe { CStr::from_ptr(version) }.to_bytes().starts_with(b"OpenSSL 4.0.3 "),
                 "GUI linked runtime does not match pinned OpenSSL 4.0.3");
     }
-    fn request(kind:Kind)->Request {Request{id:"test-job".into(),kind,input:String::new(),output:String::new(),key_path:String::new(),public_path:String::new(),private_path:String::new(),password:Zeroizing::new(String::new()),confirmation:Zeroizing::new(String::new()),key_text:Zeroizing::new(String::new()),paste:false}}
+    fn request(kind:Kind)->Request {Request{id:"test-job".into(),kind,input:String::new(),output:String::new(),key_path:String::new(),public_path:String::new(),private_path:String::new(),password:Zeroizing::new(String::new()),confirmation:Zeroizing::new(String::new()),key_text:Zeroizing::new(String::new()),paste:false,contact:String::new()}}
     fn run(backend:&Arc<Backend>,r:Request)->Result<Outcome,Failure>{let job=backend.reserve(&r)?;let _hold=Reservation{backend:backend.clone(),job:job.clone()};execute(r,job,|_,_|{})}
     struct Directory(PathBuf);
     impl Directory{fn new()->Self{let path=std::env::temp_dir().join(format!("nekokem-rust-{}-{}",std::process::id(),SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_nanos()));let name=super::path(path.to_str().unwrap()).unwrap();assert_eq!(unsafe{desktop_private_directory(name.as_ptr())},1);Self(path)}fn file(&self,name:&str)->String{self.0.join(name).to_str().unwrap().into()}}
@@ -195,6 +229,79 @@ mod tests {
         unsafe{CRYPTO_clear_free(pem.cast(),length,std::ptr::null(),0)};
         let mut r=request(Kind::Decrypt);r.input=dir.file("cipher.nkem");r.output=dir.file("pasted-output");r.paste=true;r.key_text=Zeroizing::new(text);run(&backend,r).unwrap();assert_eq!(fs::read(dir.file("pasted-output")).unwrap(),data);
         let mut r=request(Kind::Encrypt);r.input=dir.file("plain");r.output=dir.file("cipher.nkem");r.key_path=dir.file("public.key");let before=fs::read(&r.output).unwrap();let job=backend.reserve(&r).unwrap();let _hold=Reservation{backend:backend.clone(),job:job.clone()};let cancel=job.clone();assert_eq!(execute(r,job,move|_,_|{cancel.cancelled.store(true,Ordering::Release);}).err().unwrap().code,"cancelled");assert_eq!(fs::read(dir.file("cipher.nkem")).unwrap(),before);
+    }
+    #[test]
+    fn contact_store_changes_share_the_exclusive_operation_slot() {
+        let backend=Arc::new(Backend::default());
+        let job=backend.reserve_internal().unwrap();
+        assert_eq!(backend.reserve(&request(Kind::Encrypt)).err().unwrap().code,"busy");
+        assert_eq!(backend.reserve_internal().err().unwrap().code,"busy");
+        assert!(!backend.cancel("contacts"));
+        assert!(backend.defer_close());
+        backend.finish(&job);
+        assert!(!backend.defer_close());
+        backend.finish(&backend.reserve_internal().unwrap());
+    }
+
+    fn staging_entries()->usize {
+        let prefix=if cfg!(windows){"nekokem-paste-"}else{"nekokem-gui-"};
+        fs::read_dir(std::env::temp_dir()).unwrap().filter(|entry|entry.as_ref().unwrap().file_name().to_string_lossy().starts_with(prefix)).count()
+    }
+
+    #[test]
+    fn saved_contact_encryption_uses_only_the_verified_record() {
+        use crate::contacts::{tests as contact,Source,Store};
+        struct Override;
+        impl Drop for Override {fn drop(&mut self){*contact::DIRECTORY.lock().unwrap_or_else(|error|error.into_inner())=None;}}
+        let keys=contact::Directory::new();
+        let contacts=keys.private("contacts");
+        *contact::DIRECTORY.lock().unwrap_or_else(|error|error.into_inner())=Some(contacts.0.to_str().unwrap().into());
+        let _override=Override;
+        let (alice,alice_private,alice_fingerprint)=contact::keypair(&keys,"alice","public-test-alice");
+        let (bob,bob_private,_)=contact::keypair(&keys,"bob","public-test-bob");
+        let (alice_id,bob_id)={
+            let _core=contact::core_lock();
+            let store=Store::open().unwrap();
+            (store.save(Source::Path(&alice),"Alice").unwrap().id,store.save(Source::Path(&bob),"Bob").unwrap().id)
+        };
+        let data:Vec<u8>=(0..300000).map(|i|(i%251) as u8).collect();
+        fs::write(keys.file("plain"),&data).unwrap();
+        let staged=staging_entries();
+        let backend=Arc::new(Backend::default());
+        let encrypt=|contact:&str,output:&str|{let mut r=request(Kind::Encrypt);r.input=keys.file("plain");r.output=keys.file(output);r.contact=contact.into();r};
+        let decrypt=|private:&str,password:&str,output:&str|{let mut r=request(Kind::Decrypt);r.input=keys.file("alice.nkem");r.output=keys.file(output);r.key_path=private.into();r.password=Zeroizing::new(password.into());r};
+
+        let outcome=run(&backend,encrypt(&alice_id,"alice.nkem")).unwrap();
+        assert_eq!(outcome.fingerprint.as_deref(),Some(alice_fingerprint.as_str()));
+        run(&backend,decrypt(&alice_private,"public-test-alice","alice.out")).unwrap();
+        assert_eq!(fs::read(keys.file("alice.out")).unwrap(),data);
+        assert_eq!(run(&backend,decrypt(&bob_private,"public-test-bob","bob.out")).err().unwrap().code,"core-error");
+
+        // A contact is never combined with, or replaced by, another key source.
+        let mut r=encrypt(&alice_id,"combined.nkem");r.key_path=bob.clone();
+        assert_eq!(run(&backend,r).err().unwrap().code,"invalid-request");
+        let mut r=encrypt(&alice_id,"combined.nkem");r.paste=true;r.key_text=Zeroizing::new(fs::read_to_string(&bob).unwrap());
+        assert_eq!(run(&backend,r).err().unwrap().code,"invalid-request");
+        for kind in [Kind::Decrypt,Kind::Fingerprint,Kind::Keygen] {let mut r=request(kind);r.contact=alice_id.clone();assert_eq!(run(&backend,r).err().unwrap().code,"invalid-request");}
+        assert_eq!(run(&backend,encrypt("../alice","combined.nkem")).err().unwrap().code,"invalid-request");
+        assert!(fs::metadata(keys.file("combined.nkem")).is_err());
+
+        // Deleted or damaged contacts fail without creating or replacing output.
+        {let _core=contact::core_lock();Store::open().unwrap().delete(&bob_id).unwrap();}
+        assert_eq!(run(&backend,encrypt(&bob_id,"bob.nkem")).err().unwrap().code,"contact-missing");
+        assert!(fs::metadata(keys.file("bob.nkem")).is_err());
+        let before=fs::read(keys.file("alice.nkem")).unwrap();
+        fs::write(contacts.file(&format!("{alice_id}.json")),"{").unwrap();
+        assert_eq!(run(&backend,encrypt(&alice_id,"alice.nkem")).err().unwrap().code,"contact-invalid");
+        assert_eq!(fs::read(keys.file("alice.nkem")).unwrap(),before);
+
+        // After an explicit re-import, cancellation still preserves the existing output.
+        {let _core=contact::core_lock();Store::open().unwrap().save(Source::Path(&alice),"Alice").unwrap();}
+        let r=encrypt(&alice_id,"alice.nkem");let job=backend.reserve(&r).unwrap();let _hold=Reservation{backend:backend.clone(),job:job.clone()};let cancel=job.clone();
+        assert_eq!(execute(r,job,move|_,_|{cancel.cancelled.store(true,Ordering::Release);}).err().unwrap().code,"cancelled");
+        assert_eq!(fs::read(keys.file("alice.nkem")).unwrap(),before);
+        // Every operation-specific public-key snapshot was removed.
+        assert_eq!(staging_entries(),staged);
     }
     #[cfg(unix)]
     #[test]

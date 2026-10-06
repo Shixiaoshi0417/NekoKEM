@@ -173,4 +173,36 @@
     <string name="default_public_key_filename">public.key</string>
     <string name="default_private_key_filename">private.nkpr.enc</string>
     <string name="error_language_save">无法保存语言设置，请重试。</string>
+
+    <!-- Saved public-key contacts -->
+    <string name="navigation_contacts">公钥通讯录</string>
+    <string name="action_import_contact">添加公钥</string>
+    <string name="action_choose_contact">选择通讯录公钥</string>
+    <string name="action_edit_contact_note">编辑备注</string>
+    <string name="action_save_contact">保存</string>
+    <string name="action_use_contact">用于加密</string>
+    <string name="contact_empty">尚未保存公钥</string>
+    <string name="contact_description">保存常用收件人的公钥，按备注选择。请与对方核对指纹；备注不能证明身份。</string>
+    <string name="contact_note_label">备注（可选）</string>
+    <string name="contact_note_hint">收件人名称或其他说明</string>
+    <string name="contact_note_limit">最多 %1$d 个字符</string>
+    <string name="contact_duplicate">此公钥已保存在通讯录，保存将更新备注。</string>
+    <string name="contact_note_line">备注：%1$s</string>
+    <string name="contact_saved">公钥已保存</string>
+    <string name="contact_updated">备注已更新</string>
+    <string name="contact_deleted">通讯录公钥已删除</string>
+    <string name="contact_selected">已选择通讯录公钥</string>
+    <string name="contact_load_failed">无法读取公钥通讯录</string>
+    <string name="contact_unreadable_entries">有 %1$d 个条目无法读取</string>
+    <string name="contact_unavailable">所选通讯录公钥不可用，请选择其他公钥。</string>
+    <string name="contact_delete_title">删除通讯录公钥？</string>
+    <string name="contact_delete_message">从通讯录删除 %1$s？若此条目已被选中，需要重新选择加密公钥。默认密钥将保留。</string>
+    <string name="contact_save_title">保存公钥</string>
+    <string name="contact_edit_title">编辑备注</string>
+    <string name="contact_picker_title">选择通讯录公钥</string>
+    <string name="key_source_contacts">公钥通讯录</string>
+    <string name="operation_save_contact">保存公钥</string>
+    <string name="operation_update_contact">更新公钥备注</string>
+    <string name="operation_delete_contact">删除通讯录公钥</string>
+    <string name="operation_select_contact">选择通讯录公钥</string>
 </resources>

@@ -2,7 +2,16 @@ package com.shixiaoshi0417.nekokem.ui
 
 import android.app.Activity
 import android.os.Build
+import androidx.activity.BackEventCompat
+import androidx.activity.compose.PredictiveBackHandler
 import androidx.annotation.StringRes
+import androidx.compose.animation.core.Animatable
+import androidx.compose.foundation.background
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.runtime.derivedStateOf
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.RadioButton
 import androidx.compose.foundation.selection.selectable
@@ -57,6 +66,9 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.shixiaoshi0417.nekokem.R
+import com.shixiaoshi0417.nekokem.keys.PublicKeyContact
+import com.shixiaoshi0417.nekokem.keys.PublicKeyContactsState
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 
 data class NekoKEMUiState(
@@ -72,6 +84,9 @@ data class NekoKEMUiState(
     val privateKeyFileName: String,
     val privateKeyFingerprint: String?,
     val running: Boolean,
+    val contactsState: PublicKeyContactsState = PublicKeyContactsState(),
+    val publicKeyContactId: String? = null,
+    val publicKeyNote: String? = null,
 )
 
 data class NekoKEMActions(
@@ -92,11 +107,17 @@ data class NekoKEMActions(
     val onRestoreDefaultPrivateKey: () -> Unit,
     val onEncrypt: () -> Unit,
     val onDecrypt: () -> Unit,
+    val onImportContact: () -> Unit,
+    val onChooseContact: () -> Unit,
+    val onSelectContact: (PublicKeyContact) -> Unit,
+    val onEditContact: (PublicKeyContact) -> Unit,
+    val onDeleteContact: (PublicKeyContact) -> Unit,
 )
 
 private enum class AppDestination(@StringRes val titleResource: Int) {
     FILES(R.string.navigation_files),
     KEYS(R.string.navigation_keys),
+    CONTACTS(R.string.navigation_contacts),
     SETTINGS(R.string.navigation_settings),
     ABOUT(R.string.navigation_about),
 }
@@ -113,12 +134,37 @@ fun NekoKEMAppShell(
     var destination by rememberSaveable { mutableStateOf(AppDestination.FILES) }
     val fontScale = LocalDensity.current.fontScale.coerceAtLeast(1f)
     val menuDescription = stringResource(R.string.navigation_open_menu)
+    // Predictive back: a secondary page follows the system back gesture and
+    // reveals Files beneath it. Files itself leaves back to the system, which
+    // shows its back-to-home animation; the open drawer handles its own gesture.
+    val backProgress = remember { Animatable(0f) }
+    var backEdge by remember { mutableIntStateOf(BackEventCompat.EDGE_LEFT) }
+    val previewingFiles by remember { derivedStateOf { backProgress.value > 0f } }
+    val drawerClosed = drawerState.currentValue == DrawerValue.Closed &&
+        drawerState.targetValue == DrawerValue.Closed
+    PredictiveBackHandler(
+        enabled = destination != AppDestination.FILES && drawerClosed && !state.running,
+    ) { events ->
+        try {
+            events.collect { event ->
+                backEdge = event.swipeEdge
+                backProgress.snapTo(event.progress)
+            }
+            destination = AppDestination.FILES
+            backProgress.snapTo(0f)
+        } catch (error: CancellationException) {
+            // A cancelled gesture returns the page to its resting position.
+            scope.launch { backProgress.animateTo(0f) }
+            throw error
+        }
+    }
 
     ModalNavigationDrawer(
         drawerState = drawerState,
         gesturesEnabled = !state.running,
         drawerContent = {
-            ModalDrawerSheet {
+            // Passing the state enables Material's predictive back for the drawer.
+            ModalDrawerSheet(drawerState = drawerState) {
                 Text(
                     modifier = Modifier.padding(24.dp),
                     text = stringResource(R.string.app_name),
@@ -171,11 +217,41 @@ fun NekoKEMAppShell(
                     .fillMaxSize()
                     .padding(padding),
             ) {
-                when (destination) {
-                    AppDestination.FILES -> FileOperationsPage(state, actions)
-                    AppDestination.KEYS -> KeyManagementPage(state, actions)
-                    AppDestination.SETTINGS -> SettingsPage(state.running)
-                    AppDestination.ABOUT -> AboutPage(state)
+                if (previewingFiles && destination != AppDestination.FILES) {
+                    // Visual preview only; the page being left keeps the semantics.
+                    Box(modifier = Modifier.fillMaxSize().clearAndSetSemantics {}) {
+                        FileOperationsPage(state, actions)
+                    }
+                }
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .graphicsLayer {
+                            // Material predictive back: shrink to 90%, shift away from the
+                            // swipe edge and round the corners as the finger moves.
+                            val progress = backProgress.value
+                            val scale = 1f - 0.1f * progress
+                            scaleX = scale
+                            scaleY = scale
+                            val direction = if (backEdge == BackEventCompat.EDGE_RIGHT) -1f else 1f
+                            translationX = direction * progress *
+                                (size.width / 20f - 8.dp.toPx()).coerceAtLeast(0f)
+                            shape = RoundedCornerShape(28.dp * progress)
+                            clip = progress > 0f
+                            shadowElevation = 6.dp.toPx() * progress
+                        }
+                        .background(MaterialTheme.colorScheme.background),
+                ) {
+                    when (destination) {
+                        AppDestination.FILES -> FileOperationsPage(state, actions)
+                        AppDestination.KEYS -> KeyManagementPage(state, actions)
+                        AppDestination.CONTACTS -> PublicKeyContactsPage(state, actions) { contact ->
+                            actions.onSelectContact(contact)
+                            destination = AppDestination.FILES
+                        }
+                        AppDestination.SETTINGS -> SettingsPage(state.running)
+                        AppDestination.ABOUT -> AboutPage(state)
+                    }
                 }
             }
         }
@@ -237,13 +313,23 @@ private fun FileOperationsPage(
             temporary = state.publicKeyTemporary,
             fileName = state.publicKeyFileName,
             fingerprint = state.publicKeyFingerprint,
+            sourceResource = if (state.publicKeyContactId != null) R.string.key_source_contacts else null,
+            note = state.publicKeyNote,
+        )
+        if (state.publicKeyContactId != null && state.publicKeyFingerprint == null) {
+            Text(stringResource(R.string.contact_unavailable), color = MaterialTheme.colorScheme.error)
+        }
+        ActionButton(
+            labelResource = R.string.action_choose_contact,
+            enabled = state.nativeConnected && !state.running,
+            onClick = actions.onChooseContact,
         )
         ActionButton(
             labelResource = R.string.action_select_other_public_key,
             enabled = state.nativeConnected && !state.running,
             onClick = actions.onSelectTemporaryPublicKey,
         )
-        if (state.publicKeyTemporary) {
+        if (state.publicKeyTemporary || state.publicKeyContactId != null) {
             ActionButton(
                 labelResource = R.string.action_restore_default_public_key,
                 enabled = !state.running,
@@ -278,6 +364,8 @@ private fun KeySelectionCard(
     temporary: Boolean,
     fileName: String,
     fingerprint: String?,
+    @StringRes sourceResource: Int? = null,
+    note: String? = null,
 ) {
     val unavailable = stringResource(R.string.not_available)
     Card(modifier = Modifier.fillMaxWidth()) {
@@ -292,7 +380,7 @@ private fun KeySelectionCard(
                 text = stringResource(
                     R.string.key_source_line,
                     stringResource(
-                        if (temporary) {
+                        sourceResource ?: if (temporary) {
                             R.string.key_source_temporary_saf
                         } else {
                             R.string.key_source_app_default
@@ -306,6 +394,9 @@ private fun KeySelectionCard(
                 text = stringResource(R.string.key_file_line, fileName),
                 style = MaterialTheme.typography.bodyMedium,
             )
+            if (!note.isNullOrBlank()) {
+                Text(stringResource(R.string.contact_note_line, note), modifier = Modifier.padding(top = 8.dp))
+            }
             Text(
                 modifier = Modifier.padding(top = 8.dp),
                 text = stringResource(

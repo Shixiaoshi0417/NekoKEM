@@ -2,17 +2,18 @@ import { mount,flushPromises,enableAutoUnmount } from '@vue/test-utils';
 import { afterEach,beforeEach,describe,expect,it,vi } from 'vitest';
 import App from '../src/App.vue';
 import * as bridge from '../src/bridge';
-import { translate } from '../src/i18n';
-vi.mock('../src/bridge',()=>({getSettings:vi.fn(),setLanguage:vi.fn(),runOperation:vi.fn(),cancelOperation:vi.fn(),closeApp:vi.fn(),onProgress:vi.fn(),chooseOpen:vi.fn(),chooseSave:vi.fn()}));
+import { catalog, translate } from '../src/i18n';
+vi.mock('../src/bridge',()=>({getSettings:vi.fn(),setLanguage:vi.fn(),runOperation:vi.fn(),cancelOperation:vi.fn(),closeApp:vi.fn(),onProgress:vi.fn(),chooseOpen:vi.fn(),chooseSave:vi.fn(),listContacts:vi.fn(),saveContact:vi.fn(),updateContactNote:vi.fn(),deleteContact:vi.fn()}));
 enableAutoUnmount(afterEach);
-beforeEach(()=>{vi.clearAllMocks();vi.mocked(bridge.getSettings).mockResolvedValue({language:'en',selection:'system',version:'3.3.1'});vi.mocked(bridge.onProgress).mockResolvedValue(()=>{});vi.mocked(bridge.runOperation).mockResolvedValue({output:'output.nkem',fingerprint:null});vi.mocked(bridge.chooseOpen).mockResolvedValue(null);vi.mocked(bridge.chooseSave).mockResolvedValue(null);vi.mocked(bridge.cancelOperation).mockResolvedValue(true);});
+beforeEach(()=>{vi.clearAllMocks();vi.mocked(bridge.getSettings).mockResolvedValue({language:'en',selection:'system',version:'3.3.1'});vi.mocked(bridge.onProgress).mockResolvedValue(()=>{});vi.mocked(bridge.runOperation).mockResolvedValue({output:'output.nkem',fingerprint:null});vi.mocked(bridge.chooseOpen).mockResolvedValue(null);vi.mocked(bridge.chooseSave).mockResolvedValue(null);vi.mocked(bridge.cancelOperation).mockResolvedValue(true);vi.mocked(bridge.listContacts).mockResolvedValue({contacts:[],unreadable:0});});
 async function ready(){const app=mount(App,{attachTo:document.body});await flushPromises();return app;}
 describe('Desktop operation boundaries',()=>{
  it('rejects mismatched keygen passwords before invoking native Core',async()=>{const app=await ready();await app.findAll('nav button')[0]!.trigger('click');await app.get('[name=publicPath]').setValue('public.key');await app.get('[name=privatePath]').setValue('private.key.enc');await app.get('[name=password]').setValue('secret-one');await app.get('[name=confirmation]').setValue('secret-two');await app.get('form').trigger('submit');expect(bridge.runOperation).not.toHaveBeenCalled();expect(app.get('[role=alert]').text()).toBe('Passwords do not match.');});
  it('clears password fields immediately and preserves cancellation failure semantics',async()=>{const app=await ready();await app.findAll('nav button')[2]!.trigger('click');await app.get('[name=keyPath]').setValue('private.key.enc');await app.get('[name=input]').setValue('input.nkem');await app.get('[name=output]').setValue('output');await app.get('[name=password]').setValue('public-test-password');vi.mocked(bridge.runOperation).mockRejectedValue({code:'cancelled'});await app.get('form').trigger('submit');expect((app.get('[name=password]').element as HTMLInputElement).value).toBe('');await flushPromises();expect(app.get('[role=alert]').text()).toContain('no new output');expect(app.text()).not.toContain('public-test-password');});
  it('rejects passwords exceeding the UTF-8 byte limit',async()=>{const app=await ready();await app.findAll('nav button')[0]!.trigger('click');await app.get('[name=publicPath]').setValue('public.key');await app.get('[name=privatePath]').setValue('private.key.enc');await app.get('[name=password]').setValue('中'.repeat(400));await app.get('[name=confirmation]').setValue('中'.repeat(400));await app.get('form').trigger('submit');expect(bridge.runOperation).not.toHaveBeenCalled();expect(app.get('[role=alert]').text()).toContain('1024 UTF-8 bytes');});
  it('locks navigation and ignores stale progress events during a job',async()=>{let callback:(value:bridge.Progress)=>void=()=>{};vi.mocked(bridge.onProgress).mockImplementation(async fn=>{callback=fn;return()=>{};});let finish:(result:bridge.Outcome)=>void=()=>{};vi.mocked(bridge.runOperation).mockReturnValue(new Promise(resolve=>{finish=resolve;}));const app=await ready();await app.get('[name=keyPath]').setValue('public.key');await app.get('[name=input]').setValue('plain');await app.get('[name=output]').setValue('out.nkem');await app.get('form').trigger('submit');const request=vi.mocked(bridge.runOperation).mock.calls[0]![0];callback({id:'stale-job',processed:50,total:100});await flushPromises();expect(app.text()).not.toContain('50%');expect(app.findAll('nav button').every(button=>button.attributes('disabled')!==undefined)).toBe(true);callback({id:request.id,processed:50,total:100});await flushPromises();expect(app.text()).toContain('50%');finish({output:'out.nkem',fingerprint:null});await flushPromises();expect(app.text()).toContain('Completed');});
- it('has a complete label for every supported language',()=>{for(const language of ['en','zh-CN','zh-TW','ja','ko'] as const){for(const key of ['keygen','encrypt','decrypt','fingerprint','exit','cancelled','core-error','navigation','keySource','loading','choosing'] as const)expect(translate(key,language).length).toBeGreaterThan(0);}});
+ it('keeps every desktop message complete in all five languages',()=>{for(const [key,values] of Object.entries(catalog)){expect(values,key).toHaveLength(5);const placeholders=values.map(value=>(value.match(/\{\w+\}/g)??[]).sort().join());for(const value of values){expect(value.trim(),key).not.toBe('');}expect(new Set(placeholders).size,key).toBe(1);}});
+ it('has a complete label for every supported language',()=>{for(const language of ['en','zh-CN','zh-TW','ja','ko'] as const){for(const key of ['keygen','encrypt','decrypt','fingerprint','exit','cancelled','core-error','navigation','keySource','loading','choosing','contacts','contactsHelp','savedContact','recipient','chooseContact','noContacts','note','noteHint','saveContact','useContact','editNote','saveNote','deleteContact','confirmDelete','deletePrompt','contactSaved','noteSaved','contactDeleted','contact-required','contact-missing','contact-invalid','contact-mismatch','contact-storage','contact-exists','contact-limit','public-key-invalid','note-limit','invalid-request'] as const)expect(translate(key,language).length).toBeGreaterThan(0);}});
 });
 
 describe('Desktop interaction and secret lifetime',()=>{
@@ -37,8 +38,13 @@ describe('Desktop interaction and secret lifetime',()=>{
   await buttons[2]!.trigger('keydown',{key:'Home'});
   expect(app.get('h1').text()).toBe('Generate keys');
   await buttons[0]!.trigger('keydown',{key:'End'});
+  expect(app.get('h1').text()).toBe('Public-key contacts');
+  expect(document.activeElement).toBe(buttons[4]!.element);
+  await buttons[4]!.trigger('keydown',{key:'ArrowUp'});
   expect(app.get('h1').text()).toBe('Public key fingerprint');
   await buttons[3]!.trigger('keydown',{key:'ArrowDown'});
+  expect(app.get('h1').text()).toBe('Public-key contacts');
+  await buttons[4]!.trigger('keydown',{key:'ArrowDown'});
   expect(app.get('h1').text()).toBe('Generate keys');
   expect(bridge.runOperation).not.toHaveBeenCalled();
  });
@@ -126,5 +132,161 @@ describe('Desktop interaction and secret lifetime',()=>{
   const password=app.get('[name=password]').element as HTMLInputElement;
   const confirmation=app.get('[name=confirmation]').element as HTMLInputElement;
   app.unmount();expect(password.value).toBe('');expect(confirmation.value).toBe('');
+ });
+});
+
+const alice:bridge.Contact={id:'a'.repeat(64),fingerprint:Array(32).fill('AA').join(':'),name:'alice.pub',note:'Alice'};
+const bob:bridge.Contact={id:'b'.repeat(64),fingerprint:Array(32).fill('BB').join(':'),name:'bob.pub',note:''};
+async function contactsPage(app:Awaited<ReturnType<typeof ready>>){await app.findAll('.operation-tab')[4]!.trigger('click');await flushPromises();}
+async function chooseContactSource(app:Awaited<ReturnType<typeof ready>>){await app.findAll('[name=keySource]')[2]!.setValue(true);}
+
+describe('Desktop public-key contacts',()=>{
+ it('saves a public key with a trimmed note, edits the note and deletes only after confirmation',async()=>{
+  let saved:bridge.Contact[]=[];
+  vi.mocked(bridge.listContacts).mockImplementation(async()=>({contacts:[...saved],unreadable:0}));
+  vi.mocked(bridge.saveContact).mockImplementation(async request=>{saved=[{...alice,note:request.note.trim()}];return saved[0]!;});
+  vi.mocked(bridge.updateContactNote).mockImplementation(async(id,note)=>{saved=[{...saved[0]!,note}];return saved[0]!;});
+  vi.mocked(bridge.deleteContact).mockImplementation(async()=>{saved=[];});
+  const app=await ready();await contactsPage(app);
+  expect(app.get('.contact-list').text()).toContain('No public keys are saved yet.');
+  await app.get('[name=contactKeyPath]').setValue('alice.pub');await app.get('[name=note]').setValue('  Alice  ');
+  await app.get('form').trigger('submit');await flushPromises();
+  expect(bridge.saveContact).toHaveBeenCalledWith({keyPath:'alice.pub',keyText:'',paste:false,note:'  Alice  '});
+  expect(app.get('form .notice.success').text()).toContain('Public key saved');
+  expect((app.get('form .fingerprint').element as HTMLTextAreaElement).value).toBe(alice.fingerprint);
+  expect((app.get('[name=contactKeyPath]').element as HTMLInputElement).value).toBe('');
+  expect(app.get('.contact.highlighted .contact-label').text()).toBe('Alice');
+  expect(app.get('.contact-fingerprint').text()).toBe(alice.fingerprint);
+  expect(app.get('.contact-source').text()).toContain('alice.pub');
+
+  await app.get('.edit-note').trigger('click');await flushPromises();
+  const draft=app.get('[name=noteDraft]');
+  expect((draft.element as HTMLInputElement).value).toBe('Alice');expect(document.activeElement).toBe(draft.element);
+  await draft.setValue('Alice laptop');await app.get('.contact-actions.editing .secondary').trigger('click');await flushPromises();
+  expect(bridge.updateContactNote).toHaveBeenCalledWith(alice.id,'Alice laptop');
+  expect(app.get('.contact-label').text()).toBe('Alice laptop');
+  expect(app.get('.contact-list .notice.success').text()).toContain('Note saved');
+
+  await app.get('.delete-contact').trigger('click');
+  expect(bridge.deleteContact).not.toHaveBeenCalled();
+  expect(app.get('.contact-actions.confirming').text()).toContain('Files already encrypted are not affected');
+  await app.get('.contact-actions.confirming .text-button').trigger('click');
+  expect(app.find('.contact-actions.confirming').exists()).toBe(false);
+  await app.get('.delete-contact').trigger('click');await app.get('.danger').trigger('click');await flushPromises();
+  expect(bridge.deleteContact).toHaveBeenCalledWith(alice.id);
+  expect(app.findAll('.contact')).toHaveLength(0);
+  expect(app.get('.contact-list .notice.success').text()).toContain('Contact deleted');
+ });
+ it('validates notes and key sources before invoking native code',async()=>{
+  const app=await ready();await contactsPage(app);
+  await app.get('form').trigger('submit');await flushPromises();
+  expect(document.activeElement).toBe(app.get('[name=contactKeyPath]').element);
+  await app.get('[name=contactKeyPath]').setValue('alice.pub');await app.get('[name=note]').setValue('😀'.repeat(513));
+  await app.get('form').trigger('submit');await flushPromises();
+  expect(app.get('[role=alert]').text()).toContain('512 characters');
+  expect(app.get('[name=note]').attributes('aria-invalid')).toBe('true');
+  expect(bridge.saveContact).not.toHaveBeenCalled();
+  // The limit counts code points: 512 emoji are accepted, and no UTF-16 maxlength cuts them.
+  expect(app.get('[name=note]').attributes('maxlength')).toBeUndefined();
+  vi.mocked(bridge.saveContact).mockResolvedValue({...alice,note:'😀'.repeat(512)});
+  await app.get('[name=note]').setValue('😀'.repeat(512));
+  await app.get('form').trigger('submit');await flushPromises();
+  expect(bridge.saveContact).toHaveBeenCalledWith({keyPath:'alice.pub',keyText:'',paste:false,note:'😀'.repeat(512)});
+ });
+ it('scrubs pasted contact text before the native call and when its source is hidden',async()=>{
+  const app=await ready();await contactsPage(app);
+  await app.findAll('[name=contactKeySource]')[1]!.setValue(true);
+  await app.get('[name=contactKeyText]').setValue('-----BEGIN PUBLIC KEY-----fixture');
+  const text=app.get('[name=contactKeyText]').element as HTMLTextAreaElement;
+  await app.findAll('[name=contactKeySource]')[0]!.setValue(true);
+  expect(text.value).toBe('');expect(text.isConnected).toBe(false);
+  await app.findAll('[name=contactKeySource]')[1]!.setValue(true);
+  const pasted=app.get('[name=contactKeyText]');await pasted.setValue('-----BEGIN PUBLIC KEY-----fixture');
+  vi.mocked(bridge.saveContact).mockImplementation(async request=>{
+   expect((pasted.element as HTMLTextAreaElement).value).toBe('');
+   expect(request).toEqual({keyPath:'',keyText:'-----BEGIN PUBLIC KEY-----fixture',paste:true,note:''});
+   throw {code:'public-key-invalid'};
+  });
+  await app.get('form').trigger('submit');await flushPromises();
+  expect(app.get('[role=alert]').text()).toContain('Not a valid NekoKEM public key');
+  expect(app.get('[name=contactKeyText]').attributes('aria-invalid')).toBe('true');
+  expect(vi.mocked(bridge.saveContact).mock.calls[0]![0].keyText).toBe('');
+  expect(app.html()).not.toContain('fixture');
+ });
+ it('points a duplicate import at the existing contact instead of replacing it',async()=>{
+  vi.mocked(bridge.listContacts).mockResolvedValue({contacts:[alice,bob],unreadable:0});
+  vi.mocked(bridge.saveContact).mockRejectedValue({code:'contact-exists',contact:bob.id});
+  const app=await ready();await contactsPage(app);
+  await app.get('[name=contactKeyPath]').setValue('bob-copy.pub');await app.get('form').trigger('submit');await flushPromises();
+  expect(app.get('[role=alert]').text()).toContain('already saved');
+  expect(app.get('.contact.highlighted').attributes('data-contact')).toBe(bob.id);
+  expect(app.get('.contact.highlighted .contact-label').text()).toBe('bob.pub');
+ });
+ it('encrypts only for an explicitly selected contact without sending another key source',async()=>{
+  vi.mocked(bridge.listContacts).mockResolvedValue({contacts:[alice,bob],unreadable:0});
+  vi.mocked(bridge.runOperation).mockResolvedValue({output:'out.nkem',fingerprint:bob.fingerprint});
+  const app=await ready();
+  await app.get('[name=keyPath]').setValue('default-public.key');
+  await chooseContactSource(app);
+  expect(app.find('[name=keyPath]').exists()).toBe(false);
+  await app.get('[name=input]').setValue('plain');await app.get('[name=output]').setValue('out.nkem');
+  await app.get('form').trigger('submit');await flushPromises();
+  expect(bridge.runOperation).not.toHaveBeenCalled();
+  expect(app.get('[role=alert]').text()).toBe('Choose a saved contact.');
+  const select=app.get('[name=contact]');
+  expect(document.activeElement).toBe(select.element);expect(select.attributes('aria-invalid')).toBe('true');
+  expect(select.findAll('option').map(option=>option.text())).toEqual(['Choose a saved contact…','Alice · AA:AA:AA:AA…','bob.pub · BB:BB:BB:BB…']);
+  await select.setValue(bob.id);
+  expect(app.find('[role=alert]').exists()).toBe(false);
+  expect(app.get('.contact-preview code').text()).toBe(bob.fingerprint);
+  await app.get('form').trigger('submit');await flushPromises();
+  const request=vi.mocked(bridge.runOperation).mock.calls[0]![0];
+  expect([request.kind,request.contact,request.keyPath,request.keyText,request.paste]).toEqual(['encrypt',bob.id,'','',false]);
+  expect(app.get('.notice.success').text()).toContain('Recipient: bob.pub');
+  expect((app.get('.notice.success .fingerprint').element as HTMLTextAreaElement).value).toBe(bob.fingerprint);
+ });
+ it('reports a missing or damaged contact and requires a new explicit choice',async()=>{
+  vi.mocked(bridge.listContacts).mockResolvedValue({contacts:[alice,bob],unreadable:0});
+  vi.mocked(bridge.runOperation).mockRejectedValueOnce({code:'contact-invalid'});
+  const app=await ready();await chooseContactSource(app);
+  await app.get('[name=contact]').setValue(alice.id);await app.get('[name=input]').setValue('plain');await app.get('[name=output]').setValue('out.nkem');
+  await app.get('form').trigger('submit');await flushPromises();
+  expect(app.get('[role=alert]').text()).toContain('damaged or has unsafe permissions');
+  expect((app.get('[name=contact]').element as HTMLSelectElement).value).toBe('');
+  expect(app.get('[name=contact]').attributes('aria-invalid')).toBe('true');
+  expect(bridge.listContacts).toHaveBeenCalledTimes(2);
+  await app.get('form').trigger('submit');await flushPromises();
+  expect(bridge.runOperation).toHaveBeenCalledTimes(1);
+  expect(app.get('[role=alert]').text()).toBe('Choose a saved contact.');
+
+  // A contact deleted elsewhere disappears from the next refresh; it is never replaced.
+  await app.get('[name=contact]').setValue(alice.id);
+  vi.mocked(bridge.listContacts).mockResolvedValue({contacts:[bob],unreadable:0});
+  await app.findAll('.operation-tab')[0]!.trigger('click');await app.findAll('.operation-tab')[1]!.trigger('click');await flushPromises();
+  expect(app.get('[role=alert]').text()).toContain('no longer exists');
+  expect((app.get('[name=contact]').element as HTMLSelectElement).value).toBe('');
+  expect(bridge.runOperation).toHaveBeenCalledTimes(1);
+ });
+ it('opens encryption from a contact and keeps the choice per operation',async()=>{
+  vi.mocked(bridge.listContacts).mockResolvedValue({contacts:[alice,bob],unreadable:2});
+  const app=await ready();await contactsPage(app);
+  expect(app.get('.contact-list').text()).toContain('2 saved entries could not be read');
+  expect(app.findAll('.contact-label').map(item=>item.text())).toEqual(['Alice','bob.pub']);
+  await app.findAll('.use-contact')[0]!.trigger('click');await flushPromises();
+  expect(app.get('h1').text()).toBe('Encrypt file');
+  expect((app.findAll('[name=keySource]')[2]!.element as HTMLInputElement).checked).toBe(true);
+  expect((app.get('[name=contact]').element as HTMLSelectElement).value).toBe(alice.id);
+  // Decryption and fingerprints never offer saved contacts.
+  await app.findAll('.operation-tab')[2]!.trigger('click');
+  expect(app.findAll('[name=keySource]')).toHaveLength(2);
+  expect(app.find('[name=keyPath]').exists()).toBe(true);
+ });
+ it('shows contact storage failures without offering any contact',async()=>{
+  vi.mocked(bridge.listContacts).mockRejectedValue({code:'contact-storage'});
+  const app=await ready();await chooseContactSource(app);
+  expect(app.get('.contact-choice').text()).toContain('Cannot use the contacts folder');
+  expect(app.get('[name=contact]').findAll('option')).toHaveLength(1);
+  await contactsPage(app);
+  expect(app.get('.contact-list [role=alert]').text()).toContain('Cannot use the contacts folder');
  });
 });

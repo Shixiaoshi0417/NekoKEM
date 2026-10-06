@@ -38,8 +38,11 @@ class TemporaryKeyInstrumentation : Instrumentation() {
     override fun onStart() {
         val results = Bundle()
         val status = try {
+            runContactProcessRestartTests(this, languagePhase)
             val publicKeyTrace = if (languagePhase == null) runTemporaryKeyTests(targetContext) else "language-only"
             runLanguageDeviceTests(this, languagePhase, expectedSystemLanguage, screenshotPrefix)
+            if (languagePhase == null) runPublicKeyContactsUiTests(this)
+            if (languagePhase == null) runPredictiveBackUiTests(this)
             results.putString(RESULT_KEY, RESULT_SUCCESS)
             results.putString(PUBLIC_KEY_TRACE_KEY, publicKeyTrace)
             Activity.RESULT_OK
@@ -87,7 +90,15 @@ class TemporaryKeyInstrumentation : Instrumentation() {
             testTemporaryKeys(manager, workflow, context.cacheDir, plaintext)
             testInvalidKeys(manager, workflow, context.cacheDir)
             testCancellationCleanup(workflow, context.cacheDir, plaintext)
+            runPublicKeyContactsTests(context, manager, workflow, plaintext, DEFAULT_PASSWORD)
             testKeyDeletion(manager)
+            val retainedContacts = com.shixiaoshi0417.nekokem.keys.PublicKeyContacts(context, manager)
+            val retained = retainedContacts.readState().contacts.single()
+            val selected = checkNotNull(retainedContacts.stageForEncryption(retained.id).key)
+            try {
+                check(manager.encryptFile(plaintext, File(context.cacheDir, "contact-without-local-key.nkem"),
+                    selected, CONTINUE_PROGRESS) == NativeBridge.RESULT_SUCCESS)
+            } finally { workflow.discardTemporaryPublicKey(selected) }
             check(workflow.clearTemporaryKeyCache())
             check(!workflow.hasTemporaryKeyCache())
         } finally {

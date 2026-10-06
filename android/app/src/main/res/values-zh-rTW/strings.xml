@@ -159,4 +159,36 @@
         <item quantity="other">%1$d 秒</item>
     </plurals>
     <string name="error_language_save">無法儲存語言設定，請重試。</string>
+
+    <!-- Saved public-key contacts -->
+    <string name="navigation_contacts">公鑰通訊錄</string>
+    <string name="action_import_contact">新增公鑰</string>
+    <string name="action_choose_contact">選擇通訊錄公鑰</string>
+    <string name="action_edit_contact_note">編輯備註</string>
+    <string name="action_save_contact">儲存</string>
+    <string name="action_use_contact">用於加密</string>
+    <string name="contact_empty">尚未儲存公鑰</string>
+    <string name="contact_description">儲存常用收件人的公鑰，依備註選擇。請與對方核對指紋；備註不能證明身分。</string>
+    <string name="contact_note_label">備註（選填）</string>
+    <string name="contact_note_hint">收件人名稱或其他說明</string>
+    <string name="contact_note_limit">最多 %1$d 個字元</string>
+    <string name="contact_duplicate">此公鑰已儲存在通訊錄，儲存將更新備註。</string>
+    <string name="contact_note_line">備註：%1$s</string>
+    <string name="contact_saved">公鑰已儲存</string>
+    <string name="contact_updated">備註已更新</string>
+    <string name="contact_deleted">通訊錄公鑰已刪除</string>
+    <string name="contact_selected">已選擇通訊錄公鑰</string>
+    <string name="contact_load_failed">無法讀取公鑰通訊錄</string>
+    <string name="contact_unreadable_entries">有 %1$d 個項目無法讀取</string>
+    <string name="contact_unavailable">所選通訊錄公鑰無法使用，請選擇其他公鑰。</string>
+    <string name="contact_delete_title">刪除通訊錄公鑰？</string>
+    <string name="contact_delete_message">從通訊錄刪除 %1$s？若此項目已被選取，需重新選擇加密公鑰。預設金鑰將保留。</string>
+    <string name="contact_save_title">儲存公鑰</string>
+    <string name="contact_edit_title">編輯備註</string>
+    <string name="contact_picker_title">選擇通訊錄公鑰</string>
+    <string name="key_source_contacts">公鑰通訊錄</string>
+    <string name="operation_save_contact">儲存公鑰</string>
+    <string name="operation_update_contact">更新公鑰備註</string>
+    <string name="operation_delete_contact">刪除通訊錄公鑰</string>
+    <string name="operation_select_contact">選擇通訊錄公鑰</string>
 </resources>
