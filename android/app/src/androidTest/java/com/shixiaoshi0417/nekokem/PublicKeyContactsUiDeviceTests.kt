@@ -41,10 +41,12 @@ internal fun runPublicKeyContactsUiTests(instrumentation: Instrumentation) {
     }
     fun awaitText(value: String): AccessibilityNodeInfo {
         val deadline = SystemClock.uptimeMillis() + 10000
+        var attempts = 0
         while (SystemClock.uptimeMillis() < deadline) {
             text(value)?.let { return it }
             find(instrumentation.uiAutomation.rootInActiveWindow) { it.isScrollable }
-                ?.performAction(AccessibilityNodeInfo.ACTION_SCROLL_FORWARD)
+                ?.performAction(if ((attempts++ / 3) % 2 == 0)
+                    AccessibilityNodeInfo.ACTION_SCROLL_FORWARD else AccessibilityNodeInfo.ACTION_SCROLL_BACKWARD)
             instrumentation.waitForIdleSync()
             SystemClock.sleep(100)
         }
@@ -130,12 +132,18 @@ internal fun runPublicKeyContactsUiTests(instrumentation: Instrumentation) {
         click(checkNotNull(activity).getString(R.string.action_use_contact))
         awaitText(checkNotNull(activity).getString(R.string.key_source_contacts))
         awaitText(editedNote)
+        // A selected radio item is deliberately not exposed as clickable by Compose.
+        // Exercise the picker by selecting this recipient from the default-key state.
+        click(checkNotNull(activity).getString(R.string.action_restore_default_public_key))
         openDialog(checkNotNull(activity).getString(R.string.action_choose_contact))
         awaitText(checkNotNull(activity).getString(R.string.contact_picker_title))
-        var recipient = awaitText(contact.fingerprint)
-        while (!recipient.isClickable) recipient = checkNotNull(recipient.parent)
+        awaitText(contact.fingerprint)
+        val recipient = checkNotNull(find(instrumentation.uiAutomation.rootInActiveWindow) {
+            it.className?.toString() == "android.widget.RadioButton" && it.isClickable
+        }) { "Saved recipient radio option is not clickable" }
         check(recipient.performAction(AccessibilityNodeInfo.ACTION_CLICK))
         instrumentation.waitForIdleSync()
+        awaitText(checkNotNull(activity).getString(R.string.key_source_contacts))
         awaitText(editedNote)
         recreate()
         awaitText(checkNotNull(activity).getString(R.string.key_source_contacts))
