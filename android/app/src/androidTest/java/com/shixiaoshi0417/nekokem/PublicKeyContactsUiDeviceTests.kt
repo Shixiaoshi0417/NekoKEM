@@ -9,7 +9,6 @@ import android.net.Uri
 import android.os.Bundle
 import android.os.SystemClock
 import android.system.Os
-import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
 import com.shixiaoshi0417.nekokem.files.SafFileWorkflow
 import com.shixiaoshi0417.nekokem.i18n.AppLanguages
@@ -32,14 +31,25 @@ internal fun runPublicKeyContactsUiTests(instrumentation: Instrumentation) {
     var activity: Activity? = null
     var savedId: String? = null
     val priorLanguage = AppLanguages.selection(context)
+    // On the API 35 emulator no scroll event from Compose reached UiAutomation, and its
+    // cached nodes kept an old child list after the page scrolled: a failure dump
+    // lacked buttons the screenshot showed. Refresh every node from the app before
+    // trusting it; refresh() fails for a node that no longer exists.
+    fun fresh(node: AccessibilityNodeInfo?): AccessibilityNodeInfo? = node?.takeIf { it.refresh() }
     fun find(root: AccessibilityNodeInfo?, predicate: (AccessibilityNodeInfo) -> Boolean): AccessibilityNodeInfo? {
-        if (root == null) return null
-        if (predicate(root)) return root
-        for (index in 0 until root.childCount) find(root.getChild(index), predicate)?.let { return it }
+        val node = fresh(root) ?: return null
+        if (predicate(node)) return node
+        for (index in 0 until node.childCount) find(node.getChild(index), predicate)?.let { return it }
         return null
     }
     fun text(value: String): AccessibilityNodeInfo? = find(instrumentation.uiAutomation.rootInActiveWindow) {
         it.text?.toString()?.contains(value) == true || it.contentDescription?.toString() == value
+    }
+    fun layout(node: AccessibilityNodeInfo): String = buildString {
+        for (index in 0 until node.childCount) {
+            val child = fresh(node.getChild(index)) ?: continue
+            append(Rect().also { child.getBoundsInScreen(it) }.toShortString()).append(child.text).append(';')
+        }
     }
     // Three steps forward, three back: reaches content on either side of the viewport.
     fun scroll(step: Int) {
@@ -48,19 +58,19 @@ internal fun runPublicKeyContactsUiTests(instrumentation: Instrumentation) {
             AccessibilityNodeInfo.ACTION_SCROLL_FORWARD else AccessibilityNodeInfo.ACTION_SCROLL_BACKWARD
         // Compose offers only the directions it can still scroll.
         if (scrollable.actionList.none { it.id == action }) return
-        // Compose applies the scroll on its next frame, which a loaded emulator can
-        // delay by seconds. Wait for the scroll event so no later lookup sees, and no
+        val before = layout(scrollable)
+        if (!scrollable.performAction(action)) return
+        // Compose applies the scroll on a later frame, which a loaded emulator can
+        // delay by seconds. Wait until the content has moved so no lookup sees, and no
         // later scroll queues behind, a position that is about to change.
-        runCatching {
-            instrumentation.uiAutomation.executeAndWaitForEvent(
-                { scrollable.performAction(action) },
-                { it.eventType == AccessibilityEvent.TYPE_VIEW_SCROLLED },
-                5000,
-            )
+        val deadline = SystemClock.uptimeMillis() + 10000
+        while (SystemClock.uptimeMillis() < deadline) {
+            SystemClock.sleep(50)
+            if (!scrollable.refresh() || layout(scrollable) != before) return
         }
     }
     fun awaitText(value: String): AccessibilityNodeInfo {
-        val deadline = SystemClock.uptimeMillis() + 20000
+        val deadline = SystemClock.uptimeMillis() + 30000
         var attempts = 0
         while (SystemClock.uptimeMillis() < deadline) {
             text(value)?.let { return it }
@@ -72,18 +82,18 @@ internal fun runPublicKeyContactsUiTests(instrumentation: Instrumentation) {
     }
     fun click(value: String) {
         awaitText(value)
-        // The page may recompose between lookup and click, leaving a stale node that
-        // refuses the action or briefly lacks the exact label, or move the target out
-        // of view, where Compose leaves it out of the accessibility tree. Retry, and
-        // keep scrolling while it fails so the target comes back into view.
-        val deadline = SystemClock.uptimeMillis() + 20000
+        // The page may recompose between lookup and click, leaving a node that refuses
+        // the action or briefly lacks the exact label, or move the target out of view,
+        // where Compose leaves it out of the accessibility tree. Retry, and keep
+        // scrolling while it fails so the target comes back into view.
+        val deadline = SystemClock.uptimeMillis() + 30000
         var attempts = 0
         while (true) {
             var target = find(instrumentation.uiAutomation.rootInActiveWindow) {
                 it.text?.toString() == value || it.contentDescription?.toString() == value
             }
             var observed = if (target == null) "not in tree" else "label found"
-            while (target != null && !target.isClickable) target = target.parent
+            while (target != null && !target.isClickable) target = fresh(target.parent)
             if (target != null) {
                 observed = "enabled=${target.isEnabled}, visible=${target.isVisibleToUser}, " +
                     "click=${target.actionList.any { it.id == AccessibilityNodeInfo.ACTION_CLICK }}"
@@ -177,7 +187,7 @@ internal fun runPublicKeyContactsUiTests(instrumentation: Instrumentation) {
         var recipient: AccessibilityNodeInfo? = null
         while (recipient == null && SystemClock.uptimeMillis() < pickerDeadline) {
             var option = text(contact.fingerprint)
-            while (option != null && !option.isClickable) option = option.parent
+            while (option != null && !option.isClickable) option = fresh(option.parent)
             recipient = option
             if (recipient == null) SystemClock.sleep(100)
         }
@@ -220,7 +230,8 @@ internal fun runPublicKeyContactsUiTests(instrumentation: Instrumentation) {
             capture("contacts-failure")
             val tree = StringBuilder()
             var count = 0
-            fun dump(node: AccessibilityNodeInfo?, depth: Int) {
+            fun dump(cached: AccessibilityNodeInfo?, depth: Int) {
+                val node = fresh(cached)
                 if (node == null || depth > 50 || count++ >= 512) return
                 val bounds = Rect().also { node.getBoundsInScreen(it) }
                 tree.append("  ".repeat(depth)).append(node.className).append(" | ")
