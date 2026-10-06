@@ -1,6 +1,6 @@
 # Linux GUI 安全边界 / Linux GUI security boundary
 
-Linux x86_64 与 ARM64 GUI 使用现有 Rust + Tauri 2 + Vue 3 + TypeScript 界面和同一 C17 Core。Core 3.1、NKEM v3、NKPR v1、X448 + ML-KEM-1024、HKDF-SHA512、Argon2id 参数、AES-256-GCM、AAD、指纹和 GCM 限额不变。文件仍按 64 KiB 分块流式处理，不缓存解锁后的私钥，也不降低 KDF 成本。
+Linux x86_64 与 ARM64 GUI 使用现有 Rust + Tauri 2 + Vue 3 + TypeScript 界面和同一 C17 Core。Core 4.0 新增 NKEM v4 多接收方容器；NKEM v3、NKPR v1、X448 + ML-KEM-1024、HKDF-SHA512、Argon2id 参数、AES-256-GCM、AAD、指纹和 GCM 限额不变。文件仍按 64 KiB 分块流式处理，不缓存解锁后的私钥，也不降低 KDF 成本。
 
 私有文件沿用 Linux CLI 的当前用户所有、普通文件、`0600`、单个硬链接和符号链接拒绝策略；私有目录要求 `0700`。粘贴的密钥最多 1 MiB，每行最多 16384 UTF-8 字节，口令最多 1024 UTF-8 字节。密钥暂存于新建的 `0700` 目录，通过目录描述符和 `O_EXCL | O_NOFOLLOW | O_CLOEXEC` 创建 `0600` 文件，检查所有者、文件类型与硬链接数量，再写入并要求 `fsync` 成功。清理同样拒绝不安全目录、符号链接和额外硬链接，失败会报告。
 
@@ -14,7 +14,7 @@ GUI 只加载包内页面，使用 WebKitGTK 的临时数据存储和原有 CSP�
 
 ---
 
-The x86_64 and ARM64 Linux GUI uses the existing Rust + Tauri 2 + Vue 3 + TypeScript frontend and the same C17 Core. Core 3.1, NKEM v3, NKPR v1, X448 + ML-KEM-1024, HKDF-SHA512, Argon2id parameters, AES-256-GCM, AAD, fingerprints and GCM limits are unchanged. Files still stream in 64 KiB chunks. No unlocked-key cache or weaker KDF is introduced.
+The x86_64 and ARM64 Linux GUI uses the existing Rust + Tauri 2 + Vue 3 + TypeScript frontend and the same C17 Core. Core 4.0 adds the NKEM v4 multi-recipient container; NKEM v3, NKPR v1, X448 + ML-KEM-1024, HKDF-SHA512, Argon2id parameters, AES-256-GCM, AAD, fingerprints and GCM limits are unchanged. Files still stream in 64 KiB chunks. No unlocked-key cache or weaker KDF is introduced.
 
 Private files retain Linux CLI checks for current-user ownership, regular files, mode `0600`, one hard link and rejection of symbolic links; private directories require `0700`. Pasted keys are capped at 1 MiB and 16384 UTF-8 bytes per line; passwords at 1024 UTF-8 bytes. Staging creates a new `0700` directory and uses its descriptor with `O_EXCL | O_NOFOLLOW | O_CLOEXEC` to create a `0600` file. Ownership, type and link count are checked before writing and requiring successful `fsync`. Cleanup also rejects unsafe directories, symlinks and extra hard links, and reports failure.
 

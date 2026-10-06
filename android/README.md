@@ -1,4 +1,4 @@
-# NekoKEM Android v3.3.2
+# NekoKEM Android v4.0.0
 
 <p align="center">
   <img src="../docs/icon-rounded.png" alt="NekoKEM App icon" width="160">
@@ -6,14 +6,14 @@
 
 Android App 通过窄 JNI Bridge 调用可复用的 NekoKEM C17 Core。Kotlin 和
 JNI 不实现或解析 X448、ML-KEM-1024、HKDF、AES-GCM、NKEM 或 NKPR。
-Core 仅处理 NKEM v3 文件容器；NKEM v1/v2 已不再支持。NKPR 是独立的
+Core 处理 NKEM v3 单接收方与 NKEM v4 多接收方文件容器；NKEM v1/v2 已不再支持。NKPR 是独立的
 私钥容器，仍由 Core 处理且格式不变。
 
-当前正式 App 版本为 `3.3.2`，Core 版本保持 `3.1`，Android application ID
-与 namespace 均为 `com.shixiaoshi0417.nekokem`。协议容器版本仍为
-**NKEM v3**，与 App 版本号相互独立；NKPR 格式保持不变。
+当前正式 App 版本为 `4.0.0`，Core 版本为 `4.0`，Android application ID
+与 namespace 均为 `com.shixiaoshi0417.nekokem`。协议容器版本为
+**NKEM v3**（单接收方）和 **NKEM v4**（多接收方），与 App 版本号相互独立；NKPR 格式保持不变。
 
-v3.3.2 沿用 v3.2.0 发布签名，可直接覆盖升级。升级前建议导出公钥和加密 NKPR 私钥，验证备份并保存私钥密码。仅旧签名 v3.1.x 用户需要在完成备份后卸载重装；卸载会删除内部密钥。详见 [v3.3.2 中英双语更新日志](../release/v3.3.2.md)，历史签名迁移记录保留在 [v3.2.0](../release/v3.2.0.md)。
+v4.0.0 沿用 v3.2.0 发布签名，可直接覆盖升级。升级前建议导出公钥和加密 NKPR 私钥，验证备份并保存私钥密码。仅旧签名 v3.1.x 用户需要在完成备份后卸载重装；卸载会删除内部密钥。详见 [v4.0.0 中英双语更新日志](../release/v4.0.0.md)，历史签名迁移记录保留在 [v3.2.0](../release/v3.2.0.md)。
 
 README 图标仅使用专用圆角展示图，Android launcher 继续使用现有方形白底图案。应用是未经独立专业安全审计的实验性工具，不应用于保护重要或敏感数据。
 
@@ -76,7 +76,7 @@ context.filesDir/
 无效记录、指纹不符、链接与权限检查，以及真实 Compose 页面中的备注编辑、选择、
 Activity 重建和删除。NKEM v3、NKPR 及其密码算法与参数保持不变。
 
-### 多人加密（开发分支）
+### 多人加密
 
 在“公钥通讯录”页面勾选“选为接收方”后，页面顶部显示已选人数，点击“加密给所选接收方”返回文件页；
 勾选本身不会改变当前加密公钥，需显式点击按钮才生效。“清除选择”可取消全部勾选。

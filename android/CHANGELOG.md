@@ -1,5 +1,20 @@
 # Changelog
 
+## 4.0.0
+
+- 完整中文在上、英文在下的发布说明见 [v4.0.0](../release/v4.0.0.md)。
+- 新增多人加密：一个文件最多加密给 64 位接收方，Android 在公钥通讯录勾选“选为接收方”后加密，文件页列出全部接收方；只选一位时仍写出 NKEM v3，两位及以上写出 NKEM v4。v3.3.2 及更早版本无法打开 v4 文件。
+- 全平台应用版本为 4.0.0，Core 为 4.0，Android versionCode 为 8，沿用 v3.2.0/v3.3.0 签名，可覆盖升级。
+- NKEM v3、NKPR v1、Argon2id 成本、64 KiB 流式处理及固定 OpenSSL 4.0.3 不变。
+
+Full Chinese-then-English notes: [v4.0.0](../release/v4.0.0.md). Adds multi-recipient
+encryption: one file for up to 64 recipients. On Android, tick Select as recipient in
+Public-key contacts; the Files page lists every recipient. One recipient still writes
+NKEM v3, two or more write NKEM v4, which v3.3.2 and earlier cannot open. Every app is
+4.0.0 and Core is 4.0; Android versionCode is 8 and retains the v3.2.0/v3.3.0 signer for
+in-place updates. NKEM v3, NKPR v1, Argon2id costs, 64 KiB streaming and pinned OpenSSL
+4.0.3 are unchanged.
+
 ## 3.3.2
 
 - 完整中文在上、英文在下的发布说明见 [v3.3.2](../release/v3.3.2.md)。

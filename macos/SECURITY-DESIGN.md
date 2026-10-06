@@ -1,6 +1,6 @@
 # macOS 文件安全边界 / macOS filesystem boundary
 
-macOS CLI 与 GUI 使用同一 C17 Core 和既有密码实现。Core 版本仍为 3.1，NKEM v3、NKPR v1、X448 + ML-KEM-1024、HKDF-SHA512、Argon2id 参数、AES-256-GCM、头部/AAD、指纹、nonce/tag 与 GCM 限额均不变。文件数据仍按 64 KiB 流式处理；没有加入解锁私钥缓存或弱化密码派生。
+macOS CLI 与 GUI 使用同一 C17 Core 和既有密码实现。Core 版本为 4.0，新增 NKEM v4 多接收方容器（见 [`docs/NKEM-v4.md`](../docs/NKEM-v4.md)）；NKEM v3、NKPR v1、X448 + ML-KEM-1024、HKDF-SHA512、Argon2id 参数、AES-256-GCM、头部/AAD、指纹、nonce/tag 与 GCM 限额均不变。文件数据仍按 64 KiB 流式处理；没有加入解锁私钥缓存或弱化密码派生。
 
 | 边界 | macOS 策略 | 原生 CI 检查范围 |
 | --- | --- | --- |
@@ -25,7 +25,7 @@ CLI 与 GUI 的 ad-hoc hardened-runtime 签名只用于结构验证，不是 Dev
 
 ---
 
-The macOS CLI and GUI use the same C17 Core and existing cryptographic implementation. Core remains 3.1. NKEM v3, NKPR v1, X448 + ML-KEM-1024, HKDF-SHA512, Argon2id parameters, AES-256-GCM, headers/AAD, fingerprints, nonce/tag and GCM limits are unchanged. File data still uses 64 KiB streaming blocks. No unlocked-key cache or weaker password derivation is introduced.
+The macOS CLI and GUI use the same C17 Core and existing cryptographic implementation. Core is 4.0 and adds the NKEM v4 multi-recipient container (see [`docs/NKEM-v4.md`](../docs/NKEM-v4.md)); NKEM v3, NKPR v1, X448 + ML-KEM-1024, HKDF-SHA512, Argon2id parameters, AES-256-GCM, headers/AAD, fingerprints, nonce/tag and GCM limits are unchanged. File data still uses 64 KiB streaming blocks. No unlocked-key cache or weaker password derivation is introduced.
 
 | Boundary | macOS policy | Native CI coverage |
 | --- | --- | --- |

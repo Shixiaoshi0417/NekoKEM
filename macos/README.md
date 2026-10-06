@@ -1,6 +1,6 @@
 # macOS Apple Silicon CLI 与 GUI / macOS Apple Silicon CLI and GUI
 
-v3.3.2 面向 M 系列 Mac 的原生 `arm64` 架构，提供 CLI 和 Rust + Tauri 2 + Vue 3 + TypeScript GUI。不提供 Intel/Rosetta 构建。从 [v3.3.2 Release](https://github.com/Shixiaoshi0417/NekoKEM/releases/tag/v3.3.2) 下载 CLI、GUI ZIP 或 DMG，先用顶层 `SHA256SUMS.txt` 校验归档，再校验包内文件。
+v4.0.0 面向 M 系列 Mac 的原生 `arm64` 架构，提供 CLI 和 Rust + Tauri 2 + Vue 3 + TypeScript GUI。不提供 Intel/Rosetta 构建。从 [v4.0.0 Release](https://github.com/Shixiaoshi0417/NekoKEM/releases/tag/v4.0.0) 下载 CLI、GUI ZIP 或 DMG，先用顶层 `SHA256SUMS.txt` 校验归档，再校验包内文件。
 
 构建使用 macOS 11.0 deployment target；实际原生 CI 运行于 GitHub `macos-15` arm64 runner。deployment target 不等于 macOS 11.0 实机验证，也不承诺不同代 M 系列芯片具有相同性能。两种应用静态链接固定 OpenSSL 4.0.3，并保留其 arm64 汇编加速；运行不需要 Homebrew OpenSSL dylib，但仍依赖 macOS 系统库与框架。GUI 使用系统 WKWebView，不需要 WebView2 Runtime 或 `WebView2Loader.dll`。
 
@@ -29,7 +29,7 @@ shasum -a 256 -c SHA256SUMS
 
 包内校验文件用于检测文件损坏，不替代可信构建来源或发布者签名。CLI 与 Linux 共用全部参数和五项菜单；无参数运行进入菜单。`NekoKEM.command` 在 Terminal 中启动 CLI，并先将工作目录切换为解包目录，因此交互产生的 `keys/`、`encrypted/` 和 `plaintext/` 位于该目录。密码通过关闭回显的终端或 UTF-8 标准输入读取，不放在命令行参数里。
 
-GUI 构建说明见仓库的 [desktop/README.md](https://github.com/Shixiaoshi0417/NekoKEM/blob/main/desktop/README.md)。GUI 包为 `NekoKEM-macos-arm64-GUI.zip` 和 `NekoKEM-macos-arm64-GUI.dmg`；ZIP 中包含 `NekoKEM.app`、说明、许可、校验和构建元数据。Tauri 原始 DMG 名为 `NekoKEM_3.3.2_aarch64.dmg`，构建检查后导出为上述稳定包名。GUI 提供原生文件选择、进度、取消、五语言以及遵循减少动态效果偏好的界面动画。
+GUI 构建说明见仓库的 [desktop/README.md](https://github.com/Shixiaoshi0417/NekoKEM/blob/main/desktop/README.md)。GUI 包为 `NekoKEM-macos-arm64-GUI.zip` 和 `NekoKEM-macos-arm64-GUI.dmg`；ZIP 中包含 `NekoKEM.app`、说明、许可、校验和构建元数据。Tauri 原始 DMG 名为 `NekoKEM_4.0.0_aarch64.dmg`，构建检查后导出为上述稳定包名。GUI 提供原生文件选择、进度、取消、五语言以及遵循减少动态效果偏好的界面动画。
 
 ## 语言与文件安全
 
@@ -37,11 +37,11 @@ GUI 构建说明见仓库的 [desktop/README.md](https://github.com/Shixiaoshi04
 
 导入 NKPR 必须是当前用户拥有、权限为 `0600`、只有一个硬链接的普通文件，且没有扩展 ACL 的 allow 条目；不能用宽松权限替代这些检查。私有目录要求当前用户所有、`0700`，扩展 ACL 只允许空或 deny-only。普通文件先 `fsync` 再强制 `F_FULLFSYNC`，父目录使用 `fsync`；失败或不支持时拒绝，不静默降级。文件系统大小写或 Unicode 等价名称导致的密钥输出别名会触发拒绝及进程内回滚。细节、失败边界和原生测试范围见 [SECURITY-DESIGN.md](SECURITY-DESIGN.md)。
 
-Core 3.1、NKEM v3、NKPR v1、密码算法、KDF 参数与 64 KiB 流式分块均保持不变。CLI 和 GUI 使用 ad-hoc hardened-runtime 签名，用于结构完整性检查，未使用 Developer ID，也未进行 Apple 公证；不能证明发布者身份或保证下载后通过 Gatekeeper。本项目仍是未经独立专业安全审计的实验性工具，不应用于保护重要或敏感数据。
+Core 4.0 新增 NKEM v4 多接收方容器；NKEM v3、NKPR v1、密码算法、KDF 参数与 64 KiB 流式分块均保持不变。CLI 和 GUI 使用 ad-hoc hardened-runtime 签名，用于结构完整性检查，未使用 Developer ID，也未进行 Apple 公证；不能证明发布者身份或保证下载后通过 Gatekeeper。本项目仍是未经独立专业安全审计的实验性工具，不应用于保护重要或敏感数据。
 
 ---
 
-v3.3.2 targets native `arm64` M-series Macs with a CLI and Rust + Tauri 2 + Vue 3 + TypeScript GUI. Intel/Rosetta builds are not provided. Download the CLI, GUI ZIP or DMG from the [v3.3.2 Release](https://github.com/Shixiaoshi0417/NekoKEM/releases/tag/v3.3.2), verify the archive against the top-level `SHA256SUMS.txt`, then check its internal files.
+v4.0.0 targets native `arm64` M-series Macs with a CLI and Rust + Tauri 2 + Vue 3 + TypeScript GUI. Intel/Rosetta builds are not provided. Download the CLI, GUI ZIP or DMG from the [v4.0.0 Release](https://github.com/Shixiaoshi0417/NekoKEM/releases/tag/v4.0.0), verify the archive against the top-level `SHA256SUMS.txt`, then check its internal files.
 
 Builds set a macOS 11.0 deployment target; actual native CI uses GitHub's `macos-15` arm64 runner. The deployment target does not establish physical macOS 11.0 compatibility or identical performance across M-series generations. Both applications statically link pinned OpenSSL 4.0.3 with arm64 assembly acceleration retained. They require no Homebrew OpenSSL dylib but still depend on macOS system libraries/frameworks. The GUI uses system WKWebView, with no WebView2 Runtime or `WebView2Loader.dll` requirement.
 
@@ -70,7 +70,7 @@ shasum -a 256 -c SHA256SUMS
 
 The internal checksums detect damaged files; they do not replace trusted build provenance or a publisher signature. The CLI shares every Linux argument and the five-option menu; running without arguments enters that menu. `NekoKEM.command` opens the CLI in Terminal after changing the working directory to the extracted package. Interactive `keys/`, `encrypted/` and `plaintext/` directories therefore live there. Passwords are read from a terminal with echo disabled, or UTF-8 stdin, and never belong in command-line arguments.
 
-See the repository's [desktop/README.md](https://github.com/Shixiaoshi0417/NekoKEM/blob/main/desktop/README.md) for GUI builds. GUI packages are `NekoKEM-macos-arm64-GUI.zip` and `NekoKEM-macos-arm64-GUI.dmg`. The ZIP contains `NekoKEM.app`, documentation, licenses, checksums and build metadata. Tauri's original `NekoKEM_3.3.2_aarch64.dmg` is checked before export under the stable package name. The GUI provides native file dialogs, progress, cancellation, five languages and animations that respect reduced-motion preferences.
+See the repository's [desktop/README.md](https://github.com/Shixiaoshi0417/NekoKEM/blob/main/desktop/README.md) for GUI builds. GUI packages are `NekoKEM-macos-arm64-GUI.zip` and `NekoKEM-macos-arm64-GUI.dmg`. The ZIP contains `NekoKEM.app`, documentation, licenses, checksums and build metadata. Tauri's original `NekoKEM_4.0.0_aarch64.dmg` is checked before export under the stable package name. The GUI provides native file dialogs, progress, cancellation, five languages and animations that respect reduced-motion preferences.
 
 ## Language and file security
 
@@ -78,4 +78,4 @@ Simplified Chinese, Traditional Chinese, English, Japanese and Korean are suppor
 
 An imported NKPR must be a current-user-owned regular file with mode `0600`, one hard link and no allow entries in its extended ACL. Broad permissions cannot replace these checks. Private directories require current-user ownership and mode `0700`; only empty or deny-only extended ACLs are accepted. Regular files require `fsync` followed by `F_FULLFSYNC`; parent directories require `fsync`. Failure or lack of support rejects the operation rather than silently downgrading. Filesystem case/Unicode-equivalent key-output aliases are rejected with process-local rollback. See [SECURITY-DESIGN.md](SECURITY-DESIGN.md) for details, failure boundaries and native test coverage.
 
-Core 3.1, NKEM v3, NKPR v1, algorithms, KDF parameters and 64 KiB streaming chunks are unchanged. CLI and GUI use ad-hoc hardened-runtime signing for structural integrity checks, without Developer ID or Apple notarization. This neither authenticates the publisher nor guarantees Gatekeeper acceptance after downloading. The project remains experimental, without an independent professional security audit, and must not protect important or sensitive data.
+Core 4.0 adds the NKEM v4 multi-recipient container; NKEM v3, NKPR v1, algorithms, KDF parameters and 64 KiB streaming chunks are unchanged. CLI and GUI use ad-hoc hardened-runtime signing for structural integrity checks, without Developer ID or Apple notarization. This neither authenticates the publisher nor guarantees Gatekeeper acceptance after downloading. The project remains experimental, without an independent professional security audit, and must not protect important or sensitive data.
