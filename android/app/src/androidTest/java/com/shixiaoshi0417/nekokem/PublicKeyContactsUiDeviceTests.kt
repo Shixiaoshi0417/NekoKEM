@@ -138,10 +138,16 @@ internal fun runPublicKeyContactsUiTests(instrumentation: Instrumentation) {
         openDialog(checkNotNull(activity).getString(R.string.action_choose_contact))
         awaitText(checkNotNull(activity).getString(R.string.contact_picker_title))
         awaitText(contact.fingerprint)
-        val recipient = checkNotNull(find(instrumentation.uiAutomation.rootInActiveWindow) {
-            it.className?.toString() == "android.widget.RadioButton" && it.isClickable
-        }) { "Saved recipient radio option is not clickable" }
-        check(recipient.performAction(AccessibilityNodeInfo.ACTION_CLICK))
+        val pickerDeadline = SystemClock.uptimeMillis() + 10000
+        var recipient: AccessibilityNodeInfo? = null
+        while (recipient == null && SystemClock.uptimeMillis() < pickerDeadline) {
+            var option = text(contact.fingerprint)
+            while (option != null && !option.isClickable) option = option.parent
+            recipient = option
+            if (recipient == null) SystemClock.sleep(100)
+        }
+        check(checkNotNull(recipient) { "Saved recipient radio option is not clickable" }
+            .performAction(AccessibilityNodeInfo.ACTION_CLICK))
         instrumentation.waitForIdleSync()
         awaitText(checkNotNull(activity).getString(R.string.key_source_contacts))
         awaitText(editedNote)
