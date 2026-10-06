@@ -213,6 +213,9 @@ test('public-key contacts are saved, edited, chosen explicitly and deleted',asyn
  await page.locator('header select').selectOption('en');
  await page.locator('.operation-tab').nth(4).click();
  await page.locator('[name=contactKeyPath]').fill('C:\\Local\\carol-public.key');
+ // Note limits count Unicode code points; the browser must not cut emoji at 512 UTF-16 units.
+ await page.locator('[name=note]').fill('🐈'.repeat(512));
+ await expect(page.locator('[name=note]')).toHaveValue('🐈'.repeat(512));
  await page.locator('[name=note]').fill('  Carol desktop  ');
  await page.locator('.primary').click();
  await expect(page.locator('form .notice.success')).toContainText('Public key saved');
@@ -223,6 +226,8 @@ test('public-key contacts are saved, edited, chosen explicitly and deleted',asyn
  const carol=page.locator('.contact.highlighted');
  await carol.locator('.edit-note').click();
  await expect(page.locator('[name=noteDraft]')).toBeFocused();
+ await page.locator('[name=noteDraft]').fill('🐈'.repeat(512));
+ await expect(page.locator('[name=noteDraft]')).toHaveValue('🐈'.repeat(512));
  await page.locator('[name=noteDraft]').fill('Carol laptop');await page.keyboard.press('Enter');
  await expect(page.locator('.contact-list .notice.success')).toContainText('Note saved');
  await expect(page.locator('.contact.highlighted .contact-label')).toHaveText('Carol laptop');
