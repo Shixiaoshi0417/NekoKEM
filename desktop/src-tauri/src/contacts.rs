@@ -270,7 +270,7 @@ fn file_name(path: &str) -> &str { path.rsplit(['/', '\\']).next().unwrap_or_def
 // bidirectional formatting characters so a name cannot disguise itself.
 fn clean_name(name: &str) -> String {
     let visible: String = name.chars()
-        .filter(|&c| !c.is_control() && !matches!(c, '\u{200e}' | '\u{200f}' | '\u{202a}'..='\u{202e}' | '\u{2066}'..='\u{2069}'))
+        .filter(|&c| !c.is_control() && !matches!(c, '\u{061c}' | '\u{200e}' | '\u{200f}' | '\u{202a}'..='\u{202e}' | '\u{2066}'..='\u{2069}'))
         .collect();
     visible.trim().chars().take(MAX_NAME_CHARS).collect::<String>().trim_end().into()
 }
@@ -344,7 +344,7 @@ pub mod tests {
         assert_eq!(store.list().unwrap().contacts, vec![]);
 
         // Leading text is accepted by Core's PEM reader but never stored.
-        let annotated = keys.file("annotated \u{202e}yek.pem");
+        let annotated = keys.file("annotated \u{202e}yek\u{061c}.pem");
         fs::write(&annotated, format!("Alice's key from a trusted channel\n{}", fs::read_to_string(&alice).unwrap())).unwrap();
         let saved = store.save(Source::Path(&annotated), "  Alice 中文 😀\tlaptop  ").unwrap();
         assert_eq!(saved.fingerprint, alice_fingerprint);
