@@ -43,7 +43,7 @@ def verify(binary, architecture, prefix):
     assert '-fPIC' in manifest['cflags'] and '-O3' in manifest['cflags']
     return {
         'architecture': architecture, 'target': architecture+'-unknown-linux-gnu',
-        'version': '3.3.2', 'tested_distribution': 'Ubuntu 24.04',
+        'version': '4.0.0', 'tested_distribution': 'Ubuntu 24.04',
         'required_glibc': '.'.join(map(str, glibc)),
         'openssl_version': '4.0.3', 'openssl_source_sha256': manifest['openssl_source_sha256'],
         'openssl_dynamic_exports': 0, 'core_dynamic_exports': 0,

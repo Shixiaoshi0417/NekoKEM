@@ -26,21 +26,26 @@ try:
   user.EnumWindows(visit,0);time.sleep(.2)
  assert found,'Visible NekoKEM window not found'
  # UI Automation verifies the actual WebView form is rendered and enabled after
- # its real get_settings IPC succeeds; a blank native window cannot pass.
+ # its real get_settings IPC succeeds; a blank native window cannot pass. Only
+ # edit controls are requested: reading every WebView descendant's properties one
+ # cross-process call at a time outlasted the whole wait on a loaded runner.
  script = r"""
  Add-Type -AssemblyName UIAutomationClient
  Add-Type -AssemblyName UIAutomationTypes
  $root = [System.Windows.Automation.AutomationElement]::FromHandle([IntPtr]HANDLE)
- $deadline = (Get-Date).AddSeconds(20)
+ $edit = [System.Windows.Automation.PropertyCondition]::new([System.Windows.Automation.AutomationElement]::ControlTypeProperty, [System.Windows.Automation.ControlType]::Edit)
+ $enabledEdits = @()
+ $deadline = (Get-Date).AddSeconds(45)
  do {
-   $elements = $root.FindAll([System.Windows.Automation.TreeScope]::Descendants, [System.Windows.Automation.Condition]::TrueCondition)
-   $enabledEdits = @($elements | Where-Object { $_.Current.ControlType -eq [System.Windows.Automation.ControlType]::Edit -and $_.Current.IsEnabled })
+   $enabledEdits = @($root.FindAll([System.Windows.Automation.TreeScope]::Descendants, $edit) | Where-Object { $_.Current.IsEnabled })
    if ($enabledEdits.Count -ge 3) { Write-Output 'Actual WebView form rendered and real settings IPC ready'; exit 0 }
    Start-Sleep -Milliseconds 200
  } while ((Get-Date) -lt $deadline)
- throw 'WebView form not rendered or settings IPC failed'
+ throw "WebView form not rendered or settings IPC failed: $($enabledEdits.Count) enabled edit controls"
  """.replace('HANDLE',str(found[0]))
- ready=subprocess.run(['powershell.exe','-NoProfile','-NonInteractive','-Command',script],capture_output=True,text=True,timeout=30)
+ # The outer limit leaves room for PowerShell startup and the last search, so a
+ # slow runner reports the script's own message instead of a bare timeout.
+ ready=subprocess.run(['powershell.exe','-NoProfile','-NonInteractive','-Command',script],capture_output=True,text=True,timeout=120)
  assert ready.returncode==0,ready.stdout+ready.stderr
  print(ready.stdout.strip())
  time.sleep(5)

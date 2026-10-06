@@ -1,13 +1,13 @@
 # NekoKEM Desktop GUI
 
-Rust + Tauri 2 + Vue 3 + TypeScript desktop frontend, released as v3.3.2 for
+Rust + Tauri 2 + Vue 3 + TypeScript desktop frontend, released as v4.0.0 for
 Windows 10/11 x64. It requires the Microsoft Edge WebView2 Runtime. Open
 `nekokem-gui.exe` to
 use the app; it opens a native window without a terminal. Keep the included
 Microsoft `WebView2Loader.dll` beside the EXE. The portable package
 contains no Android signing material and is not Authenticode signed.
 
-v3.3.2 also provides native Apple Silicon `aarch64-apple-darwin`
+v4.0.0 also provides native Apple Silicon `aarch64-apple-darwin`
 `NekoKEM.app` ZIP and DMG packages using macOS system WKWebView. macOS 11.0 is
 the deployment target; native CI runs on macOS 15. Intel Macs are not supported.
 本版 Release 提供 M 系列 Mac 原生应用 ZIP 与 DMG，部署目标为 macOS 11.0，
@@ -15,7 +15,7 @@ the deployment target; native CI runs on macOS 15. Intel Macs are not supported.
 
 Linux GUI targets native x86_64 and ARM64 with system GTK3, WebKitGTK 4.1 and
 glibc 2.39 or newer. Ubuntu 24.04 is the build/test baseline; native Fedora 44
-containers install and launch the RPM in CI. v3.3.2 provides `.deb`, `.rpm` and
+containers install and launch the RPM in CI. v4.0.0 provides `.deb`, `.rpm` and
 portable `.tar.gz` packages for each architecture. Linux 原生 GUI 提供两种架构
 的 DEB、RPM 和便携包；实际验证基线为 Ubuntu 24.04 与 Fedora 44 的 X11 会话。
 
@@ -86,7 +86,7 @@ run exclusively with Core operations, and closing waits for an in-progress recor
 Contacts are user configuration rather than package contents; keep original public-key
 backups. NKEM v3, NKPR v1 and their cryptographic parameters are unchanged.
 
-### Several recipients (development branch) / 多人加密（开发分支）
+### Several recipients / 多人加密
 
 Several contacts can share one encrypted file. Tick contacts on the contacts page, where a
 selection bar offers **Encrypt for selected** and **Clear selection**, or tick them in the
@@ -171,7 +171,7 @@ cd ..
 python3 desktop/scripts/package-macos-gui.py \
   --bundle-dir desktop/src-tauri/target/aarch64-apple-darwin/release/bundle \
   --output macos/dist \
-  --version 3.3.2 --source-sha "$(git rev-parse HEAD)"
+  --version 4.0.0 --source-sha "$(git rev-parse HEAD)"
 ```
 
 `NekoKEM-macos-arm64-GUI.zip` contains `NekoKEM.app`, documentation, licenses,
@@ -318,12 +318,12 @@ Windows power-loss equivalence to POSIX directory fsync is unverified. Pair comm
 are not cross-file crash atomic. Process death may leave protected plaintext/key
 staging files; deletion is not physical erasure. See the
 [Windows filesystem design](../windows/SECURITY-DESIGN.md) for the complete backend
-boundary. The v3.3.2 Windows application is not Authenticode signed. Verifying the bundled
+boundary. The v4.0.0 Windows application is not Authenticode signed. Verifying the bundled
 Microsoft SDK loader does not sign the application. This experimental project has
 not undergone an independent professional security audit and must not be used to
 protect important or sensitive data.
 
-Download `NekoKEM-Windows-GUI.zip` from the [v3.3.2 Release](https://github.com/Shixiaoshi0417/NekoKEM/releases/tag/v3.3.2)
+Download `NekoKEM-Windows-GUI.zip` from the [v4.0.0 Release](https://github.com/Shixiaoshi0417/NekoKEM/releases/tag/v4.0.0)
 and verify it against the release's top-level `SHA256SUMS.txt`. See the complete
-[bilingual release notes](../release/v3.3.2.md). v3.3.2 提供便携 GUI 压缩包；下载后先校验
+[bilingual release notes](../release/v4.0.0.md). v4.0.0 提供便携 GUI 压缩包；下载后先校验
 SHA-256，再解压并保留 EXE 旁的 Microsoft SDK loader。
