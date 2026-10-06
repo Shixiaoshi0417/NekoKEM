@@ -159,4 +159,36 @@
         <item quantity="other">%1$d 秒</item>
     </plurals>
     <string name="error_language_save">言語設定を保存できませんでした。もう一度お試しください。</string>
+
+    <!-- Saved public-key contacts -->
+    <string name="navigation_contacts">公開鍵アドレス帳</string>
+    <string name="action_import_contact">公開鍵を追加</string>
+    <string name="action_choose_contact">保存済みの公開鍵を選択</string>
+    <string name="action_edit_contact_note">メモを編集</string>
+    <string name="action_save_contact">保存</string>
+    <string name="action_use_contact">暗号化に使用</string>
+    <string name="contact_empty">保存済みの公開鍵はありません</string>
+    <string name="contact_description">受信者の公開鍵を保存し、メモで選択できます。指紋は相手と確認してください。メモは本人確認にはなりません。</string>
+    <string name="contact_note_label">メモ（任意）</string>
+    <string name="contact_note_hint">受信者の名前や説明</string>
+    <string name="contact_note_limit">最大 %1$d 文字</string>
+    <string name="contact_duplicate">この公開鍵は保存済みです。保存するとメモを更新します。</string>
+    <string name="contact_note_line">メモ：%1$s</string>
+    <string name="contact_saved">公開鍵を保存しました</string>
+    <string name="contact_updated">メモを更新しました</string>
+    <string name="contact_deleted">保存済みの公開鍵を削除しました</string>
+    <string name="contact_selected">保存済みの公開鍵を選択しました</string>
+    <string name="contact_load_failed">公開鍵アドレス帳を読み込めません</string>
+    <string name="contact_unreadable_entries">%1$d 件の保存済み項目を読み込めません</string>
+    <string name="contact_unavailable">選択した公開鍵を使用できません。別の公開鍵を選択してください。</string>
+    <string name="contact_delete_title">保存済みの公開鍵を削除しますか？</string>
+    <string name="contact_delete_message">アドレス帳から %1$s を削除しますか？選択中の場合は暗号化用の鍵を選び直してください。既定の鍵は保持されます。</string>
+    <string name="contact_save_title">公開鍵を保存</string>
+    <string name="contact_edit_title">メモを編集</string>
+    <string name="contact_picker_title">保存済みの公開鍵を選択</string>
+    <string name="key_source_contacts">公開鍵アドレス帳</string>
+    <string name="operation_save_contact">公開鍵を保存</string>
+    <string name="operation_update_contact">公開鍵のメモを更新</string>
+    <string name="operation_delete_contact">保存済みの公開鍵を削除</string>
+    <string name="operation_select_contact">保存済みの公開鍵を選択</string>
 </resources>

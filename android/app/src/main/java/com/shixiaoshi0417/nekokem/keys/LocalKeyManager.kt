@@ -120,7 +120,10 @@ class LocalKeyManager(context: Context) {
         temporaryKey: TemporaryPublicKey?,
         progress: NativeProgressCallback,
     ): Int = try {
-        NativeBridge.nativeEncryptFileWithProgress(
+        val currentFingerprint = temporaryKey?.let { publicKeyFingerprint(it.file) }
+        if (temporaryKey != null && currentFingerprint != temporaryKey.fingerprint) {
+            RESULT_FINGERPRINT_MISMATCH
+        } else NativeBridge.nativeEncryptFileWithProgress(
             input.absolutePath,
             output.absolutePath,
             (temporaryKey?.file ?: publicKey).absolutePath,

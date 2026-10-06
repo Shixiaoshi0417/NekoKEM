@@ -57,6 +57,8 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.shixiaoshi0417.nekokem.R
+import com.shixiaoshi0417.nekokem.keys.PublicKeyContact
+import com.shixiaoshi0417.nekokem.keys.PublicKeyContactsState
 import kotlinx.coroutines.launch
 
 data class NekoKEMUiState(
@@ -72,6 +74,9 @@ data class NekoKEMUiState(
     val privateKeyFileName: String,
     val privateKeyFingerprint: String?,
     val running: Boolean,
+    val contactsState: PublicKeyContactsState = PublicKeyContactsState(),
+    val publicKeyContactId: String? = null,
+    val publicKeyNote: String? = null,
 )
 
 data class NekoKEMActions(
@@ -92,11 +97,17 @@ data class NekoKEMActions(
     val onRestoreDefaultPrivateKey: () -> Unit,
     val onEncrypt: () -> Unit,
     val onDecrypt: () -> Unit,
+    val onImportContact: () -> Unit,
+    val onChooseContact: () -> Unit,
+    val onSelectContact: (PublicKeyContact) -> Unit,
+    val onEditContact: (PublicKeyContact) -> Unit,
+    val onDeleteContact: (PublicKeyContact) -> Unit,
 )
 
 private enum class AppDestination(@StringRes val titleResource: Int) {
     FILES(R.string.navigation_files),
     KEYS(R.string.navigation_keys),
+    CONTACTS(R.string.navigation_contacts),
     SETTINGS(R.string.navigation_settings),
     ABOUT(R.string.navigation_about),
 }
@@ -174,6 +185,10 @@ fun NekoKEMAppShell(
                 when (destination) {
                     AppDestination.FILES -> FileOperationsPage(state, actions)
                     AppDestination.KEYS -> KeyManagementPage(state, actions)
+                    AppDestination.CONTACTS -> PublicKeyContactsPage(state, actions) { contact ->
+                        actions.onSelectContact(contact)
+                        destination = AppDestination.FILES
+                    }
                     AppDestination.SETTINGS -> SettingsPage(state.running)
                     AppDestination.ABOUT -> AboutPage(state)
                 }
@@ -237,13 +252,23 @@ private fun FileOperationsPage(
             temporary = state.publicKeyTemporary,
             fileName = state.publicKeyFileName,
             fingerprint = state.publicKeyFingerprint,
+            sourceResource = if (state.publicKeyContactId != null) R.string.key_source_contacts else null,
+            note = state.publicKeyNote,
+        )
+        if (state.publicKeyContactId != null && state.publicKeyFingerprint == null) {
+            Text(stringResource(R.string.contact_unavailable), color = MaterialTheme.colorScheme.error)
+        }
+        ActionButton(
+            labelResource = R.string.action_choose_contact,
+            enabled = state.nativeConnected && !state.running,
+            onClick = actions.onChooseContact,
         )
         ActionButton(
             labelResource = R.string.action_select_other_public_key,
             enabled = state.nativeConnected && !state.running,
             onClick = actions.onSelectTemporaryPublicKey,
         )
-        if (state.publicKeyTemporary) {
+        if (state.publicKeyTemporary || state.publicKeyContactId != null) {
             ActionButton(
                 labelResource = R.string.action_restore_default_public_key,
                 enabled = !state.running,
@@ -278,6 +303,8 @@ private fun KeySelectionCard(
     temporary: Boolean,
     fileName: String,
     fingerprint: String?,
+    @StringRes sourceResource: Int? = null,
+    note: String? = null,
 ) {
     val unavailable = stringResource(R.string.not_available)
     Card(modifier = Modifier.fillMaxWidth()) {
@@ -292,7 +319,7 @@ private fun KeySelectionCard(
                 text = stringResource(
                     R.string.key_source_line,
                     stringResource(
-                        if (temporary) {
+                        sourceResource ?: if (temporary) {
                             R.string.key_source_temporary_saf
                         } else {
                             R.string.key_source_app_default
@@ -306,6 +333,9 @@ private fun KeySelectionCard(
                 text = stringResource(R.string.key_file_line, fileName),
                 style = MaterialTheme.typography.bodyMedium,
             )
+            if (!note.isNullOrBlank()) {
+                Text(stringResource(R.string.contact_note_line, note), modifier = Modifier.padding(top = 8.dp))
+            }
             Text(
                 modifier = Modifier.padding(top = 8.dp),
                 text = stringResource(

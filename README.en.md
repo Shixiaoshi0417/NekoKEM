@@ -32,6 +32,17 @@ Verify each downloaded archive against [SHA256SUMS.txt](https://github.com/Shixi
 
 README uses a dedicated rounded display image. Android retains the existing square artwork with its white background; Windows CLI/GUI EXE icons retain the square artwork with the outer white area made transparent. Windows applications are not Authenticode signed.
 
+## Android public-key contacts (development branch)
+
+Import a recipient's public key and add a note in the drawer's Public-key contacts page,
+then choose a saved entry when encrypting. Notes can be edited, entries deleted, and
+duplicate fingerprints are stored once. Contacts persist in app-private storage. Each
+use validates the key and fingerprint with the existing Core; an unavailable entry
+requires an explicit new selection. Notes are labels; verify fingerprints with recipients.
+Contacts are separate from local default keys. Cryptographic parameters and file formats
+remain unchanged. See the [Android documentation](android/README.md#公钥通讯录开发分支)
+for behavior and device tests. The published v3.3.1 APK does not contain this development feature.
+
 ## Historical release v3.2.0
 
 v3.2.0 introduced five interface languages, system-language selection and security fixes, and changed the Android release signer. Its migration instructions and historical build records remain in the [v3.2.0 notes](release/v3.2.0.md). Updating from v3.2.0 to v3.3.0 does not require another uninstall.
