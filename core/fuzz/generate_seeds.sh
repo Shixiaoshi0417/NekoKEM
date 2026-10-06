@@ -21,6 +21,13 @@ printf '%s' \
 dd if=/dev/zero bs=1 count=1684 status=none \
     >> "$nkem_dir/valid-v3"
 
+# Structurally valid NKEM v4 with one synthetic recipient entry and no file data.
+printf '%s' \
+    '4e4b454d0404002000010688000000000000000000000000200c104000000000' |
+    hex_to_binary > "$nkem_dir/valid-v4"
+dd if=/dev/zero bs=1 count=1796 status=none \
+    >> "$nkem_dir/valid-v4"
+
 # Structurally valid NKPR with one synthetic ciphertext byte.
 printf '%s' \
     '4e4b5052010101000001000000000003000000040000001300200c100000000000000001' |

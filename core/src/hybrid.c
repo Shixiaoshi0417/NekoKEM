@@ -302,6 +302,61 @@ cleanup:
     return success;
 }
 
+/*
+ * Rejects the one clamped X448 scalar, four times the prime subgroup order,
+ * whose public key is the all-zero point. It turns the shared secret with
+ * every curve point into zero, so whether a peer key is rejected would depend
+ * on the private key instead of the peer key alone.
+ */
+static int x448_private_key_is_usable(EVP_PKEY *key)
+{
+    unsigned char public_key[X448_PUBLIC_KEY_SIZE];
+    unsigned char bits = 0U;
+    size_t length = sizeof(public_key);
+    size_t index;
+
+    if (EVP_PKEY_get_raw_public_key(key, public_key, &length) != 1 ||
+        length != sizeof(public_key)) {
+        print_openssl_error("Cannot read the recipient X448 public key");
+        return 0;
+    }
+    for (index = 0U; index < sizeof(public_key); ++index) {
+        bits |= public_key[index];
+    }
+    if (bits == 0U) {
+        fprintf(stderr, file_message("The X448 private key is degenerate and cannot be used\n"));
+        return 0;
+    }
+    return 1;
+}
+
+int hybrid_load_decryption_keys(
+    const char *path,
+    const unsigned char *password,
+    size_t password_len,
+    HybridKeys *keys)
+{
+    int loaded;
+
+    keys->x448 = NULL;
+    keys->mlkem = NULL;
+    if (private_key_path_is_encrypted(path)) {
+        if (password == NULL || password_len == 0U) {
+            fprintf(stderr, file_message("A password is required for this private key\n"));
+            return 0;
+        }
+        loaded = hybrid_load_protected_private_keys(
+            path, password, password_len, keys);
+    } else {
+        loaded = hybrid_load_private_keys(path, keys);
+    }
+    if (loaded && !x448_private_key_is_usable(keys->x448)) {
+        hybrid_keys_cleanup(keys);
+        return 0;
+    }
+    return loaded;
+}
+
 static int x448_derive(EVP_PKEY *private_key,
                        EVP_PKEY *peer_public_key,
                        unsigned char **shared_secret,

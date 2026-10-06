@@ -208,6 +208,106 @@ cleanup:
     return (jint)result;
 }
 
+/*
+ * Encrypts once for every listed public key (an NKEM v4 container). Core
+ * validates each key and rejects an empty list, more than
+ * NEKOKEM_MAX_RECIPIENTS keys and duplicates; JNI only converts the paths.
+ */
+JNIEXPORT jint JNICALL
+Java_com_shixiaoshi0417_nekokem_nativecore_NativeBridge_nativeEncryptFileMultiWithProgress(
+    JNIEnv *env,
+    jobject bridge,
+    jstring input_path,
+    jstring output_path,
+    jobjectArray public_key_paths,
+    jobject callback)
+{
+    ProgressJniPath input = {0};
+    ProgressJniPath output = {0};
+    ProgressJniPath keys[NEKOKEM_MAX_RECIPIENTS];
+    const char *key_values[NEKOKEM_MAX_RECIPIENTS];
+    ProgressJniCallback progress = {0};
+    jsize count = 0;
+    jsize acquired = 0;
+    jsize index;
+    int result = PROGRESS_JNI_INVALID_ARGUMENT;
+    int core_result;
+
+    (void)bridge;
+    for (index = 0; index < (jsize)NEKOKEM_MAX_RECIPIENTS; ++index) {
+        keys[index].source = NULL;
+        keys[index].value = NULL;
+        key_values[index] = NULL;
+    }
+    if (public_key_paths == NULL) {
+        goto cleanup;
+    }
+    count = (*env)->GetArrayLength(env, public_key_paths);
+    if ((*env)->ExceptionCheck(env) == JNI_TRUE) {
+        result = PROGRESS_JNI_JAVA_EXCEPTION;
+        goto cleanup;
+    }
+    if (count <= 0 || (size_t)count > NEKOKEM_MAX_RECIPIENTS) {
+        result = PROGRESS_JNI_INVALID_ARGUMENT;
+        goto cleanup;
+    }
+    /* One local reference per recipient path, plus the method lookup. */
+    if ((*env)->EnsureLocalCapacity(env, count + 8) != 0) {
+        result = (*env)->ExceptionCheck(env) == JNI_TRUE
+                     ? PROGRESS_JNI_JAVA_EXCEPTION
+                     : PROGRESS_JNI_ALLOCATION_ERROR;
+        goto cleanup;
+    }
+    result = progress_path_acquire(env, input_path, &input);
+    if (result != PROGRESS_JNI_SUCCESS) {
+        goto cleanup;
+    }
+    result = progress_path_acquire(env, output_path, &output);
+    if (result != PROGRESS_JNI_SUCCESS) {
+        goto cleanup;
+    }
+    for (index = 0; index < count; ++index) {
+        jstring path = (jstring)(*env)->GetObjectArrayElement(
+            env, public_key_paths, index);
+
+        if ((*env)->ExceptionCheck(env) == JNI_TRUE) {
+            if (path != NULL) {
+                (*env)->DeleteLocalRef(env, path);
+            }
+            result = PROGRESS_JNI_JAVA_EXCEPTION;
+            goto cleanup;
+        }
+        /* Owns the local reference from here; cleanup releases both. */
+        acquired = index + 1;
+        result = progress_path_acquire(env, path, &keys[index]);
+        if (result != PROGRESS_JNI_SUCCESS) {
+            goto cleanup;
+        }
+        key_values[index] = keys[index].value;
+    }
+    result = progress_callback_prepare(env, callback, &progress);
+    if (result != PROGRESS_JNI_SUCCESS) {
+        goto cleanup;
+    }
+    core_result = nekokem_encrypt_file_multi_with_progress(
+        input.value, output.value, key_values, (size_t)count,
+        progress_callback_bridge, &progress);
+    result = (int)progress_result_to_jni(core_result, &progress);
+
+cleanup:
+    for (index = 0; index < acquired; ++index) {
+        jstring source = keys[index].source;
+
+        progress_path_release(env, &keys[index]);
+        if (source != NULL) {
+            (*env)->DeleteLocalRef(env, source);
+        }
+    }
+    progress_path_release(env, &output);
+    progress_path_release(env, &input);
+    return (jint)result;
+}
+
 JNIEXPORT jint JNICALL
 Java_com_shixiaoshi0417_nekokem_nativecore_NativeBridge_nativeDecryptFileWithProgress(
     JNIEnv *env,

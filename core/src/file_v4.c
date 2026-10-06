@@ -1,0 +1,185 @@
+#include "file.h"
+
+#include <stdint.h>
+#include <stdio.h>
+#include <string.h>
+
+static void put_u16_be(unsigned char *output, uint16_t value)
+{
+    output[0] = (unsigned char)(value >> 8);
+    output[1] = (unsigned char)value;
+}
+
+static void put_u32_be(unsigned char *output, uint32_t value)
+{
+    output[0] = (unsigned char)(value >> 24);
+    output[1] = (unsigned char)(value >> 16);
+    output[2] = (unsigned char)(value >> 8);
+    output[3] = (unsigned char)value;
+}
+
+static void put_u64_be(unsigned char *output, uint64_t value)
+{
+    size_t index;
+
+    for (index = 0U; index < 8U; ++index) {
+        output[index] = (unsigned char)(value >> (56U - (index * 8U)));
+    }
+}
+
+static uint16_t get_u16_be(const unsigned char *input)
+{
+    return (uint16_t)(((uint16_t)input[0] << 8) | (uint16_t)input[1]);
+}
+
+static uint32_t get_u32_be(const unsigned char *input)
+{
+    return ((uint32_t)input[0] << 24) |
+           ((uint32_t)input[1] << 16) |
+           ((uint32_t)input[2] << 8) |
+           (uint32_t)input[3];
+}
+
+static uint64_t get_u64_be(const unsigned char *input)
+{
+    uint64_t value = 0U;
+    size_t index;
+
+    for (index = 0U; index < 8U; ++index) {
+        value = (value << 8) | (uint64_t)input[index];
+    }
+    return value;
+}
+
+void nkem_v4_header_encode(unsigned char output[NKEM_V4_HEADER_SIZE],
+                           uint16_t recipient_count,
+                           uint64_t ciphertext_len)
+{
+    memcpy(output, "NKEM", 4U);
+    output[4] = NKEM_V4_VERSION;
+    output[5] = NKEM_V4_ALGORITHM_ID;
+    put_u16_be(output + 6U, (uint16_t)NKEM_V4_HEADER_SIZE);
+    put_u16_be(output + 8U, recipient_count);
+    put_u16_be(output + 10U, (uint16_t)NKEM_V4_ENTRY_SIZE);
+    put_u32_be(output + 12U, 0U);
+    put_u64_be(output + 16U, ciphertext_len);
+    output[24] = NKEM_V4_SALT_SIZE;
+    output[25] = NKEM_NONCE_SIZE;
+    output[26] = NKEM_TAG_SIZE;
+    output[27] = NKEM_V4_MAC_SIZE;
+    put_u32_be(output + 28U, 0U);
+}
+
+static int nkem_v4_header_decode_internal(
+    const unsigned char input[NKEM_V4_HEADER_SIZE],
+    NkemV4Header *header,
+    int report_errors)
+{
+    if (memcmp(input, "NKEM", 4U) != 0 || input[4] != NKEM_V4_VERSION ||
+        input[5] != NKEM_V4_ALGORITHM_ID ||
+        get_u16_be(input + 6U) != NKEM_V4_HEADER_SIZE ||
+        get_u32_be(input + 12U) != 0U || get_u32_be(input + 28U) != 0U) {
+        if (report_errors != 0) {
+            fprintf(stderr, file_message("Invalid NKEM v4 header\n"));
+        }
+        return 0;
+    }
+
+    header->recipient_count = get_u16_be(input + 8U);
+    header->entry_len = get_u16_be(input + 10U);
+    header->ciphertext_len = get_u64_be(input + 16U);
+    header->salt_len = input[24];
+    header->nonce_len = input[25];
+    header->tag_len = input[26];
+    header->mac_len = input[27];
+
+    if (header->recipient_count == 0U ||
+        header->recipient_count > NKEM_V4_MAX_RECIPIENTS ||
+        header->entry_len != NKEM_V4_ENTRY_SIZE ||
+        header->salt_len != NKEM_V4_SALT_SIZE ||
+        header->nonce_len != NKEM_NONCE_SIZE ||
+        header->tag_len != NKEM_TAG_SIZE ||
+        header->mac_len != NKEM_V4_MAC_SIZE) {
+        if (report_errors != 0) {
+            fprintf(stderr, file_message("Invalid NKEM v4 header\n"));
+        }
+        return 0;
+    }
+    if (!nkem_gcm_data_size_is_valid(header->ciphertext_len)) {
+        if (report_errors != 0) {
+            fprintf(stderr, file_message("NKEM v4 ciphertext exceeds AES-GCM limit\n"));
+        }
+        return 0;
+    }
+    return 1;
+}
+
+int nkem_v4_header_decode(
+    const unsigned char input[NKEM_V4_HEADER_SIZE],
+    NkemV4Header *header)
+{
+    if (input == NULL || header == NULL) {
+        fprintf(stderr, file_message("Invalid NKEM v4 header\n"));
+        return 0;
+    }
+    return nkem_v4_header_decode_internal(input, header, 1);
+}
+
+uint64_t nkem_v4_metadata_size(uint16_t recipient_count)
+{
+    /* At most 64 entries: the sum is far below SIZE_MAX on every target. */
+    return (uint64_t)NKEM_V4_HEADER_SIZE + NKEM_V4_SALT_SIZE +
+           (uint64_t)recipient_count * NKEM_V4_ENTRY_SIZE +
+           NKEM_V4_MAC_SIZE + NKEM_NONCE_SIZE;
+}
+
+static int nkem_v4_container_size_is_valid_internal(
+    const NkemV4Header *header,
+    uint64_t actual_size,
+    int report_errors)
+{
+    uint64_t metadata_size;
+
+    if (header->recipient_count == 0U ||
+        header->recipient_count > NKEM_V4_MAX_RECIPIENTS ||
+        !nkem_gcm_data_size_is_valid(header->ciphertext_len)) {
+        if (report_errors != 0) {
+            fprintf(stderr, file_message("Invalid NKEM v4 header\n"));
+        }
+        return 0;
+    }
+    /* Both terms are bounded (about 107 KiB and below 2^36), so the sum cannot wrap. */
+    metadata_size = nkem_v4_metadata_size(header->recipient_count);
+    if (metadata_size + header->ciphertext_len + NKEM_TAG_SIZE != actual_size) {
+        if (report_errors != 0) {
+            fprintf(stderr,
+                    file_message("NKEM v4 container is truncated or has trailing data\n"));
+        }
+        return 0;
+    }
+    return 1;
+}
+
+int nkem_v4_container_size_is_valid(const NkemV4Header *header,
+                                    uint64_t actual_size)
+{
+    if (header == NULL) {
+        fprintf(stderr, file_message("Invalid NKEM v4 header\n"));
+        return 0;
+    }
+    return nkem_v4_container_size_is_valid_internal(
+        header, actual_size, 1);
+}
+
+int nkem_v4_container_parse(const unsigned char *input, size_t input_len)
+{
+    NkemV4Header header;
+
+    if (input == NULL || input_len < NKEM_V4_HEADER_SIZE ||
+        (uintmax_t)input_len > UINT64_MAX ||
+        !nkem_v4_header_decode_internal(input, &header, 0)) {
+        return 0;
+    }
+    return nkem_v4_container_size_is_valid_internal(
+        &header, (uint64_t)input_len, 0);
+}

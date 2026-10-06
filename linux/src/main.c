@@ -46,6 +46,14 @@ int main(int argc, char **argv)
                    ? EXIT_SUCCESS
                    : EXIT_FAILURE;
     }
+    if (argc > 6 && strcmp(argv[1], "encrypt") == 0 &&
+        strcmp(argv[2], "hybrid") == 0) {
+        return cli_run_hybrid_encrypt_multi(
+                   argv[3], argv[4], (const char *const *)(argv + 5),
+                   (size_t)(argc - 5))
+                   ? EXIT_SUCCESS
+                   : EXIT_FAILURE;
+    }
     if (argc == 6 && strcmp(argv[1], "decrypt") == 0 &&
         strcmp(argv[2], "hybrid") == 0) {
         return cli_run_hybrid_decrypt(argv[3], argv[4], argv[5])

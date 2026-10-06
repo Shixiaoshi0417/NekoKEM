@@ -59,7 +59,29 @@ NEKOKEM_API int nekokem_encrypt_file_with_progress(
     NekoKEMProgressCallback progress_callback,
     void *progress_user_data);
 
-/* Decrypts only the current NKEM v3 split-salt container. */
+/* Most recipients one NKEM v4 multi-recipient container may list. */
+#define NEKOKEM_MAX_RECIPIENTS 64U
+
+/*
+ * Writes a container that each listed public key's private key can decrypt:
+ * NKEM v4 (docs/NKEM-v4.md) for two or more keys and NKEM v3 for one. Every
+ * public key is loaded and validated before output is created. An empty
+ * list, more than NEKOKEM_MAX_RECIPIENTS keys, or two keys that are the same
+ * or share either component fails; no key is ever skipped or substituted.
+ * Returns NEKOKEM_OPERATION_SUCCESS, _ERROR or _CANCELLED, as above.
+ */
+NEKOKEM_API int nekokem_encrypt_file_multi_with_progress(
+    const char *input_path,
+    const char *output_path,
+    const char *const *public_key_paths,
+    size_t public_key_count,
+    NekoKEMProgressCallback progress_callback,
+    void *progress_user_data);
+
+/*
+ * Decrypts the NKEM v3 single-recipient container and the NKEM v4
+ * multi-recipient container. Other versions are rejected.
+ */
 NEKOKEM_API int nekokem_decrypt_file(
     const char *input_path,
     const char *output_path,

@@ -169,12 +169,17 @@ private fun NekoKEMRoute(
     val snackbarHostState = remember { SnackbarHostState() }
     var keyState by remember { mutableStateOf(LocalKeyState(false, null)) }
     var contactsState by remember { mutableStateOf(PublicKeyContactsState()) }
-    var selectedContactId by rememberSaveable { mutableStateOf<String?>(null) }
+    // Saved-contact recipients, in order: one keeps NKEM v3, several share NKEM v4.
+    var selectedContactIds by rememberSaveable { mutableStateOf<List<String>>(emptyList()) }
+    // Checkboxes on the contacts page; applied only by an explicit action.
+    var contactSelection by rememberSaveable { mutableStateOf<List<String>>(emptyList()) }
     var contactAwaitingSave by remember { mutableStateOf<TemporaryPublicKey?>(null) }
     var contactToEdit by remember { mutableStateOf<PublicKeyContact?>(null) }
     var contactToDelete by remember { mutableStateOf<PublicKeyContact?>(null) }
     var showContactPicker by remember { mutableStateOf(false) }
-    val selectedContact = contactsState.contacts.firstOrNull { it.id == selectedContactId }
+    val selectedContacts = selectedContactIds.mapNotNull { id -> contactsState.contacts.firstOrNull { it.id == id } }
+    val selectedContactId = selectedContactIds.singleOrNull()
+    val selectedContact = if (selectedContactId != null) selectedContacts.firstOrNull() else null
     var selectedInputState by rememberSaveable(
         stateSaver = FileInputState.Saver,
     ) {
@@ -266,6 +271,9 @@ private fun NekoKEMRoute(
             }
         }
         contactsState = withContext(Dispatchers.IO) { publicKeyContacts.readState() }
+        // Checkbox state only: deleted entries leave the pending selection. Chosen
+        // recipients are kept and reported as unavailable, never dropped silently.
+        contactSelection = contactSelection.filter { id -> contactsState.contacts.any { it.id == id } }
     }
 
     fun reportFailure(@StringRes operationResource: Int, code: Int) {
@@ -282,6 +290,17 @@ private fun NekoKEMRoute(
         failedOperation = FailedOperation(
             operationResource,
             context.getString(reasonResource),
+        )
+    }
+
+    // Names the saved contact that stopped an encryption; nothing was encrypted.
+    fun reportRecipientFailure(code: Int, failedId: String?) {
+        val reason = resultReason(context, R.string.operation_select_contact, code)
+        val failed = contactsState.contacts.firstOrNull { it.id == failedId }
+        failedOperation = FailedOperation(
+            R.string.operation_select_contact,
+            if (failed == null) reason
+            else reason + "\n" + context.getString(R.string.contact_failed_recipient, failed.label),
         )
     }
 
@@ -742,25 +761,31 @@ private fun NekoKEMRoute(
     }
 
     fun prepareEncryption(source: SelectedDocument) {
-        var selectedKey = temporaryPublicKey
-        val contactId = selectedContactId
+        val selectedKey = temporaryPublicKey
+        val contactIds = selectedContactIds
         val tracker = beginProgress(R.string.operation_encrypt_file)
         scope.launch {
+            var recipients = emptyList<TemporaryPublicKey>()
             try {
-                if (contactId != null) {
-                    val staged = withContext(Dispatchers.IO) { publicKeyContacts.stageForEncryption(contactId) }
-                    if (staged.code != NativeBridge.RESULT_SUCCESS || staged.key == null) {
-                        reportFailure(R.string.operation_select_contact, staged.code)
+                if (contactIds.isNotEmpty()) {
+                    // Every selected contact is re-read and verified; one failure stops all.
+                    val staged = withContext(Dispatchers.IO) { publicKeyContacts.stageRecipients(contactIds) }
+                    if (staged.code != NativeBridge.RESULT_SUCCESS || staged.keys.isEmpty()) {
+                        reportRecipientFailure(staged.code, staged.failedId)
                         return@launch
                     }
-                    selectedKey = staged.key
+                    recipients = staged.keys
                 }
                 val outcome = withContext(Dispatchers.IO) {
-                    fileWorkflow.prepareEncryption(
-                        source.uri,
-                        tracker,
-                        selectedKey,
-                    )
+                    if (recipients.isNotEmpty()) {
+                        fileWorkflow.prepareEncryptionForRecipients(source.uri, tracker, recipients)
+                    } else {
+                        fileWorkflow.prepareEncryption(
+                            source.uri,
+                            tracker,
+                            selectedKey,
+                        )
+                    }
                 }
                 if (temporaryPublicKey === selectedKey) {
                     temporaryPublicKey = null
@@ -792,6 +817,7 @@ private fun NekoKEMRoute(
             } catch (_: Exception) {
                 withContext(Dispatchers.IO) {
                     fileWorkflow.discardTemporaryPublicKey(selectedKey)
+                    recipients.forEach { fileWorkflow.discardTemporaryPublicKey(it) }
                 }
                 if (temporaryPublicKey === selectedKey) {
                     temporaryPublicKey = null
@@ -1096,7 +1122,7 @@ private fun NekoKEMRoute(
                         publicKeyAwaitingConfirmation = null
                         val previous = temporaryPublicKey
                         temporaryPublicKey = candidate
-                        selectedContactId = null
+                        selectedContactIds = emptyList()
                         transitionInputSelection(
                             InputSelectionEvent.KEY_SELECTION_CHANGED,
                         )
@@ -1185,7 +1211,7 @@ private fun NekoKEMRoute(
                 showContactPicker = false
                 val previous = temporaryPublicKey
                 temporaryPublicKey = null
-                selectedContactId = contact.id
+                selectedContactIds = listOf(contact.id)
                 transitionInputSelection(InputSelectionEvent.KEY_SELECTION_CHANGED)
                 scope.launch(Dispatchers.IO) { fileWorkflow.discardTemporaryPublicKey(previous) }
                 showSnackbar(R.string.contact_selected)
@@ -1325,10 +1351,10 @@ private fun NekoKEMRoute(
             selectedFileName = selectedInputName,
             publicKeyTemporary = temporaryPublicKey != null,
             publicKeyFileName = temporaryPublicKey?.displayName
-                ?: if (selectedContactId != null) selectedContact?.displayName
+                ?: if (selectedContactIds.isNotEmpty()) selectedContact?.displayName
                     ?: context.getString(R.string.not_available)
                 else context.getString(R.string.default_public_key_filename),
-            publicKeyFingerprint = if (selectedContactId != null) selectedContact?.fingerprint
+            publicKeyFingerprint = if (selectedContactIds.isNotEmpty()) selectedContact?.fingerprint
                 else temporaryPublicKey?.fingerprint ?: keyState.fingerprint,
             privateKeyTemporary = temporaryPrivateKey != null,
             privateKeyFileName = temporaryPrivateKey?.displayName
@@ -1339,6 +1365,9 @@ private fun NekoKEMRoute(
             contactsState = contactsState,
             publicKeyContactId = selectedContactId,
             publicKeyNote = selectedContact?.note,
+            publicKeyRecipients = selectedContacts,
+            publicKeyRecipientCount = selectedContactIds.size,
+            contactSelection = contactSelection,
         ),
         actions = NekoKEMActions(
             onGenerate = { showGeneratePasswordDialog = true },
@@ -1382,7 +1411,7 @@ private fun NekoKEMRoute(
             onRestoreDefaultPublicKey = {
                 val abandoned = temporaryPublicKey
                 temporaryPublicKey = null
-                selectedContactId = null
+                selectedContactIds = emptyList()
                 transitionInputSelection(
                     InputSelectionEvent.KEY_SELECTION_CHANGED,
                 )
@@ -1415,7 +1444,7 @@ private fun NekoKEMRoute(
                         R.string.error_select_file_first,
                     )
                     temporaryPublicKey == null &&
-                        selectedContactId == null &&
+                        selectedContactIds.isEmpty() &&
                         keyState.fingerprint == null -> reportFailureReason(
                         R.string.operation_encrypt_file,
                         R.string.error_public_key_not_found,
@@ -1442,13 +1471,33 @@ private fun NekoKEMRoute(
             onSelectContact = { contact ->
                 val previous = temporaryPublicKey
                 temporaryPublicKey = null
-                selectedContactId = contact.id
+                selectedContactIds = listOf(contact.id)
                 transitionInputSelection(InputSelectionEvent.KEY_SELECTION_CHANGED)
                 scope.launch(Dispatchers.IO) { fileWorkflow.discardTemporaryPublicKey(previous) }
                 showSnackbar(R.string.contact_selected)
             },
             onEditContact = { contactToEdit = it },
             onDeleteContact = { contactToDelete = it },
+            onToggleContactSelection = { contact ->
+                contactSelection = when {
+                    contact.id in contactSelection -> contactSelection - contact.id
+                    contactSelection.size < NativeBridge.MAX_RECIPIENTS -> contactSelection + contact.id
+                    else -> contactSelection
+                }
+            },
+            onClearContactSelection = { contactSelection = emptyList() },
+            onEncryptForSelectedContacts = {
+                // Only contacts still listed are applied; the choice stays explicit.
+                val ids = contactSelection.filter { id -> contactsState.contacts.any { it.id == id } }
+                if (ids.isNotEmpty()) {
+                    val previous = temporaryPublicKey
+                    temporaryPublicKey = null
+                    selectedContactIds = ids
+                    transitionInputSelection(InputSelectionEvent.KEY_SELECTION_CHANGED)
+                    scope.launch(Dispatchers.IO) { fileWorkflow.discardTemporaryPublicKey(previous) }
+                    showSnackbar(if (ids.size > 1) R.string.contact_recipients_selected else R.string.contact_selected)
+                }
+            },
         ),
         snackbarHostState = snackbarHostState,
     )

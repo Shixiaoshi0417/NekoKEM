@@ -14,6 +14,11 @@ collect_evidence() {
     adb shell dumpsys activity activities > "$report_dir/activities.txt" || true
     adb shell dumpsys activity lastanr > "$report_dir/last-anr.txt" || true
     adb shell dumpsys window > "$report_dir/windows.txt" || true
+    # Also print a failed contacts UI run's accessibility tree into the job log.
+    if adb shell "run-as com.shixiaoshi0417.nekokem sh -c 'test -f cache/i18n-screens/contacts-failure.txt'"; then
+        echo '--- contacts UI accessibility tree at failure ---'
+        adb exec-out run-as com.shixiaoshi0417.nekokem cat cache/i18n-screens/contacts-failure.txt || true
+    fi
 }
 # Failure collection preserves test status; successful runs verify the complete archive.
 trap 'collect_evidence || true' EXIT
@@ -89,12 +94,12 @@ with tarfile.open(sys.argv[1], 'r:gz') as archive:
     for name in ('large-dark-system-ja', 'small-light-system-de'):
         image = archive.extractfile(f'i18n-screens/{name}.png')
         assert image is not None and image.read(8) == b'\x89PNG\r\n\x1a\n'
-    for name in ('contacts-selected', 'predictive-back'):
+    for name in ('contacts-selected', 'contacts-multi-select', 'predictive-back'):
         image = archive.extractfile(f'i18n-screens/{name}.png')
         assert image is not None and image.read(8) == b'\x89PNG\r\n\x1a\n'
     # Consume the complete gzip stream, including its trailer.
     archive.getmembers()
-print('All 16 language/layout screenshots, the contact selection and predictive back screenshots archived')
+print('All 16 language/layout screenshots, the contact selection, multi-select and predictive back screenshots archived')
 PY
 gzip -t "$report_dir/screens.tar.gz"
 trap - EXIT

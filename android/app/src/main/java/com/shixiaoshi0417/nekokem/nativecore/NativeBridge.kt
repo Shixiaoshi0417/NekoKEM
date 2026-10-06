@@ -13,6 +13,9 @@ object NativeBridge {
     const val RESULT_JAVA_EXCEPTION = -3
     const val RESULT_CANCELLED = -5
 
+    /** Core's NEKOKEM_MAX_RECIPIENTS: most recipients in one NKEM v4 file. */
+    const val MAX_RECIPIENTS = 64
+
     init {
         System.loadLibrary("nekokem_jni")
     }
@@ -76,6 +79,18 @@ object NativeBridge {
         inputPath: String,
         outputPath: String,
         publicKeyPath: String,
+        callback: NativeProgressCallback,
+    ): Int
+
+    /**
+     * Encrypts once for every key into one NKEM v4 file that each matching
+     * private key decrypts. Core validates every key and rejects an empty
+     * list, more than [MAX_RECIPIENTS] keys and duplicates.
+     */
+    external fun nativeEncryptFileMultiWithProgress(
+        inputPath: String,
+        outputPath: String,
+        publicKeyPaths: Array<String>,
         callback: NativeProgressCallback,
     ): Int
 

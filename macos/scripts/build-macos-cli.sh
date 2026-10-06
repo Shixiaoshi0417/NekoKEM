@@ -36,7 +36,7 @@ flags=(-std=c17 -O2 -arch arm64 -mmacosx-version-min=11.0 -isysroot "$SDKROOT"
        -I"$repo_root/linux/src")
 link=(-Wl,-pie,-dead_strip)
 libs=("$prefix/lib/libcrypto.a" -pthread -framework CoreFoundation)
-core=(nekokem key_management nekokem_v3 kem hybrid aes file file_v3 secure_mem private_key)
+core=(nekokem key_management nekokem_v3 nekokem_v4 kem hybrid aes file file_v3 file_v4 secure_mem private_key)
 sources=()
 for name in "${core[@]}"; do sources+=("$repo_root/core/src/$name.c"); done
 cli=("$repo_root/linux/src/main.c" "$repo_root/linux/src/cli.c" "$repo_root/linux/src/i18n.c")
@@ -81,7 +81,8 @@ if [[ "$build_tests" == 1 ]]; then
     export UBSAN_OPTIONS=halt_on_error=1:print_stacktrace=1
     # Darwin's ASan does not support LSan. Linux retains its existing LSan gate.
     for test in parser file_security gcm_limit aes_stream hybrid_kdf key_management \
-        version_rejection progress input_boundary pem_interaction openssl_version; do
+        version_rejection progress input_boundary pem_interaction openssl_version \
+        multi_recipient; do
         test_flags=(-DNEKOKEM_TEST_REGRESSION=1)
         library="$sanitized/libcore.a"
         if [[ "$test" == file_security ]]; then

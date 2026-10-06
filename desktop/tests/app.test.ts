@@ -3,9 +3,9 @@ import { afterEach,beforeEach,describe,expect,it,vi } from 'vitest';
 import App from '../src/App.vue';
 import * as bridge from '../src/bridge';
 import { catalog, translate } from '../src/i18n';
-vi.mock('../src/bridge',()=>({getSettings:vi.fn(),setLanguage:vi.fn(),runOperation:vi.fn(),cancelOperation:vi.fn(),closeApp:vi.fn(),onProgress:vi.fn(),chooseOpen:vi.fn(),chooseSave:vi.fn(),listContacts:vi.fn(),saveContact:vi.fn(),updateContactNote:vi.fn(),deleteContact:vi.fn()}));
+vi.mock('../src/bridge',()=>({getSettings:vi.fn(),setLanguage:vi.fn(),runOperation:vi.fn(),cancelOperation:vi.fn(),closeApp:vi.fn(),onProgress:vi.fn(),chooseOpen:vi.fn(),chooseSave:vi.fn(),listContacts:vi.fn(),saveContact:vi.fn(),updateContactNote:vi.fn(),deleteContact:vi.fn(),MAX_RECIPIENTS:64}));
 enableAutoUnmount(afterEach);
-beforeEach(()=>{vi.clearAllMocks();vi.mocked(bridge.getSettings).mockResolvedValue({language:'en',selection:'system',version:'3.3.2'});vi.mocked(bridge.onProgress).mockResolvedValue(()=>{});vi.mocked(bridge.runOperation).mockResolvedValue({output:'output.nkem',fingerprint:null});vi.mocked(bridge.chooseOpen).mockResolvedValue(null);vi.mocked(bridge.chooseSave).mockResolvedValue(null);vi.mocked(bridge.cancelOperation).mockResolvedValue(true);vi.mocked(bridge.listContacts).mockResolvedValue({contacts:[],unreadable:0});});
+beforeEach(()=>{vi.clearAllMocks();vi.mocked(bridge.getSettings).mockResolvedValue({language:'en',selection:'system',version:'3.3.2'});vi.mocked(bridge.onProgress).mockResolvedValue(()=>{});vi.mocked(bridge.runOperation).mockResolvedValue({output:'output.nkem',fingerprint:null,recipients:[]});vi.mocked(bridge.chooseOpen).mockResolvedValue(null);vi.mocked(bridge.chooseSave).mockResolvedValue(null);vi.mocked(bridge.cancelOperation).mockResolvedValue(true);vi.mocked(bridge.listContacts).mockResolvedValue({contacts:[],unreadable:0});});
 async function ready(){const app=mount(App,{attachTo:document.body});await flushPromises();return app;}
 describe('Desktop operation boundaries',()=>{
  it('rejects mismatched keygen passwords before invoking native Core',async()=>{const app=await ready();await app.findAll('nav button')[0]!.trigger('click');await app.get('[name=publicPath]').setValue('public.key');await app.get('[name=privatePath]').setValue('private.key.enc');await app.get('[name=password]').setValue('secret-one');await app.get('[name=confirmation]').setValue('secret-two');await app.get('form').trigger('submit');expect(bridge.runOperation).not.toHaveBeenCalled();expect(app.get('[role=alert]').text()).toBe('Passwords do not match.');});
@@ -13,7 +13,7 @@ describe('Desktop operation boundaries',()=>{
  it('rejects passwords exceeding the UTF-8 byte limit',async()=>{const app=await ready();await app.findAll('nav button')[0]!.trigger('click');await app.get('[name=publicPath]').setValue('public.key');await app.get('[name=privatePath]').setValue('private.key.enc');await app.get('[name=password]').setValue('中'.repeat(400));await app.get('[name=confirmation]').setValue('中'.repeat(400));await app.get('form').trigger('submit');expect(bridge.runOperation).not.toHaveBeenCalled();expect(app.get('[role=alert]').text()).toContain('1024 UTF-8 bytes');});
  it('locks navigation and ignores stale progress events during a job',async()=>{let callback:(value:bridge.Progress)=>void=()=>{};vi.mocked(bridge.onProgress).mockImplementation(async fn=>{callback=fn;return()=>{};});let finish:(result:bridge.Outcome)=>void=()=>{};vi.mocked(bridge.runOperation).mockReturnValue(new Promise(resolve=>{finish=resolve;}));const app=await ready();await app.get('[name=keyPath]').setValue('public.key');await app.get('[name=input]').setValue('plain');await app.get('[name=output]').setValue('out.nkem');await app.get('form').trigger('submit');const request=vi.mocked(bridge.runOperation).mock.calls[0]![0];callback({id:'stale-job',processed:50,total:100});await flushPromises();expect(app.text()).not.toContain('50%');expect(app.findAll('nav button').every(button=>button.attributes('disabled')!==undefined)).toBe(true);callback({id:request.id,processed:50,total:100});await flushPromises();expect(app.text()).toContain('50%');finish({output:'out.nkem',fingerprint:null});await flushPromises();expect(app.text()).toContain('Completed');});
  it('keeps every desktop message complete in all five languages',()=>{for(const [key,values] of Object.entries(catalog)){expect(values,key).toHaveLength(5);const placeholders=values.map(value=>(value.match(/\{\w+\}/g)??[]).sort().join());for(const value of values){expect(value.trim(),key).not.toBe('');}expect(new Set(placeholders).size,key).toBe(1);}});
- it('has a complete label for every supported language',()=>{for(const language of ['en','zh-CN','zh-TW','ja','ko'] as const){for(const key of ['keygen','encrypt','decrypt','fingerprint','exit','cancelled','core-error','navigation','keySource','loading','choosing','contacts','contactsHelp','savedContact','recipient','chooseContact','noContacts','note','noteHint','saveContact','useContact','editNote','saveNote','deleteContact','confirmDelete','deletePrompt','contactSaved','noteSaved','contactDeleted','contact-required','contact-missing','contact-invalid','contact-mismatch','contact-storage','contact-exists','contact-limit','public-key-invalid','note-limit','invalid-request'] as const)expect(translate(key,language).length).toBeGreaterThan(0);}});
+ it('has a complete label for every supported language',()=>{for(const language of ['en','zh-CN','zh-TW','ja','ko'] as const){for(const key of ['keygen','encrypt','decrypt','fingerprint','exit','cancelled','core-error','navigation','keySource','loading','choosing','contacts','contactsHelp','savedContact','recipient','recipients','selectContact','selectedCount','encryptSelected','clearSelection','multiRecipientHint','recipient-limit','noContacts','note','noteHint','saveContact','useContact','editNote','saveNote','deleteContact','confirmDelete','deletePrompt','contactSaved','noteSaved','contactDeleted','contact-required','contact-missing','contact-invalid','contact-mismatch','contact-storage','contact-exists','contact-limit','public-key-invalid','note-limit','invalid-request'] as const)expect(translate(key,language).length).toBeGreaterThan(0);}});
 });
 
 describe('Desktop interaction and secret lifetime',()=>{
@@ -222,9 +222,9 @@ describe('Desktop public-key contacts',()=>{
   expect(app.get('.contact.highlighted').attributes('data-contact')).toBe(bob.id);
   expect(app.get('.contact.highlighted .contact-label').text()).toBe('bob.pub');
  });
- it('encrypts only for an explicitly selected contact without sending another key source',async()=>{
+ it('encrypts only for explicitly selected contacts without sending another key source',async()=>{
   vi.mocked(bridge.listContacts).mockResolvedValue({contacts:[alice,bob],unreadable:0});
-  vi.mocked(bridge.runOperation).mockResolvedValue({output:'out.nkem',fingerprint:bob.fingerprint});
+  vi.mocked(bridge.runOperation).mockResolvedValue({output:'out.nkem',fingerprint:bob.fingerprint,recipients:[bob.fingerprint]});
   const app=await ready();
   await app.get('[name=keyPath]').setValue('default-public.key');
   await chooseContactSource(app);
@@ -232,50 +232,113 @@ describe('Desktop public-key contacts',()=>{
   await app.get('[name=input]').setValue('plain');await app.get('[name=output]').setValue('out.nkem');
   await app.get('form').trigger('submit');await flushPromises();
   expect(bridge.runOperation).not.toHaveBeenCalled();
-  expect(app.get('[role=alert]').text()).toBe('Choose a saved contact.');
-  const select=app.get('[name=contact]');
-  expect(document.activeElement).toBe(select.element);expect(select.attributes('aria-invalid')).toBe('true');
-  expect(select.findAll('option').map(option=>option.text())).toEqual(['Choose a saved contact…','Alice · AA:AA:AA:AA…','bob.pub · BB:BB:BB:BB…']);
-  await select.setValue(bob.id);
+  expect(app.get('[role=alert]').text()).toBe('Choose at least one saved contact.');
+  const boxes=app.findAll('[name=contacts]');
+  expect(document.activeElement).toBe(boxes[0]!.element);expect(app.get('.recipient-options').attributes('aria-invalid')).toBe('true');
+  expect(app.findAll('.recipient-label').map(item=>item.text())).toEqual(['Alice','bob.pub']);
+  expect(app.findAll('.recipient-option code').map(item=>item.text())).toEqual(['AA:AA:AA:AA…','BB:BB:BB:BB…']);
+  await boxes[1]!.setValue(true);
   expect(app.find('[role=alert]').exists()).toBe(false);
   expect(app.get('.contact-preview code').text()).toBe(bob.fingerprint);
+  expect(app.get('.format').text()).toContain('NKEM v3');
   await app.get('form').trigger('submit');await flushPromises();
   const request=vi.mocked(bridge.runOperation).mock.calls[0]![0];
-  expect([request.kind,request.contact,request.keyPath,request.keyText,request.paste]).toEqual(['encrypt',bob.id,'','',false]);
+  expect([request.kind,request.contacts,request.keyPath,request.keyText,request.paste]).toEqual(['encrypt',[bob.id],'','',false]);
   expect(app.get('.notice.success').text()).toContain('Recipient: bob.pub');
   expect((app.get('.notice.success .fingerprint').element as HTMLTextAreaElement).value).toBe(bob.fingerprint);
  });
- it('reports a missing or damaged contact and requires a new explicit choice',async()=>{
+ it('reports a missing or damaged contact, names it and requires a new explicit choice',async()=>{
   vi.mocked(bridge.listContacts).mockResolvedValue({contacts:[alice,bob],unreadable:0});
-  vi.mocked(bridge.runOperation).mockRejectedValueOnce({code:'contact-invalid'});
+  vi.mocked(bridge.runOperation).mockRejectedValueOnce({code:'contact-invalid',contact:alice.id});
   const app=await ready();await chooseContactSource(app);
-  await app.get('[name=contact]').setValue(alice.id);await app.get('[name=input]').setValue('plain');await app.get('[name=output]').setValue('out.nkem');
+  await app.findAll('[name=contacts]')[0]!.setValue(true);await app.get('[name=input]').setValue('plain');await app.get('[name=output]').setValue('out.nkem');
   await app.get('form').trigger('submit');await flushPromises();
   expect(app.get('[role=alert]').text()).toContain('damaged or has unsafe permissions');
-  expect((app.get('[name=contact]').element as HTMLSelectElement).value).toBe('');
-  expect(app.get('[name=contact]').attributes('aria-invalid')).toBe('true');
+  expect(app.get('.failed-contact').text()).toBe('Recipient: Alice · AA:AA:AA:AA…');
+  expect(app.findAll('[name=contacts]').map(box=>(box.element as HTMLInputElement).checked)).toEqual([false,false]);
+  expect(app.get('.recipient-options').attributes('aria-invalid')).toBe('true');
   expect(bridge.listContacts).toHaveBeenCalledTimes(2);
   await app.get('form').trigger('submit');await flushPromises();
   expect(bridge.runOperation).toHaveBeenCalledTimes(1);
-  expect(app.get('[role=alert]').text()).toBe('Choose a saved contact.');
+  expect(app.get('[role=alert]').text()).toBe('Choose at least one saved contact.');
 
   // A contact deleted elsewhere disappears from the next refresh; it is never replaced.
-  await app.get('[name=contact]').setValue(alice.id);
+  await app.findAll('[name=contacts]')[0]!.setValue(true);
   vi.mocked(bridge.listContacts).mockResolvedValue({contacts:[bob],unreadable:0});
   await app.findAll('.operation-tab')[0]!.trigger('click');await app.findAll('.operation-tab')[1]!.trigger('click');await flushPromises();
   expect(app.get('[role=alert]').text()).toContain('no longer exists');
-  expect((app.get('[name=contact]').element as HTMLSelectElement).value).toBe('');
+  expect(app.findAll('[name=contacts]').map(box=>(box.element as HTMLInputElement).checked)).toEqual([false]);
   expect(bridge.runOperation).toHaveBeenCalledTimes(1);
+ });
+ it('selects several contacts on the contacts page and encrypts one file that each of them decrypts',async()=>{
+  const carol:bridge.Contact={id:'c'.repeat(64),fingerprint:Array(32).fill('CC').join(':'),name:'carol.pub',note:''};
+  vi.mocked(bridge.listContacts).mockResolvedValue({contacts:[alice,bob,carol],unreadable:0});
+  vi.mocked(bridge.runOperation).mockResolvedValue({output:'out.nkem',fingerprint:null,recipients:[carol.fingerprint,alice.fingerprint]});
+  const app=await ready();await contactsPage(app);
+  expect(app.find('.selection-bar').exists()).toBe(false);
+  const select=(index:number)=>app.findAll('.contact-select input')[index]!.setValue(true);
+  await select(2);await select(0);
+  expect(app.get('.selection-count').text()).toBe('2 selected');
+  expect(app.findAll('.contact.selected').map(item=>item.attributes('data-contact'))).toEqual([alice.id,carol.id]);
+  expect(app.get('.contact-select input').attributes('aria-label')).toBe('Select · Alice');
+  await app.get('.encrypt-selected').trigger('click');await flushPromises();
+  expect(app.get('h1').text()).toBe('Encrypt file');
+  expect((app.findAll('[name=keySource]')[2]!.element as HTMLInputElement).checked).toBe(true);
+  expect(app.findAll('[name=contacts]').map(box=>(box.element as HTMLInputElement).checked)).toEqual([true,false,true]);
+  expect(app.get('.recipient-heading .count').text()).toBe('2 / 64');
+  expect(app.get('.multi-hint').text()).toContain('Each selected recipient can decrypt');
+  expect(app.find('.contact-preview').exists()).toBe(false);
+  expect(app.get('.format').text()).toContain('NKEM v4');
+  await app.get('[name=input]').setValue('plain');await app.get('[name=output]').setValue('out.nkem');
+  await app.get('form').trigger('submit');await flushPromises();
+  const request=vi.mocked(bridge.runOperation).mock.calls[0]![0];
+  // Selection order is kept; no other key source is sent.
+  expect([request.kind,request.contacts,request.keyPath,request.keyText,request.paste]).toEqual(['encrypt',[carol.id,alice.id],'','',false]);
+  expect(app.get('.notice.success').text()).toContain('Recipients: carol.pub, Alice');
+  expect(app.find('.notice.success .fingerprint').exists()).toBe(false);
+
+  // A failure names the contact, deselects only it and encrypts nothing.
+  vi.mocked(bridge.runOperation).mockRejectedValueOnce({code:'contact-missing',contact:carol.id});
+  await app.get('form').trigger('submit');await flushPromises();
+  expect(app.get('[role=alert]').text()).toContain('nothing was encrypted');
+  expect(app.get('.failed-contact').text()).toContain('carol.pub');
+  expect(app.findAll('[name=contacts]').map(box=>(box.element as HTMLInputElement).checked)).toEqual([true,false,false]);
+  expect(bridge.runOperation).toHaveBeenCalledTimes(2);
+  expect(app.get('.format').text()).toContain('NKEM v3');
+
+  await contactsPage(app);
+  expect(app.get('.selection-count').text()).toBe('1 selected');
+  await app.get('.clear-selection').trigger('click');
+  expect(app.find('.selection-bar').exists()).toBe(false);
+  expect(app.findAll('.contact.selected')).toHaveLength(0);
+ });
+ it('caps the selection at 64 recipients',async()=>{
+  const many:bridge.Contact[]=Array.from({length:65},(_,index)=>({id:index.toString(16).padStart(64,'0'),fingerprint:Array(32).fill('DD').join(':'),name:`key-${index}.pub`,note:''}));
+  vi.mocked(bridge.listContacts).mockResolvedValue({contacts:many,unreadable:0});
+  const app=await ready();await contactsPage(app);
+  const boxes=app.findAll('.contact-select input');
+  for(const box of boxes.slice(0,64))await box.setValue(true);
+  expect(app.get('.selection-count').text()).toBe('64 selected');
+  expect(app.get('.selection-limit').text()).toBe('Choose at most 64 recipients.');
+  expect(boxes[64]!.attributes('disabled')).toBeDefined();
+  expect(boxes[0]!.attributes('disabled')).toBeUndefined();
+  await app.get('.encrypt-selected').trigger('click');await flushPromises();
+  expect(app.findAll('[name=contacts]').filter(box=>(box.element as HTMLInputElement).checked)).toHaveLength(64);
+  expect(app.findAll('[name=contacts]')[64]!.attributes('disabled')).toBeDefined();
+  await app.findAll('[name=contacts]')[0]!.setValue(false);
+  expect(app.findAll('[name=contacts]')[64]!.attributes('disabled')).toBeUndefined();
  });
  it('opens encryption from a contact and keeps the choice per operation',async()=>{
   vi.mocked(bridge.listContacts).mockResolvedValue({contacts:[alice,bob],unreadable:2});
   const app=await ready();await contactsPage(app);
   expect(app.get('.contact-list').text()).toContain('2 saved entries could not be read');
   expect(app.findAll('.contact-label').map(item=>item.text())).toEqual(['Alice','bob.pub']);
+  // "Use for encryption" chooses exactly that one contact.
+  await app.findAll('.contact-select input')[1]!.setValue(true);
   await app.findAll('.use-contact')[0]!.trigger('click');await flushPromises();
   expect(app.get('h1').text()).toBe('Encrypt file');
   expect((app.findAll('[name=keySource]')[2]!.element as HTMLInputElement).checked).toBe(true);
-  expect((app.get('[name=contact]').element as HTMLSelectElement).value).toBe(alice.id);
+  expect(app.findAll('[name=contacts]').map(box=>(box.element as HTMLInputElement).checked)).toEqual([true,false]);
   // Decryption and fingerprints never offer saved contacts.
   await app.findAll('.operation-tab')[2]!.trigger('click');
   expect(app.findAll('[name=keySource]')).toHaveLength(2);
@@ -285,7 +348,7 @@ describe('Desktop public-key contacts',()=>{
   vi.mocked(bridge.listContacts).mockRejectedValue({code:'contact-storage'});
   const app=await ready();await chooseContactSource(app);
   expect(app.get('.contact-choice').text()).toContain('Cannot use the contacts folder');
-  expect(app.get('[name=contact]').findAll('option')).toHaveLength(1);
+  expect(app.findAll('[name=contacts]')).toHaveLength(0);
   await contactsPage(app);
   expect(app.get('.contact-list [role=alert]').text()).toContain('Cannot use the contacts folder');
  });

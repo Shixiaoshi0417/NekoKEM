@@ -12,10 +12,12 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.selectableGroup
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
@@ -26,17 +28,28 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import com.shixiaoshi0417.nekokem.R
 import com.shixiaoshi0417.nekokem.keys.PublicKeyContact
 import com.shixiaoshi0417.nekokem.keys.PublicKeyContacts
 import com.shixiaoshi0417.nekokem.keys.PublicKeyContactsState
+import com.shixiaoshi0417.nekokem.nativecore.NativeBridge
 
 @Composable
-fun PublicKeyContactsPage(state: NekoKEMUiState, actions: NekoKEMActions, onUse: (PublicKeyContact) -> Unit) {
+fun PublicKeyContactsPage(
+    state: NekoKEMUiState,
+    actions: NekoKEMActions,
+    onUse: (PublicKeyContact) -> Unit,
+    onEncryptSelected: () -> Unit,
+) {
+    val selected = state.contactSelection
+    val atLimit = selected.size >= NativeBridge.MAX_RECIPIENTS
     LazyColumn(contentPadding = PaddingValues(20.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
         item {
             Text(stringResource(R.string.contact_description), style = MaterialTheme.typography.bodyMedium)
@@ -49,9 +62,51 @@ fun PublicKeyContactsPage(state: NekoKEMUiState, actions: NekoKEMActions, onUse:
             ) { Text(stringResource(R.string.action_import_contact)) }
         }
         item { ContactStorageStatus(state.contactsState) }
+        if (selected.isNotEmpty()) {
+            item(key = "selection") {
+                // Several recipients share one NKEM v4 file; nothing changes until this is pressed.
+                Card(Modifier.fillMaxWidth()) {
+                    Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text(
+                            stringResource(R.string.contact_selection_count, selected.size),
+                            style = MaterialTheme.typography.titleMedium,
+                        )
+                        if (atLimit) {
+                            Text(
+                                stringResource(R.string.contact_selection_limit, NativeBridge.MAX_RECIPIENTS),
+                                style = MaterialTheme.typography.bodySmall,
+                            )
+                        }
+                        Text(stringResource(R.string.contact_recipients_hint), style = MaterialTheme.typography.bodySmall)
+                        Button(
+                            onClick = onEncryptSelected,
+                            enabled = state.nativeConnected && !state.running,
+                            modifier = Modifier.fillMaxWidth(),
+                        ) { Text(stringResource(R.string.action_encrypt_for_selected)) }
+                        TextButton(onClick = actions.onClearContactSelection, enabled = !state.running) {
+                            Text(stringResource(R.string.action_clear_selection))
+                        }
+                    }
+                }
+            }
+        }
         items(state.contactsState.contacts, key = { it.id }) { contact ->
+            val checked = contact.id in selected
+            val selectLabel = stringResource(R.string.contact_select_recipient)
             Card(Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Row(
+                        Modifier.fillMaxWidth().toggleable(
+                            value = checked,
+                            enabled = !state.running && (checked || !atLimit),
+                            role = Role.Checkbox,
+                            onValueChange = { actions.onToggleContactSelection(contact) },
+                        ).semantics { contentDescription = "$selectLabel · ${contact.label}" },
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Checkbox(checked = checked, onCheckedChange = null, enabled = !state.running && (checked || !atLimit))
+                        Text(selectLabel, style = MaterialTheme.typography.labelLarge)
+                    }
                     ContactIdentity(contact)
                     TextButton(onClick = { onUse(contact) }, enabled = state.nativeConnected && !state.running) {
                         Text(stringResource(R.string.action_use_contact))

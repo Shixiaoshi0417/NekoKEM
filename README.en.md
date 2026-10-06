@@ -62,6 +62,22 @@ interface languages are updated. Cryptographic parameters, file formats and secr
 remain unchanged. See the [desktop GUI documentation](desktop/README.md#public-key-contacts--公钥通讯录).
 This feature is available from v3.3.2; v3.3.1 and earlier do not include it.
 
+## Multi-recipient encryption (development branch)
+
+One file can be encrypted for up to 64 recipients at once. Each recipient decrypts it with their own
+private key; nobody else can. In the desktop GUI, tick several contacts on the Public-key contacts page
+and choose Encrypt for selected, or tick recipients in the encryption page's recipient list. On Android,
+tick Select as recipient on the Public-key contacts page and choose Encrypt for Selected Recipients. One
+selected contact still writes NKEM v3; two or more write one NKEM v4 file. Every contact is re-read and its
+fingerprint re-validated by Core before encryption. A missing, damaged or mismatched contact fails the
+whole operation and is named; no recipient is skipped or replaced by another public key. On the CLI, list
+several public keys after the usual command; see [Parameterized commands](#parameterized-commands).
+
+NKEM v4 stores one X448 + ML-KEM-1024 encapsulation and wrapped file key per recipient and encrypts the
+file data once. An HMAC-SHA512 header MAC ensures every recipient decrypts the same content. See
+[`docs/NKEM-v4.md`](docs/NKEM-v4.md) for the format. Decryption on every platform detects v3 and v4
+automatically; NekoKEM v3.3.2 and earlier cannot open v4 files.
+
 ## Historical release v3.2.0
 
 v3.2.0 introduced five interface languages, system-language selection and security fixes, and changed the Android release signer. Its migration instructions and historical build records remain in the [v3.2.0 notes](release/v3.2.0.md). Updating from v3.2.0 to v3.3.0 does not require another uninstall.
@@ -254,6 +270,12 @@ Default v3 hybrid encryption and decryption:
 ./nekokem decrypt hybrid encrypted/test-v3.nkem output.txt keys/private.key.enc
 ```
 
+Listing two or more public keys after the usual encryption command writes one NKEM v4 file that every recipient can decrypt; an invalid or repeated public key creates no output:
+
+```sh
+./nekokem encrypt hybrid test.txt encrypted/team.nkem alice.key bob.key carol.key
+```
+
 Hybrid decrypt automatically prompts once for a password when it sees `.enc`. For compatibility with existing deployments, the command still accepts legacy plaintext `private.key` containing X448 and ML-KEM-1024 PEM blocks.
 
 Commands can use the corresponding PEM keys from other locations:
@@ -302,7 +324,11 @@ The complete `header || salt || nonce` is AES-GCM AAD. The reader strictly valid
 
 ## NKEM v3 hybrid file format
 
-v3 uses X448, ML-KEM-1024, combined shared secrets, and HKDF-SHA512, separating the HKDF salt from the AES-GCM nonce. For each file, `RAND_bytes` independently generates a 32-byte salt and a 12-byte nonce. Both are included in GCM AAD together with the fixed header, X448 ephemeral public key, and ML-KEM ciphertext. See [`docs/NKEM-v3.md`](docs/NKEM-v3.md) for the full layout. `nekokem_encrypt_file()` writes v3; `nekokem_decrypt_file()` accepts only v3.
+v3 uses X448, ML-KEM-1024, combined shared secrets, and HKDF-SHA512, separating the HKDF salt from the AES-GCM nonce. For each file, `RAND_bytes` independently generates a 32-byte salt and a 12-byte nonce. Both are included in GCM AAD together with the fixed header, X448 ephemeral public key, and ML-KEM ciphertext. See [`docs/NKEM-v3.md`](docs/NKEM-v3.md) for the full layout. `nekokem_encrypt_file()` writes v3; `nekokem_decrypt_file()` accepts v3 and v4.
+
+## NKEM v4 multi-recipient file format
+
+v4 encrypts the file data once under a random 32-byte file key and stores one entry per recipient, up to 64: an X448 ephemeral public key, an ML-KEM-1024 ciphertext and the file key wrapped with AES-256-GCM. The wrap key is derived with HKDF-SHA512 from that recipient's two shared secrets and binds the X448 ephemeral and recipient public keys. An HMAC-SHA512 header MAC covers the header, salt and every recipient entry and commits to the file key, so all recipients decrypt the same content. Entries carry no fingerprint; decryption tries every entry, and neither its error nor its timing shows which entry is the key's. See [`docs/NKEM-v4.md`](docs/NKEM-v4.md) for the full layout. `nekokem_encrypt_file_multi_with_progress()` writes v4 for two or more public keys and v3 for one.
 
 ## Security implementation
 
@@ -396,7 +422,9 @@ Both harnesses accept an `argv[1]` file path, reject inputs above 2 MiB, and do 
 ## Security boundaries
 
 - Hybrid private keys are now password-protected, but security still depends on strong, unique passwords and operating-system protection of process memory, terminals, and files.
-- Container metadata such as file length and the selected algorithms is not confidential.
+- Container metadata such as file length and the selected algorithms is not confidential. NKEM v4 also reveals the number of recipients, but not who they are.
+- NKEM does not authenticate senders. v4 recipients share the file key, so any recipient can create a new file reusing the same recipient list; the list does not prove who sent a file.
+- v4 hides which entry belongs to which key, not whether a key can decrypt the file: anyone who can submit the file for decryption and see the result learns that from the unmodified file.
 - The X448/ML-KEM combination and this project's KDF/AAD binding are experimental designs, not a standardized hybrid KEM.
 - Project-internal parser fuzzing has been performed, but there has been no independent third-party audit or broad interoperability testing.
 - This implementation is not a substitute for mature, audited file encryption protocols and key management systems.

@@ -28,6 +28,13 @@ data class PublicKeyContactsState(
 
 data class PublicKeyContactResult(val code: Int, val contact: PublicKeyContact? = null)
 
+/** Snapshots for one encryption, or the code and id of the contact that failed. */
+class ContactRecipientsResult internal constructor(
+    val code: Int,
+    val keys: List<TemporaryPublicKey>,
+    val failedId: String?,
+)
+
 /** Persistent public keys only. Each atomic record binds key bytes, identity and note. */
 class PublicKeyContacts(context: Context, private val keyManager: LocalKeyManager) {
     private val directory = File(context.filesDir, DIRECTORY_NAME)
@@ -127,6 +134,30 @@ class PublicKeyContacts(context: Context, private val keyManager: LocalKeyManage
         } finally {
             raw?.delete()
         }
+    }
+
+    /**
+     * Stages every selected contact for one encryption, in order. A missing,
+     * damaged or mismatched contact fails the whole selection and is named; the
+     * snapshots already staged are deleted, and no contact is skipped.
+     */
+    fun stageRecipients(ids: List<String>): ContactRecipientsResult {
+        if (ids.isEmpty() || ids.size > NativeBridge.MAX_RECIPIENTS || ids.toSet().size != ids.size) {
+            return ContactRecipientsResult(NativeBridge.RESULT_INVALID_ARGUMENT, emptyList(), null)
+        }
+        val staged = mutableListOf<TemporaryPublicKey>()
+        for (id in ids) {
+            val result = stageForEncryption(id)
+            val key = result.key
+            if (result.code != NativeBridge.RESULT_SUCCESS || key == null) {
+                staged.forEach { it.file.delete() }
+                key?.file?.delete()
+                val code = if (result.code == NativeBridge.RESULT_SUCCESS) LocalKeyManager.RESULT_STORAGE_ERROR else result.code
+                return ContactRecipientsResult(code, emptyList(), id)
+            }
+            staged += key
+        }
+        return ContactRecipientsResult(NativeBridge.RESULT_SUCCESS, staged, null)
     }
 
     fun clearWorkCache(): Boolean = synchronized(lock) {

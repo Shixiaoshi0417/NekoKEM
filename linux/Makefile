@@ -18,8 +18,9 @@ TARGET = nekokem
 CORE_LIBRARY = libnekokem_core.a
 CORE_SOURCES = ../core/src/nekokem.c \
 	../core/src/key_management.c \
-	../core/src/nekokem_v3.c ../core/src/kem.c ../core/src/hybrid.c \
-	../core/src/aes.c ../core/src/file.c ../core/src/file_v3.c ../core/src/secure_mem.c ../core/src/private_key.c
+	../core/src/nekokem_v3.c ../core/src/nekokem_v4.c ../core/src/kem.c ../core/src/hybrid.c \
+	../core/src/aes.c ../core/src/file.c ../core/src/file_v3.c ../core/src/file_v4.c \
+	../core/src/secure_mem.c ../core/src/private_key.c
 CLI_SOURCES = src/main.c src/cli.c src/i18n.c
 SOURCES = $(CLI_SOURCES) $(CORE_SOURCES)
 CORE_OBJECTS = $(CORE_SOURCES:.c=.o)
@@ -30,7 +31,8 @@ DEPS = $(OBJECTS:.o=.d)
 .PHONY: all core clean test analyze test-ubsan test-parser fuzz-seeds \
 	fuzz-build test-key-management test-progress test-progress-large \
 	test-file-security test-version-rejection test-gcm-limit test-aes-stream \
-	test-hybrid-kdf test-asan test-input-boundaries test-pem-interaction test-openssl
+	test-hybrid-kdf test-asan test-input-boundaries test-pem-interaction test-openssl \
+	test-multi-recipient
 
 all: $(TARGET)
 
@@ -49,7 +51,8 @@ $(TARGET): $(CLI_OBJECTS) $(CORE_LIBRARY)
 analyze:
 	$(CC) $(CPPFLAGS) $(CFLAGS) -O1 -fanalyzer -fsyntax-only $(SOURCES)
 	$(CC) $(CPPFLAGS) $(CFLAGS) -O1 -fanalyzer -fsyntax-only \
-		../core/tests/parser_tests.c ../core/src/file.c ../core/src/file_v3.c ../core/src/private_key.c \
+		../core/tests/parser_tests.c ../core/src/file.c ../core/src/file_v3.c ../core/src/file_v4.c \
+		../core/src/private_key.c \
 		../core/src/secure_mem.c
 	$(CC) $(CPPFLAGS) $(CFLAGS) -O1 -fanalyzer -fsyntax-only \
 		-DNEKOKEM_TEST_FAULT_INJECTION ../core/tests/file_security_tests.c \
@@ -74,7 +77,7 @@ test-parser:
 	trap cleanup_parser EXIT INT TERM; \
 	$(CC) $(CPPFLAGS) $(CFLAGS) -O1 \
 		-fsanitize=undefined -fno-sanitize-recover=undefined \
-		$(LDFLAGS) ../core/tests/parser_tests.c ../core/src/file.c ../core/src/file_v3.c \
+		$(LDFLAGS) ../core/tests/parser_tests.c ../core/src/file.c ../core/src/file_v3.c ../core/src/file_v4.c \
 		../core/src/private_key.c ../core/src/secure_mem.c $(LDLIBS) \
 		-fsanitize=undefined -o "$$parser_binary"; \
 	UBSAN_OPTIONS=halt_on_error=1:print_stacktrace=1 \
@@ -159,7 +162,8 @@ fuzz-build: fuzz-seeds
 	}
 	mkdir -p ../core/fuzz/bin
 	$(AFL_CC) $(FUZZ_CPPFLAGS) $(FUZZ_CFLAGS) \
-		../core/fuzz/fuzz_nkem.c ../core/src/file.c ../core/src/file_v3.c ../core/src/secure_mem.c \
+		../core/fuzz/fuzz_nkem.c ../core/src/file.c ../core/src/file_v3.c ../core/src/file_v4.c \
+		../core/src/secure_mem.c \
 		$(FUZZ_LDFLAGS) $(LDLIBS) -o ../core/fuzz/bin/fuzz_nkem
 	$(AFL_CC) $(FUZZ_CPPFLAGS) $(FUZZ_CFLAGS) \
 		../core/fuzz/fuzz_nkpr.c ../core/src/private_key.c ../core/src/file.c ../core/src/file_v3.c \
@@ -207,6 +211,18 @@ test-version-rejection: $(CORE_LIBRARY)
 		-o "$$version_binary"; \
 	"$$version_binary"
 
+test-multi-recipient:
+	@set -eu; \
+	multi_binary=$$(mktemp /tmp/nekokem-multi-recipient-tests.XXXXXX); \
+	cleanup_multi() { rm -f "$$multi_binary"; }; \
+	trap cleanup_multi EXIT INT TERM; \
+	$(CC) $(CPPFLAGS) $(CFLAGS) -O1 -g -fno-omit-frame-pointer \
+		-fsanitize=address,undefined -fno-sanitize-recover=undefined \
+		$(LDFLAGS) ../core/tests/multi_recipient_tests.c $(CORE_SOURCES) \
+		$(LDLIBS) -fsanitize=address,undefined -o "$$multi_binary"; \
+	ASAN_OPTIONS=detect_leaks=1:halt_on_error=1 \
+		UBSAN_OPTIONS=halt_on_error=1:print_stacktrace=1 "$$multi_binary"
+
 test-progress test-progress-large: $(CORE_LIBRARY)
 	@set -eu; \
 	progress_binary=$$(mktemp /tmp/nekokem-progress-tests.XXXXXX); \
@@ -224,7 +240,7 @@ test-progress test-progress-large: $(CORE_LIBRARY)
 
 test: $(TARGET) test-openssl analyze test-ubsan test-parser test-file-security test-gcm-limit test-aes-stream \
 	test-key-management test-version-rejection test-progress test-hybrid-kdf test-input-boundaries \
-	test-asan test-pem-interaction test-i18n
+	test-asan test-pem-interaction test-i18n test-multi-recipient
 	@set -eu; \
 	test_dir=$$(mktemp -d); \
 	cleanup() { \
@@ -248,6 +264,10 @@ test: $(TARGET) test-openssl analyze test-ubsan test-parser test-file-security t
 			"$$test_dir/long-paste-output.txt" \
 			"$$test_dir/long-paste-error.txt" \
 			"$$test_dir/encrypted/hybrid.nkem" \
+			"$$test_dir/encrypted/multi.nkem" \
+			"$$test_dir/first-public.key" \
+			"$$test_dir/multi-output.txt" \
+			"$$test_dir/multi-decrypted.txt" \
 			"$$test_dir/encrypted/tampered.nkem" \
 			"$$test_dir/encrypted/interactive.txt.nkem" \
 			"$$test_dir/keys/public.key" \
@@ -318,9 +338,28 @@ test: $(TARGET) test-openssl analyze test-ubsan test-parser test-file-security t
 		exit 1; \
 	fi; \
 	test ! -e tampered-key-output.txt; \
+	cp keys/public.key first-public.key; \
 	mv keys/private.key.enc correct-private.key.enc; \
 	printf '%s\n%s\n' "$$key_password" "$$key_password" | \
 		./nekokem keygen hybrid; \
+	./nekokem encrypt hybrid test.txt encrypted/multi.nkem \
+		first-public.key keys/public.key > multi-output.txt; \
+	grep -F 'NKEM v4 for 2 recipients' multi-output.txt >/dev/null; \
+	test "$$(dd if=encrypted/multi.nkem bs=1 skip=4 count=1 \
+		status=none | od -An -tu1 | tr -d ' ')" = 4; \
+	for private in correct-private.key.enc keys/private.key.enc; do \
+		printf '%s\n' "$$key_password" | \
+			./nekokem decrypt hybrid encrypted/multi.nkem \
+				multi-decrypted.txt "$$private"; \
+		cmp test.txt multi-decrypted.txt; \
+		rm -f multi-decrypted.txt; \
+	done; \
+	if ./nekokem encrypt hybrid test.txt encrypted/duplicate.nkem \
+		keys/public.key keys/public.key; then \
+		echo "Duplicate recipient public key was accepted" >&2; \
+		exit 1; \
+	fi; \
+	test ! -e encrypted/duplicate.nkem; \
 	if printf '%s\n' "$$key_password" | \
 		./nekokem decrypt hybrid encrypted/hybrid.nkem \
 			wrong-output.txt keys/private.key.enc; then \
@@ -329,7 +368,7 @@ test: $(TARGET) test-openssl analyze test-ubsan test-parser test-file-security t
 	fi; \
 	test ! -e wrong-output.txt; \
 	rm -f encrypted/hybrid.nkem \
-		encrypted/tampered.nkem; \
+		encrypted/tampered.nkem encrypted/multi.nkem; \
 	rmdir encrypted; \
 	test ! -e encrypted; \
 	printf '5\n' | LC_ALL=C.UTF-8 ./nekokem --lang zh-CN > menu-output.txt; \

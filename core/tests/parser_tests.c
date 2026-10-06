@@ -46,6 +46,18 @@ static size_t build_valid_nkem(unsigned char *buffer, size_t capacity)
     return total;
 }
 
+static size_t build_valid_nkem_v4(unsigned char *buffer, size_t capacity,
+                                  uint16_t recipients)
+{
+    const uint64_t ciphertext_len = 16U;
+    const size_t total = (size_t)nkem_v4_metadata_size(recipients) +
+                         (size_t)ciphertext_len + NKEM_TAG_SIZE;
+    if (capacity < total) return 0U;
+    memset(buffer, 0, total);
+    nkem_v4_header_encode(buffer, recipients, ciphertext_len);
+    return total;
+}
+
 static size_t build_valid_nkpr(unsigned char *buffer, size_t capacity)
 {
     const uint64_t ciphertext_len = 32U;
@@ -147,6 +159,69 @@ static int test_nkem_mutations(const unsigned char *valid, size_t valid_len)
     return expect_nkem_invalid(mutated, valid_len + 1U);
 }
 
+static int expect_nkem_v4_invalid(const unsigned char *input, size_t input_len)
+{
+    return nkem_v4_container_parse(input, input_len) == 0;
+}
+
+static int test_nkem_v4_mutations(const unsigned char *valid, size_t valid_len)
+{
+    static unsigned char mutated[4096];
+    static const size_t flipped[] = {4U, 5U, 24U, 25U, 26U, 27U};
+    NkemV4Header header;
+    size_t index;
+
+    if (valid_len + 1U > sizeof(mutated) ||
+        nkem_v3_container_parse(valid, valid_len)) return 0;
+    for (index = 0U; index < sizeof(flipped) / sizeof(flipped[0]); ++index) {
+        memcpy(mutated, valid, valid_len);
+        mutated[flipped[index]] ^= 1U;
+        if (!expect_nkem_v4_invalid(mutated, valid_len)) return 0;
+    }
+    memcpy(mutated, valid, valid_len);
+    put_u16_be(mutated + 6U, 0U);
+    if (!expect_nkem_v4_invalid(mutated, valid_len)) return 0;
+    /* Zero, too many, and a count that disagrees with the actual size. */
+    for (index = 0U; index < 4U; ++index) {
+        static const uint16_t counts[] = {0U, 1U, 3U, NKEM_V4_MAX_RECIPIENTS + 1U};
+        memcpy(mutated, valid, valid_len);
+        put_u16_be(mutated + 8U, counts[index]);
+        if (!expect_nkem_v4_invalid(mutated, valid_len)) return 0;
+    }
+    memcpy(mutated, valid, valid_len);
+    put_u16_be(mutated + 10U, (uint16_t)(NKEM_V4_ENTRY_SIZE - 1U));
+    if (!expect_nkem_v4_invalid(mutated, valid_len)) return 0;
+    memcpy(mutated, valid, valid_len);
+    put_u16_be(mutated + 10U, (uint16_t)(NKEM_V4_ENTRY_SIZE + 1U));
+    if (!expect_nkem_v4_invalid(mutated, valid_len)) return 0;
+    memcpy(mutated, valid, valid_len);
+    put_u32_be(mutated + 12U, 1U);
+    if (!expect_nkem_v4_invalid(mutated, valid_len)) return 0;
+    memcpy(mutated, valid, valid_len);
+    put_u64_be(mutated + 16U, UINT64_MAX);
+    if (!expect_nkem_v4_invalid(mutated, valid_len)) return 0;
+    memcpy(mutated, valid, valid_len);
+    put_u64_be(mutated + 16U, 17U);
+    if (!expect_nkem_v4_invalid(mutated, valid_len)) return 0;
+    memcpy(mutated, valid, valid_len);
+    put_u32_be(mutated + 28U, 1U);
+    if (!expect_nkem_v4_invalid(mutated, valid_len)) return 0;
+
+    nkem_v4_header_encode(mutated, NKEM_V4_MAX_RECIPIENTS,
+                          NKEM_GCM_MAX_DATA_SIZE);
+    if (nkem_v4_header_decode(mutated, &header) == 0 ||
+        header.recipient_count != NKEM_V4_MAX_RECIPIENTS) return 0;
+    nkem_v4_header_encode(mutated, NKEM_V4_MAX_RECIPIENTS,
+                          NKEM_GCM_MAX_DATA_SIZE + UINT64_C(1));
+    if (nkem_v4_header_decode(mutated, &header) != 0) return 0;
+    nkem_v4_header_encode(mutated, NKEM_V4_MAX_RECIPIENTS + 1U, 0U);
+    if (nkem_v4_header_decode(mutated, &header) != 0) return 0;
+
+    memcpy(mutated, valid, valid_len);
+    mutated[valid_len] = 0U;
+    return expect_nkem_v4_invalid(mutated, valid_len + 1U);
+}
+
 static int test_nkpr_mutations(const unsigned char *valid, size_t valid_len)
 {
     unsigned char mutated[512];
@@ -211,6 +286,7 @@ static int test_random_inputs(void)
             memcpy(random_data, "RNDM", 4U);
         }
         if (!expect_nkem_invalid(random_data, length) ||
+            !expect_nkem_v4_invalid(random_data, length) ||
             !expect_nkpr_invalid(random_data, length)) {
             return 0;
         }
@@ -221,29 +297,37 @@ static int test_random_inputs(void)
 int main(void)
 {
     unsigned char nkem[2048];
+    static unsigned char nkem_v4[4096];
     unsigned char nkpr[512];
     size_t nkem_len = build_valid_nkem(nkem, sizeof(nkem));
+    size_t nkem_v4_len = build_valid_nkem_v4(nkem_v4, sizeof(nkem_v4), 2U);
     size_t nkpr_len = build_valid_nkpr(nkpr, sizeof(nkpr));
     size_t i;
 
-    if (nkem_len == 0U || nkpr_len == 0U ||
+    if (nkem_len == 0U || nkem_v4_len == 0U || nkpr_len == 0U ||
         !nkem_v3_container_parse(nkem, nkem_len) ||
+        !nkem_v4_container_parse(nkem_v4, nkem_v4_len) ||
+        nkem_v4_container_parse(nkem, nkem_len) ||
         !protected_private_key_container_parse(nkpr, nkpr_len)) {
         return EXIT_FAILURE;
     }
     for (i = 0U; i < nkem_len; ++i) {
         if (nkem_v3_container_parse(nkem, i)) return EXIT_FAILURE;
     }
+    for (i = 0U; i < nkem_v4_len; ++i) {
+        if (nkem_v4_container_parse(nkem_v4, i)) return EXIT_FAILURE;
+    }
     for (i = 0U; i < nkpr_len; ++i) {
         if (protected_private_key_container_parse(nkpr, i)) return EXIT_FAILURE;
     }
 
     if (!test_nkem_mutations(nkem, nkem_len) ||
+        !test_nkem_v4_mutations(nkem_v4, nkem_v4_len) ||
         !test_nkpr_mutations(nkpr, nkpr_len) ||
         !test_random_inputs()) {
         return EXIT_FAILURE;
     }
 
-    puts("NKEM v3 and NKPR parser tests passed");
+    puts("NKEM v3, NKEM v4 and NKPR parser tests passed");
     return EXIT_SUCCESS;
 }

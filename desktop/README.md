@@ -21,8 +21,9 @@ portable `.tar.gz` packages for each architecture. Linux 原生 GUI 提供两种
 
 ## Features / 功能
 
-- Generate an encrypted NKPR private key and public key; encrypt/decrypt NKEM v3
-  files; display public-key fingerprints. 密钥生成、文件加解密、公钥指纹。
+- Generate an encrypted NKPR private key and public key; encrypt NKEM v3 files, or one
+  NKEM v4 file for several saved contacts; decrypt both; display public-key fingerprints.
+  密钥生成、文件加解密（含多人加密）、公钥指纹。
 - Choose paths using native file dialogs or paste both PEM key blocks.
   支持系统文件选择器及粘贴 PEM 密钥。
 - Display progress and cancel file operations safely. Show errors and preserve
@@ -78,12 +79,32 @@ Every encryption re-reads the selected record and writes an operation-specific p
 snapshot using the pasted-key staging. Core parses that snapshot and must reproduce the
 recorded fingerprint; encryption then reads only that snapshot, which is removed after
 success, failure or cancellation. A missing, damaged, unsafe-permission or mismatched entry
-fails with a specific error, clears the selection and requires a new explicit choice. A
-request with a contact cannot also carry a key path or pasted key, and no other key is
-ever substituted. Unreadable entries are counted but never listed or used. Contact changes
+fails with a specific error that names the contact, deselects it and requires a new explicit
+choice. A request with contacts cannot also carry a key path or pasted key, and no other key
+is ever substituted. Unreadable entries are counted but never listed or used. Contact changes
 run exclusively with Core operations, and closing waits for an in-progress record update.
 Contacts are user configuration rather than package contents; keep original public-key
-backups. NKEM v3, NKPR v1, cryptographic parameters and Core are unchanged.
+backups. NKEM v3, NKPR v1 and their cryptographic parameters are unchanged.
+
+### Several recipients (development branch) / 多人加密（开发分支）
+
+Several contacts can share one encrypted file. Tick contacts on the contacts page, where a
+selection bar offers **Encrypt for selected** and **Clear selection**, or tick them in the
+encryption page's **Recipients** list. One recipient still writes NKEM v3; two to 64
+recipients write one [NKEM v4](../docs/NKEM-v4.md) file that each selected recipient decrypts
+with their own private key, and nobody else can. The footer shows the format that will be
+written. Every selected record is staged and verified exactly as above, in selection order,
+before Core encrypts; if any one fails, nothing is encrypted, the error names that contact
+and only it is deselected. Duplicate contacts, more than 64 recipients and combined key
+sources are refused. Decryption detects v3 and v4 automatically; NekoKEM v3.3.2 and earlier
+cannot open v4 files.
+
+可以把同一个文件加密给多位联系人：在公钥通讯录页面勾选联系人后点击“加密给所选联系人”
+（也可“清除选择”），或在加密页的“接收方”列表中勾选。选择一位时仍写出 NKEM v3；选择 2 至 64 位时
+写出一个 [NKEM v4](../docs/NKEM-v4.md) 文件，每位所选接收方都能用自己的私钥解密，其他人无法解密，
+页面底部会显示将写出的格式。每位联系人都按选择顺序、按上述规则重新读取并校验后才加密；任何一位失败时
+不加密任何内容，错误提示指出该联系人并只取消选择它。重复联系人、超过 64 位接收方以及与其他公钥来源混用
+都会被拒绝。解密会自动识别 v3 与 v4；NekoKEM v3.3.2 及更早版本无法打开 v4 文件。
 
 公钥通讯录位于第五个导航项：可从文件或粘贴内容保存接收方公钥，备注可选且最多 512 个字符，
 支持编辑备注和确认后删除。加密页选择“通讯录”后必须显式选择条目，条目上的“用于加密”会打开
@@ -91,15 +112,17 @@ backups. NKEM v3, NKPR v1, cryptographic parameters and Core are unchanged.
 `contacts` 目录，每个指纹一条 JSON 记录，仅包含 Core 规范化导出的公钥、指纹、来源文件名和备注，
 通过 Core 原子私有写入并按敏感文件规则读取。每次加密都重新读取记录、生成操作专用私有快照，
 并由 Core 重新解析核对指纹后才加密；快照在成功、失败或取消后清理。条目缺失、损坏、权限异常
-或指纹不符时报错、清除选择并要求重新选择，绝不改用其他公钥。备注仅用于识别，请核对完整指纹。
+或指纹不符时报错并指出该联系人、取消选择它并要求重新选择，绝不改用其他公钥。备注仅用于识别，请核对完整指纹。
 
 Rust/Core tests cover persistence across store instances, Core normalization, duplicate
 fingerprints, notes, invalid keys, damaged/substituted/unknown-field records, POSIX
 link/permission/hard-link rejection, private directory locations, recipient round trips,
 rejection of combined key sources, missing/damaged contacts without output, cancellation
-and snapshot cleanup. Frontend tests cover five-language layouts at the default and
-minimum window sizes, note editing, delete confirmation, explicit selection, failure
-handling and scrubbing of pasted key text.
+and snapshot cleanup, plus several-contact NKEM v4 files that each selected recipient
+decrypts, refused duplicates and recipient limits, and failures that name the contact.
+Frontend tests cover five-language layouts at the default and minimum window sizes, note
+editing, delete confirmation, explicit single and multiple selection, the 64-recipient cap,
+failure handling and scrubbing of pasted key text.
 
 ## Windows build
 

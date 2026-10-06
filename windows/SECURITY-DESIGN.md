@@ -1,7 +1,8 @@
 # Windows filesystem boundary
 
 This port shares the original crypto implementation. `aes.c`, `hybrid.c`, `kem.c`,
-`private_key.c`, `nekokem_v3.c`, `file_v3.c`, `secure_mem.c` and `nekokem.c` are unchanged. The
+`private_key.c`, `nekokem_v3.c`, `file_v3.c`, `secure_mem.c` and `nekokem.c` are unchanged; the
+multi-recipient `nekokem_v4.c` and `file_v4.c` are shared the same way, without Windows-specific code. The
 Windows backend is selected at compile time; the POSIX backend and its test gates
 remain in place. There is no format migration, password/KDF weakening, crypto
 rewrite, new unlocked-key cache, or removal of assembly acceleration.

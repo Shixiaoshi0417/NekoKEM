@@ -14,6 +14,18 @@
 #define NKEM_V3_ALGORITHM_ID 3U
 #define NKEM_V3_SALT_SIZE 32U
 
+/* NKEM v4 multi-recipient container; see docs/NKEM-v4.md. */
+#define NKEM_V4_HEADER_SIZE 32U
+#define NKEM_V4_VERSION 4U
+#define NKEM_V4_ALGORITHM_ID 4U
+#define NKEM_V4_SALT_SIZE 32U
+#define NKEM_V4_FILE_KEY_SIZE 32U
+#define NKEM_V4_MAC_SIZE 64U
+#define NKEM_V4_MAX_RECIPIENTS 64U
+#define NKEM_V4_ENTRY_SIZE                                        \
+    (NKEM_X448_EPHEMERAL_PUBLIC_SIZE + NKEM_V3_KEM_CIPHERTEXT_SIZE + \
+     NKEM_V4_FILE_KEY_SIZE + NKEM_TAG_SIZE)
+
 /* SP 800-38D section 5.2.1.1: 2^39 - 256 bits = 2^36 - 32 bytes. */
 #define NKEM_GCM_MAX_DATA_SIZE ((UINT64_C(1) << 36) - UINT64_C(32))
 
@@ -25,6 +37,16 @@ typedef struct {
     uint8_t nonce_len;
     uint8_t tag_len;
 } NkemV3Header;
+
+typedef struct {
+    uint16_t recipient_count;
+    uint16_t entry_len;
+    uint64_t ciphertext_len;
+    uint8_t salt_len;
+    uint8_t nonce_len;
+    uint8_t tag_len;
+    uint8_t mac_len;
+} NkemV4Header;
 
 typedef struct {
     FILE *stream;
@@ -99,6 +121,18 @@ int nkem_v3_header_decode(
 int nkem_v3_container_size_is_valid(const NkemV3Header *header,
                                     uint64_t actual_size);
 int nkem_v3_container_parse(const unsigned char *input, size_t input_len);
+
+void nkem_v4_header_encode(unsigned char output[NKEM_V4_HEADER_SIZE],
+                           uint16_t recipient_count,
+                           uint64_t ciphertext_len);
+int nkem_v4_header_decode(
+    const unsigned char input[NKEM_V4_HEADER_SIZE],
+    NkemV4Header *header);
+/* Bytes from the header through the payload nonce: the payload AAD. */
+uint64_t nkem_v4_metadata_size(uint16_t recipient_count);
+int nkem_v4_container_size_is_valid(const NkemV4Header *header,
+                                    uint64_t actual_size);
+int nkem_v4_container_parse(const unsigned char *input, size_t input_len);
 
 
 #endif

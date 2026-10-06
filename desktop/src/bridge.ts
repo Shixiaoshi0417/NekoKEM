@@ -2,8 +2,10 @@ import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { open, save } from '@tauri-apps/plugin-dialog';
 export type Operation='keygen'|'encrypt'|'decrypt'|'fingerprint';
-export interface Request {id:string;kind:Operation;input:string;output:string;keyPath:string;publicPath:string;privatePath:string;password:string;confirmation:string;keyText:string;paste:boolean;contact:string}
-export interface Outcome {output:string|null;fingerprint:string|null}
+export interface Request {id:string;kind:Operation;input:string;output:string;keyPath:string;publicPath:string;privatePath:string;password:string;confirmation:string;keyText:string;paste:boolean;contacts:string[]}
+export interface Outcome {output:string|null;fingerprint:string|null;recipients?:string[]}
+// Same limit as Core's NEKOKEM_MAX_RECIPIENTS for one NKEM v4 file.
+export const MAX_RECIPIENTS=64;
 export interface Progress {id:string;processed:number;total:number}
 export interface Contact {id:string;fingerprint:string;name:string;note:string}
 export interface ContactList {contacts:Contact[];unreadable:number}

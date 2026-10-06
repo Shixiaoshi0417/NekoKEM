@@ -157,6 +157,31 @@ class SafFileWorkflow(
         source: Uri,
         progress: CancellableProgressCallback,
         temporaryKey: TemporaryPublicKey? = null,
+    ): PreparedEncryptionResult = prepareEncryptionWith(
+        source,
+        progress,
+        listOfNotNull(temporaryKey),
+    ) { input, output -> keyManager.encryptFile(input, output, temporaryKey, progress) }
+
+    /**
+     * Saved-contact recipients, in order: one keeps NKEM v3, several share one
+     * NKEM v4 file. Takes ownership of every snapshot and deletes it.
+     */
+    fun prepareEncryptionForRecipients(
+        source: Uri,
+        progress: CancellableProgressCallback,
+        recipients: List<TemporaryPublicKey>,
+    ): PreparedEncryptionResult = prepareEncryptionWith(
+        source,
+        progress,
+        recipients,
+    ) { input, output -> keyManager.encryptFileForRecipients(input, output, recipients, progress) }
+
+    private fun prepareEncryptionWith(
+        source: Uri,
+        progress: CancellableProgressCallback,
+        temporaryKeys: List<TemporaryPublicKey>,
+        encrypt: (File, File) -> Int,
     ): PreparedEncryptionResult {
         var stagedInput: File? = null
         var stagedOutput: File? = null
@@ -167,11 +192,13 @@ class SafFileWorkflow(
             if (!prepareWorkDirectory()) {
                 result = LocalKeyManager.RESULT_STORAGE_ERROR
             } else {
-                stagedInput = createPrivateTemporaryFile(ENCRYPT_INPUT_PREFIX)
-                stagedOutput = createPrivateTemporaryPath(ENCRYPT_OUTPUT_PREFIX)
+                val input = createPrivateTemporaryFile(ENCRYPT_INPUT_PREFIX)
+                stagedInput = input
+                val output = createPrivateTemporaryPath(ENCRYPT_OUTPUT_PREFIX)
+                stagedOutput = output
                 if (!copyUriToFile(
                         source,
-                        stagedInput,
+                        input,
                         MAX_STAGED_FILE_BYTES,
                         progress,
                         allowEmpty = true,
@@ -179,18 +206,13 @@ class SafFileWorkflow(
                 ) {
                     result = cancelledOrStorageError(progress)
                 } else {
-                    result = keyManager.encryptFile(
-                        stagedInput,
-                        stagedOutput,
-                        temporaryKey,
-                        progress,
-                    )
+                    result = encrypt(input, output)
                     if (result == NativeBridge.RESULT_SUCCESS &&
                         progress.isCancelled()
                     ) {
                         result = NativeBridge.RESULT_CANCELLED
                     } else if (result == NativeBridge.RESULT_SUCCESS) {
-                        prepared = PreparedEncryption(stagedOutput)
+                        prepared = PreparedEncryption(output)
                         stagedOutput = null
                     }
                 }
@@ -203,7 +225,7 @@ class SafFileWorkflow(
             if (prepared == null) {
                 keyManager.clearWorkCache()
             }
-            discardTemporaryPublicKey(temporaryKey)
+            temporaryKeys.forEach { discardTemporaryPublicKey(it) }
         }
         return PreparedEncryptionResult(result, prepared)
     }

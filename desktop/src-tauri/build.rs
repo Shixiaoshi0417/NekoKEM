@@ -61,7 +61,7 @@ fn main() {
             .flag("-fPIC").flag("-fvisibility=hidden")
             .flag("-ffunction-sections").flag("-fdata-sections");
     }
-    for name in ["nekokem", "key_management", "nekokem_v3", "kem", "hybrid", "aes", "file", "file_v3", "secure_mem", "private_key"] {
+    for name in ["nekokem", "key_management", "nekokem_v3", "nekokem_v4", "kem", "hybrid", "aes", "file", "file_v3", "file_v4", "secure_mem", "private_key"] {
         let path = root.join(format!("core/src/{name}.c"));
         println!("cargo:rerun-if-changed={}", path.display()); build.file(path);
     }
