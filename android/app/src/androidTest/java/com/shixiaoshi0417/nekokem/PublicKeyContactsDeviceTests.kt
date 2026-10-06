@@ -51,13 +51,23 @@ internal fun runPublicKeyContactsTests(
     check(contacts.updateNote(contact.id, "updated 联系人").code == NativeBridge.RESULT_SUCCESS)
     val editedBytes = record.readBytes()
     check(PublicKeyContacts(context, manager).readState().contacts.single().note == "updated 联系人")
-    for (invalidNote in listOf("x".repeat(513), "bad\u0000note")) {
+    for (invalidNote in listOf("x".repeat(513), "🐈".repeat(513), "bad\u0000note")) {
         check(contacts.updateNote(contact.id, invalidNote).code != NativeBridge.RESULT_SUCCESS)
         check(record.readBytes().contentEquals(editedBytes))
     }
-    val duplicate = checkNotNull(workflow.stageTemporaryPublicKey(Uri.fromFile(publicKey), "renamed.key").key)
+    // The 512-character note limit counts code points: 512 emoji are accepted.
+    check(contacts.updateNote(contact.id, "🐈".repeat(512)).code == NativeBridge.RESULT_SUCCESS)
+    check(PublicKeyContacts(context, manager).readState().contacts.single().note == "🐈".repeat(512))
+    // Received names lose bidirectional formatting and are cut without splitting an emoji.
+    val longName = checkNotNull(workflow.stageTemporaryPublicKey(Uri.fromFile(publicKey), "🐈".repeat(200)).key)
+    check(contacts.save(longName, "long name").code == NativeBridge.RESULT_SUCCESS)
+    workflow.discardTemporaryPublicKey(longName)
+    check(PublicKeyContacts(context, manager).readState().contacts.single().displayName == "🐈".repeat(128))
+    val duplicate = checkNotNull(workflow.stageTemporaryPublicKey(
+        Uri.fromFile(publicKey), "\u2067renamed\u202E.key\u200F\u061C").key)
     check(contacts.save(duplicate, "same recipient").code == NativeBridge.RESULT_SUCCESS)
     workflow.discardTemporaryPublicKey(duplicate)
+    check(contacts.readState().contacts.single().displayName == "renamed.key")
     check(contacts.readState().contacts.size == 1)
     val continueProgress = contactProgress(cancelled = false)
     val pendingPrivate = checkNotNull(workflow.stageTemporaryPrivateKey(Uri.fromFile(privateKey), "recipient.nkpr").key)

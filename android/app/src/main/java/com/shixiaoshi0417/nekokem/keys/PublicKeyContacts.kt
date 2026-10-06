@@ -278,9 +278,19 @@ class PublicKeyContacts(context: Context, private val keyManager: LocalKeyManage
         private const val PRIVATE_FILE_MODE = 0x180
         private const val PERMISSION_MASK = 0x1FF
         private val lock = Any()
-        fun validNote(note: String): Boolean = note.length <= MAX_NOTE_LENGTH &&
+        private const val MAX_NAME_LENGTH = 128
+        // Bidirectional formatting characters could disguise a received file name.
+        private const val BIDI_FORMATTING = "\u061C\u200E\u200F\u202A\u202B\u202C\u202D\u202E\u2066\u2067\u2068\u2069"
+        // Limits count Unicode code points, so an emoji is one character, not two UTF-16 units.
+        fun validNote(note: String): Boolean = note.codePointCount(0, note.length) <= MAX_NOTE_LENGTH &&
             note.none { it.isISOControl() && it != '\n' && it != '\t' }
-        private fun safeName(name: String): String = name.filterNot { it.isISOControl() }
-            .trim().take(128).ifBlank { "public.key" }
+        private fun safeName(name: String): String {
+            val visible = name.filterNot { it.isISOControl() || it in BIDI_FORMATTING }.trim()
+            val end = if (visible.codePointCount(0, visible.length) > MAX_NAME_LENGTH) {
+                visible.offsetByCodePoints(0, MAX_NAME_LENGTH)
+            } else visible.length
+            // Trim again so the stored name stays a fixed point of this function.
+            return visible.substring(0, end).trimEnd().ifBlank { "public.key" }
+        }
     }
 }
