@@ -50,7 +50,15 @@ flags=(-std=c17 -O2 -Wall -Wextra -Wpedantic -Wconversion -Wshadow -Wformat=2 \
        -I"$prefix/include" -I"$repo_root/core/include" -I"$repo_root/core/src" -I"$repo_root/linux/src")
 link=(-static -Wl,--dynamicbase,--nxcompat,--high-entropy-va,--no-insert-timestamp)
 libs=("$prefix/lib/libcrypto.a" -lcrypt32 -lbcrypt -ladvapi32 -lshell32 -lole32 -luuid -lws2_32)
-core=(nekokem key_management nekokem_v3 nekokem_v4 kem hybrid aes file file_v3 file_v4 secure_mem private_key)
+core=(nekokem key_management nekokem_v3 kem hybrid aes file file_v3 secure_mem private_key)
+tests=(hybrid_kdf gcm_limit aes_stream parser)
+# CI also builds an older performance baseline with this recipe. NKEM v4 sources
+# are added only where they exist; a tree whose v3 Core references v4 still
+# fails to link without them, and every other source remains mandatory.
+if [[ -f "$repo_root/core/src/nekokem_v4.c" ]]; then
+    core+=(nekokem_v4 file_v4)
+    tests+=(multi_recipient)
+fi
 sources=()
 for name in "${core[@]}"; do sources+=("$repo_root/core/src/$name.c"); done
 gcc "${flags[@]}" -fanalyzer -fsyntax-only "${sources[@]}" \
@@ -67,7 +75,7 @@ gcc "${flags[@]}" "${link[@]}" "$repo_root/core/tests/openssl_version_tests.c" \
 "$version_probe"
 if [[ "$build_tests" == 1 ]]; then
     cp "$version_probe" "$output/openssl_version_tests.exe"
-    for test in hybrid_kdf gcm_limit aes_stream parser multi_recipient; do
+    for test in "${tests[@]}"; do
         gcc "${flags[@]}" "${link[@]}" "$repo_root/core/tests/${test}_tests.c" \
             "${sources[@]}" "${libs[@]}" -o "$output/${test}_tests.exe"
     done
