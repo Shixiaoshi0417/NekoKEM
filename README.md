@@ -135,13 +135,13 @@ v4.0.0 提供面向 M 系列 Apple Silicon Mac 的原生 `arm64` CLI 和 Rust + 
 
 CLI 与 Linux 共用参数解析、五项菜单和语言目录。GUI 使用系统 WKWebView，不需要 Windows 的 WebView2 Runtime 或 loader。两者静态链接固定 OpenSSL 4.0.3，保留其 arm64 汇编加速；运行仍依赖 macOS 系统库与框架。构建设置 macOS 11.0 deployment target；原生 CI 在 `macos-15` 上运行，这不代表已验证 macOS 11.0 实机或每代 M 系列芯片的兼容性、性能。
 
-macOS 文件层保留严格的所有者、权限、符号链接和硬链接检查，受保护文件与目录只允许空或 deny-only 扩展 ACL，并检查 APFS/HFS+ 大小写及 Unicode 名称别名。普通输出文件要求 `fsync` 与 `F_FULLFSYNC`，提交后要求父目录 `fsync`，失败时不静默降级；详细限制与测试边界见 [macOS 文件安全设计](macos/SECURITY-DESIGN.md)。Core 3.1、NKEM v3、NKPR v1、密码参数及 64 KiB 流式分块不变。包只有 ad-hoc 签名，未使用 Developer ID，也未进行 Apple 公证；这不能证明发布者身份或保证通过 Gatekeeper。
+macOS 文件层保留严格的所有者、权限、符号链接和硬链接检查，受保护文件与目录只允许空或 deny-only 扩展 ACL，并检查 APFS/HFS+ 大小写及 Unicode 名称别名。普通输出文件要求 `fsync` 与 `F_FULLFSYNC`，提交后要求父目录 `fsync`，失败时不静默降级；详细限制与测试边界见 [macOS 文件安全设计](macos/SECURITY-DESIGN.md)。Core 4.0 新增 NKEM v4 多接收方容器；NKEM v3、NKPR v1、密码参数及 64 KiB 流式分块不变。包只有 ad-hoc 签名，未使用 Developer ID，也未进行 Apple 公证；这不能证明发布者身份或保证通过 Gatekeeper。
 
 ## Linux GUI
 
 Linux 原生 GUI 支持 `x86_64` 与 `aarch64`（ARM64），复用 Rust + Tauri 2 + Vue 3 + TypeScript 界面、五语言自动检测、原生文件选择、进度/取消、键盘导航和遵循系统减少动态效果设置的动画。每种架构提供 `NekoKEM-linux-<架构>-GUI.deb`、`NekoKEM-linux-<架构>-GUI.rpm` 和 `NekoKEM-linux-<架构>-GUI.tar.gz`。Ubuntu 使用 `sudo apt install ./NekoKEM-linux-x86_64-GUI.deb`；Fedora 使用 `sudo dnf install ./NekoKEM-linux-x86_64-GUI.rpm`，ARM64 将文件名中的架构换为 `aarch64`。安装后可从系统应用菜单打开；便携包使用 `NekoKEM-GUI.sh` 启动。图标直接使用现有透明外部白色区域的方形 PNG，README 仍用圆角展示图。
 
-构建与原生 CI 基线为 Ubuntu 24.04，CI 另在同架构 Fedora 44 容器中安装并启动 RPM。RPM 原生构建，以共享库能力声明依赖；运行需要系统 GTK3、WebKitGTK 4.1 和 glibc 2.39 或更新版本，GUI 便携包仍依赖这些系统库。OpenSSL 4.0.3 静态链接并隐藏符号，避免影响 WebKit 系统 TLS 库，保留汇编、线程、Fortify、栈保护、PIE 和完整 RELRO。Linux 文件权限、认证后提交及取消清理沿用 CLI/Core，Core 3.1、NKEM v3、NKPR v1、KDF 参数与 64 KiB 流式处理不变。详见 [Linux 安装与构建](desktop/README.md#linux-installation-and-build--linux-安装与构建) 和 [Linux GUI 安全边界](desktop/LINUX-SECURITY.md)。
+构建与原生 CI 基线为 Ubuntu 24.04，CI 另在同架构 Fedora 44 容器中安装并启动 RPM。RPM 原生构建，以共享库能力声明依赖；运行需要系统 GTK3、WebKitGTK 4.1 和 glibc 2.39 或更新版本，GUI 便携包仍依赖这些系统库。OpenSSL 4.0.3 静态链接并隐藏符号，避免影响 WebKit 系统 TLS 库，保留汇编、线程、Fortify、栈保护、PIE 和完整 RELRO。Linux 文件权限、认证后提交及取消清理沿用 CLI/Core；Core 4.0 新增 NKEM v4 多接收方容器，NKEM v3、NKPR v1、KDF 参数与 64 KiB 流式处理不变。详见 [Linux 安装与构建](desktop/README.md#linux-installation-and-build--linux-安装与构建) 和 [Linux GUI 安全边界](desktop/LINUX-SECURITY.md)。
 
 v4.0.0 Release 包含上述两种架构的全部 Linux GUI 安装包和便携包，现有静态 Linux CLI 包继续保留。原生窗口测试使用 X11 会话，不代表已验证所有 Linux 发行版或 Wayland 实机。
 
