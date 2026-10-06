@@ -258,9 +258,13 @@ class PublicKeyContacts(context: Context, private val keyManager: LocalKeyManage
     }
 
     private fun syncDirectory(file: File) {
-        val descriptor = Os.open(file.absolutePath, OsConstants.O_RDONLY or
-            OsConstants.O_DIRECTORY or OsConstants.O_NOFOLLOW, 0)
-        try { Os.fsync(descriptor) } finally { Os.close(descriptor) }
+        val descriptor = Os.open(file.absolutePath, OsConstants.O_RDONLY or OsConstants.O_NOFOLLOW, 0)
+        try {
+            val status = Os.fstat(descriptor)
+            check(OsConstants.S_ISDIR(status.st_mode) && status.st_uid == Os.getuid() &&
+                (status.st_mode and PERMISSION_MASK) == PRIVATE_DIRECTORY_MODE)
+            Os.fsync(descriptor)
+        } finally { Os.close(descriptor) }
     }
 
     companion object {
