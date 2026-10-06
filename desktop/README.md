@@ -69,8 +69,9 @@ blocks or text from the source. Import compares Core fingerprints of the source 
 normalized key. Records are written with Core's atomic private output (`0600` or
 owner-only ACL, sync, rename) and read with Core's sensitive-file checks (regular file,
 current owner, one hard link, no symbolic link/reparse point, private mode/ACL, 64 KiB).
-Importing a saved fingerprint points to the existing entry instead of replacing its note;
-explicitly importing the same key again replaces a damaged entry. Up to 500 entries are
+Importing a fingerprint whose entry Core still verifies points to that entry instead of
+replacing its note; explicitly importing the same key again replaces a damaged entry or one
+whose stored key no longer matches its fingerprint. Up to 500 entries are
 kept. No private keys, passwords, permissions, network access or browser storage are added.
 
 Every encryption re-reads the selected record and writes an operation-specific private

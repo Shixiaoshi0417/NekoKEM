@@ -18,6 +18,7 @@ const RECORD_VERSION: u32 = 1;
 const MISSING: &str = "contact-missing";
 const INVALID: &str = "contact-invalid";
 const STORAGE: &str = "contact-storage";
+const MISMATCH: &str = "contact-mismatch";
 
 extern "C" {
     fn desktop_contacts_directory(path: *mut c_char, capacity: usize) -> c_int;
@@ -141,19 +142,23 @@ impl Store {
             return Ok((stage, record.fingerprint));
         }
         if !stage.close() { return Err(Failure::new("cleanup-error")); }
-        Err(Failure::new("contact-mismatch"))
+        Err(Failure::new(MISMATCH))
     }
 
     fn import(&self, input: &CStr, name: String, note: String) -> Result<Contact, Failure> {
         let fingerprint = core::fingerprint(input).ok_or_else(|| Failure::new("public-key-invalid"))?;
         let id = identity(&fingerprint).ok_or_else(|| Failure::new("public-key-invalid"))?;
-        match self.read(&id) {
-            Ok(_) => return Err(Failure::existing(id)),
+        // Only an entry that Core still verifies counts as already saved.
+        match self.stage(&id) {
+            Ok((mut stage, _)) => {
+                return Err(if stage.close() { Failure::existing(id) } else { Failure::new("cleanup-error") });
+            }
             Err(error) if error.code == MISSING => {
                 if self.ids()?.len() >= MAX_CONTACTS { return Err(Failure::new("contact-limit")); }
             }
-            // Explicitly re-importing the same key replaces a damaged record.
-            Err(_) => {}
+            // Explicitly re-importing the same key replaces a damaged or substituted record.
+            Err(error) if error.code == INVALID || error.code == MISMATCH => {}
+            Err(error) => return Err(error),
         }
         // Store only Core's canonical export: the two validated public
         // components, never extra PEM blocks or text from the source file.
@@ -163,7 +168,7 @@ impl Store {
                 return Err(Failure::new("public-key-invalid"));
             }
             if core::fingerprint(output.path()).as_deref() != Some(fingerprint.as_str()) {
-                return Err(Failure::new("contact-mismatch"));
+                return Err(Failure::new(MISMATCH));
             }
             let public_key = read_private(output.path(), MAX_PUBLIC_KEY_BYTES)
                 .and_then(|bytes| String::from_utf8(bytes).ok())
@@ -427,6 +432,14 @@ pub mod tests {
         substituted["publicKey"] = bob_record.public_key.clone().into();
         rewrite(&store, &saved.id, &substituted.to_string());
         assert_eq!(code(store.stage(&saved.id)), "contact-mismatch");
+        // The listing does not run Core, so the substituted entry is still shown;
+        // an explicit re-import of the real key must replace it, not report a duplicate.
+        assert_eq!(store.list().unwrap().contacts.len(), 2);
+        let repaired = store.save(Source::Path(&alice), "Alice repaired").unwrap();
+        assert_eq!((repaired.id.as_str(), repaired.note.as_str()), (saved.id.as_str(), "Alice repaired"));
+        assert_eq!(store.stage(&saved.id).unwrap().1, alice_fingerprint);
+        let duplicate = store.save(Source::Path(&alice), "ignored").err().unwrap();
+        assert_eq!((duplicate.code, duplicate.contact.as_deref()), ("contact-exists", Some(saved.id.as_str())));
 
         let mut renamed: serde_json::Value = serde_json::from_str(&original).unwrap();
         renamed["fingerprint"] = bob_record.fingerprint.clone().into();
