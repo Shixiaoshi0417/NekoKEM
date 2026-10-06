@@ -3,7 +3,7 @@ import { translate, type Language } from '../../src/i18n';
 
 interface Harness {
  progress(processed:number,total:number,id?:string):void;
- complete():void;
+ complete(fingerprint?:string):void;
  fail(code:string):void;
  resolveDialog(path:string|null):void;
 }
@@ -13,7 +13,7 @@ async function harness(page:Page,action:'complete'|'fail'|'progress'|'resolveDia
   if(action==='progress')desktop.progress(value as number,total!,id);
   else if(action==='fail')desktop.fail(value as string);
   else if(action==='resolveDialog')desktop.resolveDialog(value as string|null);
-  else desktop.complete();
+  else desktop.complete(value as string|undefined);
  },{action,value,total,id});
 }
 async function fillEncryption(page:Page){
@@ -24,7 +24,7 @@ async function fillEncryption(page:Page){
 }
 async function noHorizontalOverflow(page:Page){
  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth)).toBe(true);
- const card=await page.locator('.card').boundingBox();
+ const card=await page.locator('form.card').boundingBox();
  const button=await page.locator('.primary').boundingBox();
  expect(card).not.toBeNull();expect(button).not.toBeNull();
  expect(button!.x+button!.width).toBeLessThanOrEqual(card!.x+card!.width);
@@ -35,6 +35,11 @@ test.beforeEach(async({page})=>{
   let progressHandler=0,request:{id:string;output:string}|null=null;
   let finish:((value:unknown)=>void)|null=null,fail:((value:unknown)=>void)|null=null;
   let choose:((path:string|null)=>void)|null=null;
+  const fingerprint=(byte:string)=>Array(32).fill(byte).join(':');
+  let contacts=[
+   {id:'a'.repeat(64),fingerprint:fingerprint('A1'),name:'alice-public.key',note:'Alice · 工作电脑'},
+   {id:'b'.repeat(64),fingerprint:fingerprint('B2'),name:'',note:''},
+  ];
   Object.assign(window,{__TAURI_INTERNALS__:{
    transformCallback(callback:(value:unknown)=>void){const id=next++;callbacks[id]=callback;return id;},
    unregisterCallback(id:number){delete callbacks[id];},
@@ -45,15 +50,27 @@ test.beforeEach(async({page})=>{
     if(command==='plugin:event|unlisten')return Promise.resolve(null);
     if(command==='run_operation'){
      const value=args.request as {id:string;output:string};request={id:value.id,output:value.output};
+     Object.assign(window,{lastRequest:value});
      return new Promise((resolve,reject)=>{finish=resolve;fail=reject;});
     }
     if(command==='cancel_operation')return Promise.resolve(true);
+    if(command==='list_contacts')return Promise.resolve({contacts:contacts.map(contact=>({...contact})),unreadable:0});
+    if(command==='save_contact'){
+     const value=args.contact as {keyPath:string;note:string};
+     const contact={id:'c'.repeat(64),fingerprint:fingerprint('C3'),name:value.keyPath.split(/[\\/]/).pop()!,note:value.note.trim()};
+     contacts=[...contacts,contact];return Promise.resolve(contact);
+    }
+    if(command==='update_contact_note'){
+     contacts=contacts.map(contact=>contact.id===args.id?{...contact,note:(args.note as string).trim()}:contact);
+     return Promise.resolve(contacts.find(contact=>contact.id===args.id));
+    }
+    if(command==='delete_contact'){contacts=contacts.filter(contact=>contact.id!==args.id);return Promise.resolve(null);}
     if(command==='plugin:dialog|open'||command==='plugin:dialog|save')return new Promise(resolve=>{choose=resolve;});
     return Promise.reject({code:'internal'});
    },
   },__TAURI_EVENT_PLUGIN_INTERNALS__:{unregisterListener(){}},desktop:{
    progress(processed:number,total:number,id?:string){callbacks[progressHandler]?.({event:'operation-progress',id:1,payload:{id:id??request?.id,processed,total}});},
-   complete(){finish?.({output:request?.output??null,fingerprint:null});},
+   complete(fingerprint?:string){finish?.({output:request?.output??null,fingerprint:fingerprint??null});},
    fail(code:string){fail?.({code});},
    resolveDialog(path:string|null){choose?.(path);},
   }});
@@ -61,14 +78,17 @@ test.beforeEach(async({page})=>{
  await page.goto('/');await expect(page.getByRole('heading',{name:'加密文件',exact:true})).toBeVisible();
 });
 
-test('five languages across all four operation layouts',async({page})=>{
+test('five languages across all five page layouts',async({page})=>{
  for(const tag of ['zh-CN','zh-TW','en','ja','ko'] as Language[]){
-  await page.locator('select').selectOption(tag);
-  for(const [index,operation] of ['keygen','encrypt','decrypt','fingerprint'].entries()){
+  await page.locator('header select').selectOption(tag);
+  for(const [index,operation] of ['keygen','encrypt','decrypt','fingerprint','contacts'].entries()){
    await page.locator('.operation-tab').nth(index).click();
-   await expect(page.getByRole('heading',{name:translate(operation as 'keygen'|'encrypt'|'decrypt'|'fingerprint',tag),exact:true})).toBeVisible();
+   await expect(page.getByRole('heading',{name:translate(operation as 'keygen'|'encrypt'|'decrypt'|'fingerprint'|'contacts',tag),exact:true,level:1})).toBeVisible();
    await noHorizontalOverflow(page);
   }
+  await expect(page.locator('.contact')).toHaveCount(2);
+  await expect(page.locator('.contact-label').last()).toHaveText(translate('pastedKey',tag));
+  await page.screenshot({path:`test-results/desktop-contacts-${tag}.png`,fullPage:true,animations:'disabled'});
   await page.locator('.operation-tab').nth(1).click();
   await page.screenshot({path:`test-results/desktop-${tag}.png`,fullPage:true,animations:'disabled'});
  }
@@ -77,21 +97,30 @@ test('five languages across all four operation layouts',async({page})=>{
 test('minimum native window fits all five languages and pasted-key layouts',async({page})=>{
  await page.setViewportSize({width:760,height:620});
  for(const tag of ['zh-CN','zh-TW','en','ja','ko'] as Language[]){
-  await page.locator('select').selectOption(tag);
-  for(let index=0;index<4;index++){
+  await page.locator('header select').selectOption(tag);
+  for(let index=0;index<5;index++){
    await page.locator('.operation-tab').nth(index).click();await noHorizontalOverflow(page);
    if(index>0){await page.getByRole('radio').nth(1).check();await noHorizontalOverflow(page);}
   }
+  await page.locator('.edit-note').first().click();await noHorizontalOverflow(page);
+  await page.locator('.contact-actions.editing .text-button').click();
+  await page.locator('.delete-contact').first().click();await noHorizontalOverflow(page);
+  await page.locator('.contact-actions.confirming .text-button').click();
+  await page.locator('.operation-tab').nth(1).click();await page.getByRole('radio').nth(2).check();
+  await page.locator('[name=contact]').selectOption({index:1});
+  await expect(page.locator('.contact-preview code')).toBeVisible();await noHorizontalOverflow(page);
  }
- await page.locator('select').selectOption('zh-CN');await page.locator('.operation-tab').nth(2).click();
+ await page.screenshot({path:'test-results/desktop-minimum-contact-selected.png',fullPage:true,animations:'disabled'});
+ await page.locator('header select').selectOption('zh-CN');await page.locator('.operation-tab').nth(2).click();
  await page.screenshot({path:'test-results/desktop-minimum-decrypt.png',fullPage:true,animations:'disabled'});
 });
 
 test('keyboard navigation and error focus remain visible',async({page})=>{
- await page.locator('select').selectOption('en');
+ await page.locator('header select').selectOption('en');
  const first=page.locator('.operation-tab').first();await first.focus();
  await first.press('ArrowDown');await expect(page.locator('.operation-tab').nth(1)).toBeFocused();
- await page.keyboard.press('End');await expect(page.locator('.operation-tab').nth(3)).toBeFocused();
+ await page.keyboard.press('End');await expect(page.locator('.operation-tab').nth(4)).toBeFocused();
+ await expect(page.getByRole('heading',{name:'Public-key contacts',level:1})).toBeVisible();
  await page.keyboard.press('Home');await expect(first).toBeFocused();
  await page.locator('.primary').focus();await page.keyboard.press('Enter');
  await expect(page.locator('[name=publicPath]')).toBeFocused();
@@ -178,4 +207,50 @@ test('Windows high contrast keeps navigation, focus and progress readable',async
  await expect(page.getByRole('progressbar')).toHaveAttribute('aria-valuenow','50');
  expect(await page.locator('.progress-track').evaluate(element=>getComputedStyle(element).borderTopWidth)).toBe('1px');
  await page.screenshot({path:'test-results/desktop-high-contrast.png',fullPage:true,animations:'disabled'});
+});
+
+test('public-key contacts are saved, edited, chosen explicitly and deleted',async({page})=>{
+ await page.locator('header select').selectOption('en');
+ await page.locator('.operation-tab').nth(4).click();
+ await page.locator('[name=contactKeyPath]').fill('C:\\Local\\carol-public.key');
+ await page.locator('[name=note]').fill('  Carol desktop  ');
+ await page.locator('.primary').click();
+ await expect(page.locator('form .notice.success')).toContainText('Public key saved');
+ await expect(page.locator('.contact.highlighted .contact-label')).toHaveText('Carol desktop');
+ await expect(page.locator('.contact.highlighted .contact-source')).toContainText('carol-public.key');
+ await page.screenshot({path:'test-results/desktop-contacts-saved.png',fullPage:true,animations:'disabled'});
+
+ const carol=page.locator('.contact.highlighted');
+ await carol.locator('.edit-note').click();
+ await expect(page.locator('[name=noteDraft]')).toBeFocused();
+ await page.locator('[name=noteDraft]').fill('Carol laptop');await page.keyboard.press('Enter');
+ await expect(page.locator('.contact-list .notice.success')).toContainText('Note saved');
+ await expect(page.locator('.contact.highlighted .contact-label')).toHaveText('Carol laptop');
+
+ await page.locator('.contact.highlighted .use-contact').click();
+ await expect(page.getByRole('heading',{name:'Encrypt file',level:1})).toBeVisible();
+ await expect(page.getByRole('radio',{name:'Saved contact'})).toBeChecked();
+ await expect(page.locator('[name=contact]')).toHaveValue('c'.repeat(64));
+ await expect(page.locator('.contact-preview code')).toHaveText(Array(32).fill('C3').join(':'));
+ await page.locator('[name=input]').fill('C:\\Local\\report.txt');await page.locator('[name=output]').fill('C:\\Local\\report.txt.nkem');
+ await page.locator('.primary').click();
+ const request=await page.evaluate(()=>(window as unknown as {lastRequest:Record<string,unknown>}).lastRequest);
+ expect([request.kind,request.contact,request.keyPath,request.keyText,request.paste]).toEqual(['encrypt','c'.repeat(64),'','',false]);
+ await harness(page,'complete',Array(32).fill('C3').join(':'));
+ await expect(page.locator('.notice.success')).toContainText('Recipient: Carol laptop');
+ await page.screenshot({path:'test-results/desktop-contact-encrypted.png',fullPage:true,animations:'disabled'});
+
+ await page.locator('.operation-tab').nth(4).click();
+ await page.locator('.contact').filter({hasText:'Carol laptop'}).locator('.delete-contact').click();
+ await expect(page.locator('.contact-actions.confirming')).toContainText('Files already encrypted are not affected');
+ await page.locator('.danger').click();
+ await expect(page.locator('.contact-list .notice.success')).toContainText('Contact deleted');
+ await expect(page.locator('.contact')).toHaveCount(2);
+ // The deleted selection is cleared on the encryption page instead of being replaced.
+ await page.locator('.operation-tab').nth(1).click();
+ await expect(page.locator('[name=contact]')).toHaveValue('');
+ await page.locator('[name=input]').fill('C:\\Local\\report.txt');await page.locator('[name=output]').fill('C:\\Local\\report.txt.nkem');
+ await page.locator('.primary').click();
+ await expect(page.getByRole('alert')).toHaveText('Choose a saved contact.');
+ await expect(page.locator('[name=contact]')).toBeFocused();
 });

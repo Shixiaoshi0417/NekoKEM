@@ -40,11 +40,65 @@ portable `.tar.gz` packages for each architecture. Linux 原生 GUI 提供两种
   页面过渡、按钮反馈与进度动画遵循系统减少动态效果设置，支持 Windows 高对比度。
 - Navigate operations with Up/Down, Home/End; validation focuses the affected field.
   Native file dialogs lock editing until they return. 支持键盘导航与错误字段定位。
+- Save recipients' public keys with notes and choose one when encrypting; see
+  [Public-key contacts](#public-key-contacts--公钥通讯录). 公钥通讯录与加密时选择已保存公钥。
 
 Production cryptography stays in the shared C17 Core. Rust validates requests,
 serializes Core calls, owns zeroizing secrets, bridges progress/cancellation and
 creates protected temporary pasted-key files through the platform backend. The Vue
 frontend has no filesystem, shell, arbitrary process or remote-content access.
+
+## Public-key contacts / 公钥通讯录
+
+The **Public-key contacts** page (fifth navigation item) saves recipients' public keys.
+Choose a key file or paste both `PUBLIC KEY` blocks, optionally add a note of up to 512
+characters, then save. Notes can be edited and entries deleted after an inline
+confirmation. On **Encrypt file**, choose **Saved contact** and explicitly select a
+recipient; a contact's **Use for encryption** action opens that page with it selected.
+Lists and the selection show the full SHA-256 fingerprint, the list also shows the source
+file name, and a completed encryption names the recipient and its fingerprint. Notes are labels only: verify fingerprints with recipients through a
+trusted channel. Decryption and fingerprints keep their file/paste key sources.
+
+Contacts live beside the shared language preference, in `LocalAppData/NekoKEM/contacts`
+on Windows and `$XDG_CONFIG_HOME/nekokem/contacts` (or `$HOME/.config/nekokem/contacts`)
+on Linux and macOS. Both NekoKEM directories must be private (`0700`, owner-only NTFS
+ACL, no allowing macOS ACL entries). Each fingerprint has one JSON v1 record holding the
+fingerprint, a sanitized source file name, the note and the public key exported by Core's
+`nekokem_export_public_key`: only the two validated public components, never other PEM
+blocks or text from the source. Import compares Core fingerprints of the source and the
+normalized key. Records are written with Core's atomic private output (`0600` or
+owner-only ACL, sync, rename) and read with Core's sensitive-file checks (regular file,
+current owner, one hard link, no symbolic link/reparse point, private mode/ACL, 64 KiB).
+Importing a saved fingerprint points to the existing entry instead of replacing its note;
+explicitly importing the same key again replaces a damaged entry. Up to 500 entries are
+kept. No private keys, passwords, permissions, network access or browser storage are added.
+
+Every encryption re-reads the selected record and writes an operation-specific private
+snapshot using the pasted-key staging. Core parses that snapshot and must reproduce the
+recorded fingerprint; encryption then reads only that snapshot, which is removed after
+success, failure or cancellation. A missing, damaged, unsafe-permission or mismatched entry
+fails with a specific error, clears the selection and requires a new explicit choice. A
+request with a contact cannot also carry a key path or pasted key, and no other key is
+ever substituted. Unreadable entries are counted but never listed or used. Contact changes
+run exclusively with Core operations, and closing waits for an in-progress record update.
+Contacts are user configuration rather than package contents; keep original public-key
+backups. NKEM v3, NKPR v1, cryptographic parameters and Core are unchanged.
+
+公钥通讯录位于第五个导航项：可从文件或粘贴内容保存接收方公钥，备注可选且最多 512 个字符，
+支持编辑备注和确认后删除。加密页选择“通讯录”后必须显式选择条目，条目上的“用于加密”会打开
+加密页并选中它；列表和选择框显示完整指纹，列表同时显示来源文件名，加密完成后显示接收方及其指纹。记录保存在语言设置旁的私有
+`contacts` 目录，每个指纹一条 JSON 记录，仅包含 Core 规范化导出的公钥、指纹、来源文件名和备注，
+通过 Core 原子私有写入并按敏感文件规则读取。每次加密都重新读取记录、生成操作专用私有快照，
+并由 Core 重新解析核对指纹后才加密；快照在成功、失败或取消后清理。条目缺失、损坏、权限异常
+或指纹不符时报错、清除选择并要求重新选择，绝不改用其他公钥。备注仅用于识别，请核对完整指纹。
+
+Rust/Core tests cover persistence across store instances, Core normalization, duplicate
+fingerprints, notes, invalid keys, damaged/substituted/unknown-field records, POSIX
+link/permission/hard-link rejection, private directory locations, recipient round trips,
+rejection of combined key sources, missing/damaged contacts without output, cancellation
+and snapshot cleanup. Frontend tests cover five-language layouts at the default and
+minimum window sizes, note editing, delete confirmation, explicit selection, failure
+handling and scrubbing of pasted key text.
 
 ## Windows build
 
