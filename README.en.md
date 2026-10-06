@@ -328,7 +328,7 @@ v3 uses X448, ML-KEM-1024, combined shared secrets, and HKDF-SHA512, separating 
 
 ## NKEM v4 multi-recipient file format
 
-v4 encrypts the file data once under a random 32-byte file key and stores one entry per recipient, up to 64: an X448 ephemeral public key, an ML-KEM-1024 ciphertext and the file key wrapped with AES-256-GCM. The wrap key is derived with HKDF-SHA512 from that recipient's two shared secrets and binds the X448 ephemeral and recipient public keys. An HMAC-SHA512 header MAC covers the header, salt and every recipient entry and commits to the file key, so all recipients decrypt the same content. Entries carry no fingerprint; decryption tries them in order. See [`docs/NKEM-v4.md`](docs/NKEM-v4.md) for the full layout. `nekokem_encrypt_file_multi_with_progress()` writes v4.
+v4 encrypts the file data once under a random 32-byte file key and stores one entry per recipient, up to 64: an X448 ephemeral public key, an ML-KEM-1024 ciphertext and the file key wrapped with AES-256-GCM. The wrap key is derived with HKDF-SHA512 from that recipient's two shared secrets and binds the X448 ephemeral and recipient public keys. An HMAC-SHA512 header MAC covers the header, salt and every recipient entry and commits to the file key, so all recipients decrypt the same content. Entries carry no fingerprint; decryption tries every entry, and neither its error nor its timing shows which entry is the key's. See [`docs/NKEM-v4.md`](docs/NKEM-v4.md) for the full layout. `nekokem_encrypt_file_multi_with_progress()` writes v4 for two or more public keys and v3 for one.
 
 ## Security implementation
 

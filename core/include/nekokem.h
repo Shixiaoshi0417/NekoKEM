@@ -63,10 +63,11 @@ NEKOKEM_API int nekokem_encrypt_file_with_progress(
 #define NEKOKEM_MAX_RECIPIENTS 64U
 
 /*
- * Writes an NKEM v4 container that each listed public key's private key can
- * decrypt (docs/NKEM-v4.md). Every public key is loaded and validated before
- * output is created. An empty list, more than NEKOKEM_MAX_RECIPIENTS keys or
- * the same key listed twice fails; no key is ever skipped or substituted.
+ * Writes a container that each listed public key's private key can decrypt:
+ * NKEM v4 (docs/NKEM-v4.md) for two or more keys and NKEM v3 for one. Every
+ * public key is loaded and validated before output is created. An empty
+ * list, more than NEKOKEM_MAX_RECIPIENTS keys, or two keys that are the same
+ * or share either component fails; no key is ever skipped or substituted.
  * Returns NEKOKEM_OPERATION_SUCCESS, _ERROR or _CANCELLED, as above.
  */
 NEKOKEM_API int nekokem_encrypt_file_multi_with_progress(

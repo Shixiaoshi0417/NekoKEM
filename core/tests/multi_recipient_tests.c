@@ -4,9 +4,14 @@
 
 #include <openssl/bio.h>
 #include <openssl/buffer.h>
+#include <openssl/core_names.h>
 #include <openssl/crypto.h>
+#include <openssl/err.h>
 #include <openssl/evp.h>
+#include <openssl/kdf.h>
+#include <openssl/params.h>
 #include <openssl/pem.h>
+#include <openssl/rand.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -189,6 +194,277 @@ static int swap_entries(const char *source, const char *destination)
     return success;
 }
 
+static EVP_PKEY *read_public(const char *path, const char *algorithm)
+{
+    BIO *input = BIO_new_file(path, "rb");
+    EVP_PKEY *key = NULL;
+
+    while (input != NULL && key == NULL) {
+        EVP_PKEY *next = PEM_read_bio_PUBKEY(input, NULL, NULL, NULL);
+
+        if (next == NULL) {
+            break;
+        }
+        if (EVP_PKEY_is_a(next, algorithm) == 1) {
+            key = next;
+        } else {
+            EVP_PKEY_free(next);
+        }
+    }
+    BIO_free(input);
+    /* Reading past the last PEM block leaves an error Core would print. */
+    ERR_clear_error();
+    return key;
+}
+
+/* A valid public-key file with the X448 key of one file and the ML-KEM key of another. */
+static int splice_public(const char *x448_from, const char *mlkem_from,
+                         const char *output)
+{
+    EVP_PKEY *x448 = read_public(x448_from, "X448");
+    EVP_PKEY *mlkem = read_public(mlkem_from, "ML-KEM-1024");
+    BIO *pem = BIO_new(BIO_s_mem());
+    BUF_MEM *buffer = NULL;
+    int success = x448 != NULL && mlkem != NULL && pem != NULL &&
+                  PEM_write_bio_PUBKEY(pem, x448) == 1 &&
+                  PEM_write_bio_PUBKEY(pem, mlkem) == 1 &&
+                  BIO_get_mem_ptr(pem, &buffer) > 0 &&
+                  write_private(output, buffer->data, buffer->length);
+
+    BIO_free(pem);
+    EVP_PKEY_free(x448);
+    EVP_PKEY_free(mlkem);
+    return success;
+}
+
+static int hkdf_sha512(const unsigned char *key, size_t key_len,
+                       const unsigned char *salt, const char *label,
+                       const unsigned char *suffix, size_t suffix_len,
+                       unsigned char *output, size_t output_len)
+{
+    unsigned char info[256];
+    size_t label_len = strlen(label);
+    EVP_KDF *kdf = EVP_KDF_fetch(NULL, "HKDF", NULL);
+    EVP_KDF_CTX *context = kdf != NULL ? EVP_KDF_CTX_new(kdf) : NULL;
+    OSSL_PARAM parameters[5];
+    int success;
+
+    if (label_len + suffix_len > sizeof(info)) {
+        EVP_KDF_CTX_free(context);
+        EVP_KDF_free(kdf);
+        return 0;
+    }
+    memcpy(info, label, label_len);
+    if (suffix_len > 0U) {
+        memcpy(info + label_len, suffix, suffix_len);
+    }
+    parameters[0] = OSSL_PARAM_construct_utf8_string(
+        OSSL_KDF_PARAM_DIGEST, (char *)"SHA512", 0U);
+    parameters[1] = OSSL_PARAM_construct_octet_string(
+        OSSL_KDF_PARAM_KEY, (void *)key, key_len);
+    parameters[2] = OSSL_PARAM_construct_octet_string(
+        OSSL_KDF_PARAM_SALT, (void *)salt, NKEM_V4_SALT_SIZE);
+    parameters[3] = OSSL_PARAM_construct_octet_string(
+        OSSL_KDF_PARAM_INFO, info, label_len + suffix_len);
+    parameters[4] = OSSL_PARAM_construct_end();
+    success = context != NULL &&
+              EVP_KDF_derive(context, output, output_len, parameters) == 1;
+    EVP_KDF_CTX_free(context);
+    EVP_KDF_free(kdf);
+    return success;
+}
+
+/* One-shot AES-256-GCM with a 12-byte nonce; output receives length bytes. */
+static int gcm_seal(const unsigned char key[32], const unsigned char *nonce,
+                    const unsigned char *aad, size_t aad_len,
+                    const unsigned char *input, size_t length,
+                    unsigned char *output, unsigned char tag[NKEM_TAG_SIZE])
+{
+    EVP_CIPHER_CTX *context = EVP_CIPHER_CTX_new();
+    unsigned char final_block[EVP_MAX_BLOCK_LENGTH];
+    int written = 0;
+    int success = context != NULL &&
+                  EVP_EncryptInit_ex(context, EVP_aes_256_gcm(), NULL, key,
+                                     nonce) == 1 &&
+                  EVP_EncryptUpdate(context, NULL, &written, aad,
+                                    (int)aad_len) == 1 &&
+                  (length == 0U ||
+                   EVP_EncryptUpdate(context, output, &written, input,
+                                     (int)length) == 1) &&
+                  EVP_EncryptFinal_ex(context, final_block, &written) == 1 &&
+                  EVP_CIPHER_CTX_ctrl(context, EVP_CTRL_GCM_GET_TAG,
+                                      (int)NKEM_TAG_SIZE, tag) == 1;
+
+    EVP_CIPHER_CTX_free(context);
+    return success;
+}
+
+/* One recipient entry, written from docs/NKEM-v4.md without Core's code. */
+static int seal_entry(const char *public_path,
+                      const unsigned char prefix[NKEM_V4_HEADER_SIZE + NKEM_V4_SALT_SIZE],
+                      const unsigned char file_key[NKEM_V4_FILE_KEY_SIZE],
+                      unsigned char entry[NKEM_V4_ENTRY_SIZE])
+{
+    static const unsigned char zero_nonce[NKEM_NONCE_SIZE] = {0};
+    const size_t prefix_len = NKEM_V4_HEADER_SIZE + NKEM_V4_SALT_SIZE;
+    const size_t wrapped = 56U + 1568U;
+    EVP_PKEY *x448 = read_public(public_path, "X448");
+    EVP_PKEY *mlkem = read_public(public_path, "ML-KEM-1024");
+    EVP_PKEY *ephemeral = EVP_PKEY_Q_keygen(NULL, NULL, "X448");
+    EVP_PKEY_CTX *context = NULL;
+    unsigned char secret[56U + 32U];
+    unsigned char keys[2U * 56U];
+    unsigned char wrap_key[32];
+    unsigned char aad[NKEM_V4_HEADER_SIZE + NKEM_V4_SALT_SIZE + 56U + 1568U];
+    size_t length = 56U;
+    size_t ciphertext_len = 1568U;
+    size_t mlkem_len = 32U;
+    int success = 0;
+
+    if (x448 == NULL || mlkem == NULL || ephemeral == NULL ||
+        EVP_PKEY_get_raw_public_key(ephemeral, entry, &length) != 1 ||
+        length != 56U) {
+        goto cleanup;
+    }
+    length = 56U;
+    if (EVP_PKEY_get_raw_public_key(x448, keys + 56U, &length) != 1 ||
+        length != 56U) {
+        goto cleanup;
+    }
+    memcpy(keys, entry, 56U);
+    context = EVP_PKEY_CTX_new_from_pkey(NULL, ephemeral, NULL);
+    length = 56U;
+    if (context == NULL || EVP_PKEY_derive_init(context) != 1 ||
+        EVP_PKEY_derive_set_peer(context, x448) != 1 ||
+        EVP_PKEY_derive(context, secret, &length) != 1 || length != 56U) {
+        goto cleanup;
+    }
+    EVP_PKEY_CTX_free(context);
+    context = EVP_PKEY_CTX_new_from_pkey(NULL, mlkem, NULL);
+    if (context == NULL || EVP_PKEY_encapsulate_init(context, NULL) != 1 ||
+        EVP_PKEY_encapsulate(context, entry + 56U, &ciphertext_len,
+                             secret + 56U, &mlkem_len) != 1 ||
+        ciphertext_len != 1568U || mlkem_len != 32U) {
+        goto cleanup;
+    }
+    memcpy(aad, prefix, prefix_len);
+    memcpy(aad + prefix_len, entry, wrapped);
+    success = hkdf_sha512(secret, sizeof(secret), prefix + NKEM_V4_HEADER_SIZE,
+                          "NekoKEM v4 recipient wrap X448-MLKEM1024",
+                          keys, sizeof(keys), wrap_key, sizeof(wrap_key)) &&
+              gcm_seal(wrap_key, zero_nonce, aad, sizeof(aad), file_key,
+                       NKEM_V4_FILE_KEY_SIZE, entry + wrapped,
+                       entry + wrapped + NKEM_V4_FILE_KEY_SIZE);
+
+cleanup:
+    OPENSSL_cleanse(secret, sizeof(secret));
+    OPENSSL_cleanse(wrap_key, sizeof(wrap_key));
+    EVP_PKEY_CTX_free(context);
+    EVP_PKEY_free(x448);
+    EVP_PKEY_free(mlkem);
+    EVP_PKEY_free(ephemeral);
+    return success;
+}
+
+/*
+ * An independent NKEM v4 encoder playing a sender that knows the file key.
+ * Entry `malformed` gets an all-zero X448 key, which no correct encryptor
+ * writes, under a valid header MAC and payload; SIZE_MAX writes none.
+ */
+static int build_container(const char *const *keys, size_t count,
+                           size_t malformed, const unsigned char *data,
+                           const char *output)
+{
+    const size_t entries = NKEM_V4_HEADER_SIZE + NKEM_V4_SALT_SIZE;
+    const size_t mac_offset = entries + count * NKEM_V4_ENTRY_SIZE;
+    const size_t metadata_len = mac_offset + NKEM_V4_MAC_SIZE + NKEM_NONCE_SIZE;
+    const size_t total = metadata_len + DATA_SIZE + NKEM_TAG_SIZE;
+    unsigned char *bytes = OPENSSL_zalloc(total);
+    unsigned char *salt = bytes + NKEM_V4_HEADER_SIZE;
+    unsigned char file_key[NKEM_V4_FILE_KEY_SIZE];
+    unsigned char payload_key[32];
+    unsigned char mac_key[64];
+    size_t mac_len = 0U;
+    size_t index;
+    int success = 0;
+
+    if (bytes == NULL) {
+        return 0;
+    }
+    nkem_v4_header_encode(bytes, (uint16_t)count, DATA_SIZE);
+    if (RAND_bytes(file_key, (int)sizeof(file_key)) != 1 ||
+        RAND_bytes(salt, (int)NKEM_V4_SALT_SIZE) != 1 ||
+        RAND_bytes(bytes + mac_offset + NKEM_V4_MAC_SIZE,
+                   (int)NKEM_NONCE_SIZE) != 1) {
+        goto cleanup;
+    }
+    for (index = 0U; index < count; ++index) {
+        unsigned char *entry = bytes + entries + index * NKEM_V4_ENTRY_SIZE;
+
+        if (index == malformed) {
+            if (RAND_bytes(entry + 56U, (int)(NKEM_V4_ENTRY_SIZE - 56U)) != 1) {
+                goto cleanup;
+            }
+        } else if (!seal_entry(keys[index], bytes, file_key, entry)) {
+            goto cleanup;
+        }
+    }
+    success = hkdf_sha512(file_key, sizeof(file_key), salt,
+                          "NekoKEM v4 payload AES-256-GCM", NULL, 0U,
+                          payload_key, sizeof(payload_key)) &&
+              hkdf_sha512(file_key, sizeof(file_key), salt,
+                          "NekoKEM v4 header HMAC-SHA512", NULL, 0U,
+                          mac_key, sizeof(mac_key)) &&
+              EVP_Q_mac(NULL, "HMAC", NULL, "SHA512", NULL, mac_key,
+                        sizeof(mac_key), bytes, mac_offset,
+                        bytes + mac_offset, NKEM_V4_MAC_SIZE,
+                        &mac_len) != NULL &&
+              mac_len == NKEM_V4_MAC_SIZE &&
+              gcm_seal(payload_key, bytes + mac_offset + NKEM_V4_MAC_SIZE,
+                       bytes, metadata_len, data, DATA_SIZE,
+                       bytes + metadata_len,
+                       bytes + metadata_len + DATA_SIZE) &&
+              write_private(output, bytes, total);
+
+cleanup:
+    OPENSSL_cleanse(file_key, sizeof(file_key));
+    OPENSSL_cleanse(payload_key, sizeof(payload_key));
+    OPENSSL_cleanse(mac_key, sizeof(mac_key));
+    OPENSSL_free(bytes);
+    return success;
+}
+
+#ifndef _WIN32
+/* Decrypts with stderr captured; 1 when it failed, printed and wrote nothing. */
+static int failure_message(size_t index, const char *input, char *message,
+                           size_t size)
+{
+    FILE *capture = tmpfile();
+    size_t length;
+    int saved;
+    int failed;
+
+    if (capture == NULL) {
+        return 0;
+    }
+    (void)fflush(stderr);
+    saved = dup(fileno(stderr));
+    if (saved < 0 || dup2(fileno(capture), fileno(stderr)) < 0) {
+        (void)fclose(capture);
+        return 0;
+    }
+    failed = !decrypt_as(index, input, "fresh-out");
+    (void)fflush(stderr);
+    (void)dup2(saved, fileno(stderr));
+    (void)close(saved);
+    rewind(capture);
+    length = fread(message, 1U, size - 1U, capture);
+    message[length] = '\0';
+    (void)fclose(capture);
+    return failed && length > 0U && !exists("fresh-out");
+}
+#endif
+
 typedef struct {
     uint64_t last;
     uint64_t total;
@@ -257,9 +533,12 @@ static int test_round_trips(const unsigned char *data)
         CHECK(file_equals("out", data, DATA_SIZE));
     }
 
-    /* One recipient is a valid v4 container as well. */
+    /* One recipient keeps the v3 format that older releases read. */
     CHECK(encrypt_to("plain", "one.nkem", one, 1U) ==
           NEKOKEM_OPERATION_SUCCESS);
+    CHECK(read_all("one.nkem", &container, &container_len));
+    CHECK(container[4] == 3U && nkem_v3_container_parse(container, container_len));
+    OPENSSL_free(container);
     CHECK(decrypt_as(2U, "one.nkem", "out"));
     CHECK(file_equals("out", data, DATA_SIZE));
     CHECK(!decrypt_as(1U, "one.nkem", "fresh-out"));
@@ -375,6 +654,69 @@ static int test_tampering(void)
     return 1;
 }
 
+/* Trial decryption opens every entry and reports one failure (PR #29 audit). */
+static int test_trial_decryption(const unsigned char *data)
+{
+    const char *const pair[] = {public_paths[1], public_paths[2]};
+    const char *const spliced[] = {public_paths[1], "spliced.pub"};
+    size_t malformed;
+    size_t index;
+
+    /* The independent encoder interoperates with Core. */
+    CHECK(build_container(pair, 2U, SIZE_MAX, data, "built.nkem"));
+    for (index = 1U; index <= 2U; ++index) {
+        CHECK(decrypt_as(index, "built.nkem", "out"));
+        CHECK(file_equals("out", data, DATA_SIZE));
+    }
+    /* A malformed entry rejects the container wherever it is, including after
+     * this key's own entry, although the MAC and payload verify. */
+    for (malformed = 0U; malformed < 2U; ++malformed) {
+        CHECK(build_container(pair, 2U, malformed, data, "built.nkem"));
+        for (index = 1U; index <= 2U; ++index) {
+            CHECK(!decrypt_as(index, "built.nkem", "fresh-out"));
+            CHECK(!exists("fresh-out"));
+        }
+    }
+
+    /* Two keys sharing one component are rejected, not only identical keys;
+     * the spliced key alone is a valid public key. */
+    CHECK(splice_public(public_paths[1], public_paths[3], "spliced.pub"));
+    CHECK(nekokem_encrypt_file("plain", "spliced.nkem", "spliced.pub"));
+    CHECK(encrypt_to("plain", "fresh.nkem", spliced, 2U) ==
+          NEKOKEM_OPERATION_ERROR);
+    CHECK(!exists("fresh.nkem"));
+    CHECK(splice_public(public_paths[3], public_paths[1], "spliced.pub"));
+    CHECK(encrypt_to("plain", "fresh.nkem", spliced, 2U) ==
+          NEKOKEM_OPERATION_ERROR);
+    CHECK(!exists("fresh.nkem"));
+
+#ifndef _WIN32
+    {
+        char first[512];
+        char other[512];
+        size_t entry;
+
+        /* Breaking either entry's wrap tag gives both recipients the same
+         * failure, whether their own entry stopped opening or the header MAC
+         * failed, and a key that is not listed sees it too. */
+        CHECK(encrypt_to("plain", "pair.nkem", pair, 2U) ==
+              NEKOKEM_OPERATION_SUCCESS);
+        CHECK(failure_message(3U, "pair.nkem", first, sizeof(first)));
+        for (entry = 0U; entry < 2U; ++entry) {
+            CHECK(mutate("pair.nkem", "tampered.nkem",
+                         ENTRY_OFFSET(entry) + NKEM_V4_ENTRY_SIZE - 1U,
+                         0x01U, 0));
+            for (index = 1U; index <= 2U; ++index) {
+                CHECK(failure_message(index, "tampered.nkem", other,
+                                      sizeof(other)));
+                CHECK(strcmp(first, other) == 0);
+            }
+        }
+    }
+#endif
+    return 1;
+}
+
 static int test_progress_and_cancellation(void)
 {
     const char *const two[] = {public_paths[1], public_paths[2]};
@@ -439,7 +781,8 @@ static int run(void)
         }
     }
     success = test_round_trips(data) && test_recipient_limits(data) &&
-              test_tampering() && test_progress_and_cancellation();
+              test_tampering() && test_trial_decryption(data) &&
+              test_progress_and_cancellation();
 
 cleanup:
     OPENSSL_free(data);
@@ -453,7 +796,8 @@ static void remove_fixtures(void)
         "plain", "empty", "out", "two.nkem", "four.nkem", "one.nkem",
         "empty.nkem", "v3.nkem", "max.nkem", "existing.nkem",
         "tampered.nkem", "progress.nkem", "fresh-out", "fresh.nkem",
-        "cancelled.nkem", "cancelled-out"};
+        "cancelled.nkem", "cancelled-out", "built.nkem", "spliced.pub",
+        "spliced.nkem", "pair.nkem"};
     size_t index;
 
     for (index = 0U; index < sizeof(names) / sizeof(names[0]); ++index) {

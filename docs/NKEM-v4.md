@@ -3,8 +3,9 @@
 NKEM v4 encrypts one file once for up to 64 recipients. Every listed
 recipient decrypts the same container with their own private key; nobody
 else can. NKEM v3 remains the single-recipient format and is unchanged.
-Encryption to exactly one public key still writes v3, so existing
-applications keep reading single-recipient files.
+Encryption to exactly one public key still writes v3, including through the
+multi-recipient API, so existing applications keep reading
+single-recipient files.
 
 This is a project-specific experimental format, not a standardized
 multi-recipient or Hybrid KEM protocol.
@@ -130,26 +131,37 @@ The payload is processed in 64 KiB chunks exactly as in v3 and keeps the
 
 1. Validate the version, algorithm ID, fixed lengths, recipient count,
    reserved fields, total size and absence of trailing data.
-2. Unlock the private key. For each entry in order, decapsulate X448 and
+2. Unlock the private key. For every entry, decapsulate X448 and
    ML-KEM-1024, derive the wrap key and try to unwrap the file key. ML-KEM
-   rejects implicitly, so another recipient's entry fails at the wrap tag;
-   such failures are silent and the next entry is tried.
-3. If no entry unwraps, decryption fails: the file is not encrypted for this
-   key, or its entry was modified. No output is created.
-4. Recompute and compare the header MAC in constant time before reading any
-   ciphertext.
+   rejects implicitly, so another recipient's entry fails at the wrap tag.
+   Every entry is tried, including after a match, and the first match is
+   kept with a constant-time select. Nothing is reported per entry.
+3. If any entry's X448 ephemeral key is rejected, the whole container is
+   rejected as malformed, wherever that entry is. OpenSSL rejects a key
+   whose shared secret is all zero, which only a small-order key produces
+   whatever the private key, and no correct encryptor writes one. This
+   check depends on the container alone.
+4. Recompute the header MAC and compare it in constant time before reading
+   any ciphertext. When no entry unwrapped, the MAC is still computed, over
+   an all-zero file key, and the file is rejected.
 5. Decrypt the payload into a private temporary file and commit it
    atomically only after the payload tag verifies and no trailing data
    remains.
 
-An X448 ephemeral key that produces an all-zero shared secret is rejected
-as a malformed container; no correct encryptor produces one.
+A key with no entry and a file whose entries or MAC were modified take the
+same path through step 4 and report the same error. Neither the error nor
+the time taken shows which entry belongs to the key, or whether one does.
+Otherwise someone who can submit modified files for decryption could break
+one wrap tag at a time and learn which entry is whose. No output is created
+on any failure.
 
 ## Limits and boundaries
 
 - At most 64 recipients per container; the recipient list adds 1672 bytes
-  per recipient. Encryption rejects an empty list, more than 64 keys and the
-  same public key listed twice before creating output.
+  per recipient. Encryption rejects an empty list, more than 64 keys and
+  two public keys that are the same or share either component, before
+  creating output. A genuine key pair shares no component with another key,
+  so a shared component means a key file was copied or spliced.
 - Every recipient shares the file key. A recipient can therefore create a
   different container that reuses the original recipient entries and header
   MAC. NKEM has no sender authentication in v3 or v4, so recipients must not
@@ -162,7 +174,8 @@ as a malformed container; no correct encryptor produces one.
 
 ## Compatibility
 
-- `nekokem_encrypt_file_multi_with_progress()` writes v4.
+- `nekokem_encrypt_file_multi_with_progress()` writes v4 for two or more
+  public keys and v3 for one.
 - `nekokem_encrypt_file*()` continues to write v3.
 - `nekokem_decrypt_file*()` accepts v3 and v4 and rejects v1, v2 and other
   versions without committing output.

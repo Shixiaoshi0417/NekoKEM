@@ -329,31 +329,84 @@ cleanup:
     return success;
 }
 
-/* Returns 1 for this key's entry, 0 for another recipient's and -1 on error. */
+/* Outcome of opening one recipient entry during trial decryption. */
+enum {
+    ENTRY_ERROR = -1,    /* OpenSSL failure unrelated to the container */
+    ENTRY_OTHER = 0,     /* another recipient's entry */
+    ENTRY_OPENED = 1,    /* this key's entry */
+    ENTRY_MALFORMED = 2  /* an X448 key that no correct encryptor writes */
+};
+
+/*
+ * X448 for one entry without printing anything, since trial decryption must
+ * not report per entry. Returns 1, 0 when OpenSSL rejects the ephemeral key or
+ * its all-zero shared secret, or -1 on another error. Only a small-order
+ * ephemeral key gives an all-zero secret, whatever the private key, so a
+ * rejection depends on the container alone.
+ */
+static int entry_x448_secret(EVP_PKEY *private_key,
+                             const unsigned char ephemeral_public[X448_PUBLIC_KEY_SIZE],
+                             unsigned char secret[X448_SHARED_SECRET_SIZE])
+{
+    EVP_PKEY *peer;
+    EVP_PKEY_CTX *context = NULL;
+    size_t secret_len = X448_SHARED_SECRET_SIZE;
+    int result = -1;
+
+    (void)ERR_set_mark();
+    peer = EVP_PKEY_new_raw_public_key_ex(NULL, X448_ALGORITHM_NAME, NULL,
+                                          ephemeral_public,
+                                          X448_PUBLIC_KEY_SIZE);
+    if (peer != NULL) {
+        context = EVP_PKEY_CTX_new_from_pkey(NULL, private_key, NULL);
+    }
+    if (context != NULL && EVP_PKEY_derive_init(context) > 0) {
+        result = EVP_PKEY_derive_set_peer(context, peer) > 0 &&
+                         EVP_PKEY_derive(context, secret, &secret_len) > 0 &&
+                         secret_len == X448_SHARED_SECRET_SIZE
+                     ? 1
+                     : 0;
+    }
+    if (result < 0) {
+        (void)ERR_clear_last_mark();
+        print_openssl_error("Cannot initialize X448 key agreement");
+    } else {
+        (void)ERR_pop_to_mark();
+    }
+    if (result != 1) {
+        secure_mem_clear(secret, X448_SHARED_SECRET_SIZE);
+    }
+    EVP_PKEY_CTX_free(context);
+    EVP_PKEY_free(peer);
+    return result;
+}
+
+/* Opens one entry into file_key; returns one of the ENTRY_ outcomes. */
 static int open_recipient(const HybridKeys *keys,
                           const unsigned char recipient_public[X448_PUBLIC_KEY_SIZE],
                           const unsigned char prefix[V4_PREFIX_SIZE],
                           const unsigned char entry[NKEM_V4_ENTRY_SIZE],
                           unsigned char file_key[NKEM_V4_FILE_KEY_SIZE])
 {
-    unsigned char *x448_secret = NULL;
+    unsigned char x448_secret[X448_SHARED_SECRET_SIZE];
     unsigned char *mlkem_secret = NULL;
     unsigned char wrap_key[AES256_KEY_SIZE] = {0};
     unsigned char wrap_aad[V4_WRAP_AAD_SIZE];
-    size_t x448_secret_len = 0U;
     size_t mlkem_secret_len = 0U;
-    int result = -1;
+    int x448;
+    int result = ENTRY_ERROR;
 
+    x448 = entry_x448_secret(keys->x448, entry, x448_secret);
+    if (x448 <= 0) {
+        result = x448 == 0 ? ENTRY_MALFORMED : ENTRY_ERROR;
+        goto cleanup;
+    }
     /* ML-KEM rejects implicitly: another recipient's ciphertext yields an
-     * unrelated secret and fails only at the wrap tag. An X448 key with an
-     * all-zero shared secret fails here; no correct encryptor writes one. */
-    if (!hybrid_x448_decapsulate(keys->x448, entry,
-                                 X448_PUBLIC_KEY_SIZE,
-                                 &x448_secret, &x448_secret_len) ||
-        !kem_decapsulate(keys->mlkem, entry + V4_KEM_OFFSET,
+     * unrelated secret and fails only at the wrap tag. */
+    if (!kem_decapsulate(keys->mlkem, entry + V4_KEM_OFFSET,
                          NKEM_V3_KEM_CIPHERTEXT_SIZE,
                          &mlkem_secret, &mlkem_secret_len) ||
-        !derive_wrap_key(x448_secret, x448_secret_len,
+        !derive_wrap_key(x448_secret, sizeof(x448_secret),
                          mlkem_secret, mlkem_secret_len,
                          prefix + NKEM_V4_HEADER_SIZE, entry,
                          recipient_public, wrap_key)) {
@@ -361,12 +414,20 @@ static int open_recipient(const HybridKeys *keys,
     }
     memcpy(wrap_aad, prefix, V4_PREFIX_SIZE);
     memcpy(wrap_aad + V4_PREFIX_SIZE, entry, V4_WRAPPED_OFFSET);
-    result = unwrap_file_key(wrap_key, wrap_aad,
-                             entry + V4_WRAPPED_OFFSET,
-                             entry + V4_WRAP_TAG_OFFSET, file_key);
+    switch (unwrap_file_key(wrap_key, wrap_aad, entry + V4_WRAPPED_OFFSET,
+                            entry + V4_WRAP_TAG_OFFSET, file_key)) {
+    case 1:
+        result = ENTRY_OPENED;
+        break;
+    case 0:
+        result = ENTRY_OTHER;
+        break;
+    default:
+        break;
+    }
 
 cleanup:
-    secure_free(x448_secret, x448_secret_len);
+    secure_mem_clear(x448_secret, sizeof(x448_secret));
     secure_free(mlkem_secret, mlkem_secret_len);
     secure_mem_clear(wrap_key, sizeof(wrap_key));
     return result;
@@ -403,12 +464,14 @@ static HybridKeys *load_recipients(const char *const *public_key_paths,
                                      &recipients[index])) {
             goto failure;
         }
+        /* A genuine key pair shares no component with another key, so two
+         * keys that share either one mean a key file was copied or spliced. */
         for (other = 0U; other < index; ++other) {
             if (EVP_PKEY_eq(recipients[index].x448,
                             recipients[other].x448) == 1 ||
                 EVP_PKEY_eq(recipients[index].mlkem,
                             recipients[other].mlkem) == 1) {
-                fprintf(stderr, file_message("The same public key is listed more than once\n"));
+                fprintf(stderr, file_message("Two public keys are the same or share a key component\n"));
                 goto failure;
             }
         }
@@ -458,6 +521,12 @@ int nekokem_encrypt_file_multi_with_progress(
             fprintf(stderr, file_message("NekoKEM Core received an empty file path\n"));
             goto cleanup;
         }
+    }
+    /* One recipient keeps the v3 format that older releases read. */
+    if (public_key_count == 1U) {
+        return nekokem_encrypt_file_with_progress(
+            input_path, output_path, public_key_paths[0],
+            progress_callback, progress_user_data);
     }
     input = file_open_regular(input_path);
     if (input == NULL) {
@@ -559,14 +628,18 @@ int nekokem_v4_decrypt_opened(
     NkemV4Header header;
     unsigned char *metadata = NULL;
     unsigned char recipient_public[X448_PUBLIC_KEY_SIZE];
+    unsigned char candidate[NKEM_V4_FILE_KEY_SIZE] = {0};
     unsigned char file_key[NKEM_V4_FILE_KEY_SIZE] = {0};
     unsigned char payload_key[AES256_KEY_SIZE] = {0};
     unsigned char mac_key[V4_MAC_KEY_SIZE] = {0};
     unsigned char expected_mac[NKEM_V4_MAC_SIZE];
+    unsigned char found = 0U;
     size_t metadata_len = 0U;
     size_t mac_offset;
     size_t index;
-    int opened = 0;
+    size_t byte;
+    int malformed = 0;
+    int mac_matches;
     int aes_result;
     int result = NEKOKEM_OPERATION_ERROR;
 
@@ -590,23 +663,42 @@ int nekokem_v4_decrypt_opened(
         !x448_raw_public(private_keys.x448, recipient_public)) {
         goto cleanup;
     }
-    /* Entries carry no recipient identifier: try each one in order. */
-    for (index = 0U; index < header.recipient_count && opened == 0; ++index) {
-        opened = open_recipient(
+    /*
+     * Entries carry no recipient identifier. Every entry is opened with the
+     * same work and the first match is kept with a constant-time select, so
+     * neither the time taken nor the error reported depends on where this
+     * key's entry is, or whether there is one.
+     */
+    for (index = 0U; index < header.recipient_count; ++index) {
+        int opened = open_recipient(
             &private_keys, recipient_public, metadata,
             metadata + V4_PREFIX_SIZE + index * NKEM_V4_ENTRY_SIZE,
-            file_key);
-        if (opened < 0) {
+            candidate);
+        unsigned char take;
+
+        if (opened == ENTRY_ERROR) {
             goto cleanup;
         }
+        malformed |= (opened == ENTRY_MALFORMED);
+        take = (unsigned char)(0U - (unsigned int)(opened == ENTRY_OPENED)) &
+               (unsigned char)~found;
+        for (byte = 0U; byte < sizeof(file_key); ++byte) {
+            file_key[byte] = (unsigned char)((file_key[byte] & ~take) |
+                                             (candidate[byte] & take));
+        }
+        found |= take;
     }
+    secure_mem_clear(candidate, sizeof(candidate));
     hybrid_keys_cleanup(&private_keys);
-    if (opened == 0) {
-        fprintf(stderr, file_message("This file is not encrypted for this private key\n"));
+    /* Depends on the container alone, so it may be reported on its own. */
+    if (malformed) {
+        fprintf(stderr, file_message("An NKEM v4 recipient entry is malformed\n"));
         goto cleanup;
     }
 
-    /* Verify the whole recipient list before reading any ciphertext. */
+    /* Verify the whole recipient list before reading any ciphertext. With no
+     * match the MAC is still computed, over an all-zero file key, so a missing
+     * entry and a modified file take one path and report one message. */
     if (!derive_file_keys(file_key, metadata + NKEM_V4_HEADER_SIZE,
                           payload_key, mac_key) ||
         !header_mac(mac_key, metadata, mac_offset, expected_mac)) {
@@ -614,9 +706,10 @@ int nekokem_v4_decrypt_opened(
     }
     secure_mem_clear(file_key, sizeof(file_key));
     secure_mem_clear(mac_key, sizeof(mac_key));
-    if (CRYPTO_memcmp(expected_mac, metadata + mac_offset,
-                      NKEM_V4_MAC_SIZE) != 0) {
-        fprintf(stderr, file_message("NKEM v4 header authentication failed: the file was modified\n"));
+    mac_matches = CRYPTO_memcmp(expected_mac, metadata + mac_offset,
+                                NKEM_V4_MAC_SIZE) == 0;
+    if (found == 0U || !mac_matches) {
+        fprintf(stderr, file_message("This file is not encrypted for this private key, or it was modified\n"));
         goto cleanup;
     }
 
@@ -647,6 +740,7 @@ cleanup:
     atomic_file_abort(&output);
     hybrid_keys_cleanup(&private_keys);
     OPENSSL_free(metadata);
+    secure_mem_clear(candidate, sizeof(candidate));
     secure_mem_clear(file_key, sizeof(file_key));
     secure_mem_clear(payload_key, sizeof(payload_key));
     secure_mem_clear(mac_key, sizeof(mac_key));
