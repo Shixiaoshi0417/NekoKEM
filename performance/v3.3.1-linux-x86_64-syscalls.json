@@ -1,0 +1,56 @@
+{
+  "executable": "/workspace/scratch/large-file-profile/nekokem-v3.3.1",
+  "purpose": "Separate diagnostic traces; excluded from throughput samples",
+  "cases": [
+    {
+      "size_MiB": 64,
+      "operation": "encrypt",
+      "wall_seconds_with_tracing": 0.11427362199992785,
+      "strace_options": [
+        "-c",
+        "-w",
+        "-S",
+        "time",
+        "-e",
+        "trace=read,write,fsync"
+      ],
+      "trace": "% time     seconds  usecs/call     calls    errors syscall\n------ ----------- ----------- --------- --------- ----------------\n 36.84    0.024842          24      1027           write\n 34.30    0.023129       11564         2           fsync\n 28.86    0.019465          18      1032           read\n------ ----------- ----------- --------- --------- ----------------\n100.00    0.067437          32      2061           total\n"
+    },
+    {
+      "size_MiB": 64,
+      "operation": "decrypt",
+      "wall_seconds_with_tracing": 0.15381323099995825,
+      "strace_options": [
+        "-c",
+        "-w",
+        "-S",
+        "time",
+        "-e",
+        "trace=read,write,fsync"
+      ],
+      "trace": "% time     seconds  usecs/call     calls    errors syscall\n------ ----------- ----------- --------- --------- ----------------\n 53.81    0.021591       10795         2           fsync\n 24.12    0.009677           9      1026           write\n 22.07    0.008853           8      1072           read\n------ ----------- ----------- --------- --------- ----------------\n100.00    0.040121          19      2100           total\n"
+    },
+    {
+      "size_MiB": 1024,
+      "operation": "encrypt",
+      "wall_seconds_with_tracing": 1.5700021949999154,
+      "strace_options": [
+        "-T",
+        "-e",
+        "trace=fsync"
+      ],
+      "trace": "fsync(4)                                = 0 <0.271496>\nfsync(4)                                = 0 <0.000291>\n"
+    },
+    {
+      "size_MiB": 1024,
+      "operation": "decrypt",
+      "wall_seconds_with_tracing": 0.8592189849998704,
+      "strace_options": [
+        "-T",
+        "-e",
+        "trace=fsync"
+      ],
+      "trace": "fsync(4)                                = 0 <0.266678>\nfsync(4)                                = 0 <0.000332>\n"
+    }
+  ]
+}
