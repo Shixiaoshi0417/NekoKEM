@@ -91,7 +91,13 @@ class TemporaryKeyInstrumentation : Instrumentation() {
             testCancellationCleanup(workflow, context.cacheDir, plaintext)
             runPublicKeyContactsTests(context, manager, workflow, plaintext, DEFAULT_PASSWORD)
             testKeyDeletion(manager)
-            check(com.shixiaoshi0417.nekokem.keys.PublicKeyContacts(context, manager).readState().contacts.size == 1)
+            val retainedContacts = com.shixiaoshi0417.nekokem.keys.PublicKeyContacts(context, manager)
+            val retained = retainedContacts.readState().contacts.single()
+            val selected = checkNotNull(retainedContacts.stageForEncryption(retained.id).key)
+            try {
+                check(manager.encryptFile(plaintext, File(context.cacheDir, "contact-without-local-key.nkem"),
+                    selected, CONTINUE_PROGRESS) == NativeBridge.RESULT_SUCCESS)
+            } finally { workflow.discardTemporaryPublicKey(selected) }
             check(workflow.clearTemporaryKeyCache())
             check(!workflow.hasTemporaryKeyCache())
         } finally {

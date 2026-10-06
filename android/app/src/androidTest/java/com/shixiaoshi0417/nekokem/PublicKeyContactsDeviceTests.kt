@@ -4,6 +4,8 @@ import android.app.Instrumentation
 import android.content.Context
 import android.net.Uri
 import android.system.Os
+import android.system.ErrnoException
+import android.system.OsConstants
 import android.util.Base64
 import com.shixiaoshi0417.nekokem.files.SafFileWorkflow
 import com.shixiaoshi0417.nekokem.keys.LocalKeyManager
@@ -116,10 +118,16 @@ internal fun runPublicKeyContactsTests(
     check(contacts.updateNote(contact.id, "unsafe").code != NativeBridge.RESULT_SUCCESS)
     Os.chmod(record.absolutePath, 0x180)
     val alias = File(context.cacheDir, "contact-record-alias")
-    Os.link(record.absolutePath, alias.absolutePath)
-    check(contacts.stageForEncryption(contact.id).key == null)
-    check(contacts.delete(contact.id) != NativeBridge.RESULT_SUCCESS)
-    check(alias.delete())
+    try {
+        Os.link(record.absolutePath, alias.absolutePath)
+        check(contacts.stageForEncryption(contact.id).key == null)
+        check(contacts.delete(contact.id) != NativeBridge.RESULT_SUCCESS)
+        check(alias.delete())
+    } catch (error: ErrnoException) {
+        // Android app SELinux policies prohibit creating hard links, including own files.
+        check(error.errno == OsConstants.EACCES || error.errno == OsConstants.EPERM)
+        check(!alias.exists() && record.readBytes().contentEquals(expectedRecord))
+    }
     val backing = File(context.cacheDir, "contact-record-backing")
     check(record.renameTo(backing))
     Os.symlink(backing.absolutePath, record.absolutePath)

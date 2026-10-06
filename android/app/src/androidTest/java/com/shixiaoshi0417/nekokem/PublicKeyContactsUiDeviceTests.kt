@@ -71,6 +71,18 @@ internal fun runPublicKeyContactsUiTests(instrumentation: Instrumentation) {
         click(checkNotNull(activity).getString(R.string.navigation_open_menu))
         click(checkNotNull(activity).getString(R.string.navigation_contacts))
     }
+    fun capture(name: String) {
+        val directory = File(context.cacheDir, "i18n-screens").apply { check(isDirectory || mkdir()) }
+        val captured = checkNotNull(instrumentation.uiAutomation.takeScreenshot())
+        val screenshot = if (captured.config == Bitmap.Config.HARDWARE) {
+            checkNotNull(captured.copy(Bitmap.Config.ARGB_8888, false)).also { captured.recycle() }
+        } else captured
+        try {
+            File(directory, "$name.png").outputStream().use {
+                check(screenshot.compress(Bitmap.CompressFormat.PNG, 100, it))
+            }
+        } finally { screenshot.recycle() }
+    }
     try {
         generateContactTestKeypair(publicKey, privateKey)
         val key = checkNotNull(workflow.stageTemporaryPublicKey(Uri.fromFile(publicKey), "ui-recipient.key").key)
@@ -108,16 +120,7 @@ internal fun runPublicKeyContactsUiTests(instrumentation: Instrumentation) {
         recreate()
         awaitText(checkNotNull(activity).getString(R.string.key_source_contacts))
         awaitText(editedNote)
-        val captured = checkNotNull(instrumentation.uiAutomation.takeScreenshot())
-        val screenshot = if (captured.config == Bitmap.Config.HARDWARE) {
-            checkNotNull(captured.copy(Bitmap.Config.ARGB_8888, false)).also { captured.recycle() }
-        } else captured
-        try {
-            val screenshots = File(context.cacheDir, "i18n-screens").apply { check(isDirectory || mkdir()) }
-            File(screenshots, "contacts-selected.png").outputStream().use {
-                check(screenshot.compress(Bitmap.CompressFormat.PNG, 100, it))
-            }
-        } finally { screenshot.recycle() }
+        capture("contacts-selected")
         openContacts()
         click(checkNotNull(activity).getString(R.string.action_delete))
         awaitText(checkNotNull(activity).getString(R.string.contact_delete_title))
@@ -129,6 +132,21 @@ internal fun runPublicKeyContactsUiTests(instrumentation: Instrumentation) {
         awaitText(checkNotNull(activity).getString(R.string.contact_unavailable))
         click(checkNotNull(activity).getString(R.string.action_restore_default_public_key))
         awaitText(checkNotNull(activity).getString(R.string.key_source_app_default))
+    } catch (error: Throwable) {
+        runCatching {
+            capture("contacts-failure")
+            val tree = StringBuilder()
+            var count = 0
+            fun dump(node: AccessibilityNodeInfo?, depth: Int) {
+                if (node == null || depth > 50 || count++ >= 512) return
+                tree.append("  ".repeat(depth)).append(node.className).append(" | ")
+                    .append(node.text).append(" | ").append(node.contentDescription).append('\n')
+                for (index in 0 until node.childCount) dump(node.getChild(index), depth + 1)
+            }
+            dump(instrumentation.uiAutomation.rootInActiveWindow, 0)
+            File(context.cacheDir, "i18n-screens/contacts-failure.txt").writeText(tree.toString())
+        }
+        throw error
     } finally {
         savedId?.let { if (contacts.readState().contacts.any { contact -> contact.id == it }) contacts.delete(it) }
         instrumentation.runOnMainSync {
