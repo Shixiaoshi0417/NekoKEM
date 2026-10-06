@@ -18,7 +18,8 @@ const failure = ref<Message | null>(null);
 // Contact list actions report beside the list; everything else beside the form.
 const feedbackArea = ref<'form' | 'list'>('form');
 const progress = ref<bridge.Progress | null>(null);
-const form = reactive({ input: '', output: '', keyPath: '', publicPath: '', privatePath: '', password: '', confirmation: '', keyText: '', source: 'path' as KeySource, contact: '' });
+// Saved-contact recipients, in selection order: shared by the Contacts and Encrypt pages.
+const form = reactive({ input: '', output: '', keyPath: '', publicPath: '', privatePath: '', password: '', confirmation: '', keyText: '', source: 'path' as KeySource, contacts: [] as string[] });
 const contactForm = reactive({ keyPath: '', keyText: '', paste: false, note: '' });
 type Field = Exclude<keyof typeof form, 'source'> | 'contactKeyPath' | 'contactKeyText' | 'note' | 'noteDraft';
 type PathField = 'input' | 'output' | 'keyPath' | 'publicPath' | 'privatePath' | 'contactKeyPath';
@@ -34,14 +35,21 @@ const contactsLoaded = ref(false);
 const contactBusy = ref(false);
 const editing = ref<string | null>(null), noteDraft = ref('');
 const confirming = ref<string | null>(null), highlighted = ref<string | null>(null);
-const recipient = ref<bridge.Contact | null>(null);
+const recipients = ref<bridge.Contact[]>([]);
+// The saved contact that made the last encryption fail, named beside the error.
+const failedContact = ref<bridge.Contact | null>(null);
 const locked = computed(() => busy.value || contactBusy.value || choosing.value !== null);
 const t = (key: Message) => translate(key, language.value);
 const tabs: View[] = ['keygen', 'encrypt', 'decrypt', 'fingerprint', 'contacts'];
 const description = computed(() => t((operation.value + 'Help') as Message));
 const percent = computed(() => progress.value && progress.value.total > 0 ? Math.max(0, Math.min(100, Math.floor(progress.value.processed / progress.value.total * 100))) : null);
 const passwordRequired = computed(() => operation.value === 'keygen' || operation.value === 'decrypt');
-const selectedContact = computed(() => contacts.value.find(contact => contact.id === form.contact) ?? null);
+const selectedContacts = computed(() => form.contacts.flatMap(id => contacts.value.filter(contact => contact.id === id)));
+const maxRecipients = bridge.MAX_RECIPIENTS;
+const atRecipientLimit = computed(() => form.contacts.length >= maxRecipients);
+const selectedText = computed(() => t('selectedCount').replace('{count}', String(form.contacts.length)));
+// One recipient keeps writing NKEM v3; several share one NKEM v4 file.
+const formatLabel = computed(() => operation.value === 'decrypt' ? 'NKEM v3 · v4' : operation.value === 'encrypt' && form.source === 'contact' && form.contacts.length > 1 ? 'NKEM v4' : 'NKEM v3');
 const status = computed(() => !loaded.value ? t('loading') : choosing.value ? t('choosing') : cancelling.value ? t('cancelling') : busy.value || contactBusy.value ? t('working') : result.value ? t('success') : t('ready'));
 const unreadableText = computed(() => t('contactUnreadable').replace('{count}', String(unreadable.value)));
 const contactFailures: Message[] = ['contact-missing', 'contact-invalid', 'contact-mismatch', 'contact-storage'];
@@ -76,7 +84,8 @@ function resetFeedback() {
   failure.value = null;
   invalidField.value = null;
   progress.value = null;
-  recipient.value = null;
+  recipients.value = [];
+  failedContact.value = null;
   feedbackArea.value = 'form';
   successMessage.value = 'success';
 }
@@ -181,9 +190,10 @@ function validate(): Message | null {
     if (form.source === 'paste') {
       if (!form.keyText || bytes(form.keyText) > 1048576) return invalid('key-limit', 'keyText');
     } else if (form.source === 'contact') {
-      // An explicit, currently listed contact is required; never pick one implicitly.
-      if (!form.contact) return invalid('contact-required', 'contact');
-      if (!selectedContact.value) return invalid('contact-missing', 'contact');
+      // Explicit, currently listed contacts are required; never pick one implicitly.
+      if (!form.contacts.length) return invalid('contact-required', 'contacts');
+      if (form.contacts.length > maxRecipients) return invalid('recipient-limit', 'contacts');
+      if (selectedContacts.value.length !== form.contacts.length) return invalid('contact-missing', 'contacts');
     } else if (!form.keyPath) return invalid('invalid-path', 'keyPath');
     if (operation.value !== 'fingerprint') {
       if (!form.input) return invalid('invalid-path', 'input');
@@ -208,10 +218,11 @@ async function refreshContacts() {
     unreadable.value = 0;
     contactsFailure.value = errorCode(error);
   } finally { contactsLoaded.value = true; }
-  // A selection that disappeared is cleared and reported, never replaced.
-  if (form.contact && !busy.value && !selectedContact.value) {
-    form.contact = '';
-    if (operation.value === 'encrypt' && form.source === 'contact' && !failure.value) failure.value = invalid('contact-missing', 'contact');
+  // A selected contact that disappeared is deselected and reported, never replaced.
+  const listed = form.contacts.filter(id => contacts.value.some(contact => contact.id === id));
+  if (listed.length !== form.contacts.length && !busy.value) {
+    form.contacts = listed;
+    if (operation.value === 'encrypt' && form.source === 'contact' && !failure.value) failure.value = invalid('contact-missing', 'contacts');
   }
 }
 async function start() {
@@ -220,7 +231,7 @@ async function start() {
   resetFeedback();
   failure.value = validate();
   if (failure.value) return focusInvalid();
-  const contact = form.source === 'contact' && operation.value === 'encrypt' ? selectedContact.value : null;
+  const chosen = form.source === 'contact' && operation.value === 'encrypt' ? [...selectedContacts.value] : [];
   jobId.value = crypto.randomUUID();
   busy.value = true;
   cancelling.value = false;
@@ -228,19 +239,25 @@ async function start() {
     id: jobId.value, kind: operation.value, input: form.input, output: form.output,
     keyPath: form.source === 'path' ? form.keyPath : '', publicPath: form.publicPath, privatePath: form.privatePath,
     password: form.password, confirmation: form.confirmation, keyText: form.source === 'paste' ? form.keyText : '',
-    paste: form.source === 'paste', contact: contact?.id ?? '',
+    paste: form.source === 'paste', contacts: chosen.map(contact => contact.id),
   };
   // The native layer owns zeroizing secrets. Do not retain them in the form.
   clearSecrets();
   let unavailable = false;
   try {
     result.value = await bridge.runOperation(request);
-    recipient.value = contact;
+    recipients.value = chosen;
   } catch (error) {
     failure.value = errorCode(error);
-    // Require an explicit new choice after a contact could not be used.
-    unavailable = contact !== null && contactFailures.includes(failure.value);
-    if (unavailable) { form.contact = ''; invalidField.value = 'contact'; }
+    // Nothing was encrypted. Deselect the contact that could not be used and
+    // require the user to start again with the recipients that remain.
+    unavailable = chosen.length > 0 && contactFailures.includes(failure.value);
+    if (unavailable) {
+      const id = (error as { contact?: string })?.contact;
+      failedContact.value = chosen.find(contact => contact.id === id) ?? null;
+      form.contacts = failedContact.value ? form.contacts.filter(selected => selected !== id) : [];
+      invalidField.value = 'contacts';
+    }
   } finally {
     request.password = ''; request.confirmation = ''; request.keyText = '';
     busy.value = false; cancelling.value = false;
@@ -330,9 +347,24 @@ async function removeContact(contact: bridge.Contact) {
 }
 function useContact(contact: bridge.Contact) {
   if (locked.value) return;
-  form.contact = contact.id;
+  form.contacts = [contact.id];
   form.source = 'contact';
   switchTab('encrypt');
+}
+function toggleContact(contact: bridge.Contact) {
+  if (locked.value) return;
+  if (form.contacts.includes(contact.id)) form.contacts = form.contacts.filter(id => id !== contact.id);
+  else if (!atRecipientLimit.value) form.contacts = [...form.contacts, contact.id];
+  if (invalidField.value === 'contacts') { invalidField.value = null; failure.value = null; }
+}
+function encryptSelected() {
+  if (locked.value || !form.contacts.length) return;
+  form.source = 'contact';
+  switchTab('encrypt');
+}
+function clearSelection() {
+  if (locked.value) return;
+  form.contacts = [];
 }
 async function cancel() {
   if (!busy.value || cancelling.value || cancelPending.value) return;
@@ -399,9 +431,14 @@ onUnmounted(() => unlisten?.());
               <label v-if="form.source === 'path'" class="field enter-field">{{ t('key') }}<div class="path-input"><input v-model="form.keyPath" v-bind="fieldAttrs('keyPath')" name="keyPath" spellcheck="false" autocomplete="off"><button type="button" :aria-label="`${t('browse')} ${t('key')}`" @click="browse('keyPath')">{{ choosing === 'keyPath' ? t('choosing') : t('browse') }}</button></div></label>
               <label v-else-if="form.source === 'paste'" class="field enter-field">{{ t('paste') }}<textarea v-model="form.keyText" v-bind="fieldAttrs('keyText')" :class="{ 'key-secret': operation === 'decrypt' }" name="keyText" rows="4" spellcheck="false" autocomplete="off" :placeholder="t('pasteHint')"></textarea></label>
               <div v-else class="contact-choice enter-field">
-                <label class="field">{{ t('recipient') }}<select v-model="form.contact" v-bind="fieldAttrs('contact')" name="contact"><option value="" disabled>{{ t('chooseContact') }}</option><option v-for="contact in contacts" :key="contact.id" :value="contact.id">{{ label(contact) }} · {{ contact.fingerprint.slice(0, 11) }}…</option></select></label>
-                <div v-if="selectedContact" class="contact-preview"><span>{{ t('fingerprint') }}</span><code>{{ selectedContact.fingerprint }}</code></div>
-                <p v-else-if="contactsFailure" class="hint warning">{{ t(contactsFailure) }}</p>
+                <div class="recipient-heading"><span id="recipients-label">{{ t('recipients') }}</span><span class="count">{{ form.contacts.length }} / {{ maxRecipients }}</span></div>
+                <div v-if="contacts.length" class="recipient-options" role="group" aria-labelledby="recipients-label" v-bind="fieldAttrs('contacts')">
+                  <label v-for="contact in contacts" :key="contact.id" class="recipient-option" :class="{ selected: form.contacts.includes(contact.id) }"><input type="checkbox" name="contacts" :value="contact.id" :checked="form.contacts.includes(contact.id)" :disabled="!form.contacts.includes(contact.id) && atRecipientLimit" @change="toggleContact(contact)"><span class="recipient-label">{{ label(contact) }}</span><code>{{ contact.fingerprint.slice(0, 11) }}…</code></label>
+                </div>
+                <div v-if="selectedContacts.length === 1" class="contact-preview"><span>{{ t('fingerprint') }}</span><code>{{ selectedContacts[0]!.fingerprint }}</code></div>
+                <p v-else-if="selectedContacts.length > 1" class="hint multi-hint">{{ t('multiRecipientHint') }}</p>
+                <p v-if="atRecipientLimit" class="hint">{{ t('recipient-limit') }}</p>
+                <p v-if="contactsFailure" class="hint warning">{{ t(contactsFailure) }}</p>
                 <p v-else-if="contactsLoaded && !contacts.length" class="hint">{{ t('noContacts') }}<button type="button" class="link-button" @click="switchTab('contacts')">{{ t('manageContacts') }}</button></p>
               </div>
               <template v-if="operation !== 'fingerprint'">
@@ -418,10 +455,10 @@ onUnmounted(() => unlisten?.());
         </fieldset>
         <div v-if="busy" class="progress-block enter-feedback" role="status"><div class="progress-label"><span>{{ cancelling ? t('cancelling') : progress ? t('progress') : t('preparing') }}</span><strong v-if="percent !== null">{{ percent }}%</strong></div><div class="progress-track" role="progressbar" :aria-label="t('progress')" :aria-valuenow="percent ?? undefined" aria-valuemin="0" aria-valuemax="100" :aria-valuetext="percent === null ? t('preparing') : undefined"><div class="progress-fill" :class="{ indeterminate: percent === null }" :style="{ width: `${percent ?? 32}%` }"></div></div></div>
         <template v-if="feedbackArea === 'form'">
-          <div v-if="failure" id="operation-error" class="notice enter-feedback" :class="{ neutral: failure === 'cancelled' }" role="alert"><AppIcon :name="failure === 'cancelled' ? 'close' : 'alert'" /><span>{{ t(failure) }}</span></div>
-          <div v-if="result" class="notice success enter-feedback" role="status"><AppIcon name="check" /><div><strong>{{ t(successMessage) }}</strong><p v-if="result.output" class="result-path">{{ result.output }}</p><p v-if="recipient" class="result-path">{{ t('recipient') }}: {{ label(recipient) }}</p><textarea v-if="result.fingerprint" class="fingerprint" :value="result.fingerprint" readonly rows="3" :aria-label="t('fingerprint')"></textarea></div></div>
+          <div v-if="failure" id="operation-error" class="notice enter-feedback" :class="{ neutral: failure === 'cancelled' }" role="alert"><AppIcon :name="failure === 'cancelled' ? 'close' : 'alert'" /><div><span>{{ t(failure) }}</span><p v-if="failedContact" class="result-path failed-contact">{{ t('recipient') }}: {{ label(failedContact) }} · {{ failedContact.fingerprint.slice(0, 11) }}…</p></div></div>
+          <div v-if="result" class="notice success enter-feedback" role="status"><AppIcon name="check" /><div><strong>{{ t(successMessage) }}</strong><p v-if="result.output" class="result-path">{{ result.output }}</p><p v-if="recipients.length" class="result-path">{{ recipients.length > 1 ? t('recipients') : t('recipient') }}: {{ recipients.map(label).join(', ') }}</p><textarea v-if="result.fingerprint" class="fingerprint" :value="result.fingerprint" readonly rows="3" :aria-label="t('fingerprint')"></textarea></div></div>
         </template>
-        <footer class="actions"><span class="format"><span class="format-dot" aria-hidden="true"></span>X448 + ML-KEM-1024<span>NKEM v3</span></span><button v-if="busy && ['encrypt', 'decrypt'].includes(operation)" class="secondary" type="button" :disabled="cancelling || cancelPending" @click="cancel">{{ t('cancel') }}</button><button class="primary" type="submit" :disabled="locked || !loaded"><span class="spinner" v-if="busy || contactBusy" aria-hidden="true"></span>{{ busy || contactBusy ? t('working') : operation === 'contacts' ? t('saveContact') : t(operation) }}<AppIcon v-if="!busy && !contactBusy" name="arrow" /></button></footer>
+        <footer class="actions"><span class="format"><span class="format-dot" aria-hidden="true"></span>X448 + ML-KEM-1024<span>{{ formatLabel }}</span></span><button v-if="busy && ['encrypt', 'decrypt'].includes(operation)" class="secondary" type="button" :disabled="cancelling || cancelPending" @click="cancel">{{ t('cancel') }}</button><button class="primary" type="submit" :disabled="locked || !loaded"><span class="spinner" v-if="busy || contactBusy" aria-hidden="true"></span>{{ busy || contactBusy ? t('working') : operation === 'contacts' ? t('saveContact') : t(operation) }}<AppIcon v-if="!busy && !contactBusy" name="arrow" /></button></footer>
       </form>
       <section v-if="operation === 'contacts'" ref="contactList" class="card contact-list enter-page" aria-labelledby="saved-contacts-title">
         <h2 id="saved-contacts-title">{{ t('savedContacts') }}<span class="count">{{ contacts.length }}</span></h2>
@@ -432,8 +469,15 @@ onUnmounted(() => unlisten?.());
           <div v-if="result" class="notice success enter-feedback" role="status"><AppIcon name="check" /><span>{{ t(successMessage) }}</span></div>
         </template>
         <p v-if="contactsLoaded && !contactsFailure && !contacts.length" class="hint empty">{{ t('noContacts') }}</p>
+        <div v-if="form.contacts.length" class="selection-bar enter-feedback" role="group" :aria-label="selectedText">
+          <span class="selection-count">{{ selectedText }}</span>
+          <span v-if="atRecipientLimit" class="selection-limit">{{ t('recipient-limit') }}</span>
+          <button type="button" class="text-button clear-selection" :disabled="locked" @click="clearSelection">{{ t('clearSelection') }}</button>
+          <button type="button" class="secondary encrypt-selected" :disabled="locked" @click="encryptSelected">{{ t('encryptSelected') }}</button>
+        </div>
         <ul :aria-label="t('savedContacts')">
-          <li v-for="contact in contacts" :key="contact.id" class="contact" :class="{ highlighted: highlighted === contact.id, selected: form.contact === contact.id }" :data-contact="contact.id">
+          <li v-for="contact in contacts" :key="contact.id" class="contact" :class="{ highlighted: highlighted === contact.id, selected: form.contacts.includes(contact.id) }" :data-contact="contact.id">
+            <label class="contact-select"><input type="checkbox" :checked="form.contacts.includes(contact.id)" :disabled="locked || (!form.contacts.includes(contact.id) && atRecipientLimit)" :aria-label="`${t('selectContact')} · ${label(contact)}`" @change="toggleContact(contact)"></label>
             <div class="contact-main">
               <strong class="contact-label">{{ label(contact) }}</strong>
               <span v-if="contact.note" class="contact-source">{{ t('sourceFile') }}: {{ contact.name || t('pastedKey') }}</span>

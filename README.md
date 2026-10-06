@@ -53,6 +53,19 @@ Windows、macOS 与 Linux 共用的 Rust + Tauri 2 + Vue 3 + TypeScript GUI 新�
 密码参数、文件格式和秘密清理机制不变。详见 [桌面 GUI 文档](desktop/README.md#public-key-contacts--公钥通讯录)。
 此功能自 v3.3.2 起提供；v3.3.1 及更早版本不包含。
 
+## 多人加密（开发分支）
+
+一个文件可以同时加密给最多 64 位接收方，每位接收方用自己的私钥都能解开，其他人无法解密。
+桌面 GUI 在“公钥通讯录”页面勾选多位联系人后点击“加密给所选联系人”，或在加密页的接收方列表中勾选；
+Android 在“公钥通讯录”页面勾选“选为接收方”后点击“加密给所选接收方”。只选一位时仍写出 NKEM v3；
+选择两位及以上时写出一个 NKEM v4 文件。每位联系人都会在加密前重新读取并由 Core 校验指纹，
+任何一位缺失、损坏或指纹不符都会让整个操作失败并指出该联系人，不会跳过或改用其他公钥。
+CLI 在原有命令后列出多个公钥即可，示例见[参数化命令](#参数化命令)。
+
+NKEM v4 为每位接收方保存一份 X448 + ML-KEM-1024 封装和被包装的文件密钥，文件数据只加密一次；
+HMAC-SHA512 头部 MAC 保证所有接收方解出相同内容。格式见 [`docs/NKEM-v4.md`](docs/NKEM-v4.md)。
+所有平台的解密都会自动识别 v3 与 v4；NekoKEM v3.3.2 及更早版本无法打开 v4 文件。
+
 ## 历史版本 v3.2.0
 
 v3.2.0 引入五种界面语言、跟随系统选项和安全修复，并更换 Android 发布签名。该次迁移说明与历史构建记录见 [v3.2.0 更新日志](release/v3.2.0.md)；从 v3.2.0 升级至 v3.3.0 不需要再次卸载。
@@ -252,6 +265,12 @@ encrypted/test.jpg.nkem -> plaintext/test.jpg
 ./nekokem decrypt hybrid encrypted/test-v3.nkem output.txt keys/private.key.enc
 ```
 
+在原有加密命令后列出两个或更多公钥，会写出一个所有接收方都能解密的 NKEM v4 文件；任一公钥无效或重复时不会创建输出：
+
+```sh
+./nekokem encrypt hybrid test.txt encrypted/team.nkem alice.key bob.key carol.key
+```
+
 Hybrid decrypt 看到 `.enc` 后会自动提示一次密码。为兼容已有部署，命令仍接受包含 X448、ML-KEM-1024 两个 PEM 块的旧式明文 `private.key`。
 
 命令可以使用其他位置的相应 PEM 密钥：
@@ -300,7 +319,11 @@ NKPR 是独立于 NKEM 文件容器的私钥存储格式；NKEM v3 不修改 NKP
 
 ## NKEM v3 hybrid 文件格式
 
-v3 使用 X448、ML-KEM-1024、共享秘密组合和 HKDF-SHA512，并将 HKDF salt 与 AES-GCM nonce 分离。每个文件分别通过 `RAND_bytes` 生成 32 字节 salt 和 12 字节 nonce；两者连同固定头部、X448 临时公钥和 ML-KEM 密文一起纳入 GCM AAD。完整布局见 [`docs/NKEM-v3.md`](docs/NKEM-v3.md)。`nekokem_encrypt_file()` 写出 v3，`nekokem_decrypt_file()` 仅接受 v3。
+v3 使用 X448、ML-KEM-1024、共享秘密组合和 HKDF-SHA512，并将 HKDF salt 与 AES-GCM nonce 分离。每个文件分别通过 `RAND_bytes` 生成 32 字节 salt 和 12 字节 nonce；两者连同固定头部、X448 临时公钥和 ML-KEM 密文一起纳入 GCM AAD。完整布局见 [`docs/NKEM-v3.md`](docs/NKEM-v3.md)。`nekokem_encrypt_file()` 写出 v3，`nekokem_decrypt_file()` 接受 v3 与 v4。
+
+## NKEM v4 多接收方文件格式
+
+v4 用随机 32 字节文件密钥只加密一次文件数据，并为每位接收方（最多 64 位）各保存一条记录：X448 临时公钥、ML-KEM-1024 密文和用 AES-256-GCM 包装的文件密钥。包装密钥由 HKDF-SHA512 从该接收方的两个共享秘密派生，并绑定 X448 临时公钥与接收方 X448 公钥。HMAC-SHA512 头部 MAC 覆盖头部、salt 和全部接收方记录，承诺文件密钥，使所有接收方解出相同内容；记录不含指纹，解密时逐条尝试。完整布局见 [`docs/NKEM-v4.md`](docs/NKEM-v4.md)。`nekokem_encrypt_file_multi_with_progress()` 写出 v4。
 
 ## 安全实现说明
 
@@ -395,7 +418,8 @@ make -C linux fuzz-build
 ## 安全边界
 
 - Hybrid 私钥现在使用口令保护，但安全性仍取决于用户选择足够强且唯一的密码，以及操作系统对进程内存、终端和文件的保护；
-- 文件长度和所选算法等容器元数据不是机密；
+- 文件长度和所选算法等容器元数据不是机密；NKEM v4 还会暴露接收方数量（不暴露身份）；
+- NKEM 不认证发送者：v4 的接收方共享文件密钥，任一接收方都能制作复用同一接收方列表的新文件，接收方列表不能证明发件人；
 - X448 与 ML-KEM 的组合及本项目的 KDF/AAD 绑定方式是实验性设计，不代表经过标准化的 hybrid KEM；
 - 已进行项目内解析器 fuzz，但未经独立第三方审计或广泛互操作测试；
 - 实现不能替代成熟、经过审计的文件加密协议和密钥管理系统。

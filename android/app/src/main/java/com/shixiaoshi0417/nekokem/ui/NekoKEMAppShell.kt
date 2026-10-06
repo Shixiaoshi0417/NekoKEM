@@ -87,6 +87,11 @@ data class NekoKEMUiState(
     val contactsState: PublicKeyContactsState = PublicKeyContactsState(),
     val publicKeyContactId: String? = null,
     val publicKeyNote: String? = null,
+    // Saved-contact recipients still listed, in order, and how many were chosen.
+    val publicKeyRecipients: List<PublicKeyContact> = emptyList(),
+    val publicKeyRecipientCount: Int = 0,
+    // Checkbox selection on the contacts page, not yet applied to encryption.
+    val contactSelection: List<String> = emptyList(),
 )
 
 data class NekoKEMActions(
@@ -112,6 +117,9 @@ data class NekoKEMActions(
     val onSelectContact: (PublicKeyContact) -> Unit,
     val onEditContact: (PublicKeyContact) -> Unit,
     val onDeleteContact: (PublicKeyContact) -> Unit,
+    val onToggleContactSelection: (PublicKeyContact) -> Unit = {},
+    val onClearContactSelection: () -> Unit = {},
+    val onEncryptForSelectedContacts: () -> Unit = {},
 )
 
 private enum class AppDestination(@StringRes val titleResource: Int) {
@@ -245,10 +253,18 @@ fun NekoKEMAppShell(
                     when (destination) {
                         AppDestination.FILES -> FileOperationsPage(state, actions)
                         AppDestination.KEYS -> KeyManagementPage(state, actions)
-                        AppDestination.CONTACTS -> PublicKeyContactsPage(state, actions) { contact ->
-                            actions.onSelectContact(contact)
-                            destination = AppDestination.FILES
-                        }
+                        AppDestination.CONTACTS -> PublicKeyContactsPage(
+                            state,
+                            actions,
+                            onUse = { contact ->
+                                actions.onSelectContact(contact)
+                                destination = AppDestination.FILES
+                            },
+                            onEncryptSelected = {
+                                actions.onEncryptForSelectedContacts()
+                                destination = AppDestination.FILES
+                            },
+                        )
                         AppDestination.SETTINGS -> SettingsPage(state.running)
                         AppDestination.ABOUT -> AboutPage(state)
                     }
@@ -308,15 +324,21 @@ private fun FileOperationsPage(
             onClick = actions.onDecrypt,
         )
         Spacer(modifier = Modifier.height(12.dp))
-        KeySelectionCard(
-            titleResource = R.string.encryption_public_key_title,
-            temporary = state.publicKeyTemporary,
-            fileName = state.publicKeyFileName,
-            fingerprint = state.publicKeyFingerprint,
-            sourceResource = if (state.publicKeyContactId != null) R.string.key_source_contacts else null,
-            note = state.publicKeyNote,
-        )
-        if (state.publicKeyContactId != null && state.publicKeyFingerprint == null) {
+        if (state.publicKeyRecipientCount > 1) {
+            RecipientsCard(state.publicKeyRecipients, state.publicKeyRecipientCount)
+        } else {
+            KeySelectionCard(
+                titleResource = R.string.encryption_public_key_title,
+                temporary = state.publicKeyTemporary,
+                fileName = state.publicKeyFileName,
+                fingerprint = state.publicKeyFingerprint,
+                sourceResource = if (state.publicKeyContactId != null) R.string.key_source_contacts else null,
+                note = state.publicKeyNote,
+            )
+        }
+        if (state.publicKeyRecipientCount > 0 &&
+            state.publicKeyRecipients.size < state.publicKeyRecipientCount
+        ) {
             Text(stringResource(R.string.contact_unavailable), color = MaterialTheme.colorScheme.error)
         }
         ActionButton(
@@ -329,7 +351,7 @@ private fun FileOperationsPage(
             enabled = state.nativeConnected && !state.running,
             onClick = actions.onSelectTemporaryPublicKey,
         )
-        if (state.publicKeyTemporary || state.publicKeyContactId != null) {
+        if (state.publicKeyTemporary || state.publicKeyRecipientCount > 0) {
             ActionButton(
                 labelResource = R.string.action_restore_default_public_key,
                 enabled = !state.running,
@@ -353,6 +375,41 @@ private fun FileOperationsPage(
                 labelResource = R.string.action_restore_default_private_key,
                 enabled = !state.running,
                 onClick = actions.onRestoreDefaultPrivateKey,
+            )
+        }
+    }
+}
+
+/** Several saved contacts sharing one NKEM v4 file; each is listed with its fingerprint. */
+@Composable
+private fun RecipientsCard(recipients: List<PublicKeyContact>, count: Int) {
+    Card(modifier = Modifier.fillMaxWidth()) {
+        Column(modifier = Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text(
+                text = stringResource(R.string.encryption_public_key_title),
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+            )
+            Text(
+                text = stringResource(
+                    R.string.key_source_line,
+                    stringResource(R.string.key_source_contacts_multiple, count),
+                ),
+                style = MaterialTheme.typography.bodyMedium,
+            )
+            recipients.forEach { contact ->
+                Column(modifier = Modifier.padding(top = 4.dp)) {
+                    Text(contact.label, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium)
+                    Text(
+                        stringResource(R.string.key_fingerprint_line, contact.fingerprint),
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                }
+            }
+            Text(
+                text = stringResource(R.string.contact_recipients_hint),
+                style = MaterialTheme.typography.bodySmall,
+                modifier = Modifier.padding(top = 4.dp),
             )
         }
     }

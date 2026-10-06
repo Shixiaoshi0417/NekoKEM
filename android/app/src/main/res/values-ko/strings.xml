@@ -191,4 +191,12 @@
     <string name="operation_update_contact">공개키 메모 갱신</string>
     <string name="operation_delete_contact">저장된 공개키 삭제</string>
     <string name="operation_select_contact">저장된 공개키 선택</string>
+    <string name="contact_select_recipient">수신자로 선택</string>
+    <string name="contact_selection_count">수신자 %1$d명 선택됨</string>
+    <string name="action_encrypt_for_selected">선택한 수신자용으로 암호화</string>
+    <string name="contact_selection_limit">수신자는 최대 %1$d명까지 선택할 수 있습니다</string>
+    <string name="contact_recipients_hint">선택한 수신자는 각자 자신의 개인 키로 파일을 복호화할 수 있으며 다른 사람은 복호화할 수 없습니다. 여러 수신자용 파일은 NKEM v4를 사용하며 NekoKEM v3.3.2 이하에서는 열 수 없습니다.</string>
+    <string name="key_source_contacts_multiple">공개키 주소록(수신자 %1$d명)</string>
+    <string name="contact_recipients_selected">수신자를 선택했습니다</string>
+    <string name="contact_failed_recipient">사용할 수 없는 수신자: %1$s</string>
 </resources>

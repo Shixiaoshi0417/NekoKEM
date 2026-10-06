@@ -191,4 +191,12 @@
     <string name="operation_update_contact">更新公鑰備註</string>
     <string name="operation_delete_contact">刪除通訊錄公鑰</string>
     <string name="operation_select_contact">選擇通訊錄公鑰</string>
+    <string name="contact_select_recipient">選為接收者</string>
+    <string name="contact_selection_count">已選擇 %1$d 位接收者</string>
+    <string name="action_encrypt_for_selected">加密給所選接收者</string>
+    <string name="contact_selection_limit">最多選擇 %1$d 位接收者</string>
+    <string name="contact_recipients_hint">每位所選接收者都能用自己的私鑰解密此檔案，其他人無法解密。多人加密使用 NKEM v4，NekoKEM v3.3.2 及更早版本無法開啟。</string>
+    <string name="key_source_contacts_multiple">公鑰通訊錄（%1$d 位接收者）</string>
+    <string name="contact_recipients_selected">已選擇接收者</string>
+    <string name="contact_failed_recipient">無法使用的接收者：%1$s</string>
 </resources>

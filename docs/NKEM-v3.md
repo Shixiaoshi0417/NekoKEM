@@ -1,7 +1,8 @@
 # NKEM v3 Hybrid container
 
-NKEM v3 is the only NekoKEM file container supported by the current
-implementation. Its construction preserves the earlier
+NKEM v3 is NekoKEM's single-recipient file container. Files for several
+recipients use [NKEM v4](NKEM-v4.md), which reuses the same per-recipient
+X448 and ML-KEM-1024 encapsulation. The v3 construction preserves the earlier
 X448 and ML-KEM-1024 operations, the `x448_secret || mlkem_secret` input
 ordering, HKDF-SHA512, and AES-256-GCM. Its protocol change is an independent
 32-byte HKDF salt instead of reusing the 12-byte GCM nonce as that salt.
@@ -93,8 +94,9 @@ header.
 ## Compatibility
 
 - `nekokem_encrypt_file()` writes v3.
-- `nekokem_decrypt_file()` accepts only v3. Containers whose version byte is
-  `1` or `2` are rejected and no plaintext output is committed.
+- `nekokem_decrypt_file()` accepts v3 and [v4](NKEM-v4.md). Containers whose
+  version byte is `1`, `2` or any other value are rejected and no plaintext
+  output is committed.
 - The v1/v2 encryption, decryption, parser, header, API, and CLI compatibility
   implementations have been removed. Existing v1/v2 containers can no longer
   be decrypted by this project.

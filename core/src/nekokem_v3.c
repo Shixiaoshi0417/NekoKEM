@@ -4,7 +4,7 @@
 #include "file.h"
 #include "hybrid.h"
 #include "kem.h"
-#include "private_key.h"
+#include "nekokem_v4.h"
 #include "secure_mem.h"
 
 #include <limits.h>
@@ -205,8 +205,11 @@ int nekokem_encrypt_file(const char *input_path,
                NULL, NULL) == NEKOKEM_OPERATION_SUCCESS;
 }
 
-static int decrypt_file_v3_with_progress(
-    const char *input_path,
+/* Decrypts an opened v3 container whose 32-byte header was already read. */
+static int decrypt_v3_opened(
+    FILE *input,
+    uint64_t container_size,
+    const unsigned char raw_header[NKEM_V3_HEADER_SIZE],
     const char *output_path,
     const char *private_key_path,
     const unsigned char *password,
@@ -214,14 +217,12 @@ static int decrypt_file_v3_with_progress(
     NekoKEMProgressCallback progress_callback,
     void *progress_user_data)
 {
-    FILE *input = NULL;
     AtomicFile output = {0};
     HybridKeys private_keys = {0};
     unsigned char *x448_secret = NULL;
     unsigned char *kem_ciphertext = NULL;
     unsigned char *mlkem_secret = NULL;
     unsigned char *aad = NULL;
-    unsigned char raw_header[NKEM_V3_HEADER_SIZE];
     unsigned char ephemeral_public[X448_PUBLIC_KEY_SIZE];
     unsigned char salt[NKEM_V3_SALT_SIZE];
     unsigned char nonce[NKEM_NONCE_SIZE];
@@ -231,21 +232,10 @@ static int decrypt_file_v3_with_progress(
     size_t kem_ciphertext_len = 0U;
     size_t mlkem_secret_len = 0U;
     size_t aad_len = 0U;
-    uint64_t container_size = 0U;
     int aes_result;
     int result = NEKOKEM_OPERATION_ERROR;
 
-    if (!validate_file_paths(input_path, output_path, private_key_path)) {
-        goto cleanup;
-    }
-    input = file_open_regular(input_path);
-    if (input == NULL) {
-        goto cleanup;
-    }
-    if (!file_disable_buffering(input) ||
-        !file_get_size(input, &container_size) ||
-        !file_read_exact(input, raw_header, sizeof(raw_header)) ||
-        !nkem_v3_header_decode(raw_header, &header) ||
+    if (!nkem_v3_header_decode(raw_header, &header) ||
         !nkem_v3_container_size_is_valid(&header, container_size)) {
         goto cleanup;
     }
@@ -263,18 +253,8 @@ static int decrypt_file_v3_with_progress(
         !file_read_exact(input, nonce, sizeof(nonce))) {
         goto cleanup;
     }
-    if (private_key_path_is_encrypted(private_key_path)) {
-        if (password == NULL || password_len == 0U) {
-            fprintf(stderr, file_message("A password is required for this private key\n"));
-            goto cleanup;
-        }
-        if (!hybrid_load_protected_private_keys(
-                private_key_path, password, password_len,
-                &private_keys)) {
-            goto cleanup;
-        }
-    } else if (!hybrid_load_private_keys(private_key_path,
-                                         &private_keys)) {
+    if (!hybrid_load_decryption_keys(private_key_path, password,
+                                     password_len, &private_keys)) {
         goto cleanup;
     }
     if (!hybrid_x448_decapsulate(
@@ -328,9 +308,6 @@ static int decrypt_file_v3_with_progress(
 
 cleanup:
     atomic_file_abort(&output);
-    if (input != NULL) {
-        (void)fclose(input);
-    }
     hybrid_keys_cleanup(&private_keys);
     secure_free(x448_secret, x448_secret_len);
     OPENSSL_free(kem_ciphertext);
@@ -349,13 +326,38 @@ int nekokem_decrypt_file_with_progress(
     NekoKEMProgressCallback progress_callback,
     void *progress_user_data)
 {
+    FILE *input = NULL;
+    unsigned char raw_header[NKEM_V3_HEADER_SIZE];
+    uint64_t container_size = 0U;
+    int result = NEKOKEM_OPERATION_ERROR;
+
     if (!validate_file_paths(input_path, output_path, private_key_path)) {
         return NEKOKEM_OPERATION_ERROR;
     }
-    return decrypt_file_v3_with_progress(
-        input_path, output_path, private_key_path,
-        password, password_len,
-        progress_callback, progress_user_data);
+    input = file_open_regular(input_path);
+    if (input == NULL) {
+        return NEKOKEM_OPERATION_ERROR;
+    }
+    if (file_disable_buffering(input) &&
+        file_get_size(input, &container_size) &&
+        file_read_exact(input, raw_header, sizeof(raw_header))) {
+        /* Both versions share the 32-byte header size and magic. Anything
+         * that is not v4 takes the v3 path, which rejects v1/v2/unknown. */
+        if (memcmp(raw_header, "NKEM", 4U) == 0 &&
+            raw_header[4] == NKEM_V4_VERSION) {
+            result = nekokem_v4_decrypt_opened(
+                input, container_size, raw_header, output_path,
+                private_key_path, password, password_len,
+                progress_callback, progress_user_data);
+        } else {
+            result = decrypt_v3_opened(
+                input, container_size, raw_header, output_path,
+                private_key_path, password, password_len,
+                progress_callback, progress_user_data);
+        }
+    }
+    (void)fclose(input);
+    return result;
 }
 
 int nekokem_decrypt_file(const char *input_path,

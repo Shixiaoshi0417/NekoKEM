@@ -302,6 +302,25 @@ cleanup:
     return success;
 }
 
+int hybrid_load_decryption_keys(
+    const char *path,
+    const unsigned char *password,
+    size_t password_len,
+    HybridKeys *keys)
+{
+    keys->x448 = NULL;
+    keys->mlkem = NULL;
+    if (private_key_path_is_encrypted(path)) {
+        if (password == NULL || password_len == 0U) {
+            fprintf(stderr, file_message("A password is required for this private key\n"));
+            return 0;
+        }
+        return hybrid_load_protected_private_keys(
+            path, password, password_len, keys);
+    }
+    return hybrid_load_private_keys(path, keys);
+}
+
 static int x448_derive(EVP_PKEY *private_key,
                        EVP_PKEY *peer_public_key,
                        unsigned char **shared_secret,

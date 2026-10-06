@@ -107,8 +107,13 @@ test('minimum native window fits all five languages and pasted-key layouts',asyn
   await page.locator('.delete-contact').first().click();await noHorizontalOverflow(page);
   await page.locator('.contact-actions.confirming .text-button').click();
   await page.locator('.operation-tab').nth(1).click();await page.getByRole('radio').nth(2).check();
-  await page.locator('[name=contact]').selectOption({index:1});
+  await page.locator('[name=contacts]').first().check();
   await expect(page.locator('.contact-preview code')).toBeVisible();await noHorizontalOverflow(page);
+  await page.locator('[name=contacts]').nth(1).check();
+  await expect(page.locator('.multi-hint')).toBeVisible();await noHorizontalOverflow(page);
+  await page.locator('.operation-tab').nth(4).click();
+  await expect(page.locator('.selection-bar')).toBeVisible();await noHorizontalOverflow(page);
+  await page.locator('.clear-selection').click();await expect(page.locator('.selection-bar')).toHaveCount(0);
  }
  await page.screenshot({path:'test-results/desktop-minimum-contact-selected.png',fullPage:true,animations:'disabled'});
  await page.locator('header select').selectOption('zh-CN');await page.locator('.operation-tab').nth(2).click();
@@ -234,13 +239,14 @@ test('public-key contacts are saved, edited, chosen explicitly and deleted',asyn
 
  await page.locator('.contact.highlighted .use-contact').click();
  await expect(page.getByRole('heading',{name:'Encrypt file',level:1})).toBeVisible();
- await expect(page.getByRole('radio',{name:'Saved contact'})).toBeChecked();
- await expect(page.locator('[name=contact]')).toHaveValue('c'.repeat(64));
+ await expect(page.getByRole('radio',{name:'Saved contacts'})).toBeChecked();
+ await expect(page.locator('.recipient-option').filter({hasText:'Carol laptop'}).locator('input')).toBeChecked();
+ await expect(page.locator('[name=contacts]:checked')).toHaveCount(1);
  await expect(page.locator('.contact-preview code')).toHaveText(Array(32).fill('C3').join(':'));
  await page.locator('[name=input]').fill('C:\\Local\\report.txt');await page.locator('[name=output]').fill('C:\\Local\\report.txt.nkem');
  await page.locator('.primary').click();
  const request=await page.evaluate(()=>(window as unknown as {lastRequest:Record<string,unknown>}).lastRequest);
- expect([request.kind,request.contact,request.keyPath,request.keyText,request.paste]).toEqual(['encrypt','c'.repeat(64),'','',false]);
+ expect([request.kind,request.contacts,request.keyPath,request.keyText,request.paste]).toEqual(['encrypt',['c'.repeat(64)],'','',false]);
  await harness(page,'complete',Array(32).fill('C3').join(':'));
  await expect(page.locator('.notice.success')).toContainText('Recipient: Carol laptop');
  await page.screenshot({path:'test-results/desktop-contact-encrypted.png',fullPage:true,animations:'disabled'});
@@ -253,9 +259,40 @@ test('public-key contacts are saved, edited, chosen explicitly and deleted',asyn
  await expect(page.locator('.contact')).toHaveCount(2);
  // The deleted selection is cleared on the encryption page instead of being replaced.
  await page.locator('.operation-tab').nth(1).click();
- await expect(page.locator('[name=contact]')).toHaveValue('');
+ await expect(page.locator('[name=contacts]:checked')).toHaveCount(0);
  await page.locator('[name=input]').fill('C:\\Local\\report.txt');await page.locator('[name=output]').fill('C:\\Local\\report.txt.nkem');
  await page.locator('.primary').click();
- await expect(page.getByRole('alert')).toHaveText('Choose a saved contact.');
- await expect(page.locator('[name=contact]')).toBeFocused();
+ await expect(page.getByRole('alert')).toHaveText('Choose at least one saved contact.');
+ await expect(page.locator('[name=contacts]').first()).toBeFocused();
+});
+
+test('several contacts selected on the contacts page share one encrypted file',async({page})=>{
+ await page.locator('header select').selectOption('en');
+ await page.locator('.operation-tab').nth(4).click();
+ await expect(page.locator('.selection-bar')).toHaveCount(0);
+ await page.getByRole('checkbox',{name:'Select · Pasted public key'}).check();
+ await page.getByRole('checkbox',{name:'Select · Alice · 工作电脑'}).check();
+ await expect(page.locator('.selection-count')).toHaveText('2 selected');
+ await expect(page.locator('.contact.selected')).toHaveCount(2);
+ await page.screenshot({path:'test-results/desktop-contacts-multi-select.png',fullPage:true,animations:'disabled'});
+ await page.locator('.encrypt-selected').click();
+ await expect(page.getByRole('heading',{name:'Encrypt file',level:1})).toBeVisible();
+ await expect(page.getByRole('radio',{name:'Saved contacts'})).toBeChecked();
+ await expect(page.locator('[name=contacts]:checked')).toHaveCount(2);
+ await expect(page.locator('.recipient-heading .count')).toHaveText('2 / 64');
+ await expect(page.locator('.multi-hint')).toContainText('Each selected recipient can decrypt');
+ await expect(page.locator('.format')).toContainText('NKEM v4');
+ await page.locator('[name=input]').fill('C:\\Local\\report.txt');await page.locator('[name=output]').fill('C:\\Local\\report.txt.nkem');
+ await noHorizontalOverflow(page);
+ await page.locator('.primary').click();
+ const request=await page.evaluate(()=>(window as unknown as {lastRequest:Record<string,unknown>}).lastRequest);
+ // Selection order is kept and no other key source is sent.
+ expect([request.kind,request.contacts,request.keyPath,request.keyText,request.paste]).toEqual(['encrypt',['b'.repeat(64),'a'.repeat(64)],'','',false]);
+ await harness(page,'complete');
+ await expect(page.locator('.notice.success')).toContainText('Recipients: Pasted public key, Alice · 工作电脑');
+ await page.screenshot({path:'test-results/desktop-multi-recipient-encrypted.png',fullPage:true,animations:'disabled'});
+ // Dropping to one recipient returns to NKEM v3 and shows the full fingerprint.
+ await page.locator('[name=contacts]').first().uncheck();
+ await expect(page.locator('.format')).toContainText('NKEM v3');
+ await expect(page.locator('.contact-preview code')).toHaveText(Array(32).fill('B2').join(':'));
 });

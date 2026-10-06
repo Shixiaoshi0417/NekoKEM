@@ -163,7 +163,21 @@ internal fun runPublicKeyContactsUiTests(instrumentation: Instrumentation) {
         awaitText(checkNotNull(activity).getString(R.string.key_source_contacts))
         awaitText(editedNote)
         capture("contacts-selected")
+        // Checkboxes on the contacts page change nothing until the explicit action.
         openContacts()
+        click("${checkNotNull(activity).getString(R.string.contact_select_recipient)} · $editedNote")
+        awaitText(checkNotNull(activity).getString(R.string.contact_selection_count, 1))
+        awaitText(checkNotNull(activity).getString(R.string.contact_recipients_hint))
+        capture("contacts-multi-select")
+        click(checkNotNull(activity).getString(R.string.action_encrypt_for_selected))
+        awaitText(checkNotNull(activity).getString(R.string.key_source_contacts))
+        awaitText(editedNote)
+        openContacts()
+        click(checkNotNull(activity).getString(R.string.action_clear_selection))
+        val encryptSelected = checkNotNull(activity).getString(R.string.action_encrypt_for_selected)
+        val clearedDeadline = SystemClock.uptimeMillis() + 10000
+        while (text(encryptSelected) != null && SystemClock.uptimeMillis() < clearedDeadline) SystemClock.sleep(100)
+        check(text(encryptSelected) == null) { "Contact selection was not cleared" }
         openDialog(checkNotNull(activity).getString(R.string.action_delete))
         awaitText(checkNotNull(activity).getString(R.string.contact_delete_title))
         click(checkNotNull(activity).getString(R.string.action_delete))

@@ -91,6 +91,45 @@ internal fun runPublicKeyContactsTests(
         check(!wrongOutput.exists())
         check(contacts.readState().contacts.size == 1)
     }
+    // Two saved contacts share one NKEM v4 file: each private key decrypts it,
+    // the default key, which was not selected, cannot.
+    val secondPublic = File(recipient, "second-public.key")
+    val secondPrivate = File(recipient, "second-private.nkpr.enc")
+    generateContactTestKeypair(secondPublic, secondPrivate)
+    val secondCandidate = checkNotNull(workflow.stageTemporaryPublicKey(Uri.fromFile(secondPublic), "second.key").key)
+    val second = checkNotNull(contacts.save(secondCandidate, "second recipient").contact)
+    workflow.discardTemporaryPublicKey(secondCandidate)
+    val group = contacts.stageRecipients(listOf(second.id, contact.id))
+    check(group.code == NativeBridge.RESULT_SUCCESS)
+    check(group.keys.map { it.fingerprint } == listOf(second.fingerprint, contact.fingerprint))
+    val groupCiphertext = File(context.cacheDir, "contact-group.nkem")
+    val groupPrepared = workflow.prepareEncryptionForRecipients(Uri.fromFile(plaintext), continueProgress, group.keys)
+    check(groupPrepared.code == NativeBridge.RESULT_SUCCESS)
+    check(group.keys.none { it.file.exists() })
+    check(groupCiphertext.createNewFile())
+    check(workflow.commitPreparedEncryption(checkNotNull(groupPrepared.prepared), Uri.fromFile(groupCiphertext), continueProgress) == NativeBridge.RESULT_SUCCESS)
+    check(groupCiphertext.readBytes()[4] == 4.toByte())
+    val secondPending = checkNotNull(workflow.stageTemporaryPrivateKey(Uri.fromFile(secondPrivate), "second.nkpr").key)
+    val secondKey = checkNotNull(workflow.validateTemporaryPrivateKey(secondPending, contactPassword()).key)
+    for ((index, key) in listOf(recipientPrivate, secondKey).withIndex()) {
+        val decrypted = File(context.cacheDir, "contact-group-$index")
+        check(manager.decryptFile(groupCiphertext, decrypted, key, contactPassword(), continueProgress) == NativeBridge.RESULT_SUCCESS)
+        check(decrypted.readBytes().contentEquals(plaintext.readBytes()))
+    }
+    val outsider = File(context.cacheDir, "contact-group-default")
+    check(manager.decryptFile(groupCiphertext, outsider, defaultPassword.toByteArray(), continueProgress) != NativeBridge.RESULT_SUCCESS)
+    check(!outsider.exists())
+    workflow.discardTemporaryPrivateKey(secondKey)
+    // One unavailable contact fails the whole selection and is named; no snapshot remains.
+    check(contacts.delete(second.id) == NativeBridge.RESULT_SUCCESS)
+    val missing = contacts.stageRecipients(listOf(contact.id, second.id))
+    check(missing.code != NativeBridge.RESULT_SUCCESS && missing.keys.isEmpty() && missing.failedId == second.id)
+    check(File(context.cacheDir, "nekokem-contact-work").listFiles().orEmpty().none { it.name.startsWith("contact-key-") })
+    for (invalid in listOf(emptyList<String>(), listOf(contact.id, contact.id), List(NativeBridge.MAX_RECIPIENTS + 1) { contact.id })) {
+        check(contacts.stageRecipients(invalid).code == NativeBridge.RESULT_INVALID_ARGUMENT)
+    }
+    check(secondPublic.delete() && secondPrivate.delete())
+    check(contacts.readState().contacts.size == 1)
     workflow.discardTemporaryPrivateKey(recipientPrivate)
     val cancelledSelection = checkNotNull(contacts.stageForEncryption(contact.id).key)
     val cancelled = workflow.prepareEncryption(Uri.fromFile(plaintext), contactProgress(cancelled = true), cancelledSelection)

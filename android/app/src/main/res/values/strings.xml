@@ -206,4 +206,12 @@
     <string name="operation_update_contact">Update Public-Key Note</string>
     <string name="operation_delete_contact">Delete Saved Public Key</string>
     <string name="operation_select_contact">Select Saved Public Key</string>
+    <string name="contact_select_recipient">Select as recipient</string>
+    <string name="contact_selection_count">Selected recipients: %1$d</string>
+    <string name="action_encrypt_for_selected">Encrypt for Selected Recipients</string>
+    <string name="contact_selection_limit">Choose at most %1$d recipients</string>
+    <string name="contact_recipients_hint">Each selected recipient can decrypt the file with their own private key, and no one else can. Files for several recipients use NKEM v4, which NekoKEM v3.3.2 and earlier cannot open.</string>
+    <string name="key_source_contacts_multiple">Saved public-key contacts (%1$d recipients)</string>
+    <string name="contact_recipients_selected">Recipients selected</string>
+    <string name="contact_failed_recipient">Unavailable recipient: %1$s</string>
 </resources>

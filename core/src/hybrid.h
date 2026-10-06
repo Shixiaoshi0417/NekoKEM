@@ -29,6 +29,12 @@ int hybrid_load_protected_private_keys(
     const unsigned char *password,
     size_t password_len,
     HybridKeys *keys);
+/* NKPR keys require a password; a plaintext Hybrid PEM key does not. */
+int hybrid_load_decryption_keys(
+    const char *path,
+    const unsigned char *password,
+    size_t password_len,
+    HybridKeys *keys);
 
 int hybrid_x448_encapsulate(
     EVP_PKEY *recipient_public_key,

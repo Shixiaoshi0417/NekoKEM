@@ -123,6 +123,20 @@ fieldset:disabled .key-source label { cursor: default; }
 select[aria-invalid=true] { border-color: #bd6650; background: #fffaf8; }
 .contact-choice { margin-bottom: 19px; }
 .contact-choice .field { margin-bottom: 10px; }
+.recipient-heading { display: flex; align-items: center; justify-content: space-between; gap: 10px; font-size: 12px; font-weight: 500; margin-bottom: 7px; }
+.recipient-heading .count { font-size: 11px; font-weight: 500; color: var(--muted); font-variant-numeric: tabular-nums; }
+.recipient-options { display: flex; flex-direction: column; gap: 2px; max-height: 214px; overflow-y: auto; border: 1px solid var(--border); border-radius: 10px; background: #fafcfb; padding: 5px; margin-bottom: 10px; }
+.recipient-options[aria-invalid=true] { border-color: #bd6650; background: #fffaf8; }
+.recipient-option { display: flex; align-items: center; gap: 10px; padding: 8px 9px; border-radius: 7px; font-size: 12px; cursor: pointer; min-width: 0; }
+.recipient-option:hover { background: #eef4ef; }
+.recipient-option.selected { background: #e5f0e7; color: var(--accent-dark); }
+.recipient-option input, .contact-select input { width: 16px; height: 16px; margin: 0; flex: none; accent-color: var(--accent); }
+.recipient-option:has(input:disabled) { cursor: default; opacity: .55; }
+.recipient-label { flex: 1; min-width: 0; overflow-wrap: anywhere; white-space: pre-wrap; }
+.recipient-option code { flex: none; font-family: Consolas, monospace; font-size: 11px; color: var(--muted); }
+.recipient-option:has(input:focus-visible) { outline: 2px solid var(--focus); outline-offset: 1px; }
+.multi-hint { line-height: 1.75; }
+.failed-contact { font-size: 11px; }
 .contact-preview { display: flex; flex-direction: column; gap: 5px; font-size: 11px; color: var(--muted); }
 .contact-preview code, .contact-fingerprint { font-family: Consolas, monospace; font-size: 11.5px; line-height: 1.6; color: #3c5145; overflow-wrap: anywhere; user-select: all; }
 .hint.warning { color: #934f3d; }
@@ -133,8 +147,14 @@ select[aria-invalid=true] { border-color: #bd6650; background: #fffaf8; }
 .contact-list .notice { margin: 0 0 14px; }
 .contact-list .empty { margin: 4px 0 2px; }
 .contact-list ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+.selection-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; border: 1px solid #d2e4d5; background: #eef6ef; border-radius: 12px; padding: 9px 11px 9px 15px; margin: 0 0 12px; font-size: 12px; }
+.selection-count { font-weight: 600; color: var(--accent-dark); margin-right: auto; }
+.selection-limit { color: var(--muted); font-size: 11px; }
+.selection-bar .secondary { padding: 8px 11px; }
 .contact { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px 16px; border: 1px solid #e6ece7; border-radius: 12px; padding: 13px 15px; background: #fbfcfb; }
-.contact.selected { border-color: #c6dccb; }
+.contact.selected { border-color: #c6dccb; background: #f6faf6; }
+.contact-select { display: flex; align-items: center; align-self: flex-start; padding: 2px 0; cursor: pointer; }
+.contact-select:has(input:disabled) { cursor: default; opacity: .55; }
 .contact.highlighted { border-color: #6da486; box-shadow: 0 0 0 3px #3b79500f; background: #fff; }
 .contact-main { display: flex; flex-direction: column; gap: 4px; min-width: 0; flex: 1 1 300px; }
 .contact-label { font-size: 13px; font-weight: 600; overflow-wrap: anywhere; white-space: pre-wrap; }
@@ -157,7 +177,7 @@ select[aria-invalid=true] { border-color: #bd6650; background: #fffaf8; }
 .progress-fill.indeterminate { background: #7b9c7e; }
 
 @media (prefers-reduced-motion: no-preference) {
-  button, nav button::before, .path-input, .field > input, .field > textarea, .field > select, .contact, .key-source label, .language select { transition: background-color .16s ease, border-color .16s ease, box-shadow .16s ease, transform .18s var(--ease); }
+  button, nav button::before, .path-input, .field > input, .field > textarea, .field > select, .contact, .key-source label, .language select, .recipient-option { transition: background-color .16s ease, border-color .16s ease, box-shadow .16s ease, transform .18s var(--ease); }
   .primary .app-icon { transition: transform .18s var(--ease); }
   .primary:hover:not(:disabled) .app-icon { transform: translateX(2px); }
   .primary:active:not(:disabled), .secondary:active:not(:disabled) { transform: translateY(1px); }
@@ -205,7 +225,8 @@ select[aria-invalid=true] { border-color: #bd6650; background: #fffaf8; }
   .primary { gap: 9px; padding: 10px 13px; }
 }
 @media (forced-colors: active) {
-  .sidebar, .title-icon, .key-source, .key-source label.selected, .status, .card, .notice, .field > input, .field > textarea, .field > select, .path-input, .primary, .secondary, .danger, .contact, .contact-actions.editing input { border-color: CanvasText; }
+  .sidebar, .title-icon, .key-source, .key-source label.selected, .status, .card, .notice, .field > input, .field > textarea, .field > select, .path-input, .primary, .secondary, .danger, .contact, .contact-actions.editing input, .recipient-options, .selection-bar { border-color: CanvasText; }
+  .recipient-option.selected { outline: 1px solid Highlight; }
   .contact.highlighted { border-color: Highlight; }
   nav button.active { border-color: Highlight; }
   nav button.active::before, .progress-fill { background: Highlight; forced-color-adjust: none; }

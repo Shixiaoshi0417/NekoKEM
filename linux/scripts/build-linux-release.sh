@@ -148,11 +148,13 @@ sources=(
     core/src/nekokem.c
     core/src/key_management.c
     core/src/nekokem_v3.c
+    core/src/nekokem_v4.c
     core/src/kem.c
     core/src/hybrid.c
     core/src/aes.c
     core/src/file.c
     core/src/file_v3.c
+    core/src/file_v4.c
     core/src/secure_mem.c
     core/src/private_key.c
 )

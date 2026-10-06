@@ -133,6 +133,33 @@ class LocalKeyManager(context: Context) {
         RESULT_STORAGE_ERROR
     }
 
+    /**
+     * Encrypts once for saved-contact snapshots: one key keeps writing NKEM v3,
+     * several share one NKEM v4 file. Every snapshot must still have the
+     * fingerprint confirmed when it was staged; none is skipped or replaced.
+     */
+    fun encryptFileForRecipients(
+        input: File,
+        output: File,
+        keys: List<TemporaryPublicKey>,
+        progress: NativeProgressCallback,
+    ): Int = try {
+        when {
+            keys.isEmpty() || keys.size > NativeBridge.MAX_RECIPIENTS ||
+                keys.map { it.fingerprint }.toSet().size != keys.size -> NativeBridge.RESULT_INVALID_ARGUMENT
+            keys.size == 1 -> encryptFile(input, output, keys.single(), progress)
+            keys.any { publicKeyFingerprint(it.file) != it.fingerprint } -> RESULT_FINGERPRINT_MISMATCH
+            else -> NativeBridge.nativeEncryptFileMultiWithProgress(
+                input.absolutePath,
+                output.absolutePath,
+                keys.map { it.file.absolutePath }.toTypedArray(),
+                progress,
+            )
+        }
+    } catch (_: Exception) {
+        RESULT_STORAGE_ERROR
+    }
+
     /** Takes ownership of [password] and clears it before returning. */
     fun decryptFile(input: File, output: File, password: ByteArray): Int = try {
         if (password.isEmpty()) {

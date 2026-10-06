@@ -37,7 +37,8 @@ static void print_usage(FILE *output, const char *program)
             "  %s --version\n"
             "  %s keygen\n"
             "  %s keygen hybrid\n"
-            "  %s encrypt hybrid <input_file> <output_file> <public.key>\n"
+            "  %s encrypt hybrid <input_file> <output_file> <public.key> "
+            "[<public.key> ...]\n"
             "  %s decrypt hybrid <input_file> <output_file> "
             "<private.key|private.key.enc>\n"),
             program, program, program, program, program, program);
@@ -236,6 +237,21 @@ int cli_run_hybrid_encrypt(const char *input_path,
     return 1;
 }
 
+int cli_run_hybrid_encrypt_multi(const char *input_path,
+                                 const char *output_path,
+                                 const char *const *public_key_paths,
+                                 size_t public_key_count)
+{
+    if (nekokem_encrypt_file_multi_with_progress(
+            input_path, output_path, public_key_paths, public_key_count,
+            NULL, NULL) != NEKOKEM_OPERATION_SUCCESS) {
+        return 0;
+    }
+    printf(file_message("Encrypted NKEM v4 for %zu recipients %s -> %s\n"),
+           public_key_count, input_path, output_path);
+    return 1;
+}
+
 int cli_run_hybrid_decrypt(const char *input_path,
                            const char *output_path,
                            const char *private_key_path)
@@ -252,7 +268,7 @@ int cli_run_hybrid_decrypt(const char *input_path,
         goto cleanup;
     }
     password_buffer_cleanup(&password);
-    printf(file_message("Decrypted NKEM v3 %s -> %s\n"),
+    printf(file_message("Decrypted NKEM %s -> %s\n"),
            input_path, output_path);
     success = 1;
 

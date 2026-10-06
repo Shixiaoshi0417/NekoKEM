@@ -191,4 +191,12 @@
     <string name="operation_update_contact">公開鍵のメモを更新</string>
     <string name="operation_delete_contact">保存済みの公開鍵を削除</string>
     <string name="operation_select_contact">保存済みの公開鍵を選択</string>
+    <string name="contact_select_recipient">受信者に選択</string>
+    <string name="contact_selection_count">%1$d 人の受信者を選択中</string>
+    <string name="action_encrypt_for_selected">選択した受信者向けに暗号化</string>
+    <string name="contact_selection_limit">受信者は最大 %1$d 人まで選択できます</string>
+    <string name="contact_recipients_hint">選択した受信者はそれぞれ自分の秘密鍵で復号でき、それ以外の人は復号できません。複数の受信者向けファイルは NKEM v4 を使用し、NekoKEM v3.3.2 以前では開けません。</string>
+    <string name="key_source_contacts_multiple">公開鍵アドレス帳（受信者 %1$d 人）</string>
+    <string name="contact_recipients_selected">受信者を選択しました</string>
+    <string name="contact_failed_recipient">使用できない受信者：%1$s</string>
 </resources>
