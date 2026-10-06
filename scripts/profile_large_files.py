@@ -34,6 +34,27 @@ DISK_MARGIN = 256 * MIB
 MAX_SIZE_MIB = ((1 << 36) - 32) // MIB
 
 
+def write_report_atomic(path, report):
+    """Publish complete JSON while preserving the previous report on failure."""
+    temporary_path = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            mode="w", encoding="utf-8", dir=path.parent,
+            prefix=f".{path.name}.", suffix=".tmp", delete=False,
+        ) as output:
+            temporary_path = Path(output.name)
+            json.dump(report, output, indent=2)
+            output.write("\n")
+            output.flush()
+            os.fsync(output.fileno())
+        # The sibling file is on the same filesystem, so readers observe
+        # either the previous report or the complete replacement.
+        os.replace(temporary_path, path)
+    finally:
+        if temporary_path is not None:
+            temporary_path.unlink(missing_ok=True)
+
+
 def measure_cli(executable, root, environment, timeout, *arguments, password=b""):
     """Collect child usage and sample the CLI's high-water RSS after exec."""
     command = [str(executable), "--lang", "en", *map(str, arguments)]
@@ -269,7 +290,7 @@ def main():
             # Preserve completed sizes if a subsequent size is interrupted.
             report["complete"] = len(report["sizes"]) == len(args.sizes_mib)
             report["recorded_utc"] = datetime.now(timezone.utc).isoformat()
-            args.json.write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
+            write_report_atomic(args.json, report)
     print(f"Profile saved to {args.json}")
 
 

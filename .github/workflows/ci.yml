@@ -41,6 +41,9 @@ jobs:
           sudo apt-get install --yes --no-install-recommends \
             afl++ build-essential ca-certificates curl perl
 
+      - name: Test atomic performance report saving
+        run: python3 scripts/test_profile_reports.py -v
+
       - name: Build OpenSSL 4.0.3
         env:
           OPENSSL_VERSION: "4.0.3"

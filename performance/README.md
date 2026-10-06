@@ -60,7 +60,9 @@ python3 scripts/profile_large_files.py \
 为最低空闲空间要求：默认至少 16.25 GiB。工具完整写入确定性输入，
 在临时私有目录生成一次性受口令保护的 NKPR 密钥，每轮加密成功后移除
 一次性输入，再用认证解密重建并验证 SHA-256。最多同时保留两份大文件。
-每个大小结束后保存 JSON，`complete` 字段标记所有请求的大小是否完成。
+每个大小结束后，将 JSON 写入报告同目录的临时文件，完整刷新并 `fsync`
+后原子替换报告；写入、刷盘或替换前的中断/失败不会截断之前完成的报告。
+`complete` 字段标记所有请求的大小是否完成。
 
 工具仅支持 Linux。跨版本和 Windows 吞吐比较继续使用
 [`benchmark_throughput.py`](../scripts/benchmark_throughput.py)，该工具交替执行
@@ -134,8 +136,10 @@ must cover twice the largest input plus 256 MiB (16.25 GiB for defaults).
 The tool fully writes deterministic input, creates disposable NKPR keys in a
 private temporary directory, removes the disposable plaintext after encryption,
 then reconstructs it with authenticated decryption and verifies SHA-256.
-At most two large files coexist. JSON is saved after each size; `complete`
-indicates whether every requested size finished.
+At most two large files coexist. After each size, JSON is written to a sibling
+temporary file, flushed and fsynced, then atomically replaces the report.
+An interruption or failure before replacement preserves the previous report.
+`complete` indicates whether every requested size finished.
 
 This resource profiler requires Linux. Use
 [`benchmark_throughput.py`](../scripts/benchmark_throughput.py) for alternating
