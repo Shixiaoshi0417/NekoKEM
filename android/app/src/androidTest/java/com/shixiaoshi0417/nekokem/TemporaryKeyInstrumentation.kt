@@ -210,7 +210,18 @@ class TemporaryKeyInstrumentation : Instrumentation() {
     ): String {
         check(manager.generateKeypair(password(DEFAULT_PASSWORD)) ==
             NativeBridge.RESULT_SUCCESS)
+        // Generating again never replaces keys. The confirmed replacement
+        // works although SELinux denies apps link() in their data directory.
+        val firstFingerprint = checkNotNull(manager.readState().fingerprint)
+        check(manager.generateKeypair(password(DEFAULT_PASSWORD)) !=
+            NativeBridge.RESULT_SUCCESS)
+        check(manager.readState().fingerprint == firstFingerprint)
+        check(manager.generateKeypair(password(DEFAULT_PASSWORD), replace = true) ==
+            NativeBridge.RESULT_SUCCESS)
         val originalFingerprint = checkNotNull(manager.readState().fingerprint)
+        check(originalFingerprint != firstFingerprint)
+        val keys = File(File(cache.parentFile, FILES_DIRECTORY), "keys")
+        check(keys.list().orEmpty().none { ".bak." in it || ".tmp." in it })
         val exportedPublicKey = File(cache, EXPORTED_PUBLIC_KEY_NAME)
         check(exportedPublicKey.createNewFile())
         val exportTrace = workflow.exportPublicKeyDetailed(
