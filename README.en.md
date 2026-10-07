@@ -424,7 +424,7 @@ The tests run in temporary directories:
 - Pseudoterminal sentinel tests separately confirm echo is disabled for pasted private keys and protection passwords; test logs have mode `0600`.
 - Five-language resource/catalog completeness, format parameter consistency, Locale/config/flag priority, persistence, safe fallback, noninteractive help, and localized errors. The document checker verifies bilingual navigation and relative links.
 
-Test materials are deleted afterward. Android JVM and actual API 26/35 device instrumentation checks run in CI; assembling a test APK alone does not count as device-test success. Device runs retain JNI/SAF integration coverage and exercise language switching, Activity recreation, process restart, system application-language synchronization, accessibility, dark mode, and increased font scale.
+Test materials are deleted afterward. Android JVM and actual API 26/29/35 device instrumentation checks run in CI; assembling a test APK alone does not count as device-test success. Device runs retain JNI/SAF integration coverage and exercise language switching, Activity recreation, process restart, system application-language synchronization, accessibility, dark mode, and increased font scale.
 
 ## AFL++ fuzzing
 

@@ -5,7 +5,7 @@ GitHub Actions has two workflow definitions:
 - `ci.yml` (`CI`) builds and tests pull requests targeting `main`, pushes to
   `main`, and manual runs. It contains the Linux Core/analyzer/sanitizer/fuzz
   suite, x86_64/aarch64 release-package and installer tests, Android JVM and
-  API 26/35 device tests, native Windows CLI security/interoperability/performance
+  API 26/29/35 device tests, native Windows CLI security/interoperability/performance
   checks, Windows GUI frontend/Rust/Core/EXE-launch checks, and native macOS
   arm64 CLI/Core/sanitizer/filesystem/interoperability and GUI/app/package checks,
   plus Linux x86_64/ARM64 GUI Rust/Core, private staging, ELF/package and actual

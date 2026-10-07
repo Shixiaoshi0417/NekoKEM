@@ -420,7 +420,7 @@ make -C linux test
 
 - 五语言资源和目录完整性、格式参数一致性、Locale/配置/命令行优先级、持久化、安全回退、非交互帮助及错误本地化。文档检查验证双语导航和相对链接。
 
-测试材料随后删除。Android JVM 和真实 API 26/35 设备 instrumentation 在 CI 中执行；仅构建 test APK 不算设备测试通过。设备测试保留 JNI/SAF 集成覆盖，并验证语言切换、Activity 重建、进程重启、系统应用语言同步、无障碍、深色模式及字体放大。
+测试材料随后删除。Android JVM 和真实 API 26/29/35 设备 instrumentation 在 CI 中执行；仅构建 test APK 不算设备测试通过。设备测试保留 JNI/SAF 集成覆盖，并验证语言切换、Activity 重建、进程重启、系统应用语言同步、无障碍、深色模式及字体放大。
 
 ## AFL++ fuzzing
 
