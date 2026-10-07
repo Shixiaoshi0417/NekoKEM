@@ -18,9 +18,6 @@
 #define NKPR_CIPHER_ID_AES256_GCM 1U
 #define NKPR_ARGON2_VERSION 0x13U
 #define NKPR_FLAGS 0U
-#define NKPR_MAX_CONTAINER_SIZE \
-    (NKPR_HEADER_SIZE + NKPR_SALT_SIZE + NKPR_NONCE_SIZE + \
-     NKPR_MAX_PEM_SIZE + NKPR_TAG_SIZE)
 
 typedef struct {
     uint32_t memory_kib;
@@ -515,17 +512,7 @@ int protected_private_key_read(
     size_t *pem_len)
 {
     unsigned char *container = NULL;
-    unsigned char *plaintext = NULL;
-    unsigned char key[32] = {0};
-    NkprHeader header;
-    const unsigned char *salt;
-    const unsigned char *nonce;
-    const unsigned char *ciphertext;
-    const unsigned char *tag;
     size_t container_len = 0U;
-    size_t ciphertext_len;
-    size_t plaintext_capacity = 0U;
-    size_t plaintext_len = 0U;
     int success = 0;
 
     if (pem == NULL || pem_len == NULL) {
@@ -534,10 +521,42 @@ int protected_private_key_read(
     }
     *pem = NULL;
     *pem_len = 0U;
-    if (!file_read_sensitive(path, NKPR_MAX_CONTAINER_SIZE,
-                             &container, &container_len)) {
-        goto cleanup;
+    if (file_read_sensitive(path, NKPR_MAX_CONTAINER_SIZE,
+                            &container, &container_len)) {
+        success = protected_private_key_decode(container, container_len,
+                                               password, password_len,
+                                               pem, pem_len);
     }
+    secure_free(container, container_len);
+    return success;
+}
+
+int protected_private_key_decode(
+    const unsigned char *container,
+    size_t container_len,
+    const unsigned char *password,
+    size_t password_len,
+    unsigned char **pem,
+    size_t *pem_len)
+{
+    unsigned char *plaintext = NULL;
+    unsigned char key[32] = {0};
+    NkprHeader header;
+    const unsigned char *salt;
+    const unsigned char *nonce;
+    const unsigned char *ciphertext;
+    const unsigned char *tag;
+    size_t ciphertext_len;
+    size_t plaintext_capacity = 0U;
+    size_t plaintext_len = 0U;
+    int success = 0;
+
+    if (pem == NULL || pem_len == NULL || container == NULL) {
+        fprintf(stderr, file_message("Invalid protected private-key output request\n"));
+        return 0;
+    }
+    *pem = NULL;
+    *pem_len = 0U;
     if (!nkpr_container_decode_internal(container, container_len,
                                         &header, 1)) {
         goto cleanup;
@@ -570,21 +589,12 @@ int protected_private_key_read(
 
 cleanup:
     secure_free(plaintext, plaintext_capacity);
-    secure_free(container, container_len);
     secure_mem_clear(key, sizeof(key));
     return success;
 }
 
-int private_key_path_is_encrypted(const char *path)
+int private_key_data_is_protected(const unsigned char *data, size_t length)
 {
-    static const char suffix[] = ".enc";
-    size_t path_len;
-    size_t suffix_len = sizeof(suffix) - 1U;
-
-    if (path == NULL) {
-        return 0;
-    }
-    path_len = strlen(path);
-    return path_len >= suffix_len &&
-           strcmp(path + path_len - suffix_len, suffix) == 0;
+    return data != NULL && length >= sizeof(NKPR_MAGIC) - 1U &&
+           memcmp(data, NKPR_MAGIC, sizeof(NKPR_MAGIC) - 1U) == 0;
 }

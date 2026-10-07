@@ -59,6 +59,9 @@ if [[ -f "$repo_root/core/src/nekokem_v4.c" ]]; then
     core+=(nekokem_v4 file_v4)
     tests+=(multi_recipient)
 fi
+if [[ -f "$repo_root/core/tests/key_safety_tests.c" ]]; then
+    tests+=(key_safety)
+fi
 sources=()
 for name in "${core[@]}"; do sources+=("$repo_root/core/src/$name.c"); done
 gcc "${flags[@]}" -fanalyzer -fsyntax-only "${sources[@]}" \

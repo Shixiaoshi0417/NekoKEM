@@ -154,6 +154,47 @@ static int file_rename(const char *old_path, const char *new_path)
     return rename(old_path, new_path);
 }
 
+/*
+ * Publishes a new name without replacing anything: link() fails with EEXIST
+ * if the name already exists. Volumes without hard links (FAT, some network
+ * shares) fall back to checking the name immediately before rename().
+ */
+static int file_publish_new(const char *temporary_path, const char *final_path)
+{
+    struct stat status;
+
+#ifdef NEKOKEM_TEST_FAULT_INJECTION
+    if (test_fault_should_fail(FILE_TEST_FAULT_RENAME)) {
+        errno = EIO;
+        return -1;
+    }
+#endif
+    if (link(temporary_path, final_path) == 0) {
+        if (unlink(temporary_path) == 0) {
+            return 0;
+        }
+        {
+            /* A second link would make a private key unreadable later. */
+            int saved_errno = errno;
+            (void)unlink(final_path);
+            errno = saved_errno;
+        }
+        return -1;
+    }
+    if (errno != EPERM && errno != ENOTSUP && errno != EOPNOTSUPP &&
+        errno != ENOSYS && errno != EMLINK) {
+        return -1;
+    }
+    if (lstat(final_path, &status) == 0) {
+        errno = EEXIST;
+        return -1;
+    }
+    if (errno != ENOENT) {
+        return -1;
+    }
+    return rename(temporary_path, final_path);
+}
+
 #endif
 
 static const char *(*message_translator)(const char *);
@@ -186,6 +227,27 @@ void print_openssl_error(const char *context)
 void print_system_error(const char *context)
 {
     fprintf(stderr, "%s: %s\n", file_message(context), strerror(errno));
+}
+
+int file_output_spares_keys(const char *output_path,
+                            const char *const *key_paths,
+                            size_t key_count)
+{
+    size_t index;
+
+    for (index = 0U; index < key_count; ++index) {
+        int same = 0;
+
+        if (!file_paths_are_same_file(output_path, key_paths[index], &same)) {
+            print_system_error("Cannot compare the output with the key files");
+            return 0;
+        }
+        if (same != 0) {
+            fprintf(stderr, file_message("The output path is a key file this operation uses; choose another output path\n"));
+            return 0;
+        }
+    }
+    return 1;
 }
 
 #ifndef _WIN32
@@ -887,7 +949,77 @@ static void atomic_file_release(AtomicFile *file)
     file->final_path = NULL;
 }
 
-int atomic_file_commit_pair(AtomicFile *first, AtomicFile *second)
+int file_path_exists(const char *path, int *exists)
+{
+    struct stat status;
+
+    if (path == NULL || exists == NULL) {
+        errno = EINVAL;
+        return 0;
+    }
+    *exists = 0;
+    if (lstat(path, &status) == 0) {
+        *exists = 1;
+        return 1;
+    }
+    return errno == ENOENT || errno == ENOTDIR;
+}
+
+int file_paths_are_same_file(const char *first, const char *second, int *same)
+{
+    struct stat first_status;
+    struct stat second_status;
+
+    if (first == NULL || second == NULL || same == NULL) {
+        errno = EINVAL;
+        return 0;
+    }
+    *same = 0;
+    if (lstat(first, &first_status) != 0 ||
+        lstat(second, &second_status) != 0) {
+        return errno == ENOENT || errno == ENOTDIR;
+    }
+    *same = first_status.st_dev == second_status.st_dev &&
+            first_status.st_ino == second_status.st_ino;
+    return 1;
+}
+
+int file_peek_regular(const char *path, unsigned char *prefix, size_t length)
+{
+    struct stat status;
+    size_t position = 0U;
+    int descriptor;
+    int success = 0;
+
+    if (path == NULL || prefix == NULL || length == 0U) {
+        return 0;
+    }
+    descriptor = open(path, O_RDONLY | O_CLOEXEC | O_NOFOLLOW | O_NONBLOCK);
+    if (descriptor < 0) {
+        return 0;
+    }
+    if (fstat(descriptor, &status) == 0 && S_ISREG(status.st_mode)) {
+        while (position < length) {
+            ssize_t count = read(descriptor, prefix + position,
+                                 length - position);
+
+            if (count < 0 && errno == EINTR) {
+                continue;
+            }
+            if (count <= 0) {
+                break;
+            }
+            position += (size_t)count;
+        }
+        success = position == length;
+    }
+    (void)close(descriptor);
+    return success;
+}
+
+static int atomic_file_commit_pair_mode(AtomicFile *first,
+                                        AtomicFile *second,
+                                        int replace)
 {
     AtomicFile *files[2] = {first, second};
     char *backups[2] = {NULL, NULL};
@@ -930,6 +1062,18 @@ int atomic_file_commit_pair(AtomicFile *first, AtomicFile *second)
     }
     for (index = 0U; index < count; ++index) {
         errno = 0;
+        if (replace == 0) {
+            int exists = 0;
+
+            /* Fail before anything is published; link() re-checks below. */
+            if (!file_path_exists(files[index]->final_path, &exists) ||
+                exists != 0) {
+                saved_errno = exists != 0 ? EEXIST
+                                          : (errno != 0 ? errno : EIO);
+                goto rollback;
+            }
+            continue;
+        }
         backups[index] = create_backup_link(files[index]->final_path,
                                              &existed[index]);
         if (existed[index] < 0 ||
@@ -961,8 +1105,11 @@ int atomic_file_commit_pair(AtomicFile *first, AtomicFile *second)
             }
         }
 #endif
-        if (file_rename(files[index]->temporary_path,
-                        files[index]->final_path) != 0) {
+        if ((replace != 0
+                 ? file_rename(files[index]->temporary_path,
+                               files[index]->final_path)
+                 : file_publish_new(files[index]->temporary_path,
+                                    files[index]->final_path)) != 0) {
             saved_errno = errno;
             goto rollback;
         }
@@ -1027,6 +1174,16 @@ rollback:
         return 0;
     }
     return 1;
+}
+
+int atomic_file_commit_pair(AtomicFile *first, AtomicFile *second)
+{
+    return atomic_file_commit_pair_mode(first, second, 1);
+}
+
+int atomic_file_commit_pair_new(AtomicFile *first, AtomicFile *second)
+{
+    return atomic_file_commit_pair_mode(first, second, 0);
 }
 
 int atomic_file_commit(AtomicFile *file)

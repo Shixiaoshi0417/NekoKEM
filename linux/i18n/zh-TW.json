@@ -250,7 +250,7 @@
   "Unsupported NKEM v3 header flags\n": "不支援的 NKEM v3 標頭旗標\n",
   "Unsupported NKPR private-key format\n": "不支援的 NKPR 私鑰格式\n",
   "Unsupported NKPR protection parameters\n": "不支援的 NKPR 保護參數\n",
-  "Usage:\n  %s\n  %s --version\n  %s keygen\n  %s keygen hybrid\n  %s encrypt hybrid <input_file> <output_file> <public.key> [<public.key> ...]\n  %s decrypt hybrid <input_file> <output_file> <private.key|private.key.enc>\n": "用法：\n  %s\n  %s --version\n  %s keygen\n  %s keygen hybrid\n  %s encrypt hybrid <input_file> <output_file> <public.key> [<public.key> ...]\n  %s decrypt hybrid <input_file> <output_file> <private.key|private.key.enc>\n",
+  "Usage:\n  %s\n  %s --version\n  %s keygen\n  %s keygen hybrid\n  %s keygen --replace\n  %s encrypt hybrid <input_file> <output_file> <public.key> [<public.key> ...]\n  %s decrypt hybrid <input_file> <output_file> <private.key|private.key.enc>\n": "用法：\n  %s\n  %s --version\n  %s keygen\n  %s keygen hybrid\n  %s keygen --replace\n  %s encrypt hybrid <input_file> <output_file> <public.key> [<public.key> ...]\n  %s decrypt hybrid <input_file> <output_file> <private.key|private.key.enc>\n",
   "X448 key agreement failed": "X448 金鑰協議失敗",
   "两次输入的密码不一致\n": "兩次輸入的密碼不一致\n",
   "公钥": "公鑰",
@@ -276,5 +276,11 @@
   "输入路径不包含文件名\n": "輸入路徑不包含檔案名稱\n",
   "输出文件：%s\n": "輸出檔案：%s\n",
   "输出路径长度溢出\n": "輸出路徑長度溢位\n",
-  "Encrypted NKEM v4 for %zu recipients %s -> %s\n": "已為 %zu 個接收方加密 NKEM v4 %s -> %s\n"
+  "Encrypted NKEM v4 for %zu recipients %s -> %s\n": "已為 %zu 個接收方加密 NKEM v4 %s -> %s\n",
+  "Key file %s already exists; key generation never replaces existing keys\n": "金鑰檔案 %s 已存在；產生金鑰絕不會取代既有金鑰\n",
+  "Cannot check the key file path": "無法檢查金鑰檔案路徑",
+  "Cannot compare the output with the key files": "無法將輸出與金鑰檔案進行比較",
+  "The output path is a key file this operation uses; choose another output path\n": "輸出路徑是本次操作使用的金鑰檔案，請選擇其他輸出路徑\n",
+  "Key files already exist: %s, %s\nkeygen never replaces existing keys. Back up both files; to replace them deliberately, run keygen --replace.\n": "金鑰檔案已存在：%s、%s\nkeygen 絕不會取代既有金鑰。請先備份這兩個檔案；如確需取代，請執行 keygen --replace。\n",
+  "Replacing the existing key pair %s and %s. Files encrypted for the old public key can only be decrypted with the old private key; press Ctrl+C now if it is not backed up.\n": "正在取代既有金鑰對 %s 和 %s。以舊公鑰加密的檔案只能用舊私鑰解密；如尚未備份，請立即按 Ctrl+C。\n"
 }

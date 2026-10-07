@@ -250,7 +250,7 @@
   "Unsupported NKEM v3 header flags\n": "Unsupported NKEM v3 header flags\n",
   "Unsupported NKPR private-key format\n": "Unsupported NKPR private-key format\n",
   "Unsupported NKPR protection parameters\n": "Unsupported NKPR protection parameters\n",
-  "Usage:\n  %s\n  %s --version\n  %s keygen\n  %s keygen hybrid\n  %s encrypt hybrid <input_file> <output_file> <public.key> [<public.key> ...]\n  %s decrypt hybrid <input_file> <output_file> <private.key|private.key.enc>\n": "Usage:\n  %s\n  %s --version\n  %s keygen\n  %s keygen hybrid\n  %s encrypt hybrid <input_file> <output_file> <public.key> [<public.key> ...]\n  %s decrypt hybrid <input_file> <output_file> <private.key|private.key.enc>\n",
+  "Usage:\n  %s\n  %s --version\n  %s keygen\n  %s keygen hybrid\n  %s keygen --replace\n  %s encrypt hybrid <input_file> <output_file> <public.key> [<public.key> ...]\n  %s decrypt hybrid <input_file> <output_file> <private.key|private.key.enc>\n": "Usage:\n  %s\n  %s --version\n  %s keygen\n  %s keygen hybrid\n  %s keygen --replace\n  %s encrypt hybrid <input_file> <output_file> <public.key> [<public.key> ...]\n  %s decrypt hybrid <input_file> <output_file> <private.key|private.key.enc>\n",
   "X448 key agreement failed": "X448 key agreement failed",
   "两次输入的密码不一致\n": "Passwords do not match\n",
   "公钥": "public key",
@@ -276,5 +276,11 @@
   "输入路径不包含文件名\n": "Input path does not contain a filename\n",
   "输出文件：%s\n": "Output file: %s\n",
   "输出路径长度溢出\n": "Output path length overflows\n",
-  "Encrypted NKEM v4 for %zu recipients %s -> %s\n": "Encrypted NKEM v4 for %zu recipients %s -> %s\n"
+  "Encrypted NKEM v4 for %zu recipients %s -> %s\n": "Encrypted NKEM v4 for %zu recipients %s -> %s\n",
+  "Key file %s already exists; key generation never replaces existing keys\n": "Key file %s already exists; key generation never replaces existing keys\n",
+  "Cannot check the key file path": "Cannot check the key file path",
+  "Cannot compare the output with the key files": "Cannot compare the output with the key files",
+  "The output path is a key file this operation uses; choose another output path\n": "The output path is a key file this operation uses; choose another output path\n",
+  "Key files already exist: %s, %s\nkeygen never replaces existing keys. Back up both files; to replace them deliberately, run keygen --replace.\n": "Key files already exist: %s, %s\nkeygen never replaces existing keys. Back up both files; to replace them deliberately, run keygen --replace.\n",
+  "Replacing the existing key pair %s and %s. Files encrypted for the old public key can only be decrypted with the old private key; press Ctrl+C now if it is not backed up.\n": "Replacing the existing key pair %s and %s. Files encrypted for the old public key can only be decrypted with the old private key; press Ctrl+C now if it is not backed up.\n"
 }

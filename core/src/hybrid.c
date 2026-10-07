@@ -92,7 +92,8 @@ void hybrid_keys_cleanup(HybridKeys *keys)
 int hybrid_generate_keypair(const char *public_path,
                             const char *private_path,
                             const unsigned char *password,
-                            size_t password_len)
+                            size_t password_len,
+                            int replace)
 {
     HybridKeys keys = {0};
     AtomicFile public_file = {0};
@@ -138,7 +139,9 @@ int hybrid_generate_keypair(const char *public_path,
             &private_file, private_path,
             (const unsigned char *)private_buffer->data,
             private_buffer->length, password, password_len) ||
-        !atomic_file_commit_pair(&public_file, &private_file)) {
+        !(replace != 0
+              ? atomic_file_commit_pair(&public_file, &private_file)
+              : atomic_file_commit_pair_new(&public_file, &private_file))) {
         goto cleanup;
     }
     success = 1;
@@ -330,26 +333,47 @@ static int x448_private_key_is_usable(EVP_PKEY *key)
     return 1;
 }
 
+/*
+ * Reads the key file once and picks the format from those bytes: an NKPR
+ * container by its magic, otherwise plaintext PEM. The file name never
+ * decides, and the bytes checked are the bytes decrypted or parsed.
+ */
 int hybrid_load_decryption_keys(
     const char *path,
     const unsigned char *password,
     size_t password_len,
     HybridKeys *keys)
 {
-    int loaded;
+    unsigned char *contents = NULL;
+    unsigned char *pem = NULL;
+    size_t contents_len = 0U;
+    size_t pem_len = 0U;
+    int loaded = 0;
 
     keys->x448 = NULL;
     keys->mlkem = NULL;
-    if (private_key_path_is_encrypted(path)) {
+    if (!file_read_sensitive(path, NKPR_MAX_CONTAINER_SIZE,
+                             &contents, &contents_len)) {
+        goto cleanup;
+    }
+    if (private_key_data_is_protected(contents, contents_len)) {
         if (password == NULL || password_len == 0U) {
             fprintf(stderr, file_message("A password is required for this private key\n"));
-            return 0;
+            goto cleanup;
         }
-        loaded = hybrid_load_protected_private_keys(
-            path, password, password_len, keys);
+        loaded = protected_private_key_decode(contents, contents_len,
+                                              password, password_len,
+                                              &pem, &pem_len) &&
+                 parse_hybrid_private_keys(pem, pem_len, keys);
+    } else if (contents_len > MAX_PRIVATE_KEY_FILE_SIZE) {
+        fprintf(stderr, file_message("Sensitive input exceeds the size limit\n"));
     } else {
-        loaded = hybrid_load_private_keys(path, keys);
+        loaded = parse_hybrid_private_keys(contents, contents_len, keys);
     }
+
+cleanup:
+    secure_free(pem, pem_len);
+    secure_free(contents, contents_len);
     if (loaded && !x448_private_key_is_usable(keys->x448)) {
         hybrid_keys_cleanup(keys);
         return 0;

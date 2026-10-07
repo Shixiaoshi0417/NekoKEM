@@ -180,7 +180,7 @@ class Tests(unittest.TestCase):
         self.run_cli('decrypt','hybrid','cipher.nkem','output','keys/private.key.enc',password=password)
         self.assertEqual((self.root/'output').read_bytes(),b'data')
         password = b'a'*1024+b'\r\n'
-        self.run_cli('keygen',password=password*2)
+        self.run_cli('keygen','--replace',password=password*2)
         self.run_cli('encrypt','hybrid','plain','cipher.nkem','keys/public.key')
         self.run_cli('decrypt','hybrid','cipher.nkem','output','keys/private.key.enc',password=password)
         self.assertEqual((self.root/'output').read_bytes(),b'data')

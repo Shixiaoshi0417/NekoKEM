@@ -18,6 +18,7 @@ static int valid_path(const char *path)
     return path != NULL && path[0] != '\0';
 }
 
+/* The output must also be a different file from the key in use. */
 static int validate_file_paths(const char *input_path,
                                const char *output_path,
                                const char *key_path)
@@ -27,7 +28,7 @@ static int validate_file_paths(const char *input_path,
         fprintf(stderr, file_message("NekoKEM Core received an empty file path\n"));
         return 0;
     }
-    return 1;
+    return file_output_spares_keys(output_path, &key_path, 1U);
 }
 
 static unsigned char *build_v3_aad(
