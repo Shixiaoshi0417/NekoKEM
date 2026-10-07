@@ -27,6 +27,12 @@ typedef struct {
 } FileTestFaultState;
 
 static FileTestFaultState test_fault;
+static int test_links_unavailable;
+
+void file_test_set_links_unavailable(int unavailable)
+{
+    test_links_unavailable = unavailable;
+}
 
 void file_test_fault_set(FileTestFault fault, unsigned int fail_on_call)
 {
@@ -155,9 +161,25 @@ static int file_rename(const char *old_path, const char *new_path)
 }
 
 /*
+ * Volumes and policies without hard links make link() fail: FAT and some
+ * network shares, and Android, whose SELinux policy denies apps link() in
+ * their own data directories (EACCES).
+ */
+static int file_link(const char *existing_path, const char *new_path)
+{
+#ifdef NEKOKEM_TEST_FAULT_INJECTION
+    if (test_links_unavailable != 0) {
+        errno = EACCES;
+        return -1;
+    }
+#endif
+    return link(existing_path, new_path);
+}
+
+/*
  * Publishes a new name without replacing anything: link() fails with EEXIST
- * if the name already exists. Volumes without hard links (FAT, some network
- * shares) fall back to checking the name immediately before rename().
+ * if the name already exists. Where hard links are unavailable, the name is
+ * checked immediately before rename().
  */
 static int file_publish_new(const char *temporary_path, const char *final_path)
 {
@@ -169,7 +191,7 @@ static int file_publish_new(const char *temporary_path, const char *final_path)
         return -1;
     }
 #endif
-    if (link(temporary_path, final_path) == 0) {
+    if (file_link(temporary_path, final_path) == 0) {
         if (unlink(temporary_path) == 0) {
             return 0;
         }
@@ -181,8 +203,7 @@ static int file_publish_new(const char *temporary_path, const char *final_path)
         }
         return -1;
     }
-    if (errno != EPERM && errno != ENOTSUP && errno != EOPNOTSUPP &&
-        errno != ENOSYS && errno != EMLINK) {
+    if (errno == EEXIST) {
         return -1;
     }
     if (lstat(final_path, &status) == 0) {
@@ -878,6 +899,98 @@ cleanup:
     return result;
 }
 
+static int write_descriptor_all(int descriptor, const unsigned char *buffer,
+                                size_t length)
+{
+    while (length > 0U) {
+        ssize_t count = write(descriptor, buffer, length);
+
+        if (count < 0 && errno == EINTR) {
+            continue;
+        }
+        if (count <= 0) {
+            if (count == 0) {
+                errno = EIO;
+            }
+            return 0;
+        }
+        buffer += (size_t)count;
+        length -= (size_t)count;
+    }
+    return 1;
+}
+
+/*
+ * Keeps the old file as a synced private copy where it cannot be hard-linked.
+ * The final name is untouched until rename() replaces it, and a rollback
+ * renames the copy back.
+ */
+static int copy_backup(const char *final_path, const struct stat *expected,
+                       const char *backup_path, int *created)
+{
+    unsigned char buffer[16384];
+    struct stat status;
+    int source;
+    int target = -1;
+    int success = 0;
+    int saved_errno;
+
+    if (!S_ISREG(expected->st_mode)) {
+        errno = ENOTSUP;
+        return 0;
+    }
+    source = open(final_path, O_RDONLY | O_CLOEXEC | O_NOFOLLOW | O_NONBLOCK);
+    if (source < 0) {
+        return 0;
+    }
+    if (fstat(source, &status) != 0) {
+        goto cleanup;
+    }
+    if (!S_ISREG(status.st_mode) || status.st_dev != expected->st_dev ||
+        status.st_ino != expected->st_ino) {
+        errno = EBUSY;
+        goto cleanup;
+    }
+    target = open(backup_path,
+                  O_WRONLY | O_CREAT | O_EXCL | O_NOFOLLOW | O_CLOEXEC, 0600);
+    if (target < 0) {
+        goto cleanup;
+    }
+    *created = 1;
+    for (;;) {
+        ssize_t count = read(source, buffer, sizeof(buffer));
+
+        if (count < 0 && errno == EINTR) {
+            continue;
+        }
+        if (count < 0) {
+            goto cleanup;
+        }
+        if (count == 0) {
+            break;
+        }
+        if (!write_descriptor_all(target, buffer, (size_t)count)) {
+            goto cleanup;
+        }
+    }
+    if (fchmod(target, status.st_mode & 0777) != 0 ||
+        file_sync_regular_fd(target) != 0) {
+        goto cleanup;
+    }
+    success = 1;
+
+cleanup:
+    saved_errno = errno;
+    secure_mem_clear(buffer, sizeof(buffer));
+    if (target >= 0 && close(target) != 0 && success != 0) {
+        saved_errno = errno;
+        success = 0;
+    }
+    (void)close(source);
+    errno = saved_errno;
+    return success;
+}
+
 static char *create_backup_link(const char *final_path, int *existed)
 {
     static const char suffix[] = ".bak.XXXXXX";
@@ -886,6 +999,7 @@ static char *create_backup_link(const char *final_path, int *existed)
     size_t path_length;
     size_t allocation_size;
     int descriptor = -1;
+    int created = 0;
     int result;
 
     *existed = 0;
@@ -917,15 +1031,33 @@ static char *create_backup_link(const char *final_path, int *existed)
     if (descriptor < 0) {
         goto cleanup;
     }
+    created = 1;
     if (close(descriptor) != 0) {
         descriptor = -1;
         goto cleanup;
     }
     descriptor = -1;
-    if (unlink(backup_path) != 0 || link(final_path, backup_path) != 0) {
+    if (unlink(backup_path) != 0) {
         goto cleanup;
     }
-    return backup_path;
+    created = 0;
+    if (file_link(final_path, backup_path) == 0) {
+        return backup_path;
+    }
+    if (errno == EEXIST) {
+        /* Another process took the name; it is not ours to remove. */
+        goto cleanup;
+    }
+    {
+        int link_errno = errno;
+
+        if (copy_backup(final_path, &status, backup_path, &created)) {
+            return backup_path;
+        }
+        if (errno == ENOTSUP) {
+            errno = link_errno;
+        }
+    }
 
 cleanup:
     {
@@ -933,7 +1065,7 @@ cleanup:
         if (descriptor >= 0) {
             (void)close(descriptor);
         }
-        if (backup_path != NULL) {
+        if (backup_path != NULL && created != 0) {
             (void)unlink(backup_path);
         }
         free(backup_path);

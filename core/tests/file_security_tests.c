@@ -478,7 +478,7 @@ cleanup:
     return success;
 }
 
-static int test_new_pair_rollback(const char *root)
+static int test_new_pair_rollback(const char *root, int create_only)
 {
     static const unsigned char public_data[] = "new-public";
     static const unsigned char private_data[] = "new-private";
@@ -498,7 +498,9 @@ static int test_new_pair_rollback(const char *root)
         goto cleanup;
     }
     file_test_fault_set(FILE_TEST_FAULT_RENAME, 2U);
-    if (atomic_file_commit_pair(&public_output, &private_output) != 0) {
+    if ((create_only != 0
+             ? atomic_file_commit_pair_new(&public_output, &private_output)
+             : atomic_file_commit_pair(&public_output, &private_output)) != 0) {
         goto cleanup;
     }
     file_test_fault_reset();
@@ -510,6 +512,68 @@ static int test_new_pair_rollback(const char *root)
 
 cleanup:
     file_test_fault_reset();
+    atomic_file_abort(&private_output);
+    atomic_file_abort(&public_output);
+    (void)unlink(private_path);
+    (void)unlink(public_path);
+    return success;
+}
+
+/* Android denies apps link(); commits must work without hard links. */
+static int test_commits_without_links(const char *root)
+{
+    static const unsigned char old_public[] = "old-public";
+    static const unsigned char old_private[] = "old-private";
+    static const unsigned char new_public[] = "new-public";
+    static const unsigned char new_private[] = "new-private";
+    char public_path[256];
+    char private_path[256];
+    AtomicFile public_output = {0};
+    AtomicFile private_output = {0};
+    struct stat status;
+    int success = 0;
+
+    if (!make_path(public_path, sizeof(public_path), root, "nolink-public.key") ||
+        !make_path(private_path, sizeof(private_path), root,
+                   "nolink-private.key") ||
+        !stage_bytes(&public_output, public_path,
+                     old_public, sizeof(old_public)) ||
+        !stage_bytes(&private_output, private_path,
+                     old_private, sizeof(old_private)) ||
+        !atomic_file_commit_pair_new(&public_output, &private_output) ||
+        !file_equals(public_path, old_public, sizeof(old_public)) ||
+        !file_equals(private_path, old_private, sizeof(old_private)) ||
+        has_transaction_artifact(root)) {
+        goto cleanup;
+    }
+    /* Create-only still refuses names that exist. */
+    if (!stage_bytes(&public_output, public_path,
+                     new_public, sizeof(new_public)) ||
+        !stage_bytes(&private_output, private_path,
+                     new_private, sizeof(new_private)) ||
+        atomic_file_commit_pair_new(&public_output, &private_output) != 0 ||
+        !file_equals(public_path, old_public, sizeof(old_public)) ||
+        !file_equals(private_path, old_private, sizeof(old_private)) ||
+        has_transaction_artifact(root)) {
+        goto cleanup;
+    }
+    /* Replacing keeps copies as backups and removes them afterwards. */
+    if (chmod(private_path, 0400) != 0 ||
+        !stage_bytes(&public_output, public_path,
+                     new_public, sizeof(new_public)) ||
+        !stage_bytes(&private_output, private_path,
+                     new_private, sizeof(new_private)) ||
+        !atomic_file_commit_pair(&public_output, &private_output) ||
+        !file_equals(public_path, new_public, sizeof(new_public)) ||
+        !file_equals(private_path, new_private, sizeof(new_private)) ||
+        lstat(private_path, &status) != 0 ||
+        (status.st_mode & (mode_t)0777) != (mode_t)0600 ||
+        has_transaction_artifact(root)) {
+        goto cleanup;
+    }
+    success = 1;
+
+cleanup:
     atomic_file_abort(&private_output);
     atomic_file_abort(&public_output);
     (void)unlink(private_path);
@@ -781,10 +845,22 @@ int main(void)
         fprintf(stderr, "Pair fsync rollback subtest failed\n");
         goto cleanup;
     }
-    if (!test_new_pair_rollback(test_directory)) {
+    if (!test_new_pair_rollback(test_directory, 0) ||
+        !test_new_pair_rollback(test_directory, 1)) {
         fprintf(stderr, "New pair rollback subtest failed\n");
         goto cleanup;
     }
+    file_test_set_links_unavailable(1);
+    if (!test_commits_without_links(test_directory) ||
+        !test_pair_rollback(test_directory, FILE_TEST_FAULT_RENAME, 2U) ||
+        !test_pair_rollback(test_directory, FILE_TEST_FAULT_FSYNC, 3U) ||
+        !test_new_pair_rollback(test_directory, 0) ||
+        !test_new_pair_rollback(test_directory, 1)) {
+        file_test_set_links_unavailable(0);
+        fprintf(stderr, "Commit without hard links subtest failed\n");
+        goto cleanup;
+    }
+    file_test_set_links_unavailable(0);
     if (!test_pair_alias_rejection(test_directory)) {
         fprintf(stderr, "Pair alias rejection subtest failed\n");
         goto cleanup;

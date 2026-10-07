@@ -70,6 +70,8 @@ typedef enum {
 
 void file_test_fault_set(FileTestFault fault, unsigned int fail_on_call);
 void file_test_fault_reset(void);
+/* POSIX: link() fails like on Android until reset with 0; combines with faults. */
+void file_test_set_links_unavailable(int unavailable);
 #endif
 
 /* Set once before starting CLI operations. Core defaults to identity translation. */
