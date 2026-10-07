@@ -38,8 +38,9 @@ class Tests(unittest.TestCase):
                          (args, result.returncode, result.stdout, result.stderr))
         return result
 
-    def generate(self, password=PASSWORD):
-        self.run_cli('keygen', 'hybrid', password=password*2)
+    def generate(self, password=PASSWORD, replace=False):
+        replacing = ('--replace',) if replace else ()
+        self.run_cli('keygen', 'hybrid', *replacing, password=password*2)
         key = self.root/'keys/private.key.enc'
         self.assertEqual(stat.S_IMODE(key.stat().st_mode), 0o600)
         self.assertEqual(key.stat().st_nlink, 1)
@@ -178,8 +179,10 @@ class Tests(unittest.TestCase):
         self.assertFalse((self.root/'extra-output').exists())
 
     def test_utf8_crlf_and_exact_password_limit(self):
-        for password in [('中文-日本語-한국어-😀'+'a'*16).encode('utf-8')+b'\r\n', b'a'*1024+b'\n']:
-            self.generate(password=password)
+        passwords = [('中文-日本語-한국어-😀'+'a'*16).encode('utf-8')+b'\r\n', b'a'*1024+b'\n']
+        for index, password in enumerate(passwords):
+            # keygen never replaces keys unless asked to.
+            self.generate(password=password, replace=index > 0)
             (self.root/'plain').write_bytes(b'data')
             self.run_cli('encrypt', 'hybrid', 'plain', 'cipher.nkem', 'keys/public.key')
             self.run_cli('decrypt', 'hybrid', 'cipher.nkem', 'output', 'keys/private.key.enc', password=password)
