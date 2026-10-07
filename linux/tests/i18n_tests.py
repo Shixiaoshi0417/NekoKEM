@@ -41,7 +41,7 @@ class LanguageTests(unittest.TestCase):
                 self.assertEqual(0, r.returncode); self.assertIn(errors[tag], r.stderr)
                 self.assertNotIn(errors[tag], r.stdout)
                 r = self.cli('--lang', tag, '--version')
-                self.assertEqual((0, 'NekoKEM 4.0.0\n', ''), (r.returncode, r.stdout, r.stderr))
+                self.assertEqual((0, 'NekoKEM 4.0.1\n', ''), (r.returncode, r.stdout, r.stderr))
                 r = self.cli('--lang', tag, 'unknown')
                 self.assertEqual(1, r.returncode); self.assertIn(LABELS[tag], r.stderr); self.assertEqual('', r.stdout)
     def test_posix_regions_and_unsupported_fallback(self):

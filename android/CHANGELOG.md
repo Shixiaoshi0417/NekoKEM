@@ -1,5 +1,23 @@
 # Changelog
 
+## 4.0.1
+
+- 完整中文在上、英文在下的发布说明见 [v4.0.1](../release/v4.0.1.md)。
+- 安全修复：页面重建（旋转、切换语言）不再清除进行中操作的缓存；生成密钥不再覆盖已有密钥，替换前需要确认，生成后的检查失败也不会删除已提交的私钥；输出不能覆盖正在使用的密钥；NKPR 按内容识别；密码框使用密码键盘并关闭联想和学习；导入私钥后同步目录；明文与 NKEM 文件分别限制大小。
+- 全平台应用版本为 4.0.1，Core 仍为 4.0，Android versionCode 为 9，沿用 v3.2.0/v3.3.0 签名，可覆盖升级。
+- NKEM v3/v4、NKPR v1、Argon2id 成本、64 KiB 流式处理及固定 OpenSSL 4.0.3 不变。
+
+Full Chinese-then-English notes: [v4.0.1](../release/v4.0.1.md). Security fixes:
+recreating a page (rotation, language change) no longer clears a running operation's
+cache; key generation no longer overwrites existing keys, replacement needs confirmation,
+and a failed post-generation check no longer deletes the committed private key; outputs
+cannot overwrite keys in use; NKPR is recognized by content; password fields use the
+password keyboard without suggestions or learning; private-key import syncs its
+directory; plaintext and NKEM files have separate size limits. Every app is 4.0.1 and
+Core remains 4.0; Android versionCode is 9 and retains the v3.2.0/v3.3.0 signer for
+in-place updates. NKEM v3/v4, NKPR v1, Argon2id costs, 64 KiB streaming and pinned
+OpenSSL 4.0.3 are unchanged.
+
 ## 4.0.0
 
 - 完整中文在上、英文在下的发布说明见 [v4.0.0](../release/v4.0.0.md)。
