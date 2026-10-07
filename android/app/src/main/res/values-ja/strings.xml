@@ -50,6 +50,8 @@
     <string name="delete_keypair_message">ローカルの公開鍵、暗号化された NKPR 秘密鍵、および関連する一時キャッシュを削除します。</string>
     <string name="replace_private_key_title">既存の秘密鍵を置き換えますか？</string>
     <string name="replace_private_key_message">インポートする暗号化 NKPR 秘密鍵の形式とパスワードを確認した後にのみ、現在のローカル秘密鍵を置き換えます。</string>
+    <string name="replace_keypair_title">既存の鍵ペアを置き換えますか？</string>
+    <string name="replace_keypair_message">新しい鍵ペアを生成すると、現在の公開鍵と秘密鍵が置き換えられます。現在の公開鍵で暗号化したファイルは現在の秘密鍵でしか復号できないため、先に暗号化秘密鍵をエクスポートしてバックアップしてください。</string>
     <string name="action_generate_keypair">鍵ペアを生成</string>
     <string name="action_check_password">秘密鍵のパスワードを確認</string>
     <string name="action_export_public_key">公開鍵をエクスポート</string>

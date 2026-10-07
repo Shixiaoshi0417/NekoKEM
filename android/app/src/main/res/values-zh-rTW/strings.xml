@@ -50,6 +50,8 @@
     <string name="delete_keypair_message">將刪除本機公鑰、加密 NKPR 私鑰及相關暫存快取。</string>
     <string name="replace_private_key_title">取代現有私鑰？</string>
     <string name="replace_private_key_message">僅在加密 NKPR 私鑰的格式及密碼驗證成功後，才會取代目前本機私鑰。</string>
+    <string name="replace_keypair_title">取代現有金鑰對？</string>
+    <string name="replace_keypair_message">產生新的金鑰對會取代目前的公鑰和私鑰。之後，以目前公鑰加密的檔案只能用目前私鑰解密，請先匯出並備份加密私鑰。</string>
     <string name="action_generate_keypair">產生金鑰對</string>
     <string name="action_check_password">驗證私鑰密碼</string>
     <string name="action_export_public_key">匯出公鑰</string>

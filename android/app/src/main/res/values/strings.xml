@@ -56,6 +56,8 @@
     <string name="delete_keypair_message">The local public key, encrypted NKPR private key and related temporary cache will be deleted.</string>
     <string name="replace_private_key_title">Replace existing private key?</string>
     <string name="replace_private_key_message">The imported encrypted NKPR private key will replace the current local private key only after its format and password are verified.</string>
+    <string name="replace_keypair_title">Replace the existing key pair?</string>
+    <string name="replace_keypair_message">Generating a new key pair replaces the current public and private key. Files encrypted for the current public key can then only be decrypted with the current private key, so export and back up the encrypted private key first.</string>
 
     <string name="action_generate_keypair">Generate Keypair</string>
     <string name="action_check_password">Verify Private-Key Password</string>
