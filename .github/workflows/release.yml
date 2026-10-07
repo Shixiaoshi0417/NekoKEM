@@ -279,7 +279,7 @@ jobs:
         run: |
           python3 desktop/scripts/package-macos-gui.py \
             --bundle-dir desktop/src-tauri/target/aarch64-apple-darwin/release/bundle \
-            --output "$RUNNER_TEMP/macos-gui" --version 4.0.1 --source-sha "$GITHUB_SHA"
+            --output "$RUNNER_TEMP/macos-gui" --version 4.1.0 --source-sha "$GITHUB_SHA"
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: NekoKEM-macos-arm64

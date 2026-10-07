@@ -29,7 +29,7 @@ rotated = (root/'rotation.txt').read_text() == 'True'
 if not rotated and new_signer != '5a091b86b1cb339f081c1afa2aa71b986c07597343ce336f22d866b05c39fb50':
     raise SystemExit('Release signer does not match the existing v3.2.0 identity')
 badging = subprocess.check_output([str(tools/'aapt'), 'dump', 'badging', str(apk)], text=True)
-if not re.search(r"package: name='com.shixiaoshi0417.nekokem' versionCode='9' versionName='4.0.1'", badging):
+if not re.search(r"package: name='com.shixiaoshi0417.nekokem' versionCode='10' versionName='4.1.0'", badging):
     raise SystemExit('Unexpected application identity/version')
 if "sdkVersion:'26'" not in badging:
     raise SystemExit('Unexpected minimum SDK')
@@ -61,7 +61,7 @@ subprocess.run(['openssl', 'cms', '-encrypt', '-aes-256-gcm', '-binary', '-outfo
                 '-recip', str(recipient), '-keyopt', 'rsa_padding_mode:oaep',
                 '-keyopt', 'rsa_oaep_md:sha256'], check=True)
 metadata = {'source_sha': os.environ['GITHUB_SHA'], 'run_id': int(os.environ['GITHUB_RUN_ID']),
-            'version': '4.0.1', 'version_code': 9, 'core_version': '4.0',
+            'version': '4.1.0', 'version_code': 10, 'core_version': '4.0',
             'apk_sha256': hashlib.sha256(apk.read_bytes()).hexdigest(),
             'signer_sha256': new_signer, 'previous_signer_sha256': old_signer,
             'signing_key_rotated': rotated,

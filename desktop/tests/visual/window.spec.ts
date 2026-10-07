@@ -44,7 +44,7 @@ test.beforeEach(async({page})=>{
    transformCallback(callback:(value:unknown)=>void){const id=next++;callbacks[id]=callback;return id;},
    unregisterCallback(id:number){delete callbacks[id];},
    invoke(command:string,args:Record<string,unknown>){
-    if(command==='get_settings')return Promise.resolve({language:'zh-CN',selection:'system',version:'4.0.1'});
+    if(command==='get_settings')return Promise.resolve({language:'zh-CN',selection:'system',version:'4.1.0'});
     if(command==='set_language')return Promise.resolve(args.language==='system'?'zh-CN':args.language);
     if(command==='plugin:event|listen'){progressHandler=args.handler as number;return Promise.resolve(1);}
     if(command==='plugin:event|unlisten')return Promise.resolve(null);

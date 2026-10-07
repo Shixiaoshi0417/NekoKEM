@@ -1,5 +1,20 @@
 # Changelog
 
+## 4.1.0
+
+- 完整中文在上、英文在下的发布说明见 [v4.1.0](../release/v4.1.0.md)。
+- Android 应用功能与 v4.0.1 相同；CI 的真实设备测试新增 API 29，与 API 26、35 一起覆盖原子“不覆盖”发布和每页独立缓存。同版本的桌面 GUI 可以在确认后替换已有密钥，回滚保留备份时会说明备份位置。
+- 全平台应用版本为 4.1.0，Core 仍为 4.0，Android versionCode 为 10，沿用 v3.2.0/v3.3.0 签名，可覆盖升级。
+- NKEM v3/v4、NKPR v1、Argon2id 成本、64 KiB 流式处理及固定 OpenSSL 4.0.3 不变。
+
+Full Chinese-then-English notes: [v4.1.0](../release/v4.1.0.md). The Android app behaves as
+in v4.0.1; CI's real-device tests add API 29, which with API 26 and 35 exercises atomic
+no-replace publication and per-page caches. In the same release the desktop GUI can
+replace existing keys after confirmation, and a rollback that keeps a backup names it.
+Every app is 4.1.0 and Core remains 4.0; Android versionCode is 10 and retains the
+v3.2.0/v3.3.0 signer for in-place updates. NKEM v3/v4, NKPR v1, Argon2id costs, 64 KiB
+streaming and pinned OpenSSL 4.0.3 are unchanged.
+
 ## 4.0.1
 
 - 完整中文在上、英文在下的发布说明见 [v4.0.1](../release/v4.0.1.md)。

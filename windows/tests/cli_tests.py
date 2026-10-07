@@ -74,7 +74,7 @@ class Tests(unittest.TestCase):
             preference.unlink(missing_ok=True)
             if not existed and directory.exists(): directory.rmdir()
     def test_version_help_languages_and_unicode_paths(self):
-        self.assertEqual(self.run_cli('--version').stdout,b'NekoKEM 4.0.1\n')
+        self.assertEqual(self.run_cli('--version').stdout,b'NekoKEM 4.1.0\n')
         for lang,text in [('en','Usage:'),('zh-CN','用法'),('zh-TW','用法'),('ja','使用方法'),('ko','사용법')]:
             p = self.run_cli('--lang',lang,'--help')
             self.assertIn(text,p.stdout.decode('utf-8'))
