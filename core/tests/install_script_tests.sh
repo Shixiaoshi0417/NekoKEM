@@ -40,7 +40,7 @@ if [ -n "${NEKOKEM_TEST_RUNNER:-}" ]; then
         sha256sum -c SHA256SUMS
     ) >/dev/null
     test "$("$runner_path" "$original_package/nekokem" --version)" = \
-        "NekoKEM 4.0.1"
+        "NekoKEM 4.1.0"
 
     cross_binary="$test_root/nekokem-cross-binary"
     cp "$original_package/nekokem" "$cross_binary"
@@ -114,8 +114,8 @@ NEKOKEM_TEST_ARCHIVE="$archive_path" \
 NEKOKEM_TEST_SUMS="$release_sums_path" \
 NEKOKEM_INSTALL_DIR="$install_root" \
     sh "$repo_root/linux/install.sh" > "$test_root/success.log"
-test "$("$install_root/nekokem" --version)" = "NekoKEM 4.0.1"
-grep -F "Installed NekoKEM 4.0.1 to $install_root/nekokem" \
+test "$("$install_root/nekokem" --version)" = "NekoKEM 4.1.0"
+grep -F "Installed NekoKEM 4.1.0 to $install_root/nekokem" \
     "$test_root/success.log" >/dev/null
 
 bad_stage="$test_root/bad-stage"
