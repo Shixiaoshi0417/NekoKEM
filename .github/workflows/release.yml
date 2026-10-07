@@ -370,3 +370,30 @@ jobs:
           compression-level: 0
           retention-days: 14
           if-no-files-found: error
+
+  attest:
+    name: Attest public packages
+    needs: [build-linux, signed-apk, build-windows, build-macos, build-linux-gui]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
+    steps:
+      - name: Check out the asset selection script
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - name: Download this run's artifacts
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          path: ${{ runner.temp }}/release-artifacts
+      # The same selection the Publish workflow uploads: the 14 packages and
+      # their SHA256SUMS.txt, never the encrypted signing recovery envelope.
+      - name: Select exactly the public packages
+        run: python3 .github/scripts/release_assets.py collect "$RUNNER_TEMP/release-artifacts" "$RUNNER_TEMP/public"
+      - name: Attest build provenance
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-path: ${{ runner.temp }}/public/*

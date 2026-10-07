@@ -120,6 +120,9 @@ jobs:
       - name: Test release signing configuration and identity persistence
         run: python3 .github/scripts/test_release_signing.py -v
 
+      - name: Test public release asset selection and checks
+        run: python3 .github/scripts/test_release_assets.py -v
+
       - name: Run parser and decryption fuzz smoke tests
         env:
           AFL_I_DONT_CARE_ABOUT_MISSING_CRASHES: "1"
