@@ -37,6 +37,13 @@ Android v4.1.0 retains the v3.2.0/v3.3.0 signing identity and supports an in-pla
 
 Verify each downloaded archive against [SHA256SUMS.txt](https://github.com/Shixiaoshi0417/NekoKEM/releases/download/v4.1.0/SHA256SUMS.txt), then verify its internal checksums. Linux GUI requires glibc 2.39+, GTK3 and WebKitGTK 4.1. macOS tests run on macOS 15 with an 11.0 deployment target. Platform installation steps and signing limitations follow below.
 
+Releases after v4.1.0 also carry GitHub build provenance for every asset. With the GitHub CLI, confirm that a file was built by this repository's Release workflow on `main` (substitute the asset you downloaded):
+
+```sh
+gh attestation verify NekoKEM-linux-x86_64.tar.gz --repo Shixiaoshi0417/NekoKEM \
+  --signer-workflow Shixiaoshi0417/NekoKEM/.github/workflows/release.yml
+```
+
 README uses a dedicated rounded display image. Android retains the existing square artwork with its white background; Windows CLI/GUI EXE icons retain the square artwork with the outer white area made transparent. Windows applications are not Authenticode signed.
 
 ## Multi-recipient encryption

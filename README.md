@@ -37,6 +37,13 @@ Android v4.1.0 沿用 v3.2.0/v3.3.0 签名，可直接覆盖升级；建议先�
 
 下载后先用 [SHA256SUMS.txt](https://github.com/Shixiaoshi0417/NekoKEM/releases/download/v4.1.0/SHA256SUMS.txt) 校验对应归档，再校验包内文件。Linux GUI 需要 glibc 2.39+、GTK3 和 WebKitGTK 4.1；macOS 实际验证于 macOS 15，部署目标为 11.0。安装步骤与签名限制见下文各平台说明。
 
+v4.1.0 之后发布的版本，每个附件还带有 GitHub 构建来源证明，可用 GitHub CLI 确认文件由本仓库 `main` 分支上的 Release 工作流构建（把文件名换成实际下载的附件）：
+
+```sh
+gh attestation verify NekoKEM-linux-x86_64.tar.gz --repo Shixiaoshi0417/NekoKEM \
+  --signer-workflow Shixiaoshi0417/NekoKEM/.github/workflows/release.yml
+```
+
 README 使用专用圆角展示图；Android 保留现有方形白底图案，Windows CLI/GUI EXE 保留方形图案并将外部白色区域改为透明。Windows 应用未进行 Authenticode 签名。
 
 ## 多人加密

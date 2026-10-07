@@ -1,6 +1,6 @@
 # Build workflows and Android signing
 
-GitHub Actions has two workflow definitions:
+GitHub Actions has three workflow definitions:
 
 - `ci.yml` (`CI`) builds and tests pull requests targeting `main`, pushes to
   `main`, and manual runs. It contains the Linux Core/analyzer/sanitizer/fuzz
@@ -16,6 +16,12 @@ GitHub Actions has two workflow definitions:
   `.deb`/`.rpm`/portable archives. Regression suites run in CI. Source checksums, dependency
   versions, compiler hardening, binary imports/protections, SDK loader signature,
   icons, APK identity/signature and package checksums remain build requirements.
+  Its final job selects the 14 public packages and their `SHA256SUMS.txt` with
+  `.github/scripts/release_assets.py` and attests each with GitHub build
+  provenance (`actions/attest-build-provenance`), binding it to this run, this
+  workflow and the built commit.
+- `publish.yml` (`Publish`) turns one successful Release run of `main` into a
+  GitHub Release. It runs only from `main` and only by hand.
 
 The shared Linux/Windows/macOS CLI build scripts default to `NEKOKEM_BUILD_TESTS=1`.
 Release sets it to `0`, which omits the Linux cryptographic smoke test and Windows
@@ -23,9 +29,21 @@ test executables and macOS regression suites while retaining the required depend
 CI verifies that both modes produce identical CLI binaries/packages.
 
 Run Release from the Actions page or with `gh workflow run release.yml --ref main`.
-Build artifacts are available on that run; this workflow only builds and uploads
-artifacts to Actions. Publishing is a separate maintainer operation after checking
-the same source's successful CI and artifact/signing provenance.
+Build artifacts are available on that run; this workflow only builds, attests and
+uploads artifacts to Actions. Publishing is a separate maintainer step:
+
+1. Merge the version bump and `release/<tag>.md` (Chinese first, English below,
+   with the `<!-- RELEASE_ZH_METADATA -->` and `<!-- RELEASE_EN_METADATA -->`
+   placeholders) into `main`, then wait for that commit's CI run.
+2. Run Release on `main` for the same commit.
+3. Run Publish: `gh workflow run publish.yml --ref main -f tag=v4.2.0 -f ci_run=<CI run ID> -f release_run=<Release run ID>`.
+
+Publish checks that both runs succeeded on the same `main` commit, downloads the
+Release artifacts and verifies the internal checksums, every package's version,
+source commit and run, the APK's signer and identity, and that every public asset
+carries this Release run's attestation. It fills the build records into the notes
+from the built commit, creates a draft, checks every uploaded digest and only then
+publishes the release as Latest. A published release is never modified.
 
 The Android job uses the GitHub Environment named `NekoKEM` and requires:
 
@@ -57,9 +75,11 @@ The v4.1.0 public release contains 14 packages:
 | Linux ARM64 | `NekoKEM-linux-aarch64.tar.gz`, `NekoKEM-linux-aarch64-GUI.deb`, `NekoKEM-linux-aarch64-GUI.rpm`, `NekoKEM-linux-aarch64-GUI.tar.gz` |
 
 Publish only packages from the successful Release run for the exact CI-validated
-v4.1.0 source. Generate the fifteenth asset, top-level `SHA256SUMS.txt`, from all
-14 packages. Record the source commit, CI/Release run links, Android signer and
-public asset hashes in the [Chinese-then-English v4.1.0 notes](v4.1.0.md).
+source; the Publish workflow enforces this. The fifteenth asset, top-level
+`SHA256SUMS.txt`, lists all 14 packages. The notes record the source commit,
+CI/Release run links, Android signer and public asset hashes, as in the
+[Chinese-then-English v4.1.0 notes](v4.1.0.md). Releases after v4.1.0 also carry
+build provenance attestations; v4.1.0 and earlier do not.
 The encrypted signing recovery envelope remains a protected Actions artifact;
 **do not attach it to the public GitHub Release**. Windows application EXEs are
 unsigned; verification of the Microsoft SDK loader's signature is separate.
