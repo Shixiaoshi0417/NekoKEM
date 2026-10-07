@@ -103,7 +103,7 @@ sudo apt install libssl-dev build-essential
 
 需要 OpenSSL 3.5 或更高版本，因为 ML-KEM 的 EVP 支持从 OpenSSL 3.5 开始提供。各平台的源码构建与 CI 固定使用 OpenSSL 4.0.3，并校验官方源码 SHA-256。
 
-如需构建 AFL++ parser fuzz harness，额外安装：
+如需构建 AFL++ fuzz harness，额外安装：
 
 ```sh
 sudo apt install afl++
@@ -215,6 +215,8 @@ keys/
 
 生成前会要求输入并确认私钥保护密码；终端回显在两次输入期间均关闭。不会创建明文 `private.key`。
 
+生成密钥绝不覆盖已有密钥：只要 `keys/public.key` 或 `keys/private.key.enc` 已存在，程序会在询问密码前直接拒绝，两个文件保持不变。确需更换密钥时，请先备份旧私钥（用旧公钥加密的文件只能用旧私钥解密），再使用下文的 `keygen --replace`。
+
 ### 加密文件
 
 可以输入公钥文件路径，也可以粘贴两个 PEM 公钥块。随后输入原文件路径。程序会确保当前工作目录下存在权限为 `0700` 的 `encrypted/` 目录；如果不存在则自动创建。
@@ -227,7 +229,7 @@ plaintext/test.jpg -> encrypted/test.jpg.nkem
 
 ### 解密文件
 
-可以输入私钥文件路径，也可以继续粘贴两个兼容的明文 PEM 私钥块。路径以 `.enc` 结尾时，程序会自动关闭终端回显并提示输入密码，在内存中认证、解密并解析 NKPR；解出的 PEM 不会写入磁盘。输入旧的 `private.key` 时仍按原有明文 PEM 逻辑读取。
+可以输入私钥文件路径，也可以继续粘贴两个兼容的明文 PEM 私钥块。私钥文件内容是 NKPR 容器时（按文件头识别，与扩展名无关，例如 Android 导出的 `private.nkpr`），程序会自动关闭终端回显并提示输入密码，在内存中认证、解密并解析 NKPR；解出的 PEM 不会写入磁盘。旧的明文 PEM 私钥（如 `private.key`）不需要密码。
 
 粘贴旧式私钥内容时终端回显同样会被临时关闭；内部使用的 `0600` 临时密钥文件会在操作结束后删除。
 
@@ -257,7 +259,13 @@ encrypted/test.jpg.nkem -> plaintext/test.jpg
 ./nekokem keygen hybrid
 ```
 
-两种写法都会提示输入两次密码，且不会把密码放入命令行参数；输出 `keys/public.key` 与 `keys/private.key.enc`。
+两种写法都会提示输入两次密码，且不会把密码放入命令行参数；输出 `keys/public.key` 与 `keys/private.key.enc`。已有任一密钥文件时直接拒绝，不会覆盖。
+
+确需轮换密钥时，先备份旧私钥，再显式使用 `--replace`；程序会提醒用旧公钥加密的文件只能用旧私钥解密，并在询问密码前给出按 Ctrl+C 放弃的机会：
+
+```sh
+./nekokem keygen --replace
+```
 
 默认 v3 hybrid 加密和解密：
 
@@ -272,7 +280,9 @@ encrypted/test.jpg.nkem -> plaintext/test.jpg
 ./nekokem encrypt hybrid test.txt encrypted/team.nkem alice.key bob.key carol.key
 ```
 
-Hybrid decrypt 看到 `.enc` 后会自动提示一次密码。为兼容已有部署，命令仍接受包含 X448、ML-KEM-1024 两个 PEM 块的旧式明文 `private.key`。
+私钥文件内容是 NKPR 时，Hybrid decrypt 会自动提示一次密码；判断依据是文件头，不看扩展名。为兼容已有部署，命令仍接受包含 X448、ML-KEM-1024 两个 PEM 块的旧式明文 `private.key`。
+
+输出路径不能是本次操作使用的密钥文件：解密时不能写到私钥上，加密时不能写到任一公钥上。比较的是文件身份而非路径字符串，`./keys/../keys/private.key.enc` 这类别名同样会被拒绝，密钥文件保持不变。
 
 命令可以使用其他位置的相应 PEM 密钥：
 
@@ -403,7 +413,7 @@ make -C linux test
 
 测试材料随后删除。Android JVM 和真实 API 26/35 设备 instrumentation 在 CI 中执行；仅构建 test APK 不算设备测试通过。设备测试保留 JNI/SAF 集成覆盖，并验证语言切换、Activity 重建、进程重启、系统应用语言同步、无障碍、深色模式及字体放大。
 
-## AFL++ parser fuzzing
+## AFL++ fuzzing
 
 ```sh
 make -C linux fuzz-build
@@ -412,9 +422,10 @@ make -C linux fuzz-build
 该目标使用 `afl-clang-fast` 和 UBSan 构建：
 
 - `core/fuzz/bin/fuzz_nkem`：仅解析 NKEM v3 与 v4 header 及容器总长度；
-- `core/fuzz/bin/fuzz_nkpr`：仅解析 NKPR header、参数与容器总长度。
+- `core/fuzz/bin/fuzz_nkpr`：仅解析 NKPR header、参数与容器总长度；
+- `core/fuzz/bin/fuzz_decrypt`：对输入执行完整解密，覆盖 X448 与 ML-KEM-1024 解封装、v4 记录解包与头部 MAC、流式 AES-GCM 认证以及原子输出提交与回滚。
 
-两个 harness 都接受一个 `argv[1]` 文件路径，拒绝超过 2 MiB 的输入，不执行密钥解封装、Argon2id、AES-GCM 或明文写出。`core/fuzz/seeds/` 中的有效样本只是零填充的结构样本，不含密码、私钥或真实敏感数据；同时提供多个截断样本。具体 AFL 命令见 `core/fuzz/README.md`。
+三个 harness 都接受一个 `argv[1]` 文件路径。两个解析器 harness 拒绝超过 2 MiB 的输入，不执行密钥解封装、Argon2id、AES-GCM 或明文写出；`core/fuzz/seeds/` 中的解析器样本只是零填充的结构样本，不含密码、私钥或真实敏感数据，同时提供多个截断样本。`fuzz_decrypt` 的种子在每次构建时生成：一把一次性的明文 PEM 测试密钥，以及用它加密的真实 v3、空 v3 和双接收方 v4 容器，因此变异能深入试解密、MAC 和载荷认证路径；该密钥不保护任何数据，也不会提交到仓库。具体 AFL 命令见 `core/fuzz/README.md`。
 
 ## 安全边界
 

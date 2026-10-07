@@ -275,6 +275,18 @@ See [Linux GUI security boundaries](LINUX-SECURITY.md).
 
 ## Security boundary / 安全边界
 
+Key generation never replaces existing files: if either chosen key path exists,
+the GUI reports “A key file already exists” and Core refuses as well, so back up
+the old keys and choose new paths. An encryption or decryption output that is
+the selected key file is refused (“The output file is the key file in use”);
+Core compares files by identity, so path aliases are refused too. A private key
+is recognized as NKPR by its contents, so Android's `private.nkpr` export works
+without renaming.
+生成密钥绝不替换已有文件：所选任一密钥路径已存在时，GUI 提示“所选路径已存在密钥文件”，
+Core 也会拒绝；请先备份旧密钥并选择新的保存位置。加解密输出若就是所选密钥文件会被拒绝；
+Core 按文件身份比较，路径别名同样会被拒绝。私钥按文件内容识别 NKPR，Android 导出的
+`private.nkpr` 无需改名即可使用。
+
 On Windows, the same local fixed-NTFS, owner/ACL, ancestor pinning, regular-file, hard-link,
 reparse-point, device/pipe/ADS and atomic-output checks apply. The frontend cannot
 relax them. Existing outputs must already satisfy the CLI's private output policy.
