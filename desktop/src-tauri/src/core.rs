@@ -32,6 +32,8 @@ pub struct Request {
     #[serde(default)] pub confirmation:Zeroizing<String>,
     #[serde(default)] pub key_text:Zeroizing<String>,
     #[serde(default)] pub paste:bool,
+    // Keygen only: the user confirmed replacing existing key files.
+    #[serde(default)] pub replace:bool,
     // Saved recipient contacts (encryption only), in the user's order. One contact
     // writes NKEM v3; two or more write one NKEM v4 file that each of them decrypts.
     // Never combined with another key source.
@@ -83,6 +85,7 @@ impl Drop for Reservation { fn drop(&mut self){ self.backend.finish(&self.job); 
 type Progress=unsafe extern "C" fn(u64,u64,*mut c_void)->c_int;
 extern "C" {
     fn nekokem_generate_keypair(public:*const c_char, private:*const c_char,password:*const u8,length:usize)->c_int;
+    fn nekokem_replace_keypair(public:*const c_char, private:*const c_char,password:*const u8,length:usize)->c_int;
     fn nekokem_encrypt_file_with_progress(input:*const c_char,output:*const c_char,key:*const c_char,callback:Option<Progress>,data:*mut c_void)->c_int;
     fn nekokem_encrypt_file_multi_with_progress(input:*const c_char,output:*const c_char,keys:*const *const c_char,count:usize,callback:Option<Progress>,data:*mut c_void)->c_int;
     fn nekokem_decrypt_file_with_progress(input:*const c_char,output:*const c_char,key:*const c_char,password:*const u8,length:usize,callback:Option<Progress>,data:*mut c_void)->c_int;
@@ -147,18 +150,21 @@ pub fn execute<F:Fn(u64,u64)>(request:Request,job:Arc<Job>,emit:F)->Result<Outco
     if !request.contacts.is_empty() && (request.kind!=Kind::Encrypt || request.paste || !request.key_path.is_empty() || !request.key_text.is_empty()) {
         return Err(Failure::new("invalid-request"));
     }
+    if request.replace && request.kind!=Kind::Keygen {return Err(Failure::new("invalid-request"));}
     if request.contacts.len()>MAX_RECIPIENTS {return Err(Failure::new("recipient-limit"));}
     let mut seen=std::collections::HashSet::new();
     if !request.contacts.iter().all(|id|seen.insert(id.as_str())) {return Err(Failure::new("invalid-request"));}
     if request.kind==Kind::Keygen {
         if request.password.is_empty(){return Err(Failure::new("password-empty"));}
         if request.password.as_str()!=request.confirmation.as_str(){return Err(Failure::new("password-mismatch"));}
-        // Keys are never replaced; Core refuses as well, this names the reason.
-        if [&request.public_path,&request.private_path].iter().any(|target|std::fs::symlink_metadata(target.as_str()).is_ok()) {
+        // Keys are replaced only after the user confirmed it; otherwise Core
+        // refuses as well, and this names the reason.
+        if !request.replace && [&request.public_path,&request.private_path].iter().any(|target|std::fs::symlink_metadata(target.as_str()).is_ok()) {
             return Err(Failure::new("key-exists"));
         }
         let public=path(&request.public_path)?; let private=path(&request.private_path)?;
-        let result=unsafe{nekokem_generate_keypair(public.as_ptr(),private.as_ptr(),request.password.as_ptr(),request.password.len())};
+        let commit=if request.replace {nekokem_replace_keypair} else {nekokem_generate_keypair};
+        let result=unsafe{commit(public.as_ptr(),private.as_ptr(),request.password.as_ptr(),request.password.len())};
         return if result==1 {Ok(Outcome{output:Some(request.private_path),fingerprint:None,recipients:Vec::new()})}else{Err(Failure::new("core-error"))};
     }
     // Core refuses an output that is the key in use; this names the reason.
@@ -239,12 +245,25 @@ mod tests {
         assert!(unsafe { CStr::from_ptr(version) }.to_bytes().starts_with(b"OpenSSL 4.0.3 "),
                 "GUI linked runtime does not match pinned OpenSSL 4.0.3");
     }
-    fn request(kind:Kind)->Request {Request{id:"test-job".into(),kind,input:String::new(),output:String::new(),key_path:String::new(),public_path:String::new(),private_path:String::new(),password:Zeroizing::new(String::new()),confirmation:Zeroizing::new(String::new()),key_text:Zeroizing::new(String::new()),paste:false,contacts:Vec::new()}}
+    fn request(kind:Kind)->Request {Request{id:"test-job".into(),kind,input:String::new(),output:String::new(),key_path:String::new(),public_path:String::new(),private_path:String::new(),password:Zeroizing::new(String::new()),confirmation:Zeroizing::new(String::new()),key_text:Zeroizing::new(String::new()),paste:false,replace:false,contacts:Vec::new()}}
     fn run(backend:&Arc<Backend>,r:Request)->Result<Outcome,Failure>{let job=backend.reserve(&r)?;let _hold=Reservation{backend:backend.clone(),job:job.clone()};execute(r,job,|_,_|{})}
     struct Directory(PathBuf);
     impl Directory{fn new()->Self{let path=std::env::temp_dir().join(format!("nekokem-rust-{}-{}",std::process::id(),SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_nanos()));let name=super::path(path.to_str().unwrap()).unwrap();assert_eq!(unsafe{desktop_private_directory(name.as_ptr())},1);Self(path)}fn file(&self,name:&str)->String{self.0.join(name).to_str().unwrap().into()}}
     impl Drop for Directory {fn drop(&mut self){let _=fs::remove_dir_all(&self.0);}}
     #[test] fn request_bounds_busy_and_stale_cancellation(){let backend=Arc::new(Backend::default());let r=request(Kind::Encrypt);let job=backend.reserve(&r).unwrap();assert!(backend.reserve(&r).is_err());assert!(!backend.cancel("other-job"));assert!(backend.cancel(&job.id));assert!(job.cancelled.load(Ordering::Acquire));backend.finish(&job);let mut r=request(Kind::Keygen);r.password=Zeroizing::new("a".repeat(1025));assert_eq!(run(&backend,r).err().unwrap().code,"password-limit");assert!(path("a\0b").is_err());}
+    #[test] fn keygen_replaces_existing_keys_only_when_confirmed(){
+        let dir=Directory::new();let backend=Arc::new(Backend::default());
+        let keygen=|replace:bool|{let mut r=request(Kind::Keygen);r.public_path=dir.file("public.key");r.private_path=dir.file("private.key.enc");r.password=Zeroizing::new("public test password".into());r.confirmation=r.password.clone();r.replace=replace;run(&backend,r)};
+        keygen(false).unwrap();
+        let public=fs::read(dir.file("public.key")).unwrap();let private=fs::read(dir.file("private.key.enc")).unwrap();
+        assert_eq!(keygen(false).err().unwrap().code,"key-exists");
+        assert_eq!(fs::read(dir.file("public.key")).unwrap(),public);assert_eq!(fs::read(dir.file("private.key.enc")).unwrap(),private);
+        keygen(true).unwrap();
+        assert_ne!(fs::read(dir.file("public.key")).unwrap(),public);assert_ne!(fs::read(dir.file("private.key.enc")).unwrap(),private);
+        // Core removes its backups and temporary files after the replacement.
+        assert!(fs::read_dir(&dir.0).unwrap().all(|entry|{let name=entry.unwrap().file_name().to_string_lossy().into_owned();!name.contains(".bak")&&!name.contains(".tmp")}));
+        let mut r=request(Kind::Encrypt);r.replace=true;assert_eq!(run(&backend,r).err().unwrap().code,"invalid-request");
+    }
     #[test] fn actual_core_roundtrip_fingerprint_wrong_password_paste_and_cancel(){
         let dir=Directory::new();let backend=Arc::new(Backend::default());let mut r=request(Kind::Keygen);
         r.public_path=dir.file("public.key");r.private_path=dir.file("private.key.enc");r.password=Zeroizing::new("public-test-中文-😀".into());r.confirmation=r.password.clone();run(&backend,r).unwrap();

@@ -275,15 +275,20 @@ See [Linux GUI security boundaries](LINUX-SECURITY.md).
 
 ## Security boundary / 安全边界
 
-Key generation never replaces existing files: if either chosen key path exists,
-the GUI reports “A key file already exists” and Core refuses as well, so back up
-the old keys and choose new paths. An encryption or decryption output that is
+Key generation never replaces existing files on its own: if either chosen key
+path exists, the GUI reports “A key file already exists” and Core refuses as
+well. Back up the old keys, then choose new paths, or tick “Replace the existing
+key files” that the GUI then offers and generate again. The option covers one run
+and is withdrawn when either path changes; replacing deletes the old private key,
+so files encrypted for the old public key can no longer be decrypted. An encryption or decryption output that is
 the selected key file is refused (“The output file is the key file in use”);
 Core compares files by identity, so path aliases are refused too. A private key
 is recognized as NKPR by its contents, so Android's `private.nkpr` export works
 without renaming.
-生成密钥绝不替换已有文件：所选任一密钥路径已存在时，GUI 提示“所选路径已存在密钥文件”，
-Core 也会拒绝；请先备份旧密钥并选择新的保存位置。加解密输出若就是所选密钥文件会被拒绝；
+生成密钥不会自行替换已有文件：所选任一密钥路径已存在时，GUI 提示“所选路径已存在密钥文件”，
+Core 也会拒绝。请先备份旧密钥，再选择新的保存位置，或勾选 GUI 随后提供的“替换已有的密钥文件”
+并重新生成。该选项只对一次操作有效，修改任一路径即撤销；替换会删除旧私钥，之后无法再解密用旧公钥
+加密的文件。加解密输出若就是所选密钥文件会被拒绝；
 Core 按文件身份比较，路径别名同样会被拒绝。私钥按文件内容识别 NKPR，Android 导出的
 `private.nkpr` 无需改名即可使用。
 

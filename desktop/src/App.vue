@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, onBeforeUnmount, onMounted, onUnmounted, reactive, ref } from 'vue';
+import { computed, nextTick, onBeforeUnmount, onMounted, onUnmounted, reactive, ref, watch } from 'vue';
 import * as bridge from './bridge';
 import AppIcon from './components/AppIcon.vue';
 import { languageNames, translate, errorCode, type Language, type Message } from './i18n';
@@ -19,8 +19,16 @@ const failure = ref<Message | null>(null);
 const feedbackArea = ref<'form' | 'list'>('form');
 const progress = ref<bridge.Progress | null>(null);
 // Saved-contact recipients, in selection order: shared by the Contacts and Encrypt pages.
-const form = reactive({ input: '', output: '', keyPath: '', publicPath: '', privatePath: '', password: '', confirmation: '', keyText: '', source: 'path' as KeySource, contacts: [] as string[] });
+const form = reactive({ input: '', output: '', keyPath: '', publicPath: '', privatePath: '', password: '', confirmation: '', keyText: '', source: 'path' as KeySource, contacts: [] as string[], replace: false });
 const contactForm = reactive({ keyPath: '', keyText: '', paste: false, note: '' });
+// Replacing keys is offered only after Core reported existing keys at the
+// chosen paths, must be ticked for each run and is withdrawn when they change.
+const replaceOffered = ref(false);
+function withdrawReplace() {
+  replaceOffered.value = false;
+  form.replace = false;
+}
+watch(() => [form.publicPath, form.privatePath], withdrawReplace);
 type Field = Exclude<keyof typeof form, 'source'> | 'contactKeyPath' | 'contactKeyText' | 'note' | 'noteDraft';
 type PathField = 'input' | 'output' | 'keyPath' | 'publicPath' | 'privatePath' | 'contactKeyPath';
 const invalidField = ref<Field | null>(null);
@@ -97,6 +105,7 @@ function switchTab(value: View) {
   editing.value = null;
   confirming.value = null;
   highlighted.value = null;
+  withdrawReplace();
   if ((value === 'decrypt' || value === 'fingerprint') && form.source === 'contact') form.source = 'path';
   operation.value = value;
   if (value === 'encrypt' || value === 'contacts') void refreshContacts();
@@ -240,7 +249,9 @@ async function start() {
     keyPath: form.source === 'path' ? form.keyPath : '', publicPath: form.publicPath, privatePath: form.privatePath,
     password: form.password, confirmation: form.confirmation, keyText: form.source === 'paste' ? form.keyText : '',
     paste: form.source === 'paste', contacts: chosen.map(contact => contact.id),
+    replace: operation.value === 'keygen' && replaceOffered.value && form.replace,
   };
+  withdrawReplace();
   // The native layer owns zeroizing secrets. Do not retain them in the form.
   clearSecrets();
   let unavailable = false;
@@ -249,6 +260,7 @@ async function start() {
     recipients.value = chosen;
   } catch (error) {
     failure.value = errorCode(error);
+    if (request.kind === 'keygen' && failure.value === 'key-exists') replaceOffered.value = true;
     // Nothing was encrypted. Deselect the contact that could not be used and
     // require the user to start again with the recipients that remain.
     unavailable = chosen.length > 0 && contactFailures.includes(failure.value);
@@ -418,6 +430,10 @@ onUnmounted(() => unlisten?.());
             <template v-if="operation === 'keygen'">
               <label class="field">{{ t('publicPath') }}<div class="path-input"><input v-model="form.publicPath" v-bind="fieldAttrs('publicPath')" name="publicPath" spellcheck="false" autocomplete="off"><button type="button" :aria-label="`${t('browse')} ${t('publicPath')}`" @click="browse('publicPath')">{{ choosing === 'publicPath' ? t('choosing') : t('browse') }}</button></div></label>
               <label class="field">{{ t('privatePath') }}<div class="path-input"><input v-model="form.privatePath" v-bind="fieldAttrs('privatePath')" name="privatePath" spellcheck="false" autocomplete="off"><button type="button" :aria-label="`${t('browse')} ${t('privatePath')}`" @click="browse('privatePath')">{{ choosing === 'privatePath' ? t('choosing') : t('browse') }}</button></div></label>
+              <div v-if="replaceOffered" class="replace-option enter-field">
+                <label class="recipient-option" :class="{ selected: form.replace }"><input v-model="form.replace" type="checkbox" name="replace" aria-describedby="replace-hint">{{ t('replaceKeys') }}</label>
+                <p id="replace-hint" class="hint warning">{{ t('replaceKeysHint') }}</p>
+              </div>
             </template>
             <template v-else-if="operation === 'contacts'">
               <div class="key-source" role="group" :aria-label="t('keySource')"><label :class="{ selected: !contactForm.paste }"><input type="radio" name="contactKeySource" :checked="!contactForm.paste" @change="setContactSource(false)">{{ t('path') }}</label><label :class="{ selected: contactForm.paste }"><input type="radio" name="contactKeySource" :checked="contactForm.paste" @change="setContactSource(true)">{{ t('paste') }}</label></div>
@@ -458,7 +474,7 @@ onUnmounted(() => unlisten?.());
           <div v-if="failure" id="operation-error" class="notice enter-feedback" :class="{ neutral: failure === 'cancelled' }" role="alert"><AppIcon :name="failure === 'cancelled' ? 'close' : 'alert'" /><div><span>{{ t(failure) }}</span><p v-if="failedContact" class="result-path failed-contact">{{ t('recipient') }}: {{ label(failedContact) }} · {{ failedContact.fingerprint.slice(0, 11) }}…</p></div></div>
           <div v-if="result" class="notice success enter-feedback" role="status"><AppIcon name="check" /><div><strong>{{ t(successMessage) }}</strong><p v-if="result.output" class="result-path">{{ result.output }}</p><p v-if="recipients.length" class="result-path">{{ recipients.length > 1 ? t('recipients') : t('recipient') }}: {{ recipients.map(label).join(', ') }}</p><textarea v-if="result.fingerprint" class="fingerprint" :value="result.fingerprint" readonly rows="3" :aria-label="t('fingerprint')"></textarea></div></div>
         </template>
-        <footer class="actions"><span class="format"><span class="format-dot" aria-hidden="true"></span>X448 + ML-KEM-1024<span>{{ formatLabel }}</span></span><button v-if="busy && ['encrypt', 'decrypt'].includes(operation)" class="secondary" type="button" :disabled="cancelling || cancelPending" @click="cancel">{{ t('cancel') }}</button><button class="primary" type="submit" :disabled="locked || !loaded"><span class="spinner" v-if="busy || contactBusy" aria-hidden="true"></span>{{ busy || contactBusy ? t('working') : operation === 'contacts' ? t('saveContact') : t(operation) }}<AppIcon v-if="!busy && !contactBusy" name="arrow" /></button></footer>
+        <footer class="actions"><span class="format"><span class="format-dot" aria-hidden="true"></span>X448 + ML-KEM-1024<span>{{ formatLabel }}</span></span><button v-if="busy && ['encrypt', 'decrypt'].includes(operation)" class="secondary" type="button" :disabled="cancelling || cancelPending" @click="cancel">{{ t('cancel') }}</button><button class="primary" type="submit" :disabled="locked || !loaded"><span class="spinner" v-if="busy || contactBusy" aria-hidden="true"></span>{{ busy || contactBusy ? t('working') : operation === 'contacts' ? t('saveContact') : operation === 'keygen' && form.replace ? t('replaceKeysAction') : t(operation) }}<AppIcon v-if="!busy && !contactBusy" name="arrow" /></button></footer>
       </form>
       <section v-if="operation === 'contacts'" ref="contactList" class="card contact-list enter-page" aria-labelledby="saved-contacts-title">
         <h2 id="saved-contacts-title">{{ t('savedContacts') }}<span class="count">{{ contacts.length }}</span></h2>
