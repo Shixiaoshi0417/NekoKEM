@@ -10,6 +10,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
+#include <sys/file.h>
 #ifdef __APPLE__
 #include <grp.h>
 #include <membership.h>
@@ -17,6 +18,7 @@
 #include <uuid/uuid.h>
 #endif
 #include <sys/types.h>
+#include <sys/wait.h>
 #include <unistd.h>
 
 #define TEST_BUFFER_SIZE 128U
@@ -110,6 +112,15 @@ static int has_transaction_artifact(const char *directory)
         found = 1;
     }
     return found;
+}
+
+static void remove_pair_lock(const char *directory)
+{
+    char path[256];
+
+    if (make_path(path, sizeof(path), directory, ".nekokem-pair.lock")) {
+        (void)unlink(path);
+    }
 }
 
 static int test_directory_validation(const char *root)
@@ -682,6 +693,110 @@ cleanup:
     return success;
 }
 
+static const unsigned char other_public[] = "other-public";
+static const unsigned char other_private[] = "other-private";
+static char interrupted_public_path[256];
+static char interrupted_lock_path[256];
+static unsigned int interrupted_publish_count;
+static int other_pair_created;
+static int lock_blocked_another_process;
+
+static void replace_published_key_before_second_commit(const char *private_path)
+{
+    char replacement_path[256];
+    pid_t child;
+    int status;
+    int path_length;
+
+    if (++interrupted_publish_count != 2U) {
+        return;
+    }
+    child = fork();
+    if (child == 0) {
+        int descriptor = open(interrupted_lock_path, O_RDWR | O_CLOEXEC);
+        int result = descriptor >= 0 ? flock(descriptor, LOCK_EX | LOCK_NB) : 0;
+        int blocked = result != 0 &&
+                      (errno == EWOULDBLOCK || errno == EAGAIN);
+
+        if (descriptor >= 0) {
+            (void)close(descriptor);
+        }
+        _exit(blocked ? 0 : 1);
+    }
+    if (child <= 0 || waitpid(child, &status, 0) != child ||
+        !WIFEXITED(status) || WEXITSTATUS(status) != 0) {
+        return;
+    }
+    lock_blocked_another_process = 1;
+
+    /* The competing writer deliberately ignores the application's lock. */
+    path_length = snprintf(replacement_path, sizeof(replacement_path),
+                           "%s.other", interrupted_public_path);
+    if (path_length < 0 || (size_t)path_length >= sizeof(replacement_path)) {
+        return;
+    }
+    if (!write_plain_file(replacement_path, other_public,
+                          sizeof(other_public), 0600) ||
+        rename(replacement_path, interrupted_public_path) != 0 ||
+        !write_plain_file(private_path, other_private,
+                          sizeof(other_private), 0600)) {
+        (void)unlink(replacement_path);
+        return;
+    }
+    other_pair_created = 1;
+}
+
+static int test_interleaved_pair_rollback(const char *root)
+{
+    static const unsigned char our_public[] = "our-public";
+    static const unsigned char our_private[] = "our-private";
+    char private_path[256] = {0};
+    AtomicFile public_output = {0};
+    AtomicFile private_output = {0};
+    int success = 0;
+
+    interrupted_public_path[0] = '\0';
+    if (!make_path(interrupted_public_path, sizeof(interrupted_public_path),
+                   root, "interleaved-public.key") ||
+        !make_path(private_path, sizeof(private_path), root,
+                   "interleaved-private.key") ||
+        !make_path(interrupted_lock_path, sizeof(interrupted_lock_path), root,
+                   ".nekokem-pair.lock") ||
+        !stage_bytes(&public_output, interrupted_public_path,
+                     our_public, sizeof(our_public)) ||
+        !stage_bytes(&private_output, private_path,
+                     our_private, sizeof(our_private))) {
+        goto cleanup;
+    }
+    interrupted_publish_count = 0U;
+    other_pair_created = 0;
+    lock_blocked_another_process = 0;
+    file_test_set_before_noreplace_rename(
+        replace_published_key_before_second_commit);
+    if (atomic_file_commit_pair_new(&public_output, &private_output) != 0 ||
+        errno != EEXIST || other_pair_created == 0 ||
+        lock_blocked_another_process == 0 ||
+        !file_equals(interrupted_public_path, other_public,
+                     sizeof(other_public)) ||
+        !file_equals(private_path, other_private, sizeof(other_private)) ||
+        has_transaction_artifact(root)) {
+        goto cleanup;
+    }
+    success = 1;
+
+cleanup:
+    file_test_fault_reset();
+    atomic_file_abort(&private_output);
+    atomic_file_abort(&public_output);
+    if (private_path[0] != '\0') {
+        (void)unlink(private_path);
+    }
+    if (interrupted_public_path[0] != '\0') {
+        (void)unlink(interrupted_public_path);
+    }
+    return success;
+}
+
 static int test_pair_alias_rejection(const char *root)
 {
     static const unsigned char public_data[] = "public";
@@ -717,6 +832,7 @@ cleanup:
     atomic_file_abort(&public_output);
     (void)unlink(aliased_path);
     (void)unlink(public_path);
+    remove_pair_lock(directory);
     (void)rmdir(directory);
     return success;
 }
@@ -952,7 +1068,8 @@ int main(void)
         goto cleanup;
     }
     file_test_set_links_unavailable(1);
-    if (!test_noreplace_race(test_directory, 1U) ||
+    if (!test_interleaved_pair_rollback(test_directory) ||
+        !test_noreplace_race(test_directory, 1U) ||
         !test_noreplace_race(test_directory, 2U) ||
         !test_noreplace_unavailable(test_directory, 1U) ||
         !test_noreplace_unavailable(test_directory, 2U) ||
@@ -978,6 +1095,7 @@ int main(void)
     success = 1;
 
 cleanup:
+    remove_pair_lock(test_directory);
     (void)rmdir(test_directory);
     return success != 0 ? 0 : 1;
 }

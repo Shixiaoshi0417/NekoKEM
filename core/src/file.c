@@ -15,6 +15,9 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
+#ifndef _WIN32
+#include <sys/file.h>
+#endif
 #ifdef __linux__
 #include <linux/fs.h>
 #include <sys/syscall.h>
@@ -855,6 +858,111 @@ static char *parent_directory_path(const char *path)
     return directory;
 }
 
+/* Keep this file: removing a lock file lets a waiter and a newcomer lock
+ * different inodes for the same directory. Two-file commits use these locks
+ * through publication, rollback and backup cleanup. */
+static int open_pair_directory_lock(const char *final_path,
+                                    struct stat *identity)
+{
+    static const char name[] = "/.nekokem-pair.lock";
+    char *directory = parent_directory_path(final_path);
+    char *lock_path = NULL;
+    struct stat path_status;
+    int descriptor = -1;
+    int saved_errno;
+    size_t length;
+
+    if (directory == NULL) {
+        return -1;
+    }
+    length = strlen(directory);
+    if (length > SIZE_MAX - sizeof(name)) {
+        errno = EOVERFLOW;
+        goto cleanup;
+    }
+    lock_path = malloc(length + sizeof(name));
+    if (lock_path == NULL) {
+        goto cleanup;
+    }
+    memcpy(lock_path, directory, length);
+    memcpy(lock_path + length, name, sizeof(name));
+    descriptor = open(lock_path,
+                      O_RDWR | O_CREAT | O_CLOEXEC | O_NOFOLLOW | O_NONBLOCK,
+                      0600);
+    if (descriptor < 0) {
+        goto cleanup;
+    }
+    if (fstat(descriptor, identity) != 0 ||
+        lstat(lock_path, &path_status) != 0) {
+        goto reject;
+    }
+    if (!S_ISREG(identity->st_mode) ||
+        identity->st_uid != geteuid() ||
+        (identity->st_mode & (mode_t)0777) != (mode_t)0600 ||
+        identity->st_nlink != (nlink_t)1 ||
+        identity->st_dev != path_status.st_dev ||
+        identity->st_ino != path_status.st_ino ||
+        !file_private_acl_is_safe(descriptor)) {
+        errno = EACCES;
+        goto reject;
+    }
+    goto cleanup;
+
+reject:
+    saved_errno = errno;
+    (void)close(descriptor);
+    descriptor = -1;
+    errno = saved_errno;
+
+cleanup:
+    saved_errno = errno;
+    free(lock_path);
+    free(directory);
+    errno = saved_errno;
+    return descriptor;
+}
+
+static int lock_pair_directories(const char *first_path,
+                                 const char *second_path,
+                                 int descriptors[2])
+{
+    struct stat identity[2];
+    size_t order[2] = {0U, 1U};
+    size_t index;
+
+    descriptors[0] = open_pair_directory_lock(first_path, &identity[0]);
+    if (descriptors[0] < 0) {
+        return 0;
+    }
+    descriptors[1] = open_pair_directory_lock(second_path, &identity[1]);
+    if (descriptors[1] < 0) {
+        return 0;
+    }
+    if (identity[0].st_dev == identity[1].st_dev &&
+        identity[0].st_ino == identity[1].st_ino) {
+        (void)close(descriptors[1]);
+        descriptors[1] = -1;
+    } else if (identity[1].st_dev < identity[0].st_dev ||
+               (identity[1].st_dev == identity[0].st_dev &&
+                identity[1].st_ino < identity[0].st_ino)) {
+        order[0] = 1U;
+        order[1] = 0U;
+    }
+    for (index = 0U; index < 2U; ++index) {
+        int descriptor = descriptors[order[index]];
+
+        if (descriptor < 0) {
+            continue;
+        }
+        while (flock(descriptor, LOCK_EX) != 0) {
+            if (errno != EINTR) {
+                return 0;
+            }
+        }
+    }
+    return 1;
+}
+
 static int atomic_file_targets_are_same(
     const char *first_path,
     const char *second_path,
@@ -1188,6 +1296,8 @@ static int atomic_file_commit_pair_mode(AtomicFile *first,
     char *backups[2] = {NULL, NULL};
     int existed[2] = {0, 0};
     int published[2] = {0, 0};
+    int published_descriptors[2] = {-1, -1};
+    int lock_descriptors[2] = {-1, -1};
     int preserve_backup[2] = {0, 0};
     size_t count = second == NULL ? 1U : 2U;
     size_t index;
@@ -1223,8 +1333,20 @@ static int atomic_file_commit_pair_mode(AtomicFile *first,
             goto rollback;
         }
     }
+    if (second != NULL &&
+        !lock_pair_directories(first->final_path, second->final_path,
+                               lock_descriptors)) {
+        saved_errno = errno != 0 ? errno : EIO;
+        goto rollback;
+    }
     for (index = 0U; index < count; ++index) {
         errno = 0;
+        published_descriptors[index] = open(files[index]->temporary_path,
+                                            O_RDONLY | O_CLOEXEC | O_NOFOLLOW);
+        if (published_descriptors[index] < 0) {
+            saved_errno = errno;
+            goto rollback;
+        }
         if (replace == 0) {
             int exists = 0;
 
@@ -1293,17 +1415,32 @@ rollback:
         while (reverse > 0U) {
             --reverse;
             if (published[reverse] != 0) {
+                struct stat published_status;
+                struct stat current_status;
+                int still_ours = published_descriptors[reverse] >= 0 &&
+                    fstat(published_descriptors[reverse],
+                          &published_status) == 0 &&
+                    lstat(files[reverse]->final_path,
+                          &current_status) == 0 &&
+                    published_status.st_dev == current_status.st_dev &&
+                    published_status.st_ino == current_status.st_ino;
+
                 if (existed[reverse] != 0 && backups[reverse] != NULL) {
-                    if (rename(backups[reverse],
+                    if (still_ours != 0 &&
+                        rename(backups[reverse],
                                files[reverse]->final_path) == 0) {
                         free(backups[reverse]);
                         backups[reverse] = NULL;
                     } else {
                         preserve_backup[reverse] = 1;
-                        print_system_error(
-                            "Cannot restore atomic output backup");
+                        if (still_ours != 0) {
+                            print_system_error(
+                                "Cannot restore atomic output backup");
+                        }
                     }
-                } else {
+                } else if (still_ours != 0) {
+                    /* Only remove the inode this transaction published. The
+                     * locks keep other pair commits out of this interval. */
                     (void)unlink(files[reverse]->final_path);
                 }
             }
@@ -1315,6 +1452,9 @@ rollback:
         }
     }
     for (index = 0U; index < count; ++index) {
+        if (published_descriptors[index] >= 0) {
+            (void)close(published_descriptors[index]);
+        }
         if (backups[index] != NULL) {
             if (preserve_backup[index] == 0) {
                 (void)unlink(backups[index]);
@@ -1329,6 +1469,11 @@ rollback:
             atomic_file_release(files[index]);
         } else {
             atomic_file_abort(files[index]);
+        }
+    }
+    for (index = 0U; index < 2U; ++index) {
+        if (lock_descriptors[index] >= 0) {
+            (void)close(lock_descriptors[index]);
         }
     }
     if (success == 0) {
