@@ -18,10 +18,12 @@ typedef struct {
 
 void hybrid_keys_cleanup(HybridKeys *keys);
 
+/* replace == 0 never overwrites: an existing key file fails the commit. */
 int hybrid_generate_keypair(const char *public_path,
                             const char *private_path,
                             const unsigned char *password,
-                            size_t password_len);
+                            size_t password_len,
+                            int replace);
 int hybrid_load_public_keys(const char *path, HybridKeys *keys);
 int hybrid_load_private_keys(const char *path, HybridKeys *keys);
 int hybrid_load_protected_private_keys(
@@ -29,7 +31,10 @@ int hybrid_load_protected_private_keys(
     const unsigned char *password,
     size_t password_len,
     HybridKeys *keys);
-/* NKPR keys require a password; a plaintext Hybrid PEM key does not. */
+/*
+ * NKPR keys require a password; a plaintext Hybrid PEM key does not. The
+ * format is read from the file contents, never inferred from its name.
+ */
 int hybrid_load_decryption_keys(
     const char *path,
     const unsigned char *password,

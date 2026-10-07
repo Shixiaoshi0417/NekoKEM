@@ -7,7 +7,8 @@ void cli_print_help(const char *program);
 void cli_print_usage(const char *program);
 
 int cli_run_interactive_menu(void);
-int cli_run_hybrid_keygen(void);
+/* replace != 0 rotates existing keys; otherwise they are never replaced. */
+int cli_run_hybrid_keygen(int replace);
 int cli_run_hybrid_encrypt(const char *input_path,
                            const char *output_path,
                            const char *public_key_path);

@@ -18,11 +18,15 @@ static int valid_path(const char *path)
     return path != NULL && path[0] != '\0';
 }
 
-int nekokem_generate_keypair(const char *public_key_path,
-                             const char *private_key_path,
-                             const unsigned char *password,
-                             size_t password_len)
+static int generate_keypair(const char *public_key_path,
+                            const char *private_key_path,
+                            const unsigned char *password,
+                            size_t password_len,
+                            int replace)
 {
+    const char *paths[2];
+    size_t index;
+
     if (!valid_path(public_key_path) || !valid_path(private_key_path)) {
         fprintf(stderr, file_message("NekoKEM Core received an empty key path\\n"));
         return 0;
@@ -31,8 +35,43 @@ int nekokem_generate_keypair(const char *public_key_path,
         fprintf(stderr, file_message("A non-empty private-key password is required\\n"));
         return 0;
     }
+    paths[0] = public_key_path;
+    paths[1] = private_key_path;
+    for (index = 0U; replace == 0 && index < 2U; ++index) {
+        int exists = 0;
+
+        /* Checked before generating; the commit also refuses to replace. */
+        if (!file_path_exists(paths[index], &exists)) {
+            print_system_error("Cannot check the key file path");
+            return 0;
+        }
+        if (exists != 0) {
+            fprintf(stderr,
+                    file_message("Key file %s already exists; key generation never replaces existing keys\n"),
+                    paths[index]);
+            return 0;
+        }
+    }
     return hybrid_generate_keypair(public_key_path, private_key_path,
-                                   password, password_len);
+                                   password, password_len, replace);
+}
+
+int nekokem_generate_keypair(const char *public_key_path,
+                             const char *private_key_path,
+                             const unsigned char *password,
+                             size_t password_len)
+{
+    return generate_keypair(public_key_path, private_key_path,
+                            password, password_len, 0);
+}
+
+int nekokem_replace_keypair(const char *public_key_path,
+                            const char *private_key_path,
+                            const unsigned char *password,
+                            size_t password_len)
+{
+    return generate_keypair(public_key_path, private_key_path,
+                            password, password_len, 1);
 }
 
 static int digest_public_key_component(EVP_MD_CTX *context,
@@ -203,8 +242,14 @@ cleanup:
 
 int nekokem_private_key_requires_password(const char *private_key_path)
 {
-    if (!valid_path(private_key_path)) {
+    unsigned char magic[sizeof(NKPR_MAGIC) - 1U];
+    int encrypted;
+
+    if (!valid_path(private_key_path) ||
+        !file_peek_regular(private_key_path, magic, sizeof(magic))) {
         return 0;
     }
-    return private_key_path_is_encrypted(private_key_path);
+    encrypted = private_key_data_is_protected(magic, sizeof(magic));
+    secure_mem_clear(magic, sizeof(magic));
+    return encrypted;
 }

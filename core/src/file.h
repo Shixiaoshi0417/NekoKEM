@@ -65,11 +65,16 @@ typedef enum {
     FILE_TEST_FAULT_FSYNC,
     FILE_TEST_FAULT_FULLFSYNC,
     FILE_TEST_FAULT_RENAME,
+    FILE_TEST_FAULT_NOREPLACE_UNAVAILABLE,
     FILE_TEST_FAULT_FOREIGN_OWNER
 } FileTestFault;
 
 void file_test_fault_set(FileTestFault fault, unsigned int fail_on_call);
 void file_test_fault_reset(void);
+/* POSIX: link() fails like on Android until reset with 0; combines with faults. */
+void file_test_set_links_unavailable(int unavailable);
+/* POSIX: schedule a competing writer immediately before the atomic rename. */
+void file_test_set_before_noreplace_rename(void (*hook)(const char *));
 #endif
 
 /* Set once before starting CLI operations. Core defaults to identity translation. */
@@ -104,10 +109,35 @@ int file_read_sensitive(const char *path,
                         unsigned char **buffer,
                         size_t *length);
 
+/*
+ * Whether path names a directory entry; symbolic links and reparse points
+ * are not followed. Returns 0 only when the check itself fails.
+ */
+int file_path_exists(const char *path, int *exists);
+/*
+ * Whether both paths name the same existing file, compared by identity
+ * (device and inode, or volume and file index) rather than by spelling, so
+ * "./a", "dir/../a" and case variants on case-insensitive volumes match. A
+ * missing path never matches. Links are not followed. Returns 0 only when
+ * the check itself fails.
+ */
+int file_paths_are_same_file(const char *first, const char *second, int *same);
+/*
+ * Fails with a message when the output path names the same file as one of
+ * the keys an operation uses, so a commit can never replace that key.
+ */
+int file_output_spares_keys(const char *output_path,
+                            const char *const *key_paths,
+                            size_t key_count);
+/* Quietly reads the first length bytes of a regular file; links not followed. */
+int file_peek_regular(const char *path, unsigned char *prefix, size_t length);
+
 int atomic_file_open(AtomicFile *file, const char *final_path, mode_t mode);
 int atomic_file_prepare(AtomicFile *file);
 int atomic_file_commit(AtomicFile *file);
 int atomic_file_commit_pair(AtomicFile *first, AtomicFile *second);
+/* Like atomic_file_commit_pair, but never replaces an existing file. */
+int atomic_file_commit_pair_new(AtomicFile *first, AtomicFile *second);
 void atomic_file_abort(AtomicFile *file);
 
 int nkem_gcm_data_size_is_valid(uint64_t data_size);

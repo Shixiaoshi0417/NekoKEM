@@ -126,8 +126,9 @@ fi
 test ! -e tampered-key-output.bin
 
 mv keys/private.key.enc correct-private.key.enc
+# keygen never replaces keys; rotate deliberately to get a different key.
 printf '%s\n%s\n' "$key_password" "$key_password" |
-    ./nekokem keygen hybrid >/dev/null
+    ./nekokem keygen hybrid --replace >/dev/null 2>&1
 if printf '%s\n' "$key_password" |
     ./nekokem decrypt hybrid encrypted/valid.nkem \
         wrong-key-output.bin keys/private.key.enc >/dev/null 2>&1; then

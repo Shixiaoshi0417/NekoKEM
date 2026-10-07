@@ -30,7 +30,15 @@ object NativeBridge {
         password: ByteArray,
     ): Int
 
+    /** Never overwrites: fails if either key file already exists. */
     external fun nativeGenerateKeypairWithPassword(
+        publicKeyPath: String,
+        privateKeyPath: String,
+        password: ByteArray,
+    ): Int
+
+    /** Rotation after explicit confirmation: replaces both key files. */
+    external fun nativeReplaceKeypairWithPassword(
         publicKeyPath: String,
         privateKeyPath: String,
         password: ByteArray,

@@ -528,6 +528,10 @@ int nekokem_encrypt_file_multi_with_progress(
             goto cleanup;
         }
     }
+    if (!file_output_spares_keys(output_path, public_key_paths,
+                                 public_key_count)) {
+        goto cleanup;
+    }
     /* One recipient keeps the v3 format that older releases read. */
     if (public_key_count == 1U) {
         return nekokem_encrypt_file_with_progress(

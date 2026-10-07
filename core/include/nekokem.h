@@ -34,8 +34,23 @@ typedef int (*NekoKEMProgressCallback)(uint64_t processed_bytes,
 /*
  * Functions return 1 on success and 0 on error. Password bytes
  * are borrowed for the duration of the call and are never retained by Core.
+ *
+ * Creates a new key pair and never overwrites: if either key file already
+ * exists, nothing is written and 0 is returned.
  */
 NEKOKEM_API int nekokem_generate_keypair(
+    const char *public_key_path,
+    const char *private_key_path,
+    const unsigned char *password,
+    size_t password_len);
+
+/*
+ * Rotates keys: generates a key pair that atomically replaces any existing
+ * key files. Files encrypted for the old public key then need the old
+ * private key, so call this only after the user explicitly chose to replace
+ * the keys, and remind them to back up the old private key first.
+ */
+NEKOKEM_API int nekokem_replace_keypair(
     const char *public_key_path,
     const char *private_key_path,
     const unsigned char *password,
@@ -127,7 +142,10 @@ NEKOKEM_API int nekokem_delete_private_key(
     const char *private_key_path);
 
 
-/* Lets a UI decide whether it must request a password. */
+/*
+ * Lets a UI decide whether it must request a password: 1 when the file is an
+ * NKPR container, judged by its contents rather than its name.
+ */
 NEKOKEM_API int nekokem_private_key_requires_password(
     const char *private_key_path);
 

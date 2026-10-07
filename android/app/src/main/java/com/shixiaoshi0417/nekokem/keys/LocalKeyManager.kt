@@ -17,12 +17,13 @@ data class LocalKeyState(
     val fingerprint: String?,
 )
 
-class LocalKeyManager(context: Context) {
+class LocalKeyManager internal constructor(
+    context: Context,
+    private val keyGeneration: KeyGeneration,
+) {
+    constructor(context: Context) : this(context, NativeKeyGeneration)
+
     private val keysDirectory = File(context.filesDir, KEYS_DIRECTORY_NAME)
-    private val workCacheDirectory = File(
-        context.cacheDir,
-        WORK_CACHE_DIRECTORY_NAME,
-    )
     private val publicKey = File(keysDirectory, PUBLIC_KEY_NAME)
     private val privateKey = File(keysDirectory, PRIVATE_KEY_NAME)
 
@@ -37,24 +38,32 @@ class LocalKeyManager(context: Context) {
         },
     )
 
-    /** Takes ownership of [password] and clears it before returning. */
-    fun generateKeypair(password: ByteArray): Int = try {
+    /** Whether either key file exists, valid or not; generation never replaces one. */
+    fun hasKeyFiles(): Boolean = publicKey.exists() || privateKey.exists()
+
+    /**
+     * Takes ownership of [password] and clears it before returning. Existing
+     * key files are replaced only with [replace], after the user confirmed it.
+     */
+    fun generateKeypair(password: ByteArray, replace: Boolean = false): Int = try {
         if (password.isEmpty()) {
             NativeBridge.RESULT_INVALID_ARGUMENT
         } else if (!preparePrivateDirectory(keysDirectory)) {
             RESULT_STORAGE_ERROR
         } else {
-            val result = NativeBridge.nativeGenerateKeypairWithPassword(
+            val result = keyGeneration.generate(
                 publicKey.absolutePath,
                 privateKey.absolutePath,
                 password,
+                replace,
             )
             if (result != NativeBridge.RESULT_SUCCESS) {
                 result
             } else if (!setAndVerifyRegularFileMode(publicKey, PRIVATE_FILE_MODE) ||
-                !NativeBridge.nativeHasPrivateKey(privateKey.absolutePath)
+                !keyGeneration.hasPrivateKey(privateKey.absolutePath)
             ) {
-                NativeBridge.nativeDeletePrivateKey(privateKey.absolutePath)
+                // Core has already committed both files and removed its backups.
+                // A failed post-check must not destroy the committed private key.
                 RESULT_STORAGE_ERROR
             } else {
                 NativeBridge.RESULT_SUCCESS
@@ -548,7 +557,6 @@ class LocalKeyManager(context: Context) {
      */
     fun importEncryptedPrivateKey(input: File, password: ByteArray): Int {
         var candidate: File? = null
-        var committed = false
 
         return try {
             if (password.isEmpty()) {
@@ -566,10 +574,10 @@ class LocalKeyManager(context: Context) {
                     )
                     if (result != NativeBridge.RESULT_SUCCESS) {
                         result
-                    } else {
-                        Os.rename(candidate.absolutePath, privateKey.absolutePath)
-                        committed = true
+                    } else if (commitPrivateKeyCandidate(candidate)) {
                         NativeBridge.RESULT_SUCCESS
+                    } else {
+                        RESULT_STORAGE_ERROR
                     }
                 }
             }
@@ -577,22 +585,67 @@ class LocalKeyManager(context: Context) {
             RESULT_STORAGE_ERROR
         } finally {
             password.fill(0)
-            if (!committed) {
-                clearAndDeleteRegularFile(candidate)
+            clearAndDeleteRegularFile(candidate)
+        }
+    }
+
+    /**
+     * Replaces the private key with a validated candidate and reports success
+     * only after the key directory is synced, so a crash or power loss after
+     * the success message cannot bring back the old key or lose the new one.
+     * A synced copy of the old key is kept until then; if the sync fails the
+     * old key is put back, and if that also fails the copy stays in the key
+     * directory for recovery.
+     */
+    private fun commitPrivateKeyCandidate(candidate: File): Boolean {
+        var backup: File? = null
+        var published = false
+        var success = false
+        var preserveBackup = false
+
+        try {
+            if (privateKey.exists()) {
+                backup = createPrivateCandidate(PRIVATE_BACKUP_PREFIX)
+                if (!copySensitiveRegularFile(privateKey, backup) ||
+                    !fsyncDirectory(keysDirectory)
+                ) {
+                    return false
+                }
+            }
+            Os.rename(candidate.absolutePath, privateKey.absolutePath)
+            published = true
+            success = fsyncDirectory(keysDirectory)
+            return success
+        } catch (_: Exception) {
+            return false
+        } finally {
+            if (!success && published) {
+                if (backup != null) {
+                    try {
+                        Os.rename(backup.absolutePath, privateKey.absolutePath)
+                        backup = null
+                    } catch (_: Exception) {
+                        // Keep the old key's copy for manual recovery.
+                        preserveBackup = true
+                    }
+                } else {
+                    clearAndDeleteRegularFile(privateKey)
+                }
+                if (!fsyncDirectory(keysDirectory)) {
+                    preserveBackup = backup != null
+                }
+            }
+            if (!preserveBackup) {
+                clearAndDeleteRegularFile(backup)
+                if (success && backup != null) fsyncDirectory(keysDirectory)
             }
         }
     }
 
+    // Staged operation files belong to their own operations and pages, which
+    // remove them; deleting the key must not clean files another page uses.
     fun deletePrivateKey(): Int = try {
-        val result = NativeBridge.nativeDeletePrivateKey(
-            privateKey.absolutePath,
-        )
-        val cacheCleared = clearWorkCache()
-        when {
-            result != NativeBridge.RESULT_SUCCESS -> result
-            !cacheCleared -> RESULT_STORAGE_ERROR
-            else -> NativeBridge.RESULT_SUCCESS
-        }
+        NativeBridge.nativeDeletePrivateKey(privateKey.absolutePath)
     } catch (_: Exception) {
         RESULT_STORAGE_ERROR
     }
@@ -631,30 +684,6 @@ class LocalKeyManager(context: Context) {
             return false
         }
         return fsyncDirectory(keysDirectory)
-    }
-
-    fun clearWorkCache(): Boolean {
-        if (!workCacheDirectory.exists()) {
-            return true
-        }
-        val status = Os.lstat(workCacheDirectory.absolutePath)
-        if (!OsConstants.S_ISDIR(status.st_mode)) {
-            return false
-        }
-        val entries = workCacheDirectory.listFiles() ?: return false
-        for (entry in entries) {
-            val entryStatus = Os.lstat(entry.absolutePath)
-            if (OsConstants.S_ISDIR(entryStatus.st_mode)) {
-                return false
-            }
-            val cleared = !OsConstants.S_ISREG(entryStatus.st_mode) ||
-                overwriteRegularFile(entry)
-            val deleted = entry.delete()
-            if (!cleared || !deleted) {
-                return false
-            }
-        }
-        return workCacheDirectory.delete()
     }
 
     private fun createPrivateCandidate(prefix: String): File {
@@ -797,7 +826,6 @@ class LocalKeyManager(context: Context) {
         const val RESULT_PUBLIC_KEY_PERMISSION_FAILED = -13
         const val RESULT_PUBLIC_KEY_COMMIT_FAILED = -14
         const val RESULT_PUBLIC_KEY_INTEGRITY_FAILED = -15
-        const val WORK_CACHE_DIRECTORY_NAME = "nekokem-work"
         private const val CACHE_CLEAR_BUFFER_SIZE = 64 * 1024
         private const val KEY_COPY_BUFFER_SIZE = 64 * 1024
         private const val MAX_KEY_FILE_BYTES = 16L * 1024L * 1024L
@@ -808,6 +836,7 @@ class LocalKeyManager(context: Context) {
         private const val PUBLIC_IMPORT_PREFIX = "nkem-pub-"
         private const val PUBLIC_BACKUP_PREFIX = "nkem-pub-backup-"
         private const val PRIVATE_IMPORT_PREFIX = "nkem-prv-"
+        private const val PRIVATE_BACKUP_PREFIX = "nkem-prv-backup-"
         private const val TEMPORARY_SUFFIX = ".tmp"
         private const val READ_WRITE_MODE = "rw"
         private const val PERMISSION_MASK = 0x1FF

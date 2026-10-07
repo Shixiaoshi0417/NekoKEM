@@ -35,10 +35,17 @@ class ContactRecipientsResult internal constructor(
     val failedId: String?,
 )
 
-/** Persistent public keys only. Each atomic record binds key bytes, identity and note. */
-class PublicKeyContacts(context: Context, private val keyManager: LocalKeyManager) {
+/**
+ * Persistent public keys only. Each atomic record binds key bytes, identity and
+ * note. Encryption snapshots are staged below [cacheRoot], the page's own cache.
+ */
+class PublicKeyContacts(
+    context: Context,
+    private val keyManager: LocalKeyManager,
+    cacheRoot: File = context.cacheDir,
+) {
     private val directory = File(context.filesDir, DIRECTORY_NAME)
-    private val workDirectory = File(context.cacheDir, WORK_DIRECTORY_NAME)
+    private val workDirectory = File(cacheRoot, WORK_DIRECTORY_NAME)
     private data class Record(val contact: PublicKeyContact, val publicKey: ByteArray)
     private class Failure(val code: Int) : Exception()
 

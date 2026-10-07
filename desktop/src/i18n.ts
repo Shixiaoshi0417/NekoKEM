@@ -20,6 +20,8 @@ const messages={
  'password-empty':['A password is required.','密码不能为空。','密碼不可為空。','パスワードを入力してください。','암호를 입력하세요.'],
  'password-limit':['Password must be at most 1024 UTF-8 bytes.','密码最多为 1024 个 UTF-8 字节。','密碼最多為 1024 個 UTF-8 位元組。','パスワードは UTF-8 で最大 1024 バイトです。','암호는 UTF-8 기준 최대 1024바이트입니다.'],
  'password-mismatch':['Passwords do not match.','两次输入的密码不一致。','兩次輸入的密碼不一致。','パスワードが一致しません。','암호가 일치하지 않습니다.'],
+ 'key-exists':['A key file already exists at a chosen path. Existing keys are never replaced: back them up and choose new paths.','所选路径已存在密钥文件。已有密钥不会被替换：请先备份，再选择新的保存位置。','所選路徑已存在金鑰檔案。既有金鑰不會被取代：請先備份，再選擇新的儲存位置。','選択したパスに鍵ファイルが既に存在します。既存の鍵は置き換えません。バックアップしてから新しい保存先を選んでください。','선택한 경로에 키 파일이 이미 있습니다. 기존 키는 교체하지 않습니다. 백업한 뒤 새 저장 위치를 선택하세요.'],
+ 'output-is-key':['The output file is the key file in use. Choose another output file.','输出文件就是正在使用的密钥文件，请选择其他输出文件。','輸出檔案就是正在使用的金鑰檔案，請選擇其他輸出檔案。','出力ファイルが使用中の鍵ファイルです。別の出力ファイルを選んでください。','출력 파일이 사용 중인 키 파일입니다. 다른 출력 파일을 선택하세요.'],
  'key-limit':['Paste a complete key of at most 1 MiB.','请粘贴完整密钥，大小不超过 1 MiB。','請貼上完整金鑰，大小不超過 1 MiB。','最大 1 MiB の完全な鍵を貼り付けてください。','최대 1 MiB의 완전한 키를 붙여넣으세요.'],
  'key-line-limit':['Each pasted key line must be at most 16384 UTF-8 bytes.','粘贴密钥的每行最多为 16384 个 UTF-8 字节。','貼上金鑰的每行最多為 16384 個 UTF-8 位元組。','貼り付ける鍵の各行は UTF-8 で最大 16384 バイトです。','붙여넣은 키의 각 줄은 UTF-8 기준 최대 16384바이트입니다.'],
  'core-error':['Operation failed. Check the password, key/file format, local NTFS paths and private-key permissions.','操作失败。请检查密码、密钥/文件格式、本地 NTFS 路径及私钥权限。','操作失敗。請檢查密碼、金鑰/檔案格式、本機 NTFS 路徑及私密金鑰權限。','失敗しました。パスワード、鍵・ファイル形式、ローカル NTFS パスと秘密鍵の権限を確認してください。','작업에 실패했습니다. 암호, 키/파일 형식, 로컬 NTFS 경로와 개인 키 권한을 확인하세요.'],

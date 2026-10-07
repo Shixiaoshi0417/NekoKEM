@@ -7,7 +7,7 @@ import tarfile
 
 def archive_results(root):
     root = Path(root)
-    results = [root / name for name in ("fuzz-nkem", "fuzz-nkpr")
+    results = [root / name for name in ("fuzz-nkem", "fuzz-nkpr", "fuzz-decrypt")
                if (root / name).is_dir()]
     if not results:
         print("No fuzz output was created; there are no samples to archive")

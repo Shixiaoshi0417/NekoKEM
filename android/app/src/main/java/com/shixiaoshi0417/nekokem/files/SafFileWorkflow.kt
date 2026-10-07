@@ -37,6 +37,7 @@ data class PreparedEncryptionResult(
 
 class PreparedEncryption internal constructor(
     private val encryptedFile: File,
+    internal val workspace: File? = null,
 ) {
     private var active = true
 
@@ -57,6 +58,7 @@ data class PreparedDecryptionResult(
 
 class PreparedDecryption internal constructor(
     private val plaintextFile: File,
+    internal val workspace: File? = null,
 ) {
     private var active = true
 
@@ -70,24 +72,26 @@ class PreparedDecryption internal constructor(
     }
 }
 
+/**
+ * [cacheRoot] is the page's own cache directory; every operation stages its
+ * files in a private workspace below it and removes only that workspace.
+ */
 class SafFileWorkflow(
     context: Context,
     private val keyManager: LocalKeyManager,
+    cacheRoot: File = context.cacheDir,
 ) {
     private val contentResolver = context.contentResolver
     private val defaultSelectedFilename = context.getString(
         R.string.default_selected_filename,
     )
-    private val workDirectory = File(
-        context.cacheDir,
-        LocalKeyManager.WORK_CACHE_DIRECTORY_NAME,
-    )
+    private val workDirectory = File(cacheRoot, WORK_DIRECTORY_NAME)
     private val outputBackupDirectory = File(
         context.cacheDir,
         OUTPUT_BACKUP_DIRECTORY_NAME,
     )
     private val temporaryKeyDirectory = File(
-        context.cacheDir,
+        cacheRoot,
         TEMPORARY_KEY_DIRECTORY_NAME,
     )
     private val temporaryPublicKeyDirectory = File(
@@ -183,23 +187,25 @@ class SafFileWorkflow(
         temporaryKeys: List<TemporaryPublicKey>,
         encrypt: (File, File) -> Int,
     ): PreparedEncryptionResult {
+        var workspace: File? = null
         var stagedInput: File? = null
         var stagedOutput: File? = null
         var prepared: PreparedEncryption? = null
         var result = LocalKeyManager.RESULT_STORAGE_ERROR
 
         try {
-            if (!prepareWorkDirectory()) {
+            workspace = createWorkspace()
+            if (workspace == null) {
                 result = LocalKeyManager.RESULT_STORAGE_ERROR
             } else {
-                val input = createPrivateTemporaryFile(ENCRYPT_INPUT_PREFIX)
+                val input = createPrivateTemporaryFile(ENCRYPT_INPUT_PREFIX, workspace)
                 stagedInput = input
-                val output = createPrivateTemporaryPath(ENCRYPT_OUTPUT_PREFIX)
+                val output = createPrivateTemporaryPath(ENCRYPT_OUTPUT_PREFIX, workspace)
                 stagedOutput = output
                 if (!copyUriToFile(
                         source,
                         input,
-                        MAX_STAGED_FILE_BYTES,
+                        MAX_PLAINTEXT_BYTES,
                         progress,
                         allowEmpty = true,
                     )
@@ -212,7 +218,7 @@ class SafFileWorkflow(
                     ) {
                         result = NativeBridge.RESULT_CANCELLED
                     } else if (result == NativeBridge.RESULT_SUCCESS) {
-                        prepared = PreparedEncryption(output)
+                        prepared = PreparedEncryption(output, workspace)
                         stagedOutput = null
                     }
                 }
@@ -223,7 +229,7 @@ class SafFileWorkflow(
             clearAndDelete(stagedInput)
             clearAndDelete(stagedOutput)
             if (prepared == null) {
-                keyManager.clearWorkCache()
+                removeWorkspace(workspace)
             }
             temporaryKeys.forEach { discardTemporaryPublicKey(it) }
         }
@@ -260,14 +266,14 @@ class SafFileWorkflow(
         } finally {
             if (!outputCommitted) transfer?.rollback()
             clearAndDelete(encrypted)
-            keyManager.clearWorkCache()
+            removeWorkspace(prepared.workspace)
         }
     }
 
     fun discardPreparedEncryption(prepared: PreparedEncryption?) {
         val encrypted = prepared?.consume() ?: return
         clearAndDelete(encrypted)
-        keyManager.clearWorkCache()
+        removeWorkspace(prepared.workspace)
     }
 
 
@@ -281,21 +287,24 @@ class SafFileWorkflow(
         progress: CancellableProgressCallback,
         temporaryKey: TemporaryPrivateKey? = null,
     ): PreparedDecryptionResult {
+        var workspace: File? = null
         var stagedInput: File? = null
         var stagedOutput: File? = null
         var prepared: PreparedDecryption? = null
         var result = LocalKeyManager.RESULT_STORAGE_ERROR
 
         try {
+            val directory = if (password.isEmpty()) null else createWorkspace()
+            workspace = directory
             if (password.isEmpty()) {
                 result = NativeBridge.RESULT_INVALID_ARGUMENT
-            } else if (prepareWorkDirectory()) {
-                stagedInput = createPrivateTemporaryFile(DECRYPT_INPUT_PREFIX)
-                stagedOutput = createPrivateTemporaryPath(DECRYPT_OUTPUT_PREFIX)
+            } else if (directory != null) {
+                stagedInput = createPrivateTemporaryFile(DECRYPT_INPUT_PREFIX, directory)
+                stagedOutput = createPrivateTemporaryPath(DECRYPT_OUTPUT_PREFIX, directory)
                 if (copyUriToFile(
                         source,
                         stagedInput,
-                        MAX_STAGED_FILE_BYTES,
+                        MAX_CONTAINER_BYTES,
                         progress,
                     )
                 ) {
@@ -311,7 +320,7 @@ class SafFileWorkflow(
                     ) {
                         result = NativeBridge.RESULT_CANCELLED
                     } else if (result == NativeBridge.RESULT_SUCCESS) {
-                        prepared = PreparedDecryption(stagedOutput)
+                        prepared = PreparedDecryption(stagedOutput, workspace)
                         stagedOutput = null
                     }
                 } else {
@@ -325,7 +334,7 @@ class SafFileWorkflow(
             clearAndDelete(stagedInput)
             clearAndDelete(stagedOutput)
             if (prepared == null) {
-                keyManager.clearWorkCache()
+                removeWorkspace(workspace)
             }
             discardTemporaryPrivateKey(temporaryKey)
         }
@@ -545,14 +554,14 @@ class SafFileWorkflow(
         } finally {
             if (!outputCommitted) transfer?.rollback()
             clearAndDelete(plaintext)
-            keyManager.clearWorkCache()
+            removeWorkspace(prepared.workspace)
         }
     }
 
     fun discardPreparedDecryption(prepared: PreparedDecryption?) {
         val plaintext = prepared?.consume() ?: return
         clearAndDelete(plaintext)
-        keyManager.clearWorkCache()
+        removeWorkspace(prepared.workspace)
     }
 
     fun exportPublicKey(destination: Uri): Int =
@@ -566,13 +575,15 @@ class SafFileWorkflow(
         var outputCommitted = false
         var transfer: UriOutputTransaction? = null
         var result = LocalKeyManager.RESULT_STORAGE_ERROR
+        var workspace: File? = null
 
         try {
-            if (!prepareWorkDirectory()) {
+            workspace = createWorkspace()
+            if (workspace == null) {
                 result = LocalKeyManager.RESULT_STORAGE_ERROR
             } else {
                 defaultRecord = keyManager.defaultPublicKeyRecord()
-                stagedOutput = createPrivateTemporaryPath(KEY_EXPORT_PREFIX)
+                stagedOutput = createPrivateTemporaryPath(KEY_EXPORT_PREFIX, workspace)
                 result = keyManager.exportPublicKey(stagedOutput)
                 if (result == NativeBridge.RESULT_SUCCESS) {
                     normalizedRecord = keyManager.publicKeyFileRecord(stagedOutput)
@@ -609,7 +620,7 @@ class SafFileWorkflow(
         } finally {
             if (!outputCommitted) transfer?.rollback()
             clearAndDelete(stagedOutput)
-            keyManager.clearWorkCache()
+            removeWorkspace(workspace)
         }
         return PublicKeyExportTrace(
             code = result,
@@ -637,12 +648,14 @@ class SafFileWorkflow(
         var commitResult = LocalKeyManager.RESULT_PUBLIC_KEY_COMMIT_FAILED
         var commitErrno: Int? = null
         var result = LocalKeyManager.RESULT_STORAGE_ERROR
+        var workspace: File? = null
 
         try {
-            if (!prepareWorkDirectory()) {
+            workspace = createWorkspace()
+            if (workspace == null) {
                 result = LocalKeyManager.RESULT_STORAGE_ERROR
             } else {
-                stagedInput = createPrivateTemporaryFile(PUBLIC_IMPORT_PREFIX)
+                stagedInput = createPrivateTemporaryFile(PUBLIC_IMPORT_PREFIX, workspace)
                 if (!copyUriToFile(
                         source,
                         stagedInput,
@@ -667,7 +680,7 @@ class SafFileWorkflow(
             result = LocalKeyManager.RESULT_STORAGE_ERROR
         } finally {
             clearAndDelete(stagedInput)
-            keyManager.clearWorkCache()
+            removeWorkspace(workspace)
         }
         return PublicKeyImportTrace(
             code = result,
@@ -684,15 +697,16 @@ class SafFileWorkflow(
     /** Takes ownership of [password] and clears it before returning. */
     fun importEncryptedPrivateKey(source: Uri, password: ByteArray): Int {
         var stagedInput: File? = null
+        var workspace: File? = null
 
         return try {
             if (password.isEmpty()) {
                 return NativeBridge.RESULT_INVALID_ARGUMENT
             }
-            if (!prepareWorkDirectory()) {
-                return LocalKeyManager.RESULT_STORAGE_ERROR
-            }
-            stagedInput = createPrivateTemporaryFile(PRIVATE_IMPORT_PREFIX)
+            val directory = createWorkspace()
+                ?: return LocalKeyManager.RESULT_STORAGE_ERROR
+            workspace = directory
+            stagedInput = createPrivateTemporaryFile(PRIVATE_IMPORT_PREFIX, directory)
             if (!copyUriToFile(
                     source,
                     stagedInput,
@@ -708,7 +722,7 @@ class SafFileWorkflow(
         } finally {
             password.fill(0)
             clearAndDelete(stagedInput)
-            keyManager.clearWorkCache()
+            removeWorkspace(workspace)
         }
     }
 
@@ -719,12 +733,13 @@ class SafFileWorkflow(
         var stagedOutput: File? = null
         var outputCommitted = false
         var transfer: UriOutputTransaction? = null
+        var workspace: File? = null
 
         return try {
-            if (!prepareWorkDirectory()) {
-                return LocalKeyManager.RESULT_STORAGE_ERROR
-            }
-            stagedOutput = createPrivateTemporaryPath(KEY_EXPORT_PREFIX)
+            val directory = createWorkspace()
+                ?: return LocalKeyManager.RESULT_STORAGE_ERROR
+            workspace = directory
+            stagedOutput = createPrivateTemporaryPath(KEY_EXPORT_PREFIX, directory)
             val result = producer(stagedOutput)
             if (result != NativeBridge.RESULT_SUCCESS) {
                 return result
@@ -747,7 +762,7 @@ class SafFileWorkflow(
         } finally {
             if (!outputCommitted) transfer?.rollback()
             clearAndDelete(stagedOutput)
-            keyManager.clearWorkCache()
+            removeWorkspace(workspace)
         }
     }
 
@@ -805,8 +820,26 @@ class SafFileWorkflow(
         }
     }
 
-    private fun prepareWorkDirectory(): Boolean =
-        preparePrivateDirectory(workDirectory)
+    /** A new private directory used by one operation only, or null. */
+    private fun createWorkspace(): File? {
+        if (!preparePrivateDirectory(workDirectory)) return null
+        val workspace = java.nio.file.Files.createTempDirectory(
+            workDirectory.toPath(),
+            WORKSPACE_PREFIX,
+        ).toFile()
+        if (!preparePrivateDirectory(workspace)) {
+            removeWorkspace(workspace)
+            return null
+        }
+        return workspace
+    }
+
+    /** Clears and removes one operation's workspace, never anything else. */
+    private fun removeWorkspace(workspace: File?) {
+        if (workspace == null) return
+        workspace.listFiles().orEmpty().forEach(::clearAndDelete)
+        workspace.delete()
+    }
 
     private fun prepareTemporaryKeyDirectory(directory: File): Boolean =
         preparePrivateDirectory(temporaryKeyDirectory) &&
@@ -831,7 +864,7 @@ class SafFileWorkflow(
 
     private fun createPrivateTemporaryFile(
         prefix: String,
-        directory: File = workDirectory,
+        directory: File,
         suffix: String = TEMPORARY_SUFFIX,
     ): File {
         val file = File.createTempFile(prefix, suffix, directory)
@@ -845,7 +878,7 @@ class SafFileWorkflow(
 
     private fun createPrivateTemporaryPath(
         prefix: String,
-        directory: File = workDirectory,
+        directory: File,
     ): File {
         val path = createPrivateTemporaryFile(prefix, directory)
         if (!path.delete()) {
@@ -1115,13 +1148,20 @@ class SafFileWorkflow(
 
     private companion object {
         const val COPY_BUFFER_SIZE = 64 * 1024
-        const val MAX_STAGED_FILE_BYTES = 8L * 1024L * 1024L * 1024L
-        const val MAX_OUTPUT_BACKUP_BYTES = MAX_STAGED_FILE_BYTES
+        // Plaintext and containers have separate limits, so every file that
+        // can be encrypted can also be decrypted again: a container adds
+        // 1,716 bytes (v3) or 156 + 1,672 per recipient (v4, up to 64).
+        const val MAX_PLAINTEXT_BYTES = 8L * 1024L * 1024L * 1024L
+        const val MAX_CONTAINER_OVERHEAD_BYTES = 156L + 1_672L * NativeBridge.MAX_RECIPIENTS
+        const val MAX_CONTAINER_BYTES = MAX_PLAINTEXT_BYTES + MAX_CONTAINER_OVERHEAD_BYTES
+        const val MAX_OUTPUT_BACKUP_BYTES = MAX_CONTAINER_BYTES
         const val MAX_KEY_IMPORT_BYTES = 16L * 1024L * 1024L
         const val PERMISSION_MASK = 0x1FF
         const val PRIVATE_DIRECTORY_MODE = 0x1C0
         const val PRIVATE_FILE_MODE = 0x180
 
+        const val WORK_DIRECTORY_NAME = "nekokem-work"
+        const val WORKSPACE_PREFIX = "op-"
         const val ENCRYPT_INPUT_PREFIX = "nkem-ei-"
         const val ENCRYPT_OUTPUT_PREFIX = "nkem-eo-"
         const val DECRYPT_INPUT_PREFIX = "nkem-di-"

@@ -27,10 +27,10 @@ jobs:
 
     steps:
       - name: Check out source
-        uses: actions/checkout@v5
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
 
       - name: Check out performance baseline
-        uses: actions/checkout@v5
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
         with:
           ref: ${{ github.event.pull_request.base.sha || 'main' }}
           path: performance-baseline-source
@@ -104,7 +104,7 @@ jobs:
 
       - name: Preserve Linux before-and-after throughput measurements
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: linux-throughput-comparison
           path: ${{ runner.temp }}/linux-throughput-comparison.json
@@ -120,7 +120,7 @@ jobs:
       - name: Test release signing configuration and identity persistence
         run: python3 .github/scripts/test_release_signing.py -v
 
-      - name: Run parser fuzz smoke tests
+      - name: Run parser and decryption fuzz smoke tests
         env:
           AFL_I_DONT_CARE_ABOUT_MISSING_CRASHES: "1"
           AFL_NO_UI: "1"
@@ -132,7 +132,7 @@ jobs:
           make -C linux fuzz-build \
             FUZZ_LDFLAGS="-fsanitize=undefined -L$LIBRARY_PATH"
           status=0
-          for format in nkem nkpr; do
+          for format in nkem nkpr decrypt; do
             if ! python3 .github/scripts/run_fuzz_smoke.py \
               --seeds "core/fuzz/seeds/$format" \
               --target "core/fuzz/bin/fuzz_$format" \
@@ -148,7 +148,7 @@ jobs:
 
       - name: Preserve fuzz logs, statistics and samples
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: parser-fuzz-results
           path: ${{ runner.temp }}/parser-fuzz-results.tar.gz
@@ -162,10 +162,10 @@ jobs:
 
     steps:
       - name: Check out source
-        uses: actions/checkout@v5
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
 
       - name: Set up Java 17
-        uses: actions/setup-java@v5
+        uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5
         with:
           distribution: temurin
           java-version: "17"
@@ -191,7 +191,7 @@ jobs:
             "$sdk_root" >> "$GITHUB_ENV"
 
       - name: Set up Gradle cache
-        uses: gradle/actions/setup-gradle@v4
+        uses: gradle/actions/setup-gradle@ed408507eac070d1f99cc633dbcf757c94c7933a # v4
         with:
           cache-read-only: ${{ github.event_name == 'pull_request' }}
 
@@ -211,7 +211,7 @@ jobs:
 
       - name: Preserve executed JVM test reports
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: android-jvm-test-results
           path: |
@@ -229,8 +229,8 @@ jobs:
       matrix:
         api: [26, 35]
     steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-java@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5
         with:
           distribution: temurin
           java-version: "17"
@@ -254,7 +254,7 @@ jobs:
           printf 'ANDROID_NDK_ROOT=%s/ndk/28.2.13676358\n' \
             "$sdk_root" >> "$GITHUB_ENV"
 
-      - uses: gradle/actions/setup-gradle@v4
+      - uses: gradle/actions/setup-gradle@ed408507eac070d1f99cc633dbcf757c94c7933a # v4
         with:
           cache-read-only: ${{ github.event_name == 'pull_request' }}
       - name: Build pinned OpenSSL for the test emulator
@@ -281,7 +281,7 @@ jobs:
       - name: Install and verify emulator image with bounded download retries
         run: bash .github/scripts/install_android_emulator_image.sh "$ANDROID_SDK_ROOT" "${{ matrix.api }}"
       - name: Execute JNI, SAF and language tests on a device
-        uses: reactivecircus/android-emulator-runner@v2
+        uses: reactivecircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2
         with:
           api-level: ${{ matrix.api }}
           arch: x86_64
@@ -304,7 +304,7 @@ jobs:
             bash .github/scripts/run_android_device_tests.sh android/device-reports
       - name: Preserve actual device test results
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: android-device-api-${{ matrix.api }}
           path: android/device-reports/
@@ -326,7 +326,7 @@ jobs:
 
     steps:
       - name: Check out source
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
       - name: Install build tools
         run: |
@@ -352,7 +352,7 @@ jobs:
           python3 linux/tests/i18n_tests.py "$release_test_dir/nekokem"
 
       - name: Upload Linux archive
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: NekoKEM-linux-${{ matrix.arch }}
           path: dist/NekoKEM-linux-${{ matrix.arch }}.tar.gz
@@ -366,8 +366,8 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v5
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
         with:
           ref: 3ce869eea9384859cc5808918d4672c43eab8c92
           path: baseline-source
@@ -381,7 +381,7 @@ jobs:
           cp "$executable" "$RUNNER_TEMP/baseline-nekokem"
           python3 windows/tests/interop.py generate "$RUNNER_TEMP/baseline-nekokem" "$RUNNER_TEMP/linux-fixtures"
       - name: Download current Linux CLI build
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           name: NekoKEM-linux-x86_64
           path: ${{ runner.temp }}/current-linux-dist
@@ -392,13 +392,13 @@ jobs:
             --strip-components=1 -C "$RUNNER_TEMP/current-linux-bin"
           python3 windows/tests/interop.py contract \
             "$RUNNER_TEMP/current-linux-bin/nekokem" "$RUNNER_TEMP/linux-fixtures"
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: pre-port-linux-cli
           path: ${{ runner.temp }}/baseline-nekokem
           retention-days: 14
           if-no-files-found: error
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: public-linux-interop-fixtures
           path: |
@@ -418,13 +418,13 @@ jobs:
     runs-on: windows-2022
     timeout-minutes: 45
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
       - name: Check out performance baseline
-        uses: actions/checkout@v5
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
         with:
           ref: ${{ github.event.pull_request.base.sha || 'main' }}
           path: performance-baseline-source
-      - uses: msys2/setup-msys2@v2
+      - uses: msys2/setup-msys2@ec48f7c5447b3140e2b088413ae3a55687bccb6e # v2
         with:
           msystem: UCRT64
           update: true
@@ -436,7 +436,7 @@ jobs:
         id: compiler
         shell: msys2 {0}
         run: echo "version=$(gcc -dumpfullversion)" >> "$GITHUB_OUTPUT"
-      - uses: actions/cache/restore@v4
+      - uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
         id: openssl-cache
         with:
           path: ${{ runner.temp }}/windows-openssl
@@ -461,12 +461,12 @@ jobs:
             performance-baseline-source/core/tests/openssl_version_tests.c
           bash performance-baseline-source/windows/scripts/build-windows-cli.sh \
             "$(cygpath -u "$RUNNER_TEMP")/windows-cli-performance-baseline"
-      - uses: actions/cache/save@v4
+      - uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
         if: always() && steps.openssl-cache.outputs.cache-hit != 'true'
         with:
           path: ${{ runner.temp }}/windows-openssl
           key: ${{ steps.openssl-cache.outputs.cache-primary-key }}
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           name: public-linux-interop-fixtures
           path: ${{ runner.temp }}/linux-fixtures
@@ -487,7 +487,7 @@ jobs:
             $ancestor = $ancestor.Parent
           }
           try {
-            foreach ($name in @('openssl_version', 'hybrid_kdf', 'gcm_limit', 'aes_stream', 'parser', 'multi_recipient', 'windows_core', 'console')) {
+            foreach ($name in @('openssl_version', 'hybrid_kdf', 'gcm_limit', 'aes_stream', 'parser', 'multi_recipient', 'key_safety', 'windows_core', 'console')) {
               $testDirectory = Join-Path $work $name
               New-Item -ItemType Directory -Path $testDirectory | Out-Null
               Push-Location $testDirectory
@@ -518,7 +518,7 @@ jobs:
           } finally { Remove-Item $work -Recurse -Force }
       - name: Preserve Windows before-and-after throughput measurements
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: windows-throughput-comparison
           path: ${{ runner.temp }}/windows-throughput-comparison.json
@@ -551,7 +551,7 @@ jobs:
           $bin = Join-Path $env:RUNNER_TEMP 'windows-cli'
           Compress-Archive -Path "$bin/nekokem.exe","$bin/README.md","$bin/SECURITY-DESIGN.md","$bin/LICENSE","$bin/OPENSSL-LICENSE.txt","$bin/SHA256SUMS.txt","$bin/pe-headers.txt","$bin/benchmark.json","$bin/build-metadata.json" -DestinationPath "$env:RUNNER_TEMP/NekoKEM-windows-x86_64.zip"
           (Get-FileHash "$env:RUNNER_TEMP/NekoKEM-windows-x86_64.zip" -Algorithm SHA256).Hash.ToLower() + '  NekoKEM-windows-x86_64.zip' | Set-Content "$env:RUNNER_TEMP/windows-SHA256SUMS.txt" -Encoding ascii
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: NekoKEM-windows-x86_64
           path: |
@@ -559,7 +559,7 @@ jobs:
             ${{ runner.temp }}/windows-SHA256SUMS.txt
           retention-days: 14
           if-no-files-found: error
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: public-windows-interop-fixtures
           path: ${{ runner.temp }}/windows-fixtures/
@@ -572,16 +572,16 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v5
-      - uses: actions/download-artifact@v4
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           name: pre-port-linux-cli
           path: ${{ runner.temp }}/baseline-bin
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           name: public-windows-interop-fixtures
           path: ${{ runner.temp }}/windows-fixtures
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           name: public-macos-interop-fixtures
           path: ${{ runner.temp }}/macos-fixtures
@@ -599,8 +599,8 @@ jobs:
       run:
         working-directory: desktop
     steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-node@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
         with:
           node-version: '24'
       - name: Install locked frontend dependencies
@@ -613,7 +613,7 @@ jobs:
         run: npx playwright install --with-deps chromium
       - name: Verify rendered layouts in all five languages
         run: npx playwright test
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         if: always()
         with:
           name: windows-gui-frontend-evidence
@@ -627,19 +627,19 @@ jobs:
     runs-on: windows-2022
     timeout-minutes: 60
     steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-node@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
         with:
           node-version: '24'
-      - uses: actions/setup-python@v6
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
         id: python
         with:
           python-version: '3.13'
-      - uses: dtolnay/rust-toolchain@master
+      - uses: dtolnay/rust-toolchain@7e38f4b43b4db5c8dd498af069a4f6196df1d067 # master
         with:
           toolchain: stable-x86_64-pc-windows-gnu
           targets: x86_64-pc-windows-gnu
-      - uses: msys2/setup-msys2@v2
+      - uses: msys2/setup-msys2@ec48f7c5447b3140e2b088413ae3a55687bccb6e # v2
         with:
           msystem: UCRT64
           update: true
@@ -653,13 +653,13 @@ jobs:
         run: |
           echo "version=$(gcc -dumpfullversion)" >> "$GITHUB_OUTPUT"
           echo "gcc=$(cygpath -m "$(command -v gcc)")" >> "$GITHUB_OUTPUT"
-      - uses: actions/cache/restore@v4
+      - uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
         id: openssl-cache
         with:
           path: ${{ runner.temp }}/windows-openssl
           key: windows-ucrt64-openssl-4.0.3-${{ steps.compiler.outputs.version }}-${{ hashFiles('windows/scripts/build-windows-cli.sh') }}
           restore-keys: windows-ucrt64-openssl-4.0.3-${{ steps.compiler.outputs.version }}-
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
         with:
           workspaces: desktop/src-tauri
           cache-on-failure: true
@@ -668,7 +668,7 @@ jobs:
         run: |
           export NEKOKEM_OPENSSL_PREFIX="$(cygpath -u "$RUNNER_TEMP")/windows-openssl"
           bash windows/scripts/build-windows-cli.sh "$(cygpath -u "$RUNNER_TEMP")/windows-cli"
-      - uses: actions/cache/save@v4
+      - uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
         if: steps.openssl-cache.outputs.cache-hit != 'true'
         with:
           path: ${{ runner.temp }}/windows-openssl
@@ -755,7 +755,7 @@ jobs:
           @{ source_sha=$env:GITHUB_SHA; run_id=$env:GITHUB_RUN_ID; exe_sha256=$hash; platform='windows-x86_64'; openssl_version='4.0.3'; authenticode_signed=$false; apk_signing_material_used=$false } | ConvertTo-Json | Set-Content "$root/build-metadata.json"
           Compress-Archive -Path "$root/*" -DestinationPath "$env:RUNNER_TEMP/NekoKEM-Windows-GUI.zip"
           Remove-Item $env:TEMP -Recurse -Force
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         if: always()
         with:
           name: windows-gui-native-evidence
@@ -765,7 +765,7 @@ jobs:
             gui-pe.txt
             webview2-loader-metadata.json
           retention-days: 14
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: NekoKEM-windows-gui-x86_64
           path: ${{ runner.temp }}/NekoKEM-Windows-GUI.zip
@@ -780,8 +780,8 @@ jobs:
     env:
       MACOSX_DEPLOYMENT_TARGET: '11.0'
     steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-python@v6
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
         with:
           python-version: '3.13'
       - name: Identify native Apple compiler and SDK
@@ -792,7 +792,7 @@ jobs:
           identity=$({ xcrun clang --version; xcrun --sdk macosx --show-sdk-version; } | shasum -a 256 | cut -d ' ' -f 1)
           echo "identity=$identity" >> "$GITHUB_OUTPUT"
           echo "NEKOKEM_OPENSSL_PREFIX=$RUNNER_TEMP/macos-openssl" >> "$GITHUB_ENV"
-      - uses: actions/cache@v4
+      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
         with:
           path: ${{ runner.temp }}/macos-openssl
           key: macos-arm64-openssl-4.0.3-${{ steps.compiler.outputs.identity }}-${{ hashFiles('macos/scripts/build-openssl.sh') }}
@@ -806,13 +806,13 @@ jobs:
           bash macos/scripts/build-macos-cli.sh "$RUNNER_TEMP/macos-cli-build-only"
           cmp "$RUNNER_TEMP/macos-cli/nekokem" "$RUNNER_TEMP/macos-cli-build-only/nekokem"
           cmp "$RUNNER_TEMP/macos-cli/NekoKEM-macos-arm64.tar.gz" "$RUNNER_TEMP/macos-cli-build-only/NekoKEM-macos-arm64.tar.gz"
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           name: public-linux-interop-fixtures
           path: ${{ runner.temp }}/macos-fixtures
       - name: Compare all current CLI options and exchange historical Linux containers
         run: python3 macos/tests/interop.py macos "$RUNNER_TEMP/macos-cli/nekokem" "$RUNNER_TEMP/macos-fixtures"
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: NekoKEM-macos-arm64
           path: |
@@ -820,7 +820,7 @@ jobs:
             ${{ runner.temp }}/macos-cli/macos-SHA256SUMS.txt
           retention-days: 14
           if-no-files-found: error
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: public-macos-interop-fixtures
           path: |
@@ -840,14 +840,14 @@ jobs:
     env:
       MACOSX_DEPLOYMENT_TARGET: '11.0'
     steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-python@v6
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
         with:
           python-version: '3.13'
-      - uses: actions/setup-node@v5
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
         with:
           node-version: '24'
-      - uses: dtolnay/rust-toolchain@master
+      - uses: dtolnay/rust-toolchain@7e38f4b43b4db5c8dd498af069a4f6196df1d067 # master
         with:
           toolchain: stable
           targets: aarch64-apple-darwin
@@ -859,11 +859,11 @@ jobs:
           identity=$({ xcrun clang --version; xcrun --sdk macosx --show-sdk-version; } | shasum -a 256 | cut -d ' ' -f 1)
           echo "identity=$identity" >> "$GITHUB_OUTPUT"
           echo "NEKOKEM_OPENSSL_PREFIX=$RUNNER_TEMP/macos-openssl" >> "$GITHUB_ENV"
-      - uses: actions/cache@v4
+      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
         with:
           path: ${{ runner.temp }}/macos-openssl
           key: macos-arm64-openssl-4.0.3-${{ steps.compiler.outputs.identity }}-${{ hashFiles('macos/scripts/build-openssl.sh') }}
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
         with:
           workspaces: desktop/src-tauri
           cache-on-failure: true
@@ -887,7 +887,7 @@ jobs:
             --output "$RUNNER_TEMP/macos-gui" --version 4.0.0 --source-sha "$GITHUB_SHA"
       - name: Verify the actual native macOS window launches
         run: python3 desktop/tests/launch_macos.py desktop/src-tauri/target/aarch64-apple-darwin/release/bundle/macos/NekoKEM.app --log "$RUNNER_TEMP/macos-gui/startup.log"
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         if: always()
         with:
           name: macos-gui-native-evidence
@@ -896,7 +896,7 @@ jobs:
             ${{ runner.temp }}/macos-gui/startup.log
             desktop/src-tauri/Cargo.lock
           retention-days: 14
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: NekoKEM-macos-arm64-gui
           path: |
@@ -919,14 +919,14 @@ jobs:
           - arch: aarch64
             runner: ubuntu-24.04-arm
     steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-python@v6
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
         with:
           python-version: '3.13'
-      - uses: actions/setup-node@v5
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
         with:
           node-version: '24'
-      - uses: dtolnay/rust-toolchain@master
+      - uses: dtolnay/rust-toolchain@7e38f4b43b4db5c8dd498af069a4f6196df1d067 # master
         with:
           toolchain: stable
           targets: ${{ matrix.arch }}-unknown-linux-gnu
@@ -945,11 +945,11 @@ jobs:
           identity=$({ gcc --version; getconf GNU_LIBC_VERSION; } | sha256sum | cut -d ' ' -f 1)
           echo "identity=$identity" >> "$GITHUB_OUTPUT"
           echo "NEKOKEM_OPENSSL_PREFIX=$RUNNER_TEMP/linux-gui-openssl" >> "$GITHUB_ENV"
-      - uses: actions/cache@v4
+      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
         with:
           path: ${{ runner.temp }}/linux-gui-openssl
           key: linux-gui-${{ matrix.arch }}-openssl-4.0.3-${{ steps.compiler.outputs.identity }}-${{ hashFiles('desktop/scripts/build-linux-openssl.sh') }}
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
         with:
           workspaces: desktop/src-tauri
           cache-on-failure: true
@@ -990,7 +990,7 @@ jobs:
             --mount "type=bind,src=$RUNNER_TEMP/linux-gui/rpm-evidence,dst=/evidence" \
             fedora:44 bash /nekokem-tests/install_rpm_fedora.sh \
             '/packages/NekoKEM-linux-${{ matrix.arch }}-GUI.rpm' /evidence "$(id -u)"
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         if: always()
         with:
           name: linux-gui-${{ matrix.arch }}-native-evidence
@@ -1000,7 +1000,7 @@ jobs:
             ${{ runner.temp }}/linux-gui/rpm-evidence/rpm-startup.log
             desktop/src-tauri/Cargo.lock
           retention-days: 14
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: NekoKEM-linux-${{ matrix.arch }}-gui
           path: |

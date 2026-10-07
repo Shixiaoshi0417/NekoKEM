@@ -321,6 +321,8 @@ static int win_read(const char *path, size_t maximum, unsigned char **buffer,
     stage = "stream";
     stream = win_stream(handle, _O_RDONLY, "rb");
     if (stream == NULL) goto cleanup;
+    /* Unbuffered, so no CRT buffer keeps a copy of a key after fclose. */
+    if (sensitive && setvbuf(stream, NULL, _IONBF, 0) != 0) goto cleanup;
     stage = "size";
     if (!file_get_size(stream, &size)) goto cleanup;
     stage = "size limit";
@@ -531,7 +533,73 @@ static int win_same(HANDLE a, HANDLE b)
            first.nFileIndexHigh == second.nFileIndexHigh && first.nFileIndexLow == second.nFileIndexLow;
 }
 
-int atomic_file_commit_pair(AtomicFile *first, AtomicFile *second)
+static HANDLE win_open_identity(const char *utf8)
+{
+    wchar_t *wide = windows_utf8_path(utf8);
+    if (wide == NULL) return INVALID_HANDLE_VALUE;
+    HANDLE handle = CreateFileW(wide, FILE_READ_ATTRIBUTES,
+            FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, NULL, OPEN_EXISTING,
+            FILE_FLAG_OPEN_REPARSE_POINT | FILE_FLAG_BACKUP_SEMANTICS, NULL);
+    DWORD error = GetLastError();
+    free(wide);
+    SetLastError(error);
+    return handle;
+}
+
+static int win_missing(DWORD error)
+{
+    return error == ERROR_FILE_NOT_FOUND || error == ERROR_PATH_NOT_FOUND;
+}
+
+int file_path_exists(const char *path, int *exists)
+{
+    if (path == NULL || exists == NULL) return 0;
+    *exists = 0;
+    HANDLE handle = win_open_identity(path);
+    if (handle == INVALID_HANDLE_VALUE) return win_missing(GetLastError());
+    CloseHandle(handle);
+    *exists = 1;
+    return 1;
+}
+
+int file_paths_are_same_file(const char *first, const char *second, int *same)
+{
+    if (first == NULL || second == NULL || same == NULL) return 0;
+    *same = 0;
+    HANDLE a = win_open_identity(first);
+    if (a == INVALID_HANDLE_VALUE) return win_missing(GetLastError());
+    HANDLE b = win_open_identity(second);
+    if (b == INVALID_HANDLE_VALUE) {
+        DWORD error = GetLastError();
+        CloseHandle(a);
+        return win_missing(error);
+    }
+    *same = win_same(a, b);
+    CloseHandle(a);
+    CloseHandle(b);
+    return 1;
+}
+
+int file_peek_regular(const char *path, unsigned char *prefix, size_t length)
+{
+    if (path == NULL || prefix == NULL || length == 0 || length > MAXDWORD) return 0;
+    wchar_t *wide = windows_utf8_path(path);
+    if (wide == NULL) return 0;
+    HANDLE handle = CreateFileW(wide, GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING,
+            FILE_FLAG_OPEN_REPARSE_POINT, NULL);
+    free(wide);
+    if (handle == INVALID_HANDLE_VALUE) return 0;
+    BY_HANDLE_FILE_INFORMATION info;
+    DWORD count = 0;
+    int success = GetFileType(handle) == FILE_TYPE_DISK &&
+        GetFileInformationByHandle(handle, &info) &&
+        (info.dwFileAttributes & (FILE_ATTRIBUTE_DIRECTORY | FILE_ATTRIBUTE_REPARSE_POINT)) == 0 &&
+        ReadFile(handle, prefix, (DWORD)length, &count, NULL) && count == (DWORD)length;
+    CloseHandle(handle);
+    return success;
+}
+
+static int win_commit_pair(AtomicFile *first, AtomicFile *second, int replace)
 {
     AtomicFile *files[2] = {first, second};
     HANDLE old[2] = {INVALID_HANDLE_VALUE, INVALID_HANDLE_VALUE};
@@ -557,6 +625,11 @@ int atomic_file_commit_pair(AtomicFile *first, AtomicFile *second)
         if (old[i] == INVALID_HANDLE_VALUE) {
             DWORD error = GetLastError();
             if (error != ERROR_FILE_NOT_FOUND) goto cleanup;
+        } else if (!replace) {
+            /* Create-only: the rename below also refuses a name that appears. */
+            SetLastError(ERROR_FILE_EXISTS);
+            errno = EEXIST;
+            goto cleanup;
         } else {
             /* Never overwrite a reparse point, hard-linked or broadly accessible output. */
             if (!win_regular(old[i], 1)) goto cleanup;
@@ -638,6 +711,16 @@ cleanup:
     }
     if (!success) print_system_error("Cannot commit atomic output transaction");
     return success;
+}
+
+int atomic_file_commit_pair(AtomicFile *first, AtomicFile *second)
+{
+    return win_commit_pair(first, second, 1);
+}
+
+int atomic_file_commit_pair_new(AtomicFile *first, AtomicFile *second)
+{
+    return win_commit_pair(first, second, 0);
 }
 
 int atomic_file_commit(AtomicFile *file)

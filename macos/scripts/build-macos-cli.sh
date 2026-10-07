@@ -82,7 +82,7 @@ if [[ "$build_tests" == 1 ]]; then
     # Darwin's ASan does not support LSan. Linux retains its existing LSan gate.
     for test in parser file_security gcm_limit aes_stream hybrid_kdf key_management \
         version_rejection progress input_boundary pem_interaction openssl_version \
-        multi_recipient; do
+        multi_recipient key_safety; do
         test_flags=(-DNEKOKEM_TEST_REGRESSION=1)
         library="$sanitized/libcore.a"
         if [[ "$test" == file_security ]]; then

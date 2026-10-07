@@ -153,9 +153,19 @@ pub fn execute<F:Fn(u64,u64)>(request:Request,job:Arc<Job>,emit:F)->Result<Outco
     if request.kind==Kind::Keygen {
         if request.password.is_empty(){return Err(Failure::new("password-empty"));}
         if request.password.as_str()!=request.confirmation.as_str(){return Err(Failure::new("password-mismatch"));}
+        // Keys are never replaced; Core refuses as well, this names the reason.
+        if [&request.public_path,&request.private_path].iter().any(|target|std::fs::symlink_metadata(target.as_str()).is_ok()) {
+            return Err(Failure::new("key-exists"));
+        }
         let public=path(&request.public_path)?; let private=path(&request.private_path)?;
         let result=unsafe{nekokem_generate_keypair(public.as_ptr(),private.as_ptr(),request.password.as_ptr(),request.password.len())};
         return if result==1 {Ok(Outcome{output:Some(request.private_path),fingerprint:None,recipients:Vec::new()})}else{Err(Failure::new("core-error"))};
+    }
+    // Core refuses an output that is the key in use; this names the reason.
+    if matches!(request.kind,Kind::Encrypt|Kind::Decrypt) && !request.key_path.is_empty() && !request.paste {
+        if let (Ok(output),Ok(key))=(std::fs::canonicalize(&request.output),std::fs::canonicalize(&request.key_path)) {
+            if output==key {return Err(Failure::new("output-is-key"));}
+        }
     }
     // Saved contacts are re-read and re-validated by Core for every encryption.
     // A missing or damaged contact fails the whole operation and names that
@@ -241,6 +251,10 @@ mod tests {
         let data:Vec<u8>=(0..1048576).map(|i|(i%256)as u8).collect();fs::write(dir.file("plain"),&data).unwrap();
         let mut r=request(Kind::Encrypt);r.input=dir.file("plain");r.output=dir.file("cipher.nkem");r.key_path=dir.file("public.key");run(&backend,r).unwrap();
         let mut r=request(Kind::Decrypt);r.input=dir.file("cipher.nkem");r.output=dir.file("output");r.key_path=dir.file("private.key.enc");r.password=Zeroizing::new("public-test-中文-😀".into());run(&backend,r).unwrap();assert_eq!(fs::read(dir.file("output")).unwrap(),data);
+        let protected=fs::read(dir.file("private.key.enc")).unwrap();
+        let mut r=request(Kind::Keygen);r.public_path=dir.file("public.key");r.private_path=dir.file("private.key.enc");r.password=Zeroizing::new("public-test-中文-😀".into());r.confirmation=r.password.clone();assert_eq!(run(&backend,r).err().unwrap().code,"key-exists");
+        let mut r=request(Kind::Decrypt);r.input=dir.file("cipher.nkem");r.output=dir.file("private.key.enc");r.key_path=dir.file("private.key.enc");r.password=Zeroizing::new("public-test-中文-😀".into());assert_eq!(run(&backend,r).err().unwrap().code,"output-is-key");
+        assert_eq!(fs::read(dir.file("private.key.enc")).unwrap(),protected);
         let mut r=request(Kind::Decrypt);r.input=dir.file("cipher.nkem");r.output=dir.file("output");r.key_path=dir.file("private.key.enc");r.password=Zeroizing::new("wrong".into());assert_eq!(run(&backend,r).err().unwrap().code,"core-error");assert_eq!(fs::read(dir.file("output")).unwrap(),data);
         let mut r=request(Kind::Fingerprint);r.key_path=dir.file("public.key");let fingerprint=run(&backend,r).unwrap().fingerprint;
         let mut r=request(Kind::Fingerprint);r.paste=true;r.key_text=Zeroizing::new(fs::read_to_string(dir.file("public.key")).unwrap());assert_eq!(run(&backend,r).unwrap().fingerprint,fingerprint);
@@ -477,11 +491,19 @@ mod tests {
         r.private_path = dir.file("private.key.enc");
         r.password = Zeroizing::new("public test password".into());
         r.confirmation = r.password.clone();
-        // POSIX Core safely replaces the symlink itself without following it.
-        run(&backend, r).unwrap();
-        assert_eq!(fs::read(destination).unwrap(), b"must survive");
-        assert!(!fs::symlink_metadata(dir.file("public-link")).unwrap().file_type().is_symlink());
-        assert_eq!(fs::metadata(dir.file("private.key.enc")).unwrap().mode() & 0o777, 0o600);
+        // Keygen never replaces an existing name, a symbolic link included, and
+        // never writes through one: neither the backend check nor Core itself.
+        assert_eq!(run(&backend, r).err().unwrap().code, "key-exists");
+        let public = path(&dir.file("public-link")).unwrap();
+        let private = path(&dir.file("private.key.enc")).unwrap();
+        let password = b"public test password";
+        assert_eq!({
+            let _core = CORE_LOCK.lock().unwrap_or_else(|error| error.into_inner());
+            unsafe { nekokem_generate_keypair(public.as_ptr(), private.as_ptr(), password.as_ptr(), password.len()) }
+        }, 0);
+        assert_eq!(fs::read(&destination).unwrap(), b"must survive");
+        assert!(fs::symlink_metadata(dir.file("public-link")).unwrap().file_type().is_symlink());
+        assert!(fs::symlink_metadata(dir.file("private.key.enc")).is_err());
 
         let mut staged = Staged::new(bytes).unwrap();
         let file = PathBuf::from(unsafe { CStr::from_ptr(staged.0) }.to_str().unwrap());

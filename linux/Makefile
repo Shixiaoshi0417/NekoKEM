@@ -32,7 +32,7 @@ DEPS = $(OBJECTS:.o=.d)
 	fuzz-build test-key-management test-progress test-progress-large \
 	test-file-security test-version-rejection test-gcm-limit test-aes-stream \
 	test-hybrid-kdf test-asan test-input-boundaries test-pem-interaction test-openssl \
-	test-multi-recipient
+	test-multi-recipient test-key-safety
 
 all: $(TARGET)
 
@@ -169,6 +169,14 @@ fuzz-build: fuzz-seeds
 		../core/fuzz/fuzz_nkpr.c ../core/src/private_key.c ../core/src/file.c ../core/src/file_v3.c \
 		../core/src/secure_mem.c $(FUZZ_LDFLAGS) $(LDLIBS) \
 		-o ../core/fuzz/bin/fuzz_nkpr
+	$(AFL_CC) $(FUZZ_CPPFLAGS) -I../core/include -I../core/src $(FUZZ_CFLAGS) \
+		../core/fuzz/fuzz_decrypt.c $(CORE_SOURCES) $(FUZZ_LDFLAGS) $(LDLIBS) \
+		-o ../core/fuzz/bin/fuzz_decrypt
+	$(AFL_CC) $(FUZZ_CPPFLAGS) -I../core/include -I../core/src $(FUZZ_CFLAGS) \
+		../core/fuzz/fuzz_decrypt_seeds.c $(CORE_SOURCES) $(FUZZ_LDFLAGS) $(LDLIBS) \
+		-o ../core/fuzz/bin/fuzz_decrypt_seeds
+	rm -rf ../core/fuzz/seeds/decrypt ../core/fuzz/bin/decrypt-*
+	../core/fuzz/bin/fuzz_decrypt_seeds ../core/fuzz/bin ../core/fuzz/seeds/decrypt
 
 
 test-key-management: $(CORE_LIBRARY)
@@ -223,6 +231,18 @@ test-multi-recipient:
 	ASAN_OPTIONS=detect_leaks=1:halt_on_error=1 \
 		UBSAN_OPTIONS=halt_on_error=1:print_stacktrace=1 "$$multi_binary"
 
+test-key-safety:
+	@set -eu; \
+	safety_binary=$$(mktemp /tmp/nekokem-key-safety-tests.XXXXXX); \
+	cleanup_safety() { rm -f "$$safety_binary"; }; \
+	trap cleanup_safety EXIT INT TERM; \
+	$(CC) $(CPPFLAGS) $(CFLAGS) -O1 -g -fno-omit-frame-pointer \
+		-fsanitize=address,undefined -fno-sanitize-recover=undefined \
+		$(LDFLAGS) ../core/tests/key_safety_tests.c $(CORE_SOURCES) \
+		$(LDLIBS) -fsanitize=address,undefined -o "$$safety_binary"; \
+	ASAN_OPTIONS=detect_leaks=1:halt_on_error=1 \
+		UBSAN_OPTIONS=halt_on_error=1:print_stacktrace=1 "$$safety_binary"
+
 test-progress test-progress-large: $(CORE_LIBRARY)
 	@set -eu; \
 	progress_binary=$$(mktemp /tmp/nekokem-progress-tests.XXXXXX); \
@@ -240,7 +260,7 @@ test-progress test-progress-large: $(CORE_LIBRARY)
 
 test: $(TARGET) test-openssl analyze test-ubsan test-parser test-file-security test-gcm-limit test-aes-stream \
 	test-key-management test-version-rejection test-progress test-hybrid-kdf test-input-boundaries \
-	test-asan test-pem-interaction test-i18n test-multi-recipient
+	test-asan test-pem-interaction test-i18n test-multi-recipient test-key-safety
 	@set -eu; \
 	test_dir=$$(mktemp -d); \
 	cleanup() { \
@@ -266,6 +286,16 @@ test: $(TARGET) test-openssl analyze test-ubsan test-parser test-file-security t
 			"$$test_dir/encrypted/hybrid.nkem" \
 			"$$test_dir/encrypted/multi.nkem" \
 			"$$test_dir/first-public.key" \
+			"$$test_dir/keys-before.pub" \
+			"$$test_dir/keys-before.enc" \
+			"$$test_dir/keygen-refused.txt" \
+			"$$test_dir/menu-before.enc" \
+			"$$test_dir/menu-refused.txt" \
+			"$$test_dir/alias-error.txt" \
+			"$$test_dir/renamed.nkpr" \
+			"$$test_dir/nkpr-output.txt" \
+			"$$test_dir/before-replace.pub" \
+			"$$test_dir/replace-warning.txt" \
 			"$$test_dir/multi-output.txt" \
 			"$$test_dir/multi-decrypted.txt" \
 			"$$test_dir/encrypted/tampered.nkem" \
@@ -302,6 +332,39 @@ test: $(TARGET) test-openssl analyze test-ubsan test-parser test-file-security t
 			hybrid-output.txt keys/private.key.enc; \
 	sha256sum test.txt hybrid-output.txt; \
 	cmp test.txt hybrid-output.txt; \
+	cp keys/public.key keys-before.pub; \
+	cp keys/private.key.enc keys-before.enc; \
+	if printf '%s\n%s\n' "$$key_password" "$$key_password" | \
+		./nekokem --lang en keygen 2> keygen-refused.txt; then \
+		echo "keygen replaced existing keys" >&2; \
+		exit 1; \
+	fi; \
+	grep -F 'keygen never replaces existing keys' keygen-refused.txt \
+		>/dev/null; \
+	cmp keys/public.key keys-before.pub; \
+	cmp keys/private.key.enc keys-before.enc; \
+	for alias in keys/private.key.enc ./keys/../keys/private.key.enc; do \
+		if printf '%s\n' "$$key_password" | \
+			./nekokem --lang en decrypt hybrid encrypted/hybrid.nkem \
+				"$$alias" keys/private.key.enc 2> alias-error.txt; then \
+			echo "Decryption output replaced the private key" >&2; \
+			exit 1; \
+		fi; \
+		grep -F 'is a key file this operation uses' alias-error.txt \
+			>/dev/null; \
+		cmp keys/private.key.enc keys-before.enc; \
+	done; \
+	if ./nekokem --lang en encrypt hybrid test.txt keys/public.key \
+		keys/public.key 2> alias-error.txt; then \
+		echo "Encryption output replaced the public key" >&2; \
+		exit 1; \
+	fi; \
+	cmp keys/public.key keys-before.pub; \
+	install -m 0600 keys/private.key.enc renamed.nkpr; \
+	printf '%s\n' "$$key_password" | \
+		./nekokem decrypt hybrid encrypted/hybrid.nkem \
+			nkpr-output.txt renamed.nkpr; \
+	cmp test.txt nkpr-output.txt; \
 	if printf 'wrong-password\n' | \
 		./nekokem decrypt hybrid encrypted/hybrid.nkem \
 			wrong-password-output.txt keys/private.key.enc; then \
@@ -338,7 +401,7 @@ test: $(TARGET) test-openssl analyze test-ubsan test-parser test-file-security t
 		exit 1; \
 	fi; \
 	test ! -e tampered-key-output.txt; \
-	cp keys/public.key first-public.key; \
+	mv keys/public.key first-public.key; \
 	mv keys/private.key.enc correct-private.key.enc; \
 	printf '%s\n%s\n' "$$key_password" "$$key_password" | \
 		./nekokem keygen hybrid; \
@@ -389,6 +452,13 @@ test: $(TARGET) test-openssl analyze test-ubsan test-parser test-file-security t
 		long-paste-error.txt >/dev/null; \
 	test -z "$$(find /tmp -maxdepth 1 -type d \
 		-name 'nekokem-paste.*' -print -quit)"; \
+	cp keys/private.key.enc menu-before.enc; \
+	printf '1\n5\n' | ./nekokem --lang en >/dev/null 2>menu-refused.txt; \
+	grep -F 'keygen never replaces existing keys' menu-refused.txt \
+		>/dev/null; \
+	cmp keys/private.key.enc menu-before.enc; \
+	rm -f keys/public.key keys/private.key.enc menu-before.enc \
+		menu-refused.txt; \
 	printf '1\n%s\n%s\n5\n' "$$interactive_password" \
 		"$$interactive_password" | ./nekokem >/dev/null; \
 	test -s keys/public.key; \
@@ -431,7 +501,7 @@ test: $(TARGET) test-openssl analyze test-ubsan test-parser test-file-security t
 	test "$$(stat -c %a private-echo-check.log)" = 600; \
 	{ sleep 1; printf 'PASSWORD-ECHO-SENTINEL\n'; \
 		sleep 1; printf 'PASSWORD-ECHO-SENTINEL\n'; \
-	} | /usr/bin/script -qec './nekokem keygen hybrid' \
+	} | /usr/bin/script -qec './nekokem keygen hybrid --replace' \
 		password-echo-check.log >/dev/null 2>&1; \
 	if grep -q 'PASSWORD-ECHO-SENTINEL' \
 		password-echo-check.log; then \
@@ -439,6 +509,15 @@ test: $(TARGET) test-openssl analyze test-ubsan test-parser test-file-security t
 		exit 1; \
 	fi; \
 	test "$$(stat -c %a password-echo-check.log)" = 600; \
+	cp keys/public.key before-replace.pub; \
+	printf '%s\n%s\n' "$$key_password" "$$key_password" | \
+		./nekokem --lang en keygen --replace 2> replace-warning.txt; \
+	grep -F 'Replacing the existing key pair' replace-warning.txt \
+		>/dev/null; \
+	if cmp -s keys/public.key before-replace.pub; then \
+		echo "keygen --replace kept the old public key" >&2; \
+		exit 1; \
+	fi; \
 	test -z "$$(find . -type f -name '*.tmp.*' -print -quit)"; \
 	test -z "$$(find . -type f -name 'private.key' -print -quit)"; \
 	echo "NekoKEM v3, NKPR, and interactive CLI tests passed"

@@ -88,13 +88,12 @@ static int password_bytes_copy(JNIEnv *env,
     return PASSWORD_JNI_SUCCESS;
 }
 
-JNIEXPORT jint JNICALL
-Java_com_shixiaoshi0417_nekokem_nativecore_NativeBridge_nativeGenerateKeypairWithPassword(
-    JNIEnv *env,
-    jobject bridge,
-    jstring public_key_path,
-    jstring private_key_path,
-    jbyteArray password_array)
+/* replace == 0 never overwrites existing key files; see nekokem.h. */
+static jint generate_keypair(JNIEnv *env,
+                             jstring public_key_path,
+                             jstring private_key_path,
+                             jbyteArray password_array,
+                             int replace)
 {
     PasswordJniPath public_path = {0};
     PasswordJniPath private_path = {0};
@@ -102,7 +101,6 @@ Java_com_shixiaoshi0417_nekokem_nativecore_NativeBridge_nativeGenerateKeypairWit
     size_t password_len = 0U;
     int result = PASSWORD_JNI_INVALID_ARGUMENT;
 
-    (void)bridge;
     result = password_path_acquire(env, public_key_path, &public_path);
     if (result != PASSWORD_JNI_SUCCESS) {
         goto cleanup;
@@ -116,10 +114,11 @@ Java_com_shixiaoshi0417_nekokem_nativecore_NativeBridge_nativeGenerateKeypairWit
     if (result != PASSWORD_JNI_SUCCESS) {
         goto cleanup;
     }
-    result = nekokem_generate_keypair(public_path.value,
-                                      private_path.value,
-                                      password,
-                                      password_len) == 1
+    result = (replace != 0 ? nekokem_replace_keypair
+                           : nekokem_generate_keypair)(public_path.value,
+                                                       private_path.value,
+                                                       password,
+                                                       password_len) == 1
                  ? PASSWORD_JNI_SUCCESS
                  : PASSWORD_JNI_CORE_ERROR;
 
@@ -128,6 +127,32 @@ cleanup:
     password_path_release(env, &private_path);
     password_path_release(env, &public_path);
     return (jint)result;
+}
+
+JNIEXPORT jint JNICALL
+Java_com_shixiaoshi0417_nekokem_nativecore_NativeBridge_nativeGenerateKeypairWithPassword(
+    JNIEnv *env,
+    jobject bridge,
+    jstring public_key_path,
+    jstring private_key_path,
+    jbyteArray password_array)
+{
+    (void)bridge;
+    return generate_keypair(env, public_key_path, private_key_path,
+                            password_array, 0);
+}
+
+JNIEXPORT jint JNICALL
+Java_com_shixiaoshi0417_nekokem_nativecore_NativeBridge_nativeReplaceKeypairWithPassword(
+    JNIEnv *env,
+    jobject bridge,
+    jstring public_key_path,
+    jstring private_key_path,
+    jbyteArray password_array)
+{
+    (void)bridge;
+    return generate_keypair(env, public_key_path, private_key_path,
+                            password_array, 1);
 }
 
 static jint check_private_key_password(JNIEnv *env,

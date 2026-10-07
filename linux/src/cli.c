@@ -37,11 +37,12 @@ static void print_usage(FILE *output, const char *program)
             "  %s --version\n"
             "  %s keygen\n"
             "  %s keygen hybrid\n"
+            "  %s keygen --replace\n"
             "  %s encrypt hybrid <input_file> <output_file> <public.key> "
             "[<public.key> ...]\n"
             "  %s decrypt hybrid <input_file> <output_file> "
             "<private.key|private.key.enc>\n"),
-            program, program, program, program, program, program);
+            program, program, program, program, program, program, program);
     fputs(file_message(
         "  --help                 Show this help\n"
         "  --lang LANGUAGE        Override language for this command\n"
@@ -190,18 +191,49 @@ cleanup:
     return success;
 }
 
-static int generate_hybrid_keypair(int interactive)
+/*
+ * keygen never replaces keys; --replace rotates them deliberately. Both are
+ * decided before asking for a password, so nothing is lost by refusing.
+ */
+static int generate_hybrid_keypair(int interactive, int replace)
 {
     PasswordBuffer password = {0};
+    int public_exists = 0;
+    int private_exists = 0;
     int success = 0;
 
-    if (!ensure_directory("keys", 0700) ||
-        !prompt_new_private_key_password(&password)) {
+    if (!ensure_directory("keys", 0700)) {
         goto cleanup;
     }
-    if (!nekokem_generate_keypair(PUBLIC_KEY_PATH,
-                                  PROTECTED_PRIVATE_KEY_PATH,
-                                  password.data, password.length)) {
+    if (!file_path_exists(PUBLIC_KEY_PATH, &public_exists) ||
+        !file_path_exists(PROTECTED_PRIVATE_KEY_PATH, &private_exists)) {
+        print_system_error("Cannot check the key file path");
+        goto cleanup;
+    }
+    if ((public_exists != 0 || private_exists != 0) && replace == 0) {
+        fprintf(stderr,
+                file_message("Key files already exist: %s, %s\n"
+                             "keygen never replaces existing keys. Back up both "
+                             "files; to replace them deliberately, run keygen "
+                             "--replace.\n"),
+                PUBLIC_KEY_PATH, PROTECTED_PRIVATE_KEY_PATH);
+        goto cleanup;
+    }
+    if (public_exists != 0 || private_exists != 0) {
+        fprintf(stderr,
+                file_message("Replacing the existing key pair %s and %s. Files "
+                             "encrypted for the old public key can only be "
+                             "decrypted with the old private key; press Ctrl+C "
+                             "now if it is not backed up.\n"),
+                PUBLIC_KEY_PATH, PROTECTED_PRIVATE_KEY_PATH);
+    }
+    if (!prompt_new_private_key_password(&password)) {
+        goto cleanup;
+    }
+    if (!(replace != 0 ? nekokem_replace_keypair
+                       : nekokem_generate_keypair)(
+            PUBLIC_KEY_PATH, PROTECTED_PRIVATE_KEY_PATH,
+            password.data, password.length)) {
         goto cleanup;
     }
     password_buffer_cleanup(&password);
@@ -219,9 +251,9 @@ cleanup:
     return success;
 }
 
-int cli_run_hybrid_keygen(void)
+int cli_run_hybrid_keygen(int replace)
 {
-    return generate_hybrid_keypair(0);
+    return generate_hybrid_keypair(0, replace);
 }
 
 int cli_run_hybrid_encrypt(const char *input_path,
@@ -824,7 +856,7 @@ int cli_run_interactive_menu(void)
             return cli_input_eof() != 0 ? 1 : 0;
         }
         if (strcmp(choice, "1") == 0) {
-            (void)generate_hybrid_keypair(1);
+            (void)generate_hybrid_keypair(1, 0);
         } else if (strcmp(choice, "2") == 0) {
             (void)interactive_encrypt();
         } else if (strcmp(choice, "3") == 0) {

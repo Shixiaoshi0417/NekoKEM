@@ -104,13 +104,13 @@ Java_com_shixiaoshi0417_nekokem_nativecore_NativeBridge_nativeCoreTest(
     JNIEnv *env,
     jobject bridge)
 {
-    static const char protected_key_path[] = "private.key.enc";
     static const char success[] = "Success: NekoKEM Core API connected";
     static const char failure[] = "Error: NekoKEM Core API test failed";
     const char *result;
 
     (void)bridge;
-    result = nekokem_private_key_requires_password(protected_key_path) == 1
+    /* Proves the Core link without touching files: an empty path is rejected. */
+    result = nekokem_private_key_requires_password("") == 0
                  ? success
                  : failure;
     return (*env)->NewStringUTF(env, result);

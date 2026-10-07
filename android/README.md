@@ -41,7 +41,14 @@ context.filesDir/
 
 主页不保存口令，也不显示常驻口令输入框。生成密钥、检查私钥密码、导入
 加密私钥和解密文件分别使用一次性对话框。生成时要求输入并确认非空口令；
-其他操作只请求一次口令。对话框取消时不调用 Core。
+其他操作只请求一次口令。对话框取消时不调用 Core。口令输入框声明为密码
+键盘类型，关闭候选词与自动更正，并请求输入法不做个性化学习；输入法如何
+遵守这些标志由输入法决定。
+
+已有公钥或私钥时，“生成密钥”会先弹出确认框，说明替换后用旧公钥加密的
+文件只能用旧私钥解密，并建议先导出备份加密私钥；确认后才调用
+`nativeReplaceKeypairWithPassword`。未确认时调用的
+`nativeGenerateKeypairWithPassword` 遇到已有密钥文件会直接失败，不会覆盖。
 
 口令不写入文件、SharedPreferences 或日志。Compose 对话框状态使用临时
 `ByteArray`，交给一次后台调用后立即清零；JNI 的 OpenSSL 缓冲区在每条返回
@@ -49,8 +56,12 @@ context.filesDir/
 明文 PEM。
 
 导入私钥时先选择 NKPR 文件，再请求口令。Core 在私有候选文件中验证格式和
-口令，成功后才用原子重命名替换现有私钥；错误、取消或认证失败不会覆盖旧
-私钥。删除私钥前显示确认对话框，并清除 `cacheDir/nekokem-work` 暂存文件。
+口令，成功后先保存旧私钥的已同步副本，再用原子重命名替换，并在密钥目录
+`fsync` 成功后才报告成功；同步失败时恢复旧私钥，连恢复也失败时保留该副本
+供手动恢复。错误、取消或认证失败不会覆盖旧私钥。删除私钥前显示确认对话框。
+
+导出的 `private.nkpr` 可直接用于桌面 GUI 和 CLI：各端按文件头识别 NKPR，
+与扩展名无关。
 
 ## 公钥通讯录
 
@@ -115,18 +126,26 @@ Android 8–13 收到返回时直接回到文件页或关闭菜单。
 ```text
 SAF content URI
     ↓ Android ContentResolver（只复制字节，不解析格式）
-cacheDir/nekokem-work/*  mode 0600
+cacheDir/nekokem-pages/<页面>/nekokem-work/<操作>/*  mode 0600
     ↓ JNI 路径转换
 nekokem_core
     ↓ 认证成功后
 SAF output URI
 ```
 
-工作目录权限为 `0700`，每次操作后暂存常规文件会先覆写再删除。解密时，
-Core 完成 GCM 认证并原子提交私有暂存输出后，App 才请求输出文档位置。
-密码错误、NKEM 认证失败或取消不会创建明文目标；已创建但未成功提交的 SAF
-目标会被删除。当前暂存输入上限为 8 GiB。SAF provider 最终写入本身不具备
-跨 provider 的统一原子提交保证。
+每个页面（Activity 实例）有自己的缓存目录，每次操作再使用自己的子目录，
+目录权限均为 `0700`；操作结束后只覆写并删除自己的暂存文件。旋转屏幕、
+切换语言等重建 Activity 时，旧页面中已进入同步 JNI 调用的操作可能仍在运行：
+新页面从不清理其他页面的目录；旧页面关闭时取消其操作，待最后一个后台调用
+返回后才删除旧页面目录。打开页面时只清理不属于任何存活页面的目录（例如
+上次进程或旧版本留下的文件）。
+
+解密时，Core 完成 GCM 认证并原子提交私有暂存输出后，App 才请求输出文档
+位置。密码错误、NKEM 认证失败或取消不会创建明文目标；已创建但未成功提交
+的 SAF 目标会被删除。明文输入上限为 8 GiB；容器输入上限另加最大容器开销
+（v3 为 1,716 字节，v4 为 156 + 1,672 × 接收方数，最多 64 位），因此能加密
+的文件一定能再导入解密。SAF provider 最终写入本身不具备跨 provider 的统一
+原子提交保证。
 
 加密建议名为原文件名加 `.nkem`。解密建议名移除末尾 `.nkem`；没有该后缀
 时使用 `decrypted_` 前缀。保存界面允许修改名称，并按恢复后扩展名设置 MIME。
@@ -144,7 +163,8 @@ UI 每 150 ms 至多更新一次，速度使用最近两秒的滑动平均，并
 
 ## JNI API
 
-- `nativeGenerateKeypairWithPassword(publicPath, privatePath, password)`
+- `nativeGenerateKeypairWithPassword(publicPath, privatePath, password)`：已有密钥文件时失败，从不覆盖
+- `nativeReplaceKeypairWithPassword(publicPath, privatePath, password)`：仅在用户确认替换后使用
 - `nativeUnlockPrivateKey(privatePath, password)`
 - `nativeCheckPassword(privatePath, password)`
 - `nativeHasPrivateKey(privatePath)`

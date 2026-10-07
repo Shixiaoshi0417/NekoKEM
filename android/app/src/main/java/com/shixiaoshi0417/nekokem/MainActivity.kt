@@ -26,6 +26,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import com.shixiaoshi0417.nekokem.files.PageCache
 import com.shixiaoshi0417.nekokem.files.PreparedDecryption
 import com.shixiaoshi0417.nekokem.files.PreparedEncryption
 import com.shixiaoshi0417.nekokem.files.SafFileWorkflow
@@ -67,15 +68,21 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 class MainActivity : ComponentActivity() {
+    private var pageCache: PageCache? = null
+
     override fun attachBaseContext(newBase: Context) {
         super.attachBaseContext(AppLanguages.localizedContext(newBase))
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        // A recreated page may start while the old page's Core call still runs;
+        // each page stages files only in its own cache directory.
+        val page = PageCache.open(cacheDir)
+        pageCache = page
         val keyManager = LocalKeyManager(applicationContext)
-        val fileWorkflow = SafFileWorkflow(this, keyManager)
-        val publicKeyContacts = PublicKeyContacts(applicationContext, keyManager)
+        val fileWorkflow = SafFileWorkflow(this, keyManager, page.directory)
+        val publicKeyContacts = PublicKeyContacts(applicationContext, keyManager, page.directory)
 
         setContent {
             NekoKEMTheme {
@@ -83,12 +90,20 @@ class MainActivity : ComponentActivity() {
                 NekoKEMRoute(
                     nativeConnected = nativeStatus.connected,
                     nativeVersion = nativeStatus.version,
+                    page = page,
                     keyManager = keyManager,
                     fileWorkflow = fileWorkflow,
                     publicKeyContacts = publicKeyContacts,
                 )
             }
         }
+    }
+
+    override fun onDestroy() {
+        // Cancels this page's operations; its files go once they have returned.
+        pageCache?.close()
+        pageCache = null
+        super.onDestroy()
     }
 }
 
@@ -160,12 +175,18 @@ private fun readNativeStatus(): NativeStatus = try {
 private fun NekoKEMRoute(
     nativeConnected: Boolean,
     nativeVersion: String?,
+    page: PageCache,
     keyManager: LocalKeyManager,
     fileWorkflow: SafFileWorkflow,
     publicKeyContacts: PublicKeyContacts,
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
+
+    // Blocking key and file work of this page; the page cache outlives it.
+    suspend fun <T> pageWork(block: () -> T): T =
+        withContext(Dispatchers.IO) { page.run(block) }
+
     val snackbarHostState = remember { SnackbarHostState() }
     var keyState by remember { mutableStateOf(LocalKeyState(false, null)) }
     var contactsState by remember { mutableStateOf(PublicKeyContactsState()) }
@@ -213,6 +234,8 @@ private fun NekoKEMRoute(
     var passwordPrompt by remember { mutableStateOf<PasswordPrompt?>(null) }
     var pendingDelete by remember { mutableStateOf<DeleteTarget?>(null) }
     var confirmPrivateKeyReplacement by remember { mutableStateOf(false) }
+    var confirmKeypairReplacement by remember { mutableStateOf(false) }
+    var replaceKeypair by remember { mutableStateOf(false) }
     var activeProgressOperation by remember { mutableStateOf<Int?>(null) }
     var activeProgressTracker by remember {
         mutableStateOf<OperationProgressTracker?>(null)
@@ -263,14 +286,14 @@ private fun NekoKEMRoute(
     }
 
     suspend fun refreshState() {
-        keyState = withContext(Dispatchers.IO) {
+        keyState = pageWork {
             try {
                 keyManager.readState()
             } catch (_: Exception) {
                 LocalKeyState(false, null)
             }
         }
-        contactsState = withContext(Dispatchers.IO) { publicKeyContacts.readState() }
+        contactsState = pageWork { publicKeyContacts.readState() }
         // Checkbox state only: deleted entries leave the pending selection. Chosen
         // recipients are kept and reported as unavailable, never dropped silently.
         contactSelection = contactSelection.filter { id -> contactsState.contacts.any { it.id == id } }
@@ -309,7 +332,7 @@ private fun NekoKEMRoute(
         running = true
         scope.launch {
             try {
-                val code = withContext(Dispatchers.IO) { action() }
+                val code = pageWork { action() }
                 refreshState()
                 if (code == NativeBridge.RESULT_SUCCESS) showSnackbar(success)
                 else reportFailure(operation, code)
@@ -354,7 +377,7 @@ private fun NekoKEMRoute(
                     setBusy = { running = it },
                     cleanup = { sensitiveInput?.fill(0) },
                 ) {
-                    withContext(Dispatchers.IO) { operation() }
+                    pageWork { operation() }
                 }
             } catch (_: Exception) {
                 LocalKeyManager.RESULT_STORAGE_ERROR
@@ -386,6 +409,7 @@ private fun NekoKEMRoute(
                 }
             }
         }
+        page.track(tracker)
         activeProgressTracker = tracker
         activeProgressOperation = operationResource
         progressSnapshot = OperationProgressSnapshot()
@@ -395,6 +419,7 @@ private fun NekoKEMRoute(
     }
 
     fun endProgress(tracker: OperationProgressTracker) {
+        page.untrack(tracker)
         if (activeProgressTracker === tracker) {
             activeProgressTracker = null
             activeProgressOperation = null
@@ -499,7 +524,7 @@ private fun NekoKEMRoute(
             running = true
             scope.launch {
                 val outcome = try {
-                    withContext(Dispatchers.IO) {
+                    pageWork {
                         fileWorkflow.stageTemporaryPublicKey(
                             uri,
                             document.displayName,
@@ -516,7 +541,7 @@ private fun NekoKEMRoute(
                     publicKeyAwaitingConfirmation = outcome.key
                 } else {
                     outcome?.key?.let { key ->
-                        withContext(Dispatchers.IO) {
+                        pageWork {
                             fileWorkflow.discardTemporaryPublicKey(key)
                         }
                     }
@@ -536,7 +561,7 @@ private fun NekoKEMRoute(
             running = true
             scope.launch {
                 try {
-                    val outcome = withContext(Dispatchers.IO) {
+                    val outcome = pageWork {
                         fileWorkflow.stageTemporaryPublicKey(uri, fileWorkflow.describe(uri).displayName)
                     }
                     if (outcome.code == NativeBridge.RESULT_SUCCESS && outcome.key != null) {
@@ -563,7 +588,7 @@ private fun NekoKEMRoute(
             running = true
             scope.launch {
                 val outcome = try {
-                    withContext(Dispatchers.IO) {
+                    pageWork {
                         fileWorkflow.stageTemporaryPrivateKey(
                             uri,
                             document.displayName,
@@ -581,7 +606,7 @@ private fun NekoKEMRoute(
                     passwordPrompt = PasswordPrompt.SELECT_TEMPORARY_PRIVATE_KEY
                 } else {
                     outcome?.key?.let { key ->
-                        withContext(Dispatchers.IO) {
+                        pageWork {
                             fileWorkflow.discardPendingTemporaryPrivateKey(key)
                         }
                     }
@@ -612,7 +637,7 @@ private fun NekoKEMRoute(
                     running = true
                     scope.launch {
                         try {
-                            withContext(Dispatchers.IO) {
+                            pageWork {
                                 fileWorkflow.discardPreparedEncryption(abandoned)
                             }
                         } finally {
@@ -632,7 +657,7 @@ private fun NekoKEMRoute(
                     running = true
                     scope.launch {
                         try {
-                            withContext(Dispatchers.IO) {
+                            pageWork {
                                 fileWorkflow.discardPreparedDecryption(abandoned)
                             }
                         } finally {
@@ -672,7 +697,7 @@ private fun NekoKEMRoute(
                     val tracker = beginProgress(R.string.operation_encrypt_file)
                     scope.launch {
                         val result = try {
-                            withContext(Dispatchers.IO) {
+                            pageWork {
                                 fileWorkflow.commitPreparedEncryption(
                                     prepared,
                                     destination,
@@ -710,7 +735,7 @@ private fun NekoKEMRoute(
                     val tracker = beginProgress(R.string.operation_decrypt_file)
                     scope.launch {
                         val result = try {
-                            withContext(Dispatchers.IO) {
+                            pageWork {
                                 fileWorkflow.commitPreparedDecryption(
                                     prepared,
                                     destination,
@@ -769,14 +794,14 @@ private fun NekoKEMRoute(
             try {
                 if (contactIds.isNotEmpty()) {
                     // Every selected contact is re-read and verified; one failure stops all.
-                    val staged = withContext(Dispatchers.IO) { publicKeyContacts.stageRecipients(contactIds) }
+                    val staged = pageWork { publicKeyContacts.stageRecipients(contactIds) }
                     if (staged.code != NativeBridge.RESULT_SUCCESS || staged.keys.isEmpty()) {
                         reportRecipientFailure(staged.code, staged.failedId)
                         return@launch
                     }
                     recipients = staged.keys
                 }
-                val outcome = withContext(Dispatchers.IO) {
+                val outcome = pageWork {
                     if (recipients.isNotEmpty()) {
                         fileWorkflow.prepareEncryptionForRecipients(source.uri, tracker, recipients)
                     } else {
@@ -804,7 +829,7 @@ private fun NekoKEMRoute(
                         ),
                     )
                 } else {
-                    withContext(Dispatchers.IO) {
+                    pageWork {
                         fileWorkflow.discardPreparedEncryption(outcome.prepared)
                     }
                     reportFileResult(
@@ -815,7 +840,7 @@ private fun NekoKEMRoute(
                     )
                 }
             } catch (_: Exception) {
-                withContext(Dispatchers.IO) {
+                pageWork {
                     fileWorkflow.discardTemporaryPublicKey(selectedKey)
                     recipients.forEach { fileWorkflow.discardTemporaryPublicKey(it) }
                 }
@@ -825,7 +850,7 @@ private fun NekoKEMRoute(
                 val abandoned = preparedEncryption
                 preparedEncryption = null
                 encryptionPreparationProgress = null
-                withContext(Dispatchers.IO) {
+                pageWork {
                     fileWorkflow.discardPreparedEncryption(abandoned)
                 }
                 reportFailure(
@@ -852,7 +877,7 @@ private fun NekoKEMRoute(
         val tracker = beginProgress(R.string.operation_decrypt_file)
         scope.launch {
             try {
-                val outcome = withContext(Dispatchers.IO) {
+                val outcome = pageWork {
                     fileWorkflow.prepareDecryption(
                         source.uri,
                         password,
@@ -878,7 +903,7 @@ private fun NekoKEMRoute(
                         ),
                     )
                 } else {
-                    withContext(Dispatchers.IO) {
+                    pageWork {
                         fileWorkflow.discardPreparedDecryption(outcome.prepared)
                     }
                     reportFileResult(
@@ -889,7 +914,7 @@ private fun NekoKEMRoute(
                     )
                 }
             } catch (_: Exception) {
-                withContext(Dispatchers.IO) {
+                pageWork {
                     fileWorkflow.discardTemporaryPrivateKey(selectedKey)
                 }
                 if (temporaryPrivateKey === selectedKey) {
@@ -898,7 +923,7 @@ private fun NekoKEMRoute(
                 val abandoned = preparedDecryption
                 preparedDecryption = null
                 decryptionPreparationProgress = null
-                withContext(Dispatchers.IO) {
+                pageWork {
                     fileWorkflow.discardPreparedDecryption(abandoned)
                 }
                 reportFailure(
@@ -912,20 +937,22 @@ private fun NekoKEMRoute(
         }
     }
 
+    // This page's cache starts empty; PageCache removes earlier pages' files
+    // only after their operations have returned.
     LaunchedEffect(Unit) {
-        withContext(Dispatchers.IO) {
-            keyManager.clearWorkCache()
-            fileWorkflow.clearTemporaryKeyCache()
-            publicKeyContacts.clearWorkCache()
-        }
         refreshState()
     }
 
     if (showGeneratePasswordDialog) {
         GeneratePasswordDialog(
-            onDismiss = { showGeneratePasswordDialog = false },
+            onDismiss = {
+                showGeneratePasswordDialog = false
+                replaceKeypair = false
+            },
             onConfirm = { password ->
                 showGeneratePasswordDialog = false
+                val replace = replaceKeypair
+                replaceKeypair = false
                 runKeyOperation(
                     operationResource = R.string.operation_generate_keypair,
                     sensitiveInput = password,
@@ -944,7 +971,7 @@ private fun NekoKEMRoute(
                         )
                     },
                 ) {
-                    keyManager.generateKeypair(password)
+                    keyManager.generateKeypair(password, replace)
                 }
             },
         )
@@ -982,9 +1009,7 @@ private fun NekoKEMRoute(
                 ) {
                     val abandoned = pendingTemporaryPrivateKey
                     pendingTemporaryPrivateKey = null
-                    scope.launch(Dispatchers.IO) {
-                        fileWorkflow.discardPendingTemporaryPrivateKey(abandoned)
-                    }
+                    scope.launch { pageWork { fileWorkflow.discardPendingTemporaryPrivateKey(abandoned) } }
                 }
                 passwordPrompt = null
             },
@@ -1042,7 +1067,7 @@ private fun NekoKEMRoute(
                             running = true
                             scope.launch {
                                 val outcome = try {
-                                    withContext(Dispatchers.IO) {
+                                    pageWork {
                                         fileWorkflow.validateTemporaryPrivateKey(
                                             pending,
                                             password,
@@ -1059,7 +1084,7 @@ private fun NekoKEMRoute(
                                     outcome.key != null
                                 ) {
                                     val previous = temporaryPrivateKey
-                                    withContext(Dispatchers.IO) {
+                                    pageWork {
                                         fileWorkflow.discardTemporaryPrivateKey(
                                             previous,
                                         )
@@ -1073,7 +1098,7 @@ private fun NekoKEMRoute(
                                     )
                                 } else {
                                     outcome?.key?.let { key ->
-                                        withContext(Dispatchers.IO) {
+                                        pageWork {
                                             fileWorkflow.discardTemporaryPrivateKey(
                                                 key,
                                             )
@@ -1099,9 +1124,7 @@ private fun NekoKEMRoute(
         AlertDialog(
             onDismissRequest = {
                 publicKeyAwaitingConfirmation = null
-                scope.launch(Dispatchers.IO) {
-                    fileWorkflow.discardTemporaryPublicKey(candidate)
-                }
+                scope.launch { pageWork { fileWorkflow.discardTemporaryPublicKey(candidate) } }
             },
             title = {
                 Text(stringResource(R.string.confirm_temporary_public_key_title))
@@ -1126,9 +1149,7 @@ private fun NekoKEMRoute(
                         transitionInputSelection(
                             InputSelectionEvent.KEY_SELECTION_CHANGED,
                         )
-                        scope.launch(Dispatchers.IO) {
-                            fileWorkflow.discardTemporaryPublicKey(previous)
-                        }
+                        scope.launch { pageWork { fileWorkflow.discardTemporaryPublicKey(previous) } }
                         showSnackbar(
                             R.string.snackbar_temporary_public_key_selected,
                         )
@@ -1141,9 +1162,7 @@ private fun NekoKEMRoute(
                 TextButton(
                     onClick = {
                         publicKeyAwaitingConfirmation = null
-                        scope.launch(Dispatchers.IO) {
-                            fileWorkflow.discardTemporaryPublicKey(candidate)
-                        }
+                        scope.launch { pageWork { fileWorkflow.discardTemporaryPublicKey(candidate) } }
                     },
                 ) {
                     Text(stringResource(R.string.action_cancel))
@@ -1169,7 +1188,7 @@ private fun NekoKEMRoute(
             },
             onDismiss = {
                 contactAwaitingSave = null
-                scope.launch(Dispatchers.IO) { fileWorkflow.discardTemporaryPublicKey(candidate) }
+                scope.launch { pageWork { fileWorkflow.discardTemporaryPublicKey(candidate) } }
             },
         )
     }
@@ -1213,7 +1232,7 @@ private fun NekoKEMRoute(
                 temporaryPublicKey = null
                 selectedContactIds = listOf(contact.id)
                 transitionInputSelection(InputSelectionEvent.KEY_SELECTION_CHANGED)
-                scope.launch(Dispatchers.IO) { fileWorkflow.discardTemporaryPublicKey(previous) }
+                scope.launch { pageWork { fileWorkflow.discardTemporaryPublicKey(previous) } }
                 showSnackbar(R.string.contact_selected)
             },
             onImport = {
@@ -1272,6 +1291,31 @@ private fun NekoKEMRoute(
             },
             dismissButton = {
                 TextButton(onClick = { pendingDelete = null }) {
+                    Text(stringResource(R.string.action_cancel))
+                }
+            },
+        )
+    }
+
+    // Generation never replaces keys silently; replacing needs this confirmation.
+    if (confirmKeypairReplacement) {
+        AlertDialog(
+            onDismissRequest = { confirmKeypairReplacement = false },
+            title = { Text(stringResource(R.string.replace_keypair_title)) },
+            text = { Text(stringResource(R.string.replace_keypair_message)) },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        confirmKeypairReplacement = false
+                        replaceKeypair = true
+                        showGeneratePasswordDialog = true
+                    },
+                ) {
+                    Text(stringResource(R.string.action_replace))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { confirmKeypairReplacement = false }) {
                     Text(stringResource(R.string.action_cancel))
                 }
             },
@@ -1370,7 +1414,21 @@ private fun NekoKEMRoute(
             contactSelection = contactSelection,
         ),
         actions = NekoKEMActions(
-            onGenerate = { showGeneratePasswordDialog = true },
+            onGenerate = {
+                scope.launch {
+                    val existing = try {
+                        pageWork { keyManager.hasKeyFiles() }
+                    } catch (_: Exception) {
+                        true
+                    }
+                    replaceKeypair = false
+                    if (existing) {
+                        confirmKeypairReplacement = true
+                    } else {
+                        showGeneratePasswordDialog = true
+                    }
+                }
+            },
             onCheckPassword = {
                 passwordPrompt = PasswordPrompt.CHECK_PRIVATE_KEY
             },
@@ -1415,9 +1473,7 @@ private fun NekoKEMRoute(
                 transitionInputSelection(
                     InputSelectionEvent.KEY_SELECTION_CHANGED,
                 )
-                scope.launch(Dispatchers.IO) {
-                    fileWorkflow.discardTemporaryPublicKey(abandoned)
-                }
+                scope.launch { pageWork { fileWorkflow.discardTemporaryPublicKey(abandoned) } }
                 showSnackbar(R.string.snackbar_default_public_key_restored)
             },
             onSelectTemporaryPrivateKey = {
@@ -1431,9 +1487,7 @@ private fun NekoKEMRoute(
                 transitionInputSelection(
                     InputSelectionEvent.KEY_SELECTION_CHANGED,
                 )
-                scope.launch(Dispatchers.IO) {
-                    fileWorkflow.discardTemporaryPrivateKey(abandoned)
-                }
+                scope.launch { pageWork { fileWorkflow.discardTemporaryPrivateKey(abandoned) } }
                 showSnackbar(R.string.snackbar_default_private_key_restored)
             },
             onEncrypt = {
@@ -1473,7 +1527,7 @@ private fun NekoKEMRoute(
                 temporaryPublicKey = null
                 selectedContactIds = listOf(contact.id)
                 transitionInputSelection(InputSelectionEvent.KEY_SELECTION_CHANGED)
-                scope.launch(Dispatchers.IO) { fileWorkflow.discardTemporaryPublicKey(previous) }
+                scope.launch { pageWork { fileWorkflow.discardTemporaryPublicKey(previous) } }
                 showSnackbar(R.string.contact_selected)
             },
             onEditContact = { contactToEdit = it },
@@ -1494,7 +1548,7 @@ private fun NekoKEMRoute(
                     temporaryPublicKey = null
                     selectedContactIds = ids
                     transitionInputSelection(InputSelectionEvent.KEY_SELECTION_CHANGED)
-                    scope.launch(Dispatchers.IO) { fileWorkflow.discardTemporaryPublicKey(previous) }
+                    scope.launch { pageWork { fileWorkflow.discardTemporaryPublicKey(previous) } }
                     showSnackbar(if (ids.size > 1) R.string.contact_recipients_selected else R.string.contact_selected)
                 }
             },

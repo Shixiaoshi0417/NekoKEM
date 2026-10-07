@@ -108,7 +108,7 @@ sudo apt install libssl-dev build-essential
 
 OpenSSL 3.5 or newer is required because EVP support for ML-KEM begins with OpenSSL 3.5. Source builds and CI on all platforms pin OpenSSL 4.0.3 and verify the official source SHA-256.
 
-To build the AFL++ parser fuzz harnesses, also install:
+To build the AFL++ fuzz harnesses, also install:
 
 ```sh
 sudo apt install afl++
@@ -220,6 +220,8 @@ Selecting “Generate keys” ensures a `keys/` directory with mode `0700` exist
 
 Before generation, the program requests and confirms a private-key protection password; terminal echo is disabled during both inputs. It does not create plaintext `private.key`.
 
+Key generation never overwrites keys: if `keys/public.key` or `keys/private.key.enc` already exists, the program refuses before asking for a password and leaves both files unchanged. To change keys, first back up the old private key (files encrypted for the old public key can only be decrypted with it), then use `keygen --replace` below.
+
 ### Encrypting files
 
 Enter a public-key file path or paste two PEM public-key blocks, then enter the source file path. The program ensures an `encrypted/` directory with mode `0700` exists in the working directory, creating it if necessary.
@@ -232,7 +234,7 @@ plaintext/test.jpg -> encrypted/test.jpg.nkem
 
 ### Decrypting files
 
-Enter a private-key file path or paste two compatible plaintext PEM private-key blocks. When the path ends in `.enc`, the program automatically disables terminal echo and prompts for a password, then authenticates, decrypts, and parses NKPR in memory. The decrypted PEM is not written to disk. Existing `private.key` files are still read using the original plaintext PEM logic.
+Enter a private-key file path or paste two compatible plaintext PEM private-key blocks. When the key file contains an NKPR container (recognized by its header, whatever the extension, for example `private.nkpr` exported by Android), the program automatically disables terminal echo and prompts for a password, then authenticates, decrypts, and parses NKPR in memory. The decrypted PEM is not written to disk. Legacy plaintext PEM private keys such as `private.key` need no password.
 
 Terminal echo is also temporarily disabled when pasting legacy private-key contents. The internal temporary key file has mode `0600` and is deleted after the operation.
 
@@ -262,7 +264,13 @@ Parameterized commands support scripts and development tests. Default keygen mat
 ./nekokem keygen hybrid
 ```
 
-Both forms prompt for the password twice without placing it in command-line arguments. They output `keys/public.key` and `keys/private.key.enc`.
+Both forms prompt for the password twice without placing it in command-line arguments. They output `keys/public.key` and `keys/private.key.enc`, and refuse without overwriting anything if either key file already exists.
+
+To rotate keys deliberately, back up the old private key first and pass `--replace`. The command warns that files encrypted for the old public key can only be decrypted with the old private key, and offers Ctrl+C before asking for a password:
+
+```sh
+./nekokem keygen --replace
+```
 
 Default v3 hybrid encryption and decryption:
 
@@ -277,7 +285,9 @@ Listing two or more public keys after the usual encryption command writes one NK
 ./nekokem encrypt hybrid test.txt encrypted/team.nkem alice.key bob.key carol.key
 ```
 
-Hybrid decrypt automatically prompts once for a password when it sees `.enc`. For compatibility with existing deployments, the command still accepts legacy plaintext `private.key` containing X448 and ML-KEM-1024 PEM blocks.
+Hybrid decrypt prompts once for a password when the key file contains NKPR; it decides by the file header, not the extension. For compatibility with existing deployments, the command still accepts legacy plaintext `private.key` containing X448 and ML-KEM-1024 PEM blocks.
+
+The output path cannot be a key file the operation uses: decryption cannot write over the private key, and encryption cannot write over any public key. Files are compared by identity rather than by path text, so aliases such as `./keys/../keys/private.key.enc` are refused too, and the key file is left unchanged.
 
 Commands can use the corresponding PEM keys from other locations:
 
@@ -364,6 +374,7 @@ v4 encrypts the file data once under a random 32-byte file key and stores one en
 - Private-key objects are released immediately after decapsulation, shared secrets are cleared immediately after KDF, and AES keys live only until file encryption/decryption finishes.
 - Output is still written to a temporary file in the same directory. Contents are `fsync`ed before rename, and the parent directory after rename. Authentication, parsing, cancellation, or I/O failure closes and removes temporary files.
 - Public/private key generation uses one rollback-capable transaction. Both files are written and `fsync`ed before publishing. If the second rename or directory `fsync` fails, old public/private keys are restored; when previously absent, both new files are removed, avoiding an update to only one key.
+- On POSIX, paired key commits hold interprocess locks in their parent directories through rollback and cleanup. Rollback checks the published inode before removing a file, preserving a replacement made by another writer. The mode `0600` lock file `.nekokem-pair.lock` remains in each directory; do not delete it while operations are running.
 - Hybrid keygen writes both private-key PEM blocks directly into an OpenSSL memory BIO, encrypts them into an NKPR temporary file, and commits it together with the public key. There is no plaintext private-key output or temporary file.
 - The CLI currently uses a path-based Core API. Pasted PEM therefore uses a `0600`, `O_NOFOLLOW|O_CLOEXEC` temporary file inside an exclusive `0700` directory under `/tmp`, and deletes both on all return paths. Direct memory BIO use would require a new internal Core adapter; memfd's `/proc/self/fd` paths conflict with the private-key `O_NOFOLLOW` policy. This stage does not change the public Core API; a separate future API design can eliminate the temporary path.
 - `secure_free()` is used only for sensitive buffers allocated by `OPENSSL_malloc()`; ordinary path strings and public metadata are released by their matching normal allocators.
@@ -407,7 +418,7 @@ The tests run in temporary directories:
 
 Test materials are deleted afterward. Android JVM and actual API 26/35 device instrumentation checks run in CI; assembling a test APK alone does not count as device-test success. Device runs retain JNI/SAF integration coverage and exercise language switching, Activity recreation, process restart, system application-language synchronization, accessibility, dark mode, and increased font scale.
 
-## AFL++ parser fuzzing
+## AFL++ fuzzing
 
 ```sh
 make -C linux fuzz-build
@@ -416,9 +427,10 @@ make -C linux fuzz-build
 This target builds with `afl-clang-fast` and UBSan:
 
 - `core/fuzz/bin/fuzz_nkem`: parses only NKEM v3 and v4 headers and total container lengths;
-- `core/fuzz/bin/fuzz_nkpr`: parses only NKPR headers, parameters, and total container lengths.
+- `core/fuzz/bin/fuzz_nkpr`: parses only NKPR headers, parameters, and total container lengths;
+- `core/fuzz/bin/fuzz_decrypt`: fully decrypts the input, covering X448 and ML-KEM-1024 decapsulation, v4 entry unwrapping and header MAC, streaming AES-GCM authentication, and the atomic output commit and rollback.
 
-Both harnesses accept an `argv[1]` file path, reject inputs above 2 MiB, and do not execute decapsulation, Argon2id, AES-GCM, or plaintext output. Valid seeds in `core/fuzz/seeds/` are zero-filled structural samples without passwords, private keys, or real sensitive data; several truncated samples are included. See `core/fuzz/README.md` for AFL commands.
+All three harnesses accept an `argv[1]` file path. The two parser harnesses reject inputs above 2 MiB and do not execute decapsulation, Argon2id, AES-GCM, or plaintext output; their seeds in `core/fuzz/seeds/` are zero-filled structural samples without passwords, private keys, or real sensitive data, and several truncated samples are included. Seeds for `fuzz_decrypt` are generated at every build: a throwaway plaintext-PEM test key and genuine v3, empty v3 and two-recipient v4 containers for it, so mutations reach trial decryption, the MAC and payload authentication. The key protects nothing and is never committed. See `core/fuzz/README.md` for AFL commands.
 
 ## Security boundaries
 

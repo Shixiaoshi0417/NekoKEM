@@ -10,7 +10,7 @@ rewrite, new unlocked-key cache, or removal of assembly acceleration.
 | Boundary | Windows implementation | Validation |
 | --- | --- | --- |
 | Ordinary input | Strict UTF-8 to Unicode path; local NTFS disk files; trusted pinned ancestors and leaf reject reparse points | Unicode/binary/empty input and unsafe-input-parent/junction/device/pipe/ADS regressions |
-| Private input | Handle-based owner, DACL, single-link and size validation; no write/delete sharing while reading | Broad-ACL rejection, owner fault, hard-link rejection, password checks |
+| Private input | Handle-based owner, DACL, single-link and size validation; no write/delete sharing while reading; unbuffered CRT stream, so no stdio buffer keeps key bytes after close | Broad-ACL rejection, owner fault, hard-link rejection, password checks |
 | Temporary output | Random 128-bit suffix, CREATE_NEW, protected owner-only DACL at creation, binary non-inheritable CRT descriptor | Failure/cancellation and output ACL checks |
 | Destination | Pinned ancestors and trusted parent ownership/ACL; existing destination must be a private single-link regular file | Unsafe-parent/output and alias rejection; parent rename blocked |
 | Authentication | Existing shared AES-GCM implementation; plaintext commits only after successful tag verification | Wrong password, modified tag/KEM, zero X448 peer, truncation, v1/v2 rejection |

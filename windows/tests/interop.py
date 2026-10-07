@@ -64,7 +64,8 @@ elif phase == 'windows':
     subprocess.run([harness,'secure-copy',str(root/'linux-private.enc'),str(root/'imported.enc')],
                    cwd=root, check=True, timeout=30)
     assert fingerprint('linux-public.key') == (root/'linux-fingerprint.txt').read_bytes()
-    run('keygen', password=PASSWORD*2)
+    # keygen never replaces keys; the Linux phase may have left keys/ behind.
+    run('keygen', '--replace', password=PASSWORD*2)
     shutil.copyfile(root/'keys/public.key',root/'windows-public.key')
     shutil.copyfile(root/'keys/private.key.enc',root/'windows-private.enc')
     for name in ['binary','empty']:
