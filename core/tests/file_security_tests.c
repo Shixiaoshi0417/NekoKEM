@@ -581,6 +581,107 @@ cleanup:
     return success;
 }
 
+static const unsigned char competing_key[] = "concurrently-created-key";
+static unsigned int competing_publish_call;
+static unsigned int competing_publish_target;
+static int competing_write_succeeded;
+
+static void create_competing_key(const char *final_path)
+{
+    ++competing_publish_call;
+    if (competing_publish_call == competing_publish_target) {
+        int descriptor = open(final_path, O_WRONLY | O_CREAT | O_EXCL, 0600);
+
+        if (descriptor >= 0) {
+            competing_write_succeeded =
+                write(descriptor, competing_key, sizeof(competing_key)) ==
+                (ssize_t)sizeof(competing_key);
+            if (close(descriptor) != 0) {
+                competing_write_succeeded = 0;
+            }
+        }
+    }
+}
+
+/* A writer wins the destination immediately before the rename syscall. */
+static int test_noreplace_race(const char *root, unsigned int collision_on)
+{
+    static const unsigned char data[] = "new-key";
+    char public_path[256] = {0};
+    char private_path[256] = {0};
+    AtomicFile public_output = {0};
+    AtomicFile private_output = {0};
+    int success = 0;
+
+    if (!make_path(public_path, sizeof(public_path), root, "race-public.key") ||
+        !make_path(private_path, sizeof(private_path), root, "race-private.key") ||
+        !stage_bytes(&public_output, public_path, data, sizeof(data)) ||
+        !stage_bytes(&private_output, private_path, data, sizeof(data))) {
+        goto cleanup;
+    }
+    competing_publish_call = 0U;
+    competing_publish_target = collision_on;
+    competing_write_succeeded = 0;
+    file_test_set_before_noreplace_rename(create_competing_key);
+    if (atomic_file_commit_pair_new(&public_output, &private_output) != 0 ||
+        errno != EEXIST || competing_write_succeeded == 0 ||
+        !file_equals(collision_on == 1U ? public_path : private_path,
+                     competing_key, sizeof(competing_key)) ||
+        access(collision_on == 1U ? private_path : public_path, F_OK) == 0 ||
+        has_transaction_artifact(root)) {
+        goto cleanup;
+    }
+    success = 1;
+
+cleanup:
+    file_test_fault_reset();
+    atomic_file_abort(&private_output);
+    atomic_file_abort(&public_output);
+    if (private_path[0] != '\0') {
+        (void)unlink(private_path);
+    }
+    if (public_path[0] != '\0') {
+        (void)unlink(public_path);
+    }
+    return success;
+}
+
+static int test_noreplace_unavailable(const char *root, unsigned int fail_on)
+{
+    static const unsigned char data[] = "new-key";
+    char public_path[256] = {0};
+    char private_path[256] = {0};
+    AtomicFile public_output = {0};
+    AtomicFile private_output = {0};
+    int success = 0;
+
+    if (!make_path(public_path, sizeof(public_path), root, "unsupported-public.key") ||
+        !make_path(private_path, sizeof(private_path), root, "unsupported-private.key") ||
+        !stage_bytes(&public_output, public_path, data, sizeof(data)) ||
+        !stage_bytes(&private_output, private_path, data, sizeof(data))) {
+        goto cleanup;
+    }
+    file_test_fault_set(FILE_TEST_FAULT_NOREPLACE_UNAVAILABLE, fail_on);
+    if (atomic_file_commit_pair_new(&public_output, &private_output) != 0 ||
+        errno != ENOTSUP || access(public_path, F_OK) == 0 ||
+        access(private_path, F_OK) == 0 || has_transaction_artifact(root)) {
+        goto cleanup;
+    }
+    success = 1;
+
+cleanup:
+    file_test_fault_reset();
+    atomic_file_abort(&private_output);
+    atomic_file_abort(&public_output);
+    if (private_path[0] != '\0') {
+        (void)unlink(private_path);
+    }
+    if (public_path[0] != '\0') {
+        (void)unlink(public_path);
+    }
+    return success;
+}
+
 static int test_pair_alias_rejection(const char *root)
 {
     static const unsigned char public_data[] = "public";
@@ -851,7 +952,11 @@ int main(void)
         goto cleanup;
     }
     file_test_set_links_unavailable(1);
-    if (!test_commits_without_links(test_directory) ||
+    if (!test_noreplace_race(test_directory, 1U) ||
+        !test_noreplace_race(test_directory, 2U) ||
+        !test_noreplace_unavailable(test_directory, 1U) ||
+        !test_noreplace_unavailable(test_directory, 2U) ||
+        !test_commits_without_links(test_directory) ||
         !test_pair_rollback(test_directory, FILE_TEST_FAULT_RENAME, 2U) ||
         !test_pair_rollback(test_directory, FILE_TEST_FAULT_FSYNC, 3U) ||
         !test_new_pair_rollback(test_directory, 0) ||

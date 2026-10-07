@@ -65,6 +65,7 @@ typedef enum {
     FILE_TEST_FAULT_FSYNC,
     FILE_TEST_FAULT_FULLFSYNC,
     FILE_TEST_FAULT_RENAME,
+    FILE_TEST_FAULT_NOREPLACE_UNAVAILABLE,
     FILE_TEST_FAULT_FOREIGN_OWNER
 } FileTestFault;
 
@@ -72,6 +73,8 @@ void file_test_fault_set(FileTestFault fault, unsigned int fail_on_call);
 void file_test_fault_reset(void);
 /* POSIX: link() fails like on Android until reset with 0; combines with faults. */
 void file_test_set_links_unavailable(int unavailable);
+/* POSIX: schedule a competing writer immediately before the atomic rename. */
+void file_test_set_before_noreplace_rename(void (*hook)(const char *));
 #endif
 
 /* Set once before starting CLI operations. Core defaults to identity translation. */

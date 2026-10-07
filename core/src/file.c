@@ -1,3 +1,10 @@
+#if defined(__linux__) && !defined(_GNU_SOURCE)
+#define _GNU_SOURCE
+#endif
+#if defined(__APPLE__) && !defined(_DARWIN_C_SOURCE)
+#define _DARWIN_C_SOURCE
+#endif
+
 #include "file.h"
 #include "secure_mem.h"
 
@@ -8,6 +15,10 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
+#ifdef __linux__
+#include <linux/fs.h>
+#include <sys/syscall.h>
+#endif
 #ifdef __APPLE__
 #include <sys/acl.h>
 #endif
@@ -28,6 +39,12 @@ typedef struct {
 
 static FileTestFaultState test_fault;
 static int test_links_unavailable;
+static void (*test_before_noreplace_rename)(const char *);
+
+void file_test_set_before_noreplace_rename(void (*hook)(const char *))
+{
+    test_before_noreplace_rename = hook;
+}
 
 void file_test_set_links_unavailable(int unavailable)
 {
@@ -46,6 +63,7 @@ void file_test_fault_reset(void)
     test_fault.fault = FILE_TEST_FAULT_NONE;
     test_fault.fail_on_call = 0U;
     test_fault.call_count = 0U;
+    test_before_noreplace_rename = NULL;
 }
 
 static int test_fault_should_fail(FileTestFault fault)
@@ -176,15 +194,34 @@ static int file_link(const char *existing_path, const char *new_path)
     return link(existing_path, new_path);
 }
 
-/*
- * Publishes a new name without replacing anything: link() fails with EEXIST
- * if the name already exists. Where hard links are unavailable, the name is
- * checked immediately before rename().
- */
+static int file_rename_new(const char *temporary_path, const char *final_path)
+{
+#ifdef NEKOKEM_TEST_FAULT_INJECTION
+    if (test_before_noreplace_rename != NULL) {
+        test_before_noreplace_rename(final_path);
+    }
+    if (test_fault_should_fail(FILE_TEST_FAULT_NOREPLACE_UNAVAILABLE)) {
+        errno = ENOTSUP;
+        return -1;
+    }
+#endif
+#if defined(__linux__) && defined(SYS_renameat2)
+    /* The syscall also works before Android's libc exposes renameat2(). */
+    return (int)syscall(SYS_renameat2, AT_FDCWD, temporary_path,
+                       AT_FDCWD, final_path, RENAME_NOREPLACE);
+#elif defined(__APPLE__) && defined(RENAME_EXCL)
+    return renamex_np(temporary_path, final_path, RENAME_EXCL);
+#else
+    (void)temporary_path;
+    (void)final_path;
+    errno = ENOTSUP;
+    return -1;
+#endif
+}
+
+/* Both publication paths atomically refuse an existing destination. */
 static int file_publish_new(const char *temporary_path, const char *final_path)
 {
-    struct stat status;
-
 #ifdef NEKOKEM_TEST_FAULT_INJECTION
     if (test_fault_should_fail(FILE_TEST_FAULT_RENAME)) {
         errno = EIO;
@@ -206,14 +243,8 @@ static int file_publish_new(const char *temporary_path, const char *final_path)
     if (errno == EEXIST) {
         return -1;
     }
-    if (lstat(final_path, &status) == 0) {
-        errno = EEXIST;
-        return -1;
-    }
-    if (errno != ENOENT) {
-        return -1;
-    }
-    return rename(temporary_path, final_path);
+    /* Never fall back to a check followed by an overwriting rename(). */
+    return file_rename_new(temporary_path, final_path);
 }
 
 #endif

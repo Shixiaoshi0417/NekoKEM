@@ -17,7 +17,12 @@ data class LocalKeyState(
     val fingerprint: String?,
 )
 
-class LocalKeyManager(context: Context) {
+class LocalKeyManager internal constructor(
+    context: Context,
+    private val keyGeneration: KeyGeneration,
+) {
+    constructor(context: Context) : this(context, NativeKeyGeneration)
+
     private val keysDirectory = File(context.filesDir, KEYS_DIRECTORY_NAME)
     private val publicKey = File(keysDirectory, PUBLIC_KEY_NAME)
     private val privateKey = File(keysDirectory, PRIVATE_KEY_NAME)
@@ -46,25 +51,19 @@ class LocalKeyManager(context: Context) {
         } else if (!preparePrivateDirectory(keysDirectory)) {
             RESULT_STORAGE_ERROR
         } else {
-            val result = if (replace) {
-                NativeBridge.nativeReplaceKeypairWithPassword(
-                    publicKey.absolutePath,
-                    privateKey.absolutePath,
-                    password,
-                )
-            } else {
-                NativeBridge.nativeGenerateKeypairWithPassword(
-                    publicKey.absolutePath,
-                    privateKey.absolutePath,
-                    password,
-                )
-            }
+            val result = keyGeneration.generate(
+                publicKey.absolutePath,
+                privateKey.absolutePath,
+                password,
+                replace,
+            )
             if (result != NativeBridge.RESULT_SUCCESS) {
                 result
             } else if (!setAndVerifyRegularFileMode(publicKey, PRIVATE_FILE_MODE) ||
-                !NativeBridge.nativeHasPrivateKey(privateKey.absolutePath)
+                !keyGeneration.hasPrivateKey(privateKey.absolutePath)
             ) {
-                NativeBridge.nativeDeletePrivateKey(privateKey.absolutePath)
+                // Core has already committed both files and removed its backups.
+                // A failed post-check must not destroy the committed private key.
                 RESULT_STORAGE_ERROR
             } else {
                 NativeBridge.RESULT_SUCCESS
