@@ -797,6 +797,105 @@ cleanup:
     return success;
 }
 
+static char swapped_public_path[256];
+static unsigned int swap_publish_count;
+static const unsigned char other_writer_public[] = "other-writer-public";
+
+/* Another writer replaces our first published key, then our second publish fails. */
+static void swap_first_key_before_second_publish(const char *final_path)
+{
+    char staged[300];
+    int written;
+
+    (void)final_path;
+    if (++swap_publish_count != 2U) {
+        return;
+    }
+    written = snprintf(staged, sizeof(staged), "%s.other", swapped_public_path);
+    if (written > 0 && (size_t)written < sizeof(staged) &&
+        write_plain_file(staged, other_writer_public,
+                         sizeof(other_writer_public), 0600) &&
+        rename(staged, swapped_public_path) == 0) {
+        file_test_fault_set(FILE_TEST_FAULT_RENAME, 1U);
+    }
+}
+
+static int test_replaced_output_keeps_backup(const char *root)
+{
+    static const unsigned char old_public[] = "old-public";
+    static const unsigned char old_private[] = "old-private";
+    static const unsigned char new_public[] = "new-public";
+    static const unsigned char new_private[] = "new-private";
+    static const char prefix[] = "swapped-public.key.bak.";
+    char private_path[256] = {0};
+    char backup_path[512] = {0};
+    AtomicFile public_output = {0};
+    AtomicFile private_output = {0};
+    DIR *stream = NULL;
+    struct dirent *entry;
+    int success = 0;
+
+    swapped_public_path[0] = '\0';
+    if (!make_path(swapped_public_path, sizeof(swapped_public_path), root,
+                   "swapped-public.key") ||
+        !make_path(private_path, sizeof(private_path), root,
+                   "swapped-private.key") ||
+        !write_plain_file(swapped_public_path, old_public,
+                          sizeof(old_public), 0600) ||
+        !write_plain_file(private_path, old_private,
+                          sizeof(old_private), 0600) ||
+        !stage_bytes(&public_output, swapped_public_path,
+                     new_public, sizeof(new_public)) ||
+        !stage_bytes(&private_output, private_path,
+                     new_private, sizeof(new_private))) {
+        goto cleanup;
+    }
+    swap_publish_count = 0U;
+    file_test_set_before_noreplace_rename(swap_first_key_before_second_publish);
+    if (atomic_file_commit_pair(&public_output, &private_output) != 0) {
+        goto cleanup;
+    }
+    file_test_fault_reset();
+    /* Rollback leaves the other writer's file and never publishes ours. */
+    if (swap_publish_count != 2U ||
+        !file_equals(swapped_public_path, other_writer_public,
+                     sizeof(other_writer_public)) ||
+        !file_equals(private_path, old_private, sizeof(old_private))) {
+        goto cleanup;
+    }
+    /* The old public key stays in the backup that the message names. */
+    stream = opendir(root);
+    while (stream != NULL && (entry = readdir(stream)) != NULL) {
+        if (strncmp(entry->d_name, prefix, sizeof(prefix) - 1U) == 0 &&
+            !make_path(backup_path, sizeof(backup_path), root, entry->d_name)) {
+            goto cleanup;
+        }
+    }
+    if (backup_path[0] == '\0' ||
+        !file_equals(backup_path, old_public, sizeof(old_public))) {
+        goto cleanup;
+    }
+    success = 1;
+
+cleanup:
+    file_test_fault_reset();
+    if (stream != NULL) {
+        (void)closedir(stream);
+    }
+    atomic_file_abort(&private_output);
+    atomic_file_abort(&public_output);
+    if (backup_path[0] != '\0') {
+        (void)unlink(backup_path);
+    }
+    if (private_path[0] != '\0') {
+        (void)unlink(private_path);
+    }
+    if (swapped_public_path[0] != '\0') {
+        (void)unlink(swapped_public_path);
+    }
+    return success;
+}
+
 static int test_pair_alias_rejection(const char *root)
 {
     static const unsigned char public_data[] = "public";
@@ -1067,8 +1166,13 @@ int main(void)
         fprintf(stderr, "New pair rollback subtest failed\n");
         goto cleanup;
     }
+    if (!test_replaced_output_keeps_backup(test_directory)) {
+        fprintf(stderr, "Replaced output backup subtest failed\n");
+        goto cleanup;
+    }
     file_test_set_links_unavailable(1);
     if (!test_interleaved_pair_rollback(test_directory) ||
+        !test_replaced_output_keeps_backup(test_directory) ||
         !test_noreplace_race(test_directory, 1U) ||
         !test_noreplace_race(test_directory, 2U) ||
         !test_noreplace_unavailable(test_directory, 1U) ||

@@ -3,7 +3,7 @@ set -Eeuo pipefail
 
 sdk_root=${1:?SDK root required}
 api=${2:?API level required}
-[[ "$api" == 26 || "$api" == 35 ]] || { echo 'Unsupported test API' >&2; exit 1; }
+[[ "$api" == 26 || "$api" == 29 || "$api" == 35 ]] || { echo 'Unsupported test API' >&2; exit 1; }
 sdkmanager_path=$(find "$sdk_root/cmdline-tools" -maxdepth 3 -type f -name sdkmanager -print -quit)
 [[ -n "$sdkmanager_path" ]] || { echo 'sdkmanager not found' >&2; exit 1; }
 package="system-images;android-$api;google_apis;x86_64"

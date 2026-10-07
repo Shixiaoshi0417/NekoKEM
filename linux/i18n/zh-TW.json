@@ -119,6 +119,7 @@
   "Cannot remove private temporary directory": "私有暫存目錄刪除失敗",
   "Cannot remove temporary key file": "暫存金鑰檔案刪除失敗",
   "Cannot restore atomic output backup": "原子輸出備份還原失敗",
+  "The previous contents of %s are kept as %s\n": "%s 的原有內容已保留為 %s\n",
   "Cannot restore terminal echo": "終端機回顯還原失敗",
   "Cannot retrieve AES-GCM authentication tag": "AES-GCM 認證標籤取得失敗",
   "Cannot retrieve private-key authentication tag": "私鑰認證標籤取得失敗",

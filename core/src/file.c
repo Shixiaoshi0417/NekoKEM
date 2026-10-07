@@ -173,6 +173,9 @@ cleanup:
 static int file_rename(const char *old_path, const char *new_path)
 {
 #ifdef NEKOKEM_TEST_FAULT_INJECTION
+    if (test_before_noreplace_rename != NULL) {
+        test_before_noreplace_rename(new_path);
+    }
     if (test_fault_should_fail(FILE_TEST_FAULT_RENAME)) {
         errno = EIO;
         return -1;
@@ -1437,6 +1440,11 @@ rollback:
                             print_system_error(
                                 "Cannot restore atomic output backup");
                         }
+                        /* Another writer's file or a failed restore keeps
+                         * the old contents; say where they are. */
+                        fprintf(stderr,
+                                file_message("The previous contents of %s are kept as %s\n"),
+                                files[reverse]->final_path, backups[reverse]);
                     }
                 } else if (still_ours != 0) {
                     /* Only remove the inode this transaction published. The

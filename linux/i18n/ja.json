@@ -119,6 +119,7 @@
   "Cannot remove private temporary directory": "非公開の一時ディレクトリを削除できません",
   "Cannot remove temporary key file": "一時鍵ファイルを削除できません",
   "Cannot restore atomic output backup": "アトミック出力のバックアップを復元できません",
+  "The previous contents of %s are kept as %s\n": "%s の以前の内容は %s として保持されています\n",
   "Cannot restore terminal echo": "端末のエコーを復元できません",
   "Cannot retrieve AES-GCM authentication tag": "AES-GCM 認証タグを取得できません",
   "Cannot retrieve private-key authentication tag": "秘密鍵の認証タグを取得できません",

@@ -119,6 +119,7 @@
   "Cannot remove private temporary directory": "Cannot remove private temporary directory",
   "Cannot remove temporary key file": "Cannot remove temporary key file",
   "Cannot restore atomic output backup": "Cannot restore atomic output backup",
+  "The previous contents of %s are kept as %s\n": "The previous contents of %s are kept as %s\n",
   "Cannot restore terminal echo": "Cannot restore terminal echo",
   "Cannot retrieve AES-GCM authentication tag": "Cannot retrieve AES-GCM authentication tag",
   "Cannot retrieve private-key authentication tag": "Cannot retrieve private-key authentication tag",

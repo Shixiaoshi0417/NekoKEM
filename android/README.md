@@ -83,7 +83,7 @@ context.filesDir/
 删除自己的默认密钥不会删除通讯录；取消操作和清理工作缓存也不会删除已保存条目。
 卸载或清除 App 数据会删除通讯录，请保留原始公钥备份。
 
-现有 API 26/35 设备测试覆盖备注持久化（包括进程重启）、去重、接收方解密、取消、
+现有 API 26/29/35 设备测试覆盖备注持久化（包括进程重启）、去重、接收方解密、取消、
 无效记录、指纹不符、链接与权限检查，以及真实 Compose 页面中的备注编辑、选择、
 Activity 重建和删除。NKEM v3、NKPR 及其密码算法与参数保持不变。
 
@@ -98,7 +98,7 @@ Activity 重建和删除。NKEM v3、NKPR 及其密码算法与参数保持不�
 不加密任何内容，已创建的快照立即删除，错误对话框指出该联系人，所选接收方保持不变，需由用户显式处理。
 重复联系人或超过 64 位会被拒绝。JNI 新增 `nativeEncryptFileMultiWithProgress()`，只转换路径、
 进度和取消，由 Core 校验每个公钥并写出 v4；解密自动识别 v3 与 v4。NekoKEM v3.3.2 及更早版本无法打开 v4 文件。
-API 26/35 设备测试覆盖两位联系人共享一个 v4 文件、各自解密、未选择的默认密钥无法解密、
+API 26/29/35 设备测试覆盖两位联系人共享一个 v4 文件、各自解密、未选择的默认密钥无法解密、
 联系人缺失时整体失败并清理快照、重复与超限拒绝，以及真实页面中的勾选、显式应用和清除选择。
 
 ## 预测性返回
@@ -110,7 +110,7 @@ App 启用 Android 预测性返回（`android:enableOnBackInvokedCallback="true"
 文件操作进行中不拦截返回，原有进度对话框行为不变。Android 14 及以上提供跟手进度；
 Android 8–13 收到返回时直接回到文件页或关闭菜单。
 
-预览层只用于显示，不进入无障碍树。API 26/35 设备测试通过 Activity 的
+预览层只用于显示，不进入无障碍树。API 26/29/35 设备测试通过 Activity 的
 `OnBackPressedDispatcher` 发送开始、进度、取消和完成事件，校验页面随进度缩放平移、
 取消后复原、完成后回到文件页且 Activity 不结束，以及菜单关闭和无进度返回，
 并保存一张手势进行中的截图。
@@ -195,4 +195,4 @@ JNI 只做路径、字符串、字节数组、回调和返回值转换；不解�
 APK 输出到 `app/build/outputs/apk/debug/app-debug.apk`。Android CMake 不编译
 `main.c` 或 `cli.c`。
 
-正式 APK 使用 [Release 工作流](../.github/workflows/release.yml) 构建并校验现有签名；JVM、JNI/SAF 和 API 26/35 模拟器回归统一由 [CI 工作流](../.github/workflows/ci.yml) 执行。公开附件为 `app-release.apk`，使用 Release 顶层 `SHA256SUMS.txt` 校验；签名恢复包不作为公开附件。
+正式 APK 使用 [Release 工作流](../.github/workflows/release.yml) 构建并校验现有签名；JVM、JNI/SAF 和 API 26/29/35 模拟器回归统一由 [CI 工作流](../.github/workflows/ci.yml) 执行。公开附件为 `app-release.apk`，使用 Release 顶层 `SHA256SUMS.txt` 校验；签名恢复包不作为公开附件。
