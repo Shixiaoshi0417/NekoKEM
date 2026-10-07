@@ -60,6 +60,8 @@ nekokem-keystore-password.enc
 
 # Fuzz, crash, benchmark, and generated corpus output
 /core/fuzz/bin/
+# Decryption fuzz seeds are generated with a fresh throwaway key per build.
+/core/fuzz/seeds/decrypt/
 /core/fuzz/out/
 /core/fuzz/findings/
 /core/fuzz/crashes/
