@@ -688,6 +688,10 @@ cleanup:
                 if (!moved || !win_rename(old[i], state->path.full, 0, 0)) {
                     preserve[i] = 1;
                     print_system_error("Cannot restore atomic output backup");
+                    fprintf(stderr,
+                            file_message("The previous contents of %s are kept as %s\n"),
+                            files[i]->final_path,
+                            backups[i] != NULL ? backups[i] : "");
                 }
             } else {
                 (void)win_dispose(state->output);

@@ -119,6 +119,7 @@
   "Cannot remove private temporary directory": "전용 임시 디렉터리 삭제에 실패했습니다",
   "Cannot remove temporary key file": "임시 키 파일 삭제에 실패했습니다",
   "Cannot restore atomic output backup": "원자적 출력 백업 복원에 실패했습니다",
+  "The previous contents of %s are kept as %s\n": "%s의 이전 내용은 %s(으)로 보존되어 있습니다\n",
   "Cannot restore terminal echo": "터미널 에코 복원에 실패했습니다",
   "Cannot retrieve AES-GCM authentication tag": "AES-GCM 인증 태그 가져오기에 실패했습니다",
   "Cannot retrieve private-key authentication tag": "개인 키 인증 태그 가져오기에 실패했습니다",

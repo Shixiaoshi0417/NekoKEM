@@ -119,6 +119,7 @@
   "Cannot remove private temporary directory": "无法删除私有临时目录",
   "Cannot remove temporary key file": "无法删除临时密钥文件",
   "Cannot restore atomic output backup": "无法恢复原子输出备份",
+  "The previous contents of %s are kept as %s\n": "%s 的原有内容已保留为 %s\n",
   "Cannot restore terminal echo": "无法恢复终端回显",
   "Cannot retrieve AES-GCM authentication tag": "无法获取AES-GCM 认证标签",
   "Cannot retrieve private-key authentication tag": "无法获取私钥认证标签",
