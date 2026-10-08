@@ -1,9 +1,11 @@
 name: Release
 
+# Runs only by hand. Every job builds from scratch: no Actions cache is read or
+# written, so nothing a CI run stored can reach a release package. The APK is
+# built without signing material and signed in a separate job that runs no
+# build code; only that job uses the NekoKEM Environment, and only on main.
 on:
   workflow_dispatch:
-  push:
-    tags: ["v*"]
 
 permissions:
   contents: read
@@ -51,12 +53,14 @@ jobs:
           compression-level: 0
           retention-days: 14
 
-  signed-apk:
-    environment: NekoKEM
+  build-apk:
+    name: Build unsigned Android APK
     runs-on: ubuntu-24.04
-    timeout-minutes: 45
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
       - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5
         with:
           distribution: temurin
@@ -70,25 +74,64 @@ jobs:
           "$sdkmanager_path" "platform-tools" "platforms;android-35" "build-tools;35.0.0" "ndk;28.2.13676358" "cmake;3.22.1"
           printf 'ANDROID_SDK_ROOT=%s\nANDROID_NDK_ROOT=%s/ndk/28.2.13676358\n' "$sdk_root" "$sdk_root" >> "$GITHUB_ENV"
       - uses: gradle/actions/setup-gradle@ed408507eac070d1f99cc633dbcf757c94c7933a # v4
-      - name: Prepare protected release signing
+        with:
+          cache-disabled: true
+      - name: Build OpenSSL 4.0.3 for Android arm64
+        working-directory: android
+        env:
+          JOBS: "2"
+        run: sh scripts/build-openssl-android.sh
+      - name: Build unsigned release APK
+        working-directory: android
+        run: bash ./gradlew --no-daemon --stacktrace -PnekokemUnsignedRelease=true assembleRelease
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: NekoKEM-android-unsigned
+          path: android/app/build/outputs/apk/release/app-release-unsigned.apk
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 1
+
+  signed-apk:
+    name: Sign Android APK
+    needs: build-apk
+    if: github.ref == 'refs/heads/main'
+    environment: NekoKEM
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5
+        with:
+          distribution: temurin
+          java-version: "17"
+      - name: Install pinned Android build tools
+        run: |
+          set -Eeuo pipefail
+          sdk_root="${ANDROID_SDK_ROOT:-${ANDROID_HOME:-/usr/local/lib/android/sdk}}"
+          sdkmanager_path=$(find "$sdk_root/cmdline-tools" -maxdepth 3 -type f -name sdkmanager -print -quit)
+          test -n "$sdkmanager_path"
+          "$sdkmanager_path" "build-tools;35.0.0"
+          printf 'ANDROID_SDK_ROOT=%s\n' "$sdk_root" >> "$GITHUB_ENV"
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: NekoKEM-android-unsigned
+          path: ${{ runner.temp }}/unsigned
+      # The secrets exist only in this step: no GITHUB_ENV, no build tools.
+      - name: Sign, verify and describe the APK
         env:
           ROTATE_SIGNING: "false"
           NEKOKEM_RELEASE_KEYSTORE_BASE64: ${{ secrets.NEKOKEM_RELEASE_KEYSTORE_BASE64 }}
           NEKOKEM_RELEASE_STORE_PASSWORD: ${{ secrets.NEKOKEM_RELEASE_STORE_PASSWORD }}
           NEKOKEM_RELEASE_KEY_ALIAS: ${{ secrets.NEKOKEM_RELEASE_KEY_ALIAS }}
           NEKOKEM_RELEASE_KEY_PASSWORD: ${{ secrets.NEKOKEM_RELEASE_KEY_PASSWORD }}
-        run: python3 .github/scripts/prepare_release_signing.py
-      - name: Build OpenSSL 4.0.3 for Android arm64
-        working-directory: android
-        env:
-          JOBS: "2"
-        run: sh scripts/build-openssl-android.sh
-      - name: Build signed APK
-        working-directory: android
-        run: bash ./gradlew --no-daemon --stacktrace assembleRelease
-      - name: Verify APK and encrypt signing recovery
-        run: python3 .github/scripts/verify_android_release.py
-      - name: Preserve signed APK and encrypted recovery only
+        run: python3 .github/scripts/sign_android_release.py "$RUNNER_TEMP/unsigned/app-release-unsigned.apk" release-output
+      - name: Remove plaintext signing material
+        if: always()
+        run: rm -rf -- "$RUNNER_TEMP/nekokem-release-signing"
+      - name: Preserve the signed APK and its metadata
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: NekoKEM-android-signed
@@ -96,19 +139,17 @@ jobs:
           if-no-files-found: error
           compression-level: 0
           retention-days: 14
-      - name: Remove plaintext signing material
-        if: always()
-        run: rm -rf -- "$RUNNER_TEMP/nekokem-release-signing"
 
   build-windows:
     name: Build Windows CLI and GUI
     runs-on: windows-2022
-    timeout-minutes: 60
+    timeout-minutes: 120
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
       - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
         with:
           node-version: '24'
+          package-manager-cache: false
       - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
         id: python
         with:
@@ -120,6 +161,7 @@ jobs:
       - uses: msys2/setup-msys2@ec48f7c5447b3140e2b088413ae3a55687bccb6e # v2
         with:
           msystem: UCRT64
+          cache: false
           update: true
           install: >-
             make perl curl tar
@@ -131,26 +173,11 @@ jobs:
         run: |
           echo "version=$(gcc -dumpfullversion)" >> "$GITHUB_OUTPUT"
           echo "gcc=$(cygpath -m "$(command -v gcc)")" >> "$GITHUB_OUTPUT"
-      - uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
-        id: openssl-cache
-        with:
-          path: ${{ runner.temp }}/windows-openssl
-          key: windows-ucrt64-openssl-4.0.3-${{ steps.compiler.outputs.version }}-${{ hashFiles('windows/scripts/build-windows-cli.sh') }}
-          restore-keys: windows-ucrt64-openssl-4.0.3-${{ steps.compiler.outputs.version }}-
-      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
-        with:
-          workspaces: desktop/src-tauri
-          cache-on-failure: true
       - name: Build Windows CLI with pinned OpenSSL
         shell: msys2 {0}
         run: |
           export NEKOKEM_OPENSSL_PREFIX="$(cygpath -u "$RUNNER_TEMP")/windows-openssl"
           bash windows/scripts/build-windows-cli.sh "$(cygpath -u "$RUNNER_TEMP")/windows-cli"
-      - uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
-        if: steps.openssl-cache.outputs.cache-hit != 'true'
-        with:
-          path: ${{ runner.temp }}/windows-openssl
-          key: ${{ steps.openssl-cache.outputs.cache-primary-key }}
       - name: Configure the matching Rust/C ABI
         shell: pwsh
         run: |
@@ -236,7 +263,7 @@ jobs:
   build-macos:
     name: Build Apple Silicon CLI and GUI
     runs-on: macos-15
-    timeout-minutes: 60
+    timeout-minutes: 90
     env:
       MACOSX_DEPLOYMENT_TARGET: '11.0'
     steps:
@@ -247,26 +274,16 @@ jobs:
       - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
         with:
           node-version: '24'
+          package-manager-cache: false
       - uses: dtolnay/rust-toolchain@7e38f4b43b4db5c8dd498af069a4f6196df1d067 # master
         with:
           toolchain: stable
           targets: aarch64-apple-darwin
-      - name: Identify native Apple compiler and SDK
-        id: compiler
+      - name: Check the native architecture and set the OpenSSL prefix
         run: |
           set -Eeuo pipefail
           test "$(uname -m)" = arm64
-          identity=$({ xcrun clang --version; xcrun --sdk macosx --show-sdk-version; } | shasum -a 256 | cut -d ' ' -f 1)
-          echo "identity=$identity" >> "$GITHUB_OUTPUT"
           echo "NEKOKEM_OPENSSL_PREFIX=$RUNNER_TEMP/macos-openssl" >> "$GITHUB_ENV"
-      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
-        with:
-          path: ${{ runner.temp }}/macos-openssl
-          key: macos-arm64-openssl-4.0.3-${{ steps.compiler.outputs.identity }}-${{ hashFiles('macos/scripts/build-openssl.sh') }}
-      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
-        with:
-          workspaces: desktop/src-tauri
-          cache-on-failure: true
       - name: Build and verify native arm64 CLI package
         run: bash macos/scripts/build-macos-cli.sh "$RUNNER_TEMP/macos-cli"
       - name: Install locked frontend dependencies
@@ -301,7 +318,7 @@ jobs:
   build-linux-gui:
     name: Build Linux ${{ matrix.arch }} GUI
     runs-on: ${{ matrix.runner }}
-    timeout-minutes: 60
+    timeout-minutes: 90
     strategy:
       fail-fast: false
       matrix:
@@ -318,6 +335,7 @@ jobs:
       - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
         with:
           node-version: '24'
+          package-manager-cache: false
       - uses: dtolnay/rust-toolchain@7e38f4b43b4db5c8dd498af069a4f6196df1d067 # master
         with:
           toolchain: stable
@@ -328,22 +346,11 @@ jobs:
           sudo apt-get install --yes --no-install-recommends \
             build-essential ca-certificates curl perl pkg-config binutils \
             libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev patchelf rpm
-      - name: Identify native compiler and libc
-        id: compiler
+      - name: Check the native architecture and set the OpenSSL prefix
         run: |
           set -Eeuo pipefail
           test "$(uname -m)" = '${{ matrix.arch }}'
-          identity=$({ gcc --version; getconf GNU_LIBC_VERSION; } | sha256sum | cut -d ' ' -f 1)
-          echo "identity=$identity" >> "$GITHUB_OUTPUT"
           echo "NEKOKEM_OPENSSL_PREFIX=$RUNNER_TEMP/linux-gui-openssl" >> "$GITHUB_ENV"
-      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
-        with:
-          path: ${{ runner.temp }}/linux-gui-openssl
-          key: linux-gui-${{ matrix.arch }}-openssl-4.0.3-${{ steps.compiler.outputs.identity }}-${{ hashFiles('desktop/scripts/build-linux-openssl.sh') }}
-      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
-        with:
-          workspaces: desktop/src-tauri
-          cache-on-failure: true
       - name: Build and verify the pinned static PIC dependency
         run: bash desktop/scripts/build-linux-openssl.sh '${{ matrix.arch }}' "$NEKOKEM_OPENSSL_PREFIX"
       - name: Install locked frontend dependencies
