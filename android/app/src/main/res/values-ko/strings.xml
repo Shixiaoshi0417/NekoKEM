@@ -49,7 +49,12 @@
     <string name="delete_keypair_title">키 쌍을 영구적으로 삭제할까요?</string>
     <string name="delete_keypair_message">로컬 공개 키, 암호화된 NKPR 개인 키와 관련 임시 캐시를 삭제합니다.</string>
     <string name="replace_private_key_title">기존 개인 키를 교체할까요?</string>
-    <string name="replace_private_key_message">가져올 암호화된 NKPR 개인 키의 형식과 비밀번호를 확인한 뒤에만 현재 로컬 개인 키를 교체합니다.</string>
+    <string name="replace_private_key_message">가져올 암호화된 NKPR 개인 키의 형식과 비밀번호를 확인하고 현재 공개 키와 한 쌍임을 확인한 뒤에만 현재 로컬 개인 키를 교체합니다.</string>
+    <string name="replace_public_key_title">이 기기의 공개 키를 교체할까요?</string>
+    <string name="replace_public_key_message">다른 사람이 나에게 파일을 암호화할 때 쓰는 내 공개 키를 교체합니다. 다른 사람의 공개 키를 저장하려면 공개키 주소록에 추가하세요.</string>
+    <string name="replace_public_key_pair_note">이 기기에 개인 키가 저장되어 있으므로 새 공개 키는 그 개인 키와 한 쌍이어야 합니다. 확인을 위해 개인 키 비밀번호를 입력합니다.</string>
+    <string name="import_public_key_password_title">키 쌍 확인</string>
+    <string name="import_public_key_password_message">이 기기에 있는 개인 키의 비밀번호를 입력하세요. 공개 키가 그 개인 키와 한 쌍일 때만 교체합니다.</string>
     <string name="replace_keypair_title">기존 키 쌍을 교체할까요?</string>
     <string name="replace_keypair_message">새 키 쌍을 생성하면 현재 공개 키와 개인 키가 교체됩니다. 현재 공개 키로 암호화한 파일은 현재 개인 키로만 복호화할 수 있으므로 먼저 암호화된 개인 키를 내보내 백업하세요.</string>
     <string name="action_generate_keypair">키 쌍 생성</string>
@@ -134,6 +139,7 @@
     <string name="error_reason_core">NekoKEM Core가 작업을 거부했습니다.</string>
     <string name="error_reason_unexpected">예기치 않은 Android 작업 오류가 발생했습니다.</string>
     <string name="error_reason_fingerprint_mismatch">확인 후 임시 키가 변경되었거나 지문이 더 이상 일치하지 않습니다.</string>
+    <string name="error_reason_key_pair_mismatch">이 키는 이 기기에 저장된 다른 키와 한 쌍이 아닙니다. 다른 키 쌍으로 바꾸려면 현재 키 쌍을 먼저 삭제한 뒤 두 키를 모두 가져오세요.</string>
     <string name="error_reason_public_key_copy">SAF 공개 키 데이터를 완전히 복사할 수 없습니다.</string>
     <string name="error_reason_public_key_parse">Core가 하이브리드 공개 키의 두 구성 요소를 파싱하거나 검증할 수 없습니다.</string>
     <string name="error_reason_public_key_normalize">Core가 키를 파싱했지만 정규화된 공개 키 표현을 기록할 수 없습니다.</string>

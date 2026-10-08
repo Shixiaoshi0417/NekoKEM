@@ -30,6 +30,27 @@ data class SelectedDocument(
     val displayName: String,
 )
 
+/**
+ * A provider-chosen display name as one plain line: dialogs print it next to
+ * key fingerprints, so it must not carry line breaks, bidirectional overrides
+ * or invisible characters that could fake or reorder another line.
+ */
+internal fun displaySafeName(name: String?, fallback: String): String {
+    val visible = name.orEmpty().filterNot { character ->
+        character.isISOControl() || character in UNSAFE_NAME_CHARACTERS
+    }.trim()
+    val end = if (visible.codePointCount(0, visible.length) > MAX_DISPLAY_NAME_LENGTH) {
+        visible.offsetByCodePoints(0, MAX_DISPLAY_NAME_LENGTH)
+    } else visible.length
+    return visible.substring(0, end).trimEnd().ifEmpty { fallback }
+}
+
+// Line and paragraph separators, bidirectional formatting and zero-width characters.
+private const val UNSAFE_NAME_CHARACTERS =
+    "\u2028\u2029\u061C\u200B\u200C\u200D\u200E\u200F\u202A\u202B\u202C\u202D\u202E" +
+        "\u2060\u2066\u2067\u2068\u2069\uFEFF"
+private const val MAX_DISPLAY_NAME_LENGTH = 128
+
 data class PreparedEncryptionResult(
     val code: Int,
     val prepared: PreparedEncryption?,
@@ -154,7 +175,7 @@ class SafFileWorkflow(
 
     fun describe(uri: Uri): SelectedDocument = SelectedDocument(
         uri = uri,
-        displayName = queryDisplayName(uri) ?: defaultSelectedFilename,
+        displayName = displaySafeName(queryDisplayName(uri), defaultSelectedFilename),
     )
 
     fun prepareEncryption(
@@ -635,9 +656,17 @@ class SafFileWorkflow(
             keyManager.exportEncryptedPrivateKey(output)
         }
 
-    fun importPublicKey(source: Uri): Int = importPublicKeyDetailed(source).code
+    /**
+     * Takes ownership of [privateKeyPassword], which proves the key belongs
+     * to the existing private key, and clears it before returning.
+     */
+    fun importPublicKey(source: Uri, privateKeyPassword: ByteArray? = null): Int =
+        importPublicKeyDetailed(source, privateKeyPassword).code
 
-    fun importPublicKeyDetailed(source: Uri): PublicKeyImportTrace {
+    fun importPublicKeyDetailed(
+        source: Uri,
+        privateKeyPassword: ByteArray? = null,
+    ): PublicKeyImportTrace {
         var stagedInput: File? = null
         var safCandidate: PublicKeyFileRecord? = null
         var normalizedCandidate: PublicKeyFileRecord? = null
@@ -666,7 +695,7 @@ class SafFileWorkflow(
                     result = LocalKeyManager.RESULT_PUBLIC_KEY_COPY_FAILED
                 } else {
                     safCandidate = keyManager.publicKeyFileRecord(stagedInput)
-                    val imported = keyManager.importPublicKeyDetailed(stagedInput)
+                    val imported = keyManager.importPublicKeyDetailed(stagedInput, privateKeyPassword)
                     result = imported.code
                     normalizedCandidate = imported.normalizedCandidate
                     coreParseResult = imported.coreParseResult
@@ -679,6 +708,7 @@ class SafFileWorkflow(
         } catch (_: Exception) {
             result = LocalKeyManager.RESULT_STORAGE_ERROR
         } finally {
+            privateKeyPassword?.fill(0)
             clearAndDelete(stagedInput)
             removeWorkspace(workspace)
         }

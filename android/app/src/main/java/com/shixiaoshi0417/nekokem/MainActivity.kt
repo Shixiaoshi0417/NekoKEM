@@ -8,11 +8,14 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.ui.Modifier
 import androidx.annotation.StringRes
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -26,6 +29,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.unit.dp
 import com.shixiaoshi0417.nekokem.files.PageCache
 import com.shixiaoshi0417.nekokem.files.PreparedDecryption
 import com.shixiaoshi0417.nekokem.files.PreparedEncryption
@@ -138,6 +142,7 @@ private enum class PendingKeyImport {
 private enum class PasswordPrompt {
     CHECK_PRIVATE_KEY,
     IMPORT_PRIVATE_KEY,
+    IMPORT_PUBLIC_KEY,
     SELECT_TEMPORARY_PRIVATE_KEY,
     DECRYPT_FILE,
 }
@@ -209,6 +214,7 @@ private fun NekoKEMRoute(
     var pendingOutputAction by remember { mutableStateOf<PendingOutputAction?>(null) }
     var pendingKeyImport by remember { mutableStateOf<PendingKeyImport?>(null) }
     var pendingPrivateImportUri by remember { mutableStateOf<Uri?>(null) }
+    var pendingPublicImportUri by remember { mutableStateOf<Uri?>(null) }
     var pendingTemporaryPrivateKey by remember {
         mutableStateOf<PendingTemporaryPrivateKey?>(null)
     }
@@ -234,6 +240,7 @@ private fun NekoKEMRoute(
     var passwordPrompt by remember { mutableStateOf<PasswordPrompt?>(null) }
     var pendingDelete by remember { mutableStateOf<DeleteTarget?>(null) }
     var confirmPrivateKeyReplacement by remember { mutableStateOf(false) }
+    var confirmPublicKeyReplacement by remember { mutableStateOf(false) }
     var confirmKeypairReplacement by remember { mutableStateOf(false) }
     var replaceKeypair by remember { mutableStateOf(false) }
     var activeProgressOperation by remember { mutableStateOf<Int?>(null) }
@@ -400,6 +407,24 @@ private fun NekoKEMRoute(
         }
     }
 
+    /** Takes ownership of [privateKeyPassword]. */
+    fun importPublicKeyFrom(uri: Uri, privateKeyPassword: ByteArray?) {
+        val displayName = try {
+            fileWorkflow.describe(uri).displayName
+        } catch (_: Exception) {
+            context.getString(R.string.default_public_key_filename)
+        }
+        runKeyOperation(
+            operationResource = R.string.operation_import_public_key,
+            sensitiveInput = privateKeyPassword,
+            completionDetails = { state ->
+                keyCompletionDetails(displayName, state.fingerprint)
+            },
+        ) {
+            fileWorkflow.importPublicKey(uri, privateKeyPassword)
+        }
+    }
+
     fun beginProgress(@StringRes operationResource: Int): OperationProgressTracker {
         lateinit var tracker: OperationProgressTracker
         tracker = OperationProgressTracker { update ->
@@ -491,18 +516,12 @@ private fun NekoKEMRoute(
             pendingPrivateImportUri = null
             showSnackbar(R.string.snackbar_operation_cancelled)
         } else if (action == PendingKeyImport.PUBLIC_KEY) {
-            val displayName = try {
-                fileWorkflow.describe(uri).displayName
-            } catch (_: Exception) {
-                context.getString(R.string.default_public_key_filename)
-            }
-            runKeyOperation(
-                operationResource = R.string.operation_import_public_key,
-                completionDetails = { state ->
-                    keyCompletionDetails(displayName, state.fingerprint)
-                },
-            ) {
-                fileWorkflow.importPublicKey(uri)
+            // This replaces the device's own key, not a contact: confirm it.
+            if (keyState.fingerprint != null || keyState.privateKeyExists) {
+                pendingPublicImportUri = uri
+                confirmPublicKeyReplacement = true
+            } else {
+                importPublicKeyFrom(uri, null)
             }
         } else {
             pendingPrivateImportUri = uri
@@ -981,6 +1000,7 @@ private fun NekoKEMRoute(
         val title = when (prompt) {
             PasswordPrompt.CHECK_PRIVATE_KEY -> R.string.check_password_title
             PasswordPrompt.IMPORT_PRIVATE_KEY -> R.string.import_password_title
+            PasswordPrompt.IMPORT_PUBLIC_KEY -> R.string.import_public_key_password_title
             PasswordPrompt.SELECT_TEMPORARY_PRIVATE_KEY ->
                 R.string.select_temporary_private_key_password_title
             PasswordPrompt.DECRYPT_FILE -> R.string.decrypt_password_title
@@ -988,6 +1008,7 @@ private fun NekoKEMRoute(
         val message = when (prompt) {
             PasswordPrompt.CHECK_PRIVATE_KEY -> R.string.check_password_message
             PasswordPrompt.IMPORT_PRIVATE_KEY -> R.string.import_password_message
+            PasswordPrompt.IMPORT_PUBLIC_KEY -> R.string.import_public_key_password_message
             PasswordPrompt.SELECT_TEMPORARY_PRIVATE_KEY ->
                 R.string.select_temporary_private_key_password_message
             PasswordPrompt.DECRYPT_FILE -> R.string.decrypt_password_message
@@ -1004,6 +1025,8 @@ private fun NekoKEMRoute(
             onDismiss = {
                 if (prompt == PasswordPrompt.IMPORT_PRIVATE_KEY) {
                     pendingPrivateImportUri = null
+                } else if (prompt == PasswordPrompt.IMPORT_PUBLIC_KEY) {
+                    pendingPublicImportUri = null
                 } else if (
                     prompt == PasswordPrompt.SELECT_TEMPORARY_PRIVATE_KEY
                 ) {
@@ -1054,6 +1077,17 @@ private fun NekoKEMRoute(
                             ) {
                                 fileWorkflow.importEncryptedPrivateKey(uri, password)
                             }
+                        }
+                    }
+
+                    PasswordPrompt.IMPORT_PUBLIC_KEY -> {
+                        val uri = pendingPublicImportUri
+                        pendingPublicImportUri = null
+                        if (uri == null) {
+                            password.fill(0)
+                            showSnackbar(R.string.snackbar_operation_cancelled)
+                        } else {
+                            importPublicKeyFrom(uri, password)
                         }
                     }
 
@@ -1316,6 +1350,52 @@ private fun NekoKEMRoute(
             },
             dismissButton = {
                 TextButton(onClick = { confirmKeypairReplacement = false }) {
+                    Text(stringResource(R.string.action_cancel))
+                }
+            },
+        )
+    }
+
+    if (confirmPublicKeyReplacement) {
+        val cancelPublicImport = {
+            confirmPublicKeyReplacement = false
+            pendingPublicImportUri = null
+        }
+        AlertDialog(
+            onDismissRequest = cancelPublicImport,
+            title = { Text(stringResource(R.string.replace_public_key_title)) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Text(stringResource(R.string.replace_public_key_message))
+                    keyState.fingerprint?.let { current ->
+                        Text(
+                            stringResource(R.string.key_fingerprint_line, current),
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                    }
+                    if (keyState.privateKeyExists) {
+                        Text(stringResource(R.string.replace_public_key_pair_note))
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        confirmPublicKeyReplacement = false
+                        val uri = pendingPublicImportUri
+                        if (uri != null && keyState.privateKeyExists) {
+                            passwordPrompt = PasswordPrompt.IMPORT_PUBLIC_KEY
+                        } else if (uri != null) {
+                            pendingPublicImportUri = null
+                            importPublicKeyFrom(uri, null)
+                        }
+                    },
+                ) {
+                    Text(stringResource(R.string.action_replace))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = cancelPublicImport) {
                     Text(stringResource(R.string.action_cancel))
                 }
             },
@@ -1586,6 +1666,8 @@ private fun resultReason(
         }
         LocalKeyManager.RESULT_FINGERPRINT_MISMATCH ->
             R.string.error_reason_fingerprint_mismatch
+        LocalKeyManager.RESULT_KEY_PAIR_MISMATCH -> R.string.error_reason_key_pair_mismatch
+        LocalKeyManager.RESULT_KEY_PAIR_PASSWORD_FAILED -> R.string.error_reason_authentication
         LocalKeyManager.RESULT_PUBLIC_KEY_COPY_FAILED ->
             R.string.error_reason_public_key_copy
         LocalKeyManager.RESULT_PUBLIC_KEY_PARSE_FAILED ->

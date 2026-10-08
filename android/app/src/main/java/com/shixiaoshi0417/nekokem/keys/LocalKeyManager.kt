@@ -312,10 +312,17 @@ class LocalKeyManager internal constructor(
     /**
      * Core parses the staged public key and writes a canonical candidate.
      * The candidate replaces the live key only after validation succeeds.
+     * While a private key exists, the public key must belong to it:
+     * [privateKeyPassword] unlocks the private key to prove that. Takes
+     * ownership of [privateKeyPassword] and clears it before returning.
      */
-    fun importPublicKey(input: File): Int = importPublicKeyDetailed(input).code
+    fun importPublicKey(input: File, privateKeyPassword: ByteArray? = null): Int =
+        importPublicKeyDetailed(input, privateKeyPassword).code
 
-    fun importPublicKeyDetailed(input: File): PublicKeyImportResult {
+    fun importPublicKeyDetailed(
+        input: File,
+        privateKeyPassword: ByteArray? = null,
+    ): PublicKeyImportResult {
         var candidate: File? = null
         var stagedInput: PublicKeyFileRecord? = null
         var normalizedCandidate: PublicKeyFileRecord? = null
@@ -332,8 +339,16 @@ class LocalKeyManager internal constructor(
             } else {
                 stagedInput = publicKeyFileRecord(input)
                 val inputFingerprint = publicKeyFingerprint(input)
+                val pairing = if (inputFingerprint == null) {
+                    NativeBridge.RESULT_SUCCESS
+                } else {
+                    checkPublicKeyPairing(inputFingerprint, privateKeyPassword)
+                }
                 if (stagedInput == null || inputFingerprint == null) {
                     result = RESULT_PUBLIC_KEY_PARSE_FAILED
+                } else if (pairing != NativeBridge.RESULT_SUCCESS) {
+                    coreParseResult = NativeBridge.RESULT_SUCCESS
+                    result = pairing
                 } else {
                     coreParseResult = NativeBridge.RESULT_SUCCESS
                     candidate = createPrivateCandidatePath(
@@ -376,6 +391,7 @@ class LocalKeyManager internal constructor(
         } catch (_: Exception) {
             result = RESULT_STORAGE_ERROR
         } finally {
+            privateKeyPassword?.fill(0)
             clearAndDeleteRegularFile(candidate)
         }
         return PublicKeyImportResult(
@@ -388,6 +404,22 @@ class LocalKeyManager internal constructor(
             commitResult = commitResult,
             commitErrno = commitErrno,
         )
+    }
+
+    /** Does not clear [password]; the caller owns it. */
+    private fun checkPublicKeyPairing(fingerprint: String, password: ByteArray?): Int {
+        if (!privateKey.exists()) {
+            return NativeBridge.RESULT_SUCCESS
+        }
+        if (password == null || password.isEmpty()) {
+            return NativeBridge.RESULT_INVALID_ARGUMENT
+        }
+        val pair = NativeBridge.nativePrivateKeyFingerprint(privateKey.absolutePath, password)
+        return when (pair) {
+            null -> RESULT_KEY_PAIR_PASSWORD_FAILED
+            fingerprint -> NativeBridge.RESULT_SUCCESS
+            else -> RESULT_KEY_PAIR_MISMATCH
+        }
     }
 
     internal fun defaultPublicKeyRecord(): PublicKeyFileRecord? =
@@ -553,7 +585,9 @@ class LocalKeyManager internal constructor(
 
     /**
      * Takes ownership of [password]. The Core validates both the NKPR format
-     * and password against a private candidate before the atomic replacement.
+     * and password against a private candidate before the atomic replacement,
+     * and a private key that does not belong to the current public key is
+     * refused, so the two key files always form one pair.
      */
     fun importEncryptedPrivateKey(input: File, password: ByteArray): Int {
         var candidate: File? = null
@@ -568,12 +602,17 @@ class LocalKeyManager internal constructor(
                 if (!copySensitiveRegularFile(input, candidate)) {
                     RESULT_STORAGE_ERROR
                 } else {
-                    val result = NativeBridge.nativeCheckPassword(
+                    val pair = NativeBridge.nativePrivateKeyFingerprint(
                         candidate.absolutePath,
                         password,
                     )
-                    if (result != NativeBridge.RESULT_SUCCESS) {
-                        result
+                    if (pair == null) {
+                        // Only to tell why: a wrong password or an invalid file.
+                        NativeBridge.nativeCheckPassword(candidate.absolutePath, password)
+                            .takeIf { it != NativeBridge.RESULT_SUCCESS }
+                            ?: NativeBridge.RESULT_CORE_ERROR
+                    } else if (publicKey.exists() && publicKeyFingerprint(publicKey) != pair) {
+                        RESULT_KEY_PAIR_MISMATCH
                     } else if (commitPrivateKeyCandidate(candidate)) {
                         NativeBridge.RESULT_SUCCESS
                     } else {
@@ -826,6 +865,8 @@ class LocalKeyManager internal constructor(
         const val RESULT_PUBLIC_KEY_PERMISSION_FAILED = -13
         const val RESULT_PUBLIC_KEY_COMMIT_FAILED = -14
         const val RESULT_PUBLIC_KEY_INTEGRITY_FAILED = -15
+        const val RESULT_KEY_PAIR_MISMATCH = -16
+        const val RESULT_KEY_PAIR_PASSWORD_FAILED = -17
         private const val CACHE_CLEAR_BUFFER_SIZE = 64 * 1024
         private const val KEY_COPY_BUFFER_SIZE = 64 * 1024
         private const val MAX_KEY_FILE_BYTES = 16L * 1024L * 1024L

@@ -69,7 +69,9 @@ then choose a saved entry when encrypting. Notes can be edited, entries deleted,
 duplicate fingerprints are stored once. Contacts persist in app-private storage. Each
 use validates the key and fingerprint with the existing Core; an unavailable entry
 requires an explicit new selection. Notes are labels; verify fingerprints with recipients.
-Contacts are separate from local default keys. Cryptographic parameters and file formats
+Contacts are separate from local default keys, which always form one key pair: an imported private
+key must match the stored public key, and replacing your own public key asks for confirmation and,
+while a private key is stored, its password. Cryptographic parameters and file formats
 remain unchanged. See the [Android documentation](android/README.md#公钥通讯录)
 for behavior and device tests. This release also supports Android predictive back:
 secondary pages and the navigation drawer follow the back gesture; see
