@@ -47,7 +47,8 @@ def metadata(**extra):
     return json.dumps({'source_sha': SOURCE, 'run_id': RUN, 'version': VERSION, **extra}).encode()
 
 
-def build_release(root, version=VERSION, app_version=VERSION, windows_run=RUN, rotated=False):
+def build_release(root, version=VERSION, app_version=VERSION, windows_run=RUN, rotated=False,
+                  windows_version=VERSION):
     android = root / 'NekoKEM-android-signed'
     android.mkdir(parents=True)
     apk = android / 'app-release.apk'
@@ -89,7 +90,8 @@ def build_release(root, version=VERSION, app_version=VERSION, windows_run=RUN, r
                [macos_gui / 'NekoKEM-macos-arm64-GUI.zip', macos_gui / 'NekoKEM-macos-arm64-GUI.dmg'])
     windows = root / 'NekoKEM-windows-x86_64'
     windows.mkdir()
-    windows_metadata = json.dumps({'source_sha': SOURCE, 'run_id': windows_run})
+    windows_metadata = json.dumps({'source_sha': SOURCE, 'run_id': windows_run,
+                                   'version': windows_version})
     write_zip(windows / 'NekoKEM-windows-x86_64.zip', {'build-metadata.json': windows_metadata})
     write_sums(windows / 'windows-SHA256SUMS.txt', [windows / 'NekoKEM-windows-x86_64.zip'], '\r\n')
     windows_gui = root / 'NekoKEM-windows-gui-x86_64'
@@ -144,6 +146,7 @@ class ReleaseAssetTests(unittest.TestCase):
             'macOS app version': dict(app_version='4.1.0'),
             'release version': dict(version='4.1.9'),
             'Windows run': dict(windows_run='999'),
+            'Windows version': dict(windows_version='4.1.0'),
             'rotated signer': dict(rotated=True),
         }
         for label, options in cases.items():

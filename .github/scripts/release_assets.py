@@ -193,7 +193,7 @@ def verify(artifacts, version, source, run, apk_check=check_apk):
     for name, label in (('NekoKEM-windows-x86_64.zip', 'Windows CLI'),
                         ('NekoKEM-Windows-GUI.zip', 'Windows GUI')):
         check_metadata(json.loads(zip_member(locate(artifacts, name), 'build-metadata.json')),
-                       label, source, run)
+                       label, source, run, version)
     return android['version_code']
 
 
