@@ -37,7 +37,6 @@ jobs:
       attestations: read
       contents: write
     env:
-      GH_TOKEN: ${{ github.token }}
       REPO: ${{ github.repository }}
       TAG: ${{ inputs.tag }}
       CI_RUN: ${{ inputs.ci_run }}
@@ -60,6 +59,10 @@ jobs:
           "$sdkmanager_path" "build-tools;35.0.0"
           printf 'ANDROID_SDK_ROOT=%s\n' "$sdk_root" >> "$GITHUB_ENV"
       - name: Test the asset checks
-        run: python3 .github/scripts/test_release_assets.py -v
+        run: |
+          python3 .github/scripts/test_release_assets.py -v
+          python3 .github/scripts/test_publish_release.py -v
       - name: Verify the runs, assets and attestations, then publish
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: python3 .github/scripts/publish_release.py

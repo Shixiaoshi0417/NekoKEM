@@ -44,6 +44,10 @@ gh attestation verify NekoKEM-linux-x86_64.tar.gz --repo Shixiaoshi0417/NekoKEM 
   --signer-workflow Shixiaoshi0417/NekoKEM/.github/workflows/release.yml
 ```
 
+Publish uploads and publishes using the known release ID and checks existing versions across all API pages. Only the highest stable semantic version becomes Latest. Matching partial drafts can resume; upload or verification failures restore draft status, and failed recovery explicitly reports the release ID and unconfirmed state. Publish verifies the version, source commit and build run inside Windows CLI/GUI packages. CI checks that application, packaging and Android signing-verification versions agree without changing version numbers.
+
+Rust, Node and Python are pinned to `1.99.0`, `24.21.0` and `3.13.16`. MSYS2 uses a rolling repository and retains full updates to avoid ABI and dependency mismatches from historical package combinations or partial upgrades; build records include the actual compiler version. Release builds remain uncached, APK building and signing stay separate, and signing runs only on `main`. See the [release process](release/README.md).
+
 README uses a dedicated rounded display image. Android retains the existing square artwork with its white background; Windows CLI/GUI EXE icons retain the square artwork with the outer white area made transparent. Windows applications are not Authenticode signed.
 
 ## Multi-recipient encryption

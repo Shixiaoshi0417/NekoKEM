@@ -44,6 +44,10 @@ gh attestation verify NekoKEM-linux-x86_64.tar.gz --repo Shixiaoshi0417/NekoKEM 
   --signer-workflow Shixiaoshi0417/NekoKEM/.github/workflows/release.yml
 ```
 
+Publish 按已知 release ID 上传和发布，分页检查现有版本；只有最高正式语义版本才设为 Latest。匹配的部分草稿可以续传，上传或校验失败会恢复草稿；恢复失败会明确报告 release ID 和未确认的状态。Publish 校验 Windows CLI/GUI 包内的版本、源码提交和构建运行记录。CI 检查应用、打包参数与 Android 签名校验中的版本一致性，不自动修改版本号。
+
+Rust、Node 和 Python 分别固定为 `1.99.0`、`24.21.0` 和 `3.13.16`。MSYS2 使用滚动仓库，保留完整更新以避免历史包组合和局部升级造成 ABI、依赖不匹配，并记录实际编译器版本。Release 继续无缓存构建，APK 构建与签名分离，签名只允许在 `main` 上执行；详见 [发布流程](release/README.md)。
+
 README 使用专用圆角展示图；Android 保留现有方形白底图案，Windows CLI/GUI EXE 保留方形图案并将外部白色区域改为透明。Windows 应用未进行 Authenticode 签名。
 
 ## 多人加密

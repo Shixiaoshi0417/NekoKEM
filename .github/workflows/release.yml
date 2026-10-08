@@ -148,20 +148,21 @@ jobs:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
       - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
         with:
-          node-version: '24'
+          node-version: '24.21.0'
           package-manager-cache: false
       - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
         id: python
         with:
-          python-version: '3.13'
+          python-version: '3.13.16'
       - uses: dtolnay/rust-toolchain@7e38f4b43b4db5c8dd498af069a4f6196df1d067 # master
         with:
-          toolchain: stable-x86_64-pc-windows-gnu
+          toolchain: 1.99.0-x86_64-pc-windows-gnu
           targets: x86_64-pc-windows-gnu
       - uses: msys2/setup-msys2@ec48f7c5447b3140e2b088413ae3a55687bccb6e # v2
         with:
           msystem: UCRT64
           cache: false
+          # MSYS2 requires a coherent rolling package set; see release/README.md.
           update: true
           install: >-
             make perl curl tar
@@ -251,7 +252,7 @@ jobs:
           $loaderHash = (Get-FileHash "$root/WebView2Loader.dll" -Algorithm SHA256).Hash.ToLowerInvariant()
           "$hash  nekokem-gui.exe","$loaderHash  WebView2Loader.dll" | Set-Content "$root/SHA256SUMS.txt"
           $version = (Get-Content desktop/src-tauri/tauri.conf.json -Raw | ConvertFrom-Json).version
-          @{ source_sha=$env:GITHUB_SHA; run_id=$env:GITHUB_RUN_ID; version=$version; exe_sha256=$hash; platform='windows-x86_64'; openssl_version='4.0.3'; authenticode_signed=$false; apk_signing_material_used=$false } | ConvertTo-Json | Set-Content "$root/build-metadata.json"
+          @{ source_sha=$env:GITHUB_SHA; run_id=$env:GITHUB_RUN_ID; version=$version; exe_sha256=$hash; platform='windows-x86_64'; compiler_version='${{ steps.compiler.outputs.version }}'; openssl_version='4.0.3'; authenticode_signed=$false; apk_signing_material_used=$false } | ConvertTo-Json | Set-Content "$root/build-metadata.json"
           Compress-Archive -Path "$root/*" -DestinationPath "$env:RUNNER_TEMP/NekoKEM-Windows-GUI.zip"
           Remove-Item $env:TEMP -Recurse -Force
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
@@ -271,14 +272,14 @@ jobs:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
       - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
         with:
-          python-version: '3.13'
+          python-version: '3.13.16'
       - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
         with:
-          node-version: '24'
+          node-version: '24.21.0'
           package-manager-cache: false
       - uses: dtolnay/rust-toolchain@7e38f4b43b4db5c8dd498af069a4f6196df1d067 # master
         with:
-          toolchain: stable
+          toolchain: 1.99.0
           targets: aarch64-apple-darwin
       - name: Check the native architecture and set the OpenSSL prefix
         run: |
@@ -332,14 +333,14 @@ jobs:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
       - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
         with:
-          python-version: '3.13'
+          python-version: '3.13.16'
       - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
         with:
-          node-version: '24'
+          node-version: '24.21.0'
           package-manager-cache: false
       - uses: dtolnay/rust-toolchain@7e38f4b43b4db5c8dd498af069a4f6196df1d067 # master
         with:
-          toolchain: stable
+          toolchain: 1.99.0
           targets: ${{ matrix.arch }}-unknown-linux-gnu
       - name: Install native GTK/WebKit build tools
         run: |

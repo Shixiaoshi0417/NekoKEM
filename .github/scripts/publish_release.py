@@ -14,6 +14,7 @@ import re
 import subprocess
 import sys
 import tempfile
+from urllib.parse import quote
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import release_assets  # noqa: E402
@@ -28,6 +29,40 @@ def gh(*args, **kwargs):
 
 def api(path):
     return json.loads(gh('api', path))
+
+
+def list_releases(repo):
+    """Include drafts and releases older than the first API page."""
+    pages = json.loads(gh('api', '--paginate', '--slurp',
+                         f'repos/{repo}/releases?per_page=100'))
+    return [release for page in pages for release in page]
+
+
+def semantic_version(tag):
+    match = re.fullmatch(r'v([0-9]+)\.([0-9]+)\.([0-9]+)', tag)
+    return tuple(int(part) for part in match.groups()) if match else None
+
+
+def is_highest_version(tag, releases):
+    version = semantic_version(tag)
+    return all(semantic_version(release['tag_name']) <= version
+               for release in releases if not release['draft'] and
+               not release['prerelease'] and semantic_version(release['tag_name']) is not None)
+
+
+def restore_draft(repo, release_id):
+    """Report recovery failure without hiding the original publication error."""
+    endpoint = f'repos/{repo}/releases/{release_id}'
+    try:
+        gh('api', '-X', 'PATCH', endpoint, '-F', 'draft=true')
+        release_assets.require(api(endpoint)['draft'], 'GitHub did not restore draft status')
+    except Exception as error:
+        print(f'Release ID {release_id}: draft recovery failed ({error}); '
+              f'publication state is unconfirmed. Inspect {endpoint} before retrying.',
+              file=sys.stderr)
+    else:
+        print(f'Release ID {release_id} is a draft; verified files remain available for retry.',
+              file=sys.stderr)
 
 
 def peel_tag(repo, tag):
@@ -79,17 +114,23 @@ def plan_upload(existing, expected):
     """Return the draft assets to delete and the file names to upload.
 
     An interrupted upload can leave a draft with some assets, a partial one
-    or none. A complete asset with the expected digest is kept; a partial or
-    different one is replaced. A name this publication does not own is
-    refused rather than touched.
+    or none. Complete assets must have the expected digest. Only incomplete
+    starter assets are deleted for retry; unrelated names or complete assets
+    with a different digest are refused rather than touched.
     """
-    stale, kept = [], set()
+    stale, kept, seen = [], set(), set()
     for item in existing:
         release_assets.require(item['name'] in expected,
                                f"Unexpected asset {item['name']} on the draft")
-        if item.get('state') == 'uploaded' and item.get('digest') == expected[item['name']]:
+        release_assets.require(item['name'] not in seen, 'Existing draft assets have duplicate names')
+        seen.add(item['name'])
+        if item.get('state') == 'uploaded':
+            release_assets.require(item.get('digest') == expected[item['name']],
+                                   'Existing draft assets differ from the verified files')
             kept.add(item['name'])
         else:
+            release_assets.require(item.get('state') == 'starter',
+                                   'Existing draft asset has an unknown upload state')
             stale.append(item['id'])
     return stale, sorted(set(expected) - kept)
 
@@ -99,9 +140,9 @@ def main():
     tag = os.environ['TAG']
     ci_run = os.environ['CI_RUN']
     release_run = os.environ['RELEASE_RUN']
-    match = re.fullmatch(r'v(\d+\.\d+\.\d+)', tag)
+    match = re.fullmatch(r'v([0-9]+\.[0-9]+\.[0-9]+)', tag)
     release_assets.require(match is not None, 'TAG must look like v4.2.0')
-    release_assets.require(re.fullmatch(r'\d+', ci_run) and re.fullmatch(r'\d+', release_run),
+    release_assets.require(re.fullmatch(r'[0-9]+', ci_run) and re.fullmatch(r'[0-9]+', release_run),
                            'Run IDs must be numeric')
     version = match.group(1)
 
@@ -129,7 +170,8 @@ def main():
 
     tagged = peel_tag(repo, tag)
     release_assets.require(tagged in (None, source), f'Tag {tag} points to another commit')
-    matches = [release for release in api(f'repos/{repo}/releases?per_page=100')
+    releases = list_releases(repo)
+    matches = [release for release in releases
                if release['tag_name'] == tag]
     release_assets.require(len(matches) <= 1, f'Several releases use {tag}')
     if matches:
@@ -139,32 +181,54 @@ def main():
                                f'The existing {tag} draft differs from this publication')
     else:
         # The release list can lag behind a new draft, so keep the ID the create call returns.
-        created = json.loads(gh('api', '-X', 'POST', f'repos/{repo}/releases',
-                                '-f', f'tag_name={tag}', '-f', f'target_commitish={source}',
-                                '-f', f'name=NekoKEM {tag}', '-F', f'body=@{notes_path}',
-                                '-F', 'draft=true'))
-        release = api(f"repos/{repo}/releases/{created['id']}")
-        release_assets.require(release['draft'] and release['tag_name'] == tag,
-                               'GitHub did not create the expected draft')
+        try:
+            created = json.loads(gh('api', '-X', 'POST', f'repos/{repo}/releases',
+                                    '-f', f'tag_name={tag}', '-f', f'target_commitish={source}',
+                                    '-f', f'name=NekoKEM {tag}', '-F', f'body=@{notes_path}',
+                                    '-F', 'draft=true'))
+        except Exception:
+            print(f'Draft creation for {tag} did not return a release ID; '
+                  'creation state is unconfirmed. Inspect repository drafts before retrying.',
+                  file=sys.stderr)
+            raise
+        try:
+            release = api(f"repos/{repo}/releases/{created['id']}")
+            release_assets.require(release['draft'] and release['tag_name'] == tag and
+                                   release['target_commitish'] == source,
+                                   'GitHub did not create the expected draft')
+        except Exception:
+            restore_draft(repo, created['id'])
+            raise
     release_id = release['id']
     expected = {asset.name: 'sha256:' + release_assets.sha256(asset) for asset in assets}
-    stale, missing = plan_upload(release['assets'], expected)
-    for asset_id in stale:
-        gh('api', '-X', 'DELETE', f'repos/{repo}/releases/assets/{asset_id}')
-    if missing:
-        gh('release', 'upload', tag, '--repo', repo, *[str(public / name) for name in missing])
-    release = api(f'repos/{repo}/releases/{release_id}')
-    release_assets.require({item['name']: item['digest'] for item in release['assets']} == expected,
-                           'Uploaded assets differ from the verified files')
-    release_assets.require(release['body'] == notes, 'Draft notes differ from the verified notes')
+    endpoint = f'repos/{repo}/releases/{release_id}'
+    try:
+        stale, missing = plan_upload(release['assets'], expected)
+        for asset_id in stale:
+            gh('api', '-X', 'DELETE', f'repos/{repo}/releases/assets/{asset_id}')
+        for name in missing:
+            gh('api', '-X', 'POST',
+               f'https://uploads.github.com/repos/{repo}/releases/{release_id}/assets'
+               f'?name={quote(name, safe="")}',
+               '-H', 'Content-Type: application/octet-stream', '--input', str(public / name))
+        release = api(endpoint)
+        release_assets.require({item['name']: item['digest'] for item in release['assets']} == expected,
+                               'Uploaded assets differ from the verified files')
+        release_assets.require(release['body'] == notes, 'Draft notes differ from the verified notes')
 
-    gh('release', 'edit', tag, '--repo', repo, '--draft=false', '--latest')
-    release = api(f'repos/{repo}/releases/{release_id}')
-    release_assets.require(not release['draft'] and not release['prerelease'],
-                           f'{tag} was not published as a full release')
-    release_assets.require({item['name']: item['digest'] for item in release['assets']} == expected,
-                           'Published assets differ from the verified files')
-    release_assets.require(peel_tag(repo, tag) == source, f'Published {tag} points to another commit')
+        # Explicit false preserves the current Latest when publishing an older version.
+        latest = 'true' if is_highest_version(tag, list_releases(repo)) else 'false'
+        gh('api', '-X', 'PATCH', endpoint, '-F', 'draft=false', '-F', 'prerelease=false',
+           '-f', f'make_latest={latest}')
+        release = api(endpoint)
+        release_assets.require(not release['draft'] and not release['prerelease'],
+                               f'{tag} was not published as a full release')
+        release_assets.require({item['name']: item['digest'] for item in release['assets']} == expected,
+                               'Published assets differ from the verified files')
+        release_assets.require(peel_tag(repo, tag) == source, f'Published {tag} points to another commit')
+    except Exception:
+        restore_draft(repo, release_id)
+        raise
 
     summary = (f"Published [{tag}]({release['html_url']}) from `{source}`: "
                f"{len(assets)} attested assets, Android versionCode {version_code}.\n")

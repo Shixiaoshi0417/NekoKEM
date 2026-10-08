@@ -129,12 +129,11 @@ def zip_member(path, name):
 
 def android_tool(name):
     roots = [os.environ.get(key) for key in ('ANDROID_SDK_ROOT', 'ANDROID_HOME')]
-    tools = sorted({tool for root in roots if root
-                    for tool in Path(root).glob(f'build-tools/*/{name}')},
-                   key=lambda tool: [int(part) if part.isdigit() else part
-                                     for part in re.split(r'[.-]', tool.parent.name)])
-    require(tools, f'Android {name} is not installed')
-    return str(tools[-1])
+    for root in roots:
+        tool = Path(root) / 'build-tools' / '35.0.0' / name if root else None
+        if tool is not None and tool.is_file():
+            return str(tool)
+    raise ReleaseError(f'Android build-tools 35.0.0 {name} is not installed')
 
 
 def check_apk(apk, version, version_code):
@@ -157,7 +156,7 @@ def check_apk(apk, version, version_code):
 
 def verify(artifacts, version, source, run, apk_check=check_apk):
     artifacts = Path(artifacts)
-    require(re.fullmatch(r'\d+\.\d+\.\d+', version) is not None, 'Invalid version')
+    require(re.fullmatch(r'[0-9]+\.[0-9]+\.[0-9]+', version) is not None, 'Invalid version')
     require(re.fullmatch(r'[0-9a-f]{40}', source) is not None, 'Invalid source commit')
     check_internal_sums(artifacts)
 
