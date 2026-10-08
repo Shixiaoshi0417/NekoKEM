@@ -5,6 +5,7 @@
 #include "hybrid.h"
 #include "kem.h"
 #include "secure_mem.h"
+#include "x448_encoding.h"
 
 #include <openssl/core_names.h>
 #include <openssl/crypto.h>
@@ -12,7 +13,6 @@
 #include <openssl/evp.h>
 #include <openssl/kdf.h>
 #include <openssl/params.h>
-#include <openssl/proverr.h>
 #include <openssl/rand.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -340,8 +340,8 @@ enum {
 
 /*
  * X448 for one entry without printing anything, since trial decryption must
- * not report per entry. Returns 1, 0 when OpenSSL rejects the all-zero shared
- * secret, or -1 on any other failure, such as an allocation. Only a
+ * not report per entry. Returns 1, 0 for a non-canonical or small-order
+ * public key, or -1 on an operational failure, such as an allocation. Only a
  * small-order ephemeral key gives an all-zero secret: hybrid key loading
  * rejects the one private key that would give one for other keys too, so a
  * rejection depends on the container alone.
@@ -355,6 +355,12 @@ static int entry_x448_secret(EVP_PKEY *private_key,
     size_t secret_len = X448_SHARED_SECRET_SIZE;
     int result = -1;
 
+    /* Validate the public bytes directly instead of provider reason codes. */
+    if (!x448_public_is_canonical(ephemeral_public) ||
+        x448_public_has_small_order(ephemeral_public)) {
+        secure_mem_clear(secret, X448_SHARED_SECRET_SIZE);
+        return 0;
+    }
     (void)ERR_set_mark();
     peer = EVP_PKEY_new_raw_public_key_ex(NULL, X448_ALGORITHM_NAME, NULL,
                                           ephemeral_public,
@@ -366,11 +372,6 @@ static int entry_x448_secret(EVP_PKEY *private_key,
         EVP_PKEY_derive_set_peer(context, peer) > 0) {
         if (EVP_PKEY_derive(context, secret, &secret_len) > 0) {
             result = secret_len == X448_SHARED_SECRET_SIZE ? 1 : -1;
-        } else if (ERR_GET_LIB(ERR_peek_last_error()) == ERR_LIB_PROV &&
-                   ERR_GET_REASON(ERR_peek_last_error()) ==
-                       PROV_R_FAILED_DURING_DERIVATION) {
-            /* How OpenSSL's X448 reports an all-zero shared secret. */
-            result = 0;
         }
     }
     if (result < 0) {

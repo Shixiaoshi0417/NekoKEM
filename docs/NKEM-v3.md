@@ -84,6 +84,11 @@ ciphertext fail GCM authentication. Decryption validates the version,
 algorithm ID, fixed lengths, reserved fields, total size, and absence of
 trailing data before committing atomic plaintext output.
 
+X448 public keys, including the ephemeral key in a container, must use a
+canonical 56-byte little-endian encoding of `u < p`, where
+`p = 2^448 - 2^224 - 1`. Non-canonical encodings are rejected before import
+or key agreement; normally generated existing keys are unaffected.
+
 The implementation accepts at most `2^36 - 32` plaintext/ciphertext bytes in
 one v3 container. This is the byte-aligned form of the
 `len(P) <= 2^39 - 256` bit limit in NIST SP 800-38D, Section 5.2.1.1.

@@ -5,6 +5,7 @@
 
 #include <limits.h>
 #include <openssl/core_names.h>
+#include <openssl/err.h>
 #include <openssl/evp.h>
 #include <openssl/kdf.h>
 #include <openssl/params.h>
@@ -400,9 +401,10 @@ static int decrypt_pem(
     }
     if (EVP_DecryptFinal_ex(context, pem + (size_t)output_len,
                             &final_len) <= 0) {
-        print_openssl_error(
-            "Private-key password is incorrect or NKPR data "
-            "is corrupted");
+        /* Authentication failures do not expose provider-specific details. */
+        ERR_clear_error();
+        fputs(file_message("Private-key password is incorrect or NKPR data is corrupted"), stderr);
+        fputc('\n', stderr);
         goto cleanup;
     }
     if (output_len < 0 || final_len < 0 ||
@@ -558,7 +560,9 @@ int protected_private_key_decode(
     *pem = NULL;
     *pem_len = 0U;
     if (!nkpr_container_decode_internal(container, container_len,
-                                        &header, 1)) {
+                                        &header, 0)) {
+        fputs(file_message("Private-key password is incorrect or NKPR data is corrupted"), stderr);
+        fputc('\n', stderr);
         goto cleanup;
     }
     ciphertext_len = (size_t)header.ciphertext_len;

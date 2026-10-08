@@ -344,7 +344,9 @@ NKPR 是独立于 NKEM 文件容器的私钥存储格式；NKEM v3 不修改 NKP
 32-byte salt || 12-byte nonce || encrypted hybrid private PEM || 16-byte tag
 ```
 
-`header || salt || nonce` 全部作为 AES-GCM AAD。读取器严格验证版本、算法、参数、长度和 GCM 标签；错误密码与任何受认证字段或密文的修改都会失败。解密缓冲区即使在标签验证前产生数据也始终只驻留内存，并在失败路径清零。
+`header || salt || nonce` 全部作为 AES-GCM AAD。读取器严格验证版本、算法、参数、长度和 GCM 标签；错误密码与任何受认证字段或密文的修改都会失败，并对外统一报告无法解锁私钥，不区分错误口令与容器损坏。解密缓冲区即使在标签验证前产生数据也始终只驻留内存，并在失败路径清零。
+
+NKPR 的 AES-GCM 不具备密钥承诺性，不保证一个容器只能由唯一口令或保护密钥认证，也不提供跨保护密钥的明文一致性保证。此处说明现有格式的边界，不改变 NKPR 格式或密码参数。
 
 ## NKEM v3 hybrid 文件格式
 
@@ -352,13 +354,13 @@ v3 使用 X448、ML-KEM-1024、共享秘密组合和 HKDF-SHA512，并将 HKDF s
 
 ## NKEM v4 多接收方文件格式
 
-v4 用随机 32 字节文件密钥只加密一次文件数据，并为每位接收方（最多 64 位）各保存一条记录：X448 临时公钥、ML-KEM-1024 密文和用 AES-256-GCM 包装的文件密钥。包装密钥由 HKDF-SHA512 从该接收方的两个共享秘密派生，并绑定 X448 临时公钥与接收方 X448 公钥。HMAC-SHA512 头部 MAC 覆盖头部、salt 和全部接收方记录，承诺文件密钥，使所有接收方解出相同内容；记录不含指纹，解密时尝试全部记录，失败时的报错和耗时都不暴露哪条记录属于自己。完整布局见 [`docs/NKEM-v4.md`](docs/NKEM-v4.md)。`nekokem_encrypt_file_multi_with_progress()` 为两个及以上公钥写出 v4，只有一个公钥时写出 v3。
+v4 用随机 32 字节文件密钥只加密一次文件数据，并为每位接收方（最多 64 位）各保存一条记录：X448 临时公钥、ML-KEM-1024 密文和用 AES-256-GCM 包装的文件密钥。包装密钥由 HKDF-SHA512 从该接收方的两个共享秘密派生，并绑定 X448 临时公钥与接收方 X448 公钥。HMAC-SHA512 头部 MAC 覆盖头部、salt 和全部接收方记录，承诺文件密钥，使所有接收方解出相同内容；记录不含指纹，解密时尝试全部记录。不可关联性仅面向不持有相应私钥的非收件人：收件人可以识别自己的记录，并跨文件确认自己参与；统一错误和完整试解不会阻止收件人进行这种识别。完整布局见 [`docs/NKEM-v4.md`](docs/NKEM-v4.md)。`nekokem_encrypt_file_multi_with_progress()` 为两个及以上公钥写出 v4，只有一个公钥时写出 v3。
 
 ## 安全实现说明
 
 ### OpenSSL EVP
 
-- X448、ML-KEM-1024、HKDF、Argon2id 和 AES-256-GCM 均使用 OpenSSL EVP/provider API，不自行实现密码算法，也不引入 liboqs；
+- X448、ML-KEM-1024、HKDF、Argon2id 和 AES-256-GCM 均使用 OpenSSL EVP/provider API，不自行实现密码算法，也不引入 liboqs；导入公钥和容器中的 X448 临时公钥必须使用规范编码 `u < p`，现有正常密钥不受影响；
 - 所有 `EVP_PKEY`、`EVP_PKEY_CTX`、`EVP_CIPHER_CTX`、`EVP_KDF`、`EVP_KDF_CTX`、`EVP_MD_CTX` 和 `BIO` 都有统一的成功/失败释放路径；
 - OpenSSL 错误路径通过 `ERR_get_error()` 循环取出并清空当前线程的错误队列；
 - 私钥保留在 OpenSSL 的不透明 `EVP_PKEY`/provider 对象内，不导出原始私钥副本，并使用 `EVP_PKEY_free()` 释放。

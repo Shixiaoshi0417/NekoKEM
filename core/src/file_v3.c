@@ -1,4 +1,5 @@
 #include "file.h"
+#include "x448_encoding.h"
 
 #include <stdint.h>
 #include <stdio.h>
@@ -223,5 +224,6 @@ int nkem_v3_container_parse(const unsigned char *input, size_t input_len)
         return 0;
     }
     return nkem_v3_container_size_is_valid_internal(
-        &header, (uint64_t)input_len, 0);
+               &header, (uint64_t)input_len, 0) &&
+           x448_public_is_canonical(input + NKEM_V3_HEADER_SIZE);
 }

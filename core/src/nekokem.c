@@ -28,11 +28,11 @@ static int generate_keypair(const char *public_key_path,
     size_t index;
 
     if (!valid_path(public_key_path) || !valid_path(private_key_path)) {
-        fprintf(stderr, file_message("NekoKEM Core received an empty key path\\n"));
+        fprintf(stderr, file_message("NekoKEM Core received an empty key path\n"));
         return 0;
     }
     if (password == NULL || password_len == 0U) {
-        fprintf(stderr, file_message("A non-empty private-key password is required\\n"));
+        fprintf(stderr, file_message("A non-empty private-key password is required\n"));
         return 0;
     }
     paths[0] = public_key_path;
