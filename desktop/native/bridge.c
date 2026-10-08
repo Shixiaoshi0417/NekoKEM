@@ -12,6 +12,7 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <limits.h>
+#include <pwd.h>
 #include <sys/stat.h>
 #include <unistd.h>
 #endif
@@ -91,6 +92,7 @@ int desktop_write_private(const char *path, const unsigned char *bytes, size_t l
     AtomicFile output = {0};
     if (path == NULL || bytes == NULL || length == 0U) return 0;
     if (atomic_file_open(&output, path, 0600) &&
+        file_disable_buffering(output.stream) &&
         file_write_all(output.stream, bytes, length) &&
         atomic_file_commit(&output)) return 1;
     atomic_file_abort(&output);
@@ -138,12 +140,33 @@ const char *desktop_language(void)
 /* Creates a new private 0700 staging directory and returns its descriptor. */
 static int stage_directory(char *directory_path, size_t capacity)
 {
-    const char *base = getenv("TMPDIR");
-    if (base == NULL || base[0] != '/') base = "/tmp";
+    char fallback[PATH_MAX];
+    const char *base = getenv("XDG_RUNTIME_DIR");
+    struct stat status;
+    int runtime = base != NULL && base[0] == '/' ?
+        open(base, O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC) : -1;
+    int private_runtime = runtime >= 0 && fstat(runtime, &status) == 0 &&
+        S_ISDIR(status.st_mode) && status.st_uid == geteuid() &&
+        (status.st_mode & (mode_t)0777) == (mode_t)0700 &&
+        file_private_acl_is_safe(runtime);
+    if (runtime >= 0) (void)close(runtime);
+    if (!private_runtime) {
+        /* Same private user-directory fallback as the CLI, never shared /tmp. */
+        const char *home = getenv("HOME");
+        if (home == NULL || home[0] != '/') {
+            struct passwd *user = getpwuid(geteuid());
+            home = user == NULL ? NULL : user->pw_dir;
+        }
+        if (home == NULL || home[0] != '/' || lstat(home, &status) != 0 ||
+            !S_ISDIR(status.st_mode) || status.st_uid != geteuid()) return -1;
+        int length = snprintf(fallback, sizeof(fallback), "%s/.nekokem-tmp", home);
+        if (length < 0 || (size_t)length >= sizeof(fallback)) return -1;
+        if (!ensure_directory(fallback, 0700)) return -1;
+        base = fallback;
+    }
     int size = snprintf(directory_path, capacity, "%s/nekokem-gui-XXXXXX", base);
     if (size < 0 || (size_t)size >= capacity || mkdtemp(directory_path) == NULL) return -1;
     int directory = open(directory_path, O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC);
-    struct stat status;
     if (directory >= 0 && fstat(directory, &status) == 0 &&
         S_ISDIR(status.st_mode) && status.st_uid == geteuid() &&
         fchmod(directory, 0700) == 0 && file_private_acl_is_safe(directory)) return directory;
@@ -210,8 +233,8 @@ char *desktop_stage_key(const unsigned char *bytes, size_t length)
     FILE *stream = NULL;
 #ifdef _WIN32
     if (!windows_create_private_temp(&path, &stream)) return NULL;
-    int success = fwrite(bytes, 1, length, stream) == length && fflush(stream) == 0 &&
-                  _commit(_fileno(stream)) == 0;
+    int success = file_disable_buffering(stream) &&
+                  fwrite(bytes, 1, length, stream) == length && fflush(stream) == 0;
     if (fclose(stream) != 0) success = 0;
     if (!success) { (void)desktop_remove_staged_key(path); return NULL; }
     return path;
@@ -232,8 +255,8 @@ char *desktop_stage_key(const unsigned char *bytes, size_t length)
         success = stream != NULL;
     }
     if (success) {
-        success = fwrite(bytes, 1, length, stream) == length &&
-                  fflush(stream) == 0 && file_sync_regular_fd(fileno(stream)) == 0;
+        success = file_disable_buffering(stream) &&
+                  fwrite(bytes, 1, length, stream) == length && fflush(stream) == 0;
         if (fclose(stream) != 0) success = 0;
         descriptor = -1;
     } else if (descriptor >= 0) {

@@ -100,6 +100,8 @@ interface languages are updated. Cryptographic parameters, file formats and secr
 remain unchanged. See the [desktop GUI documentation](desktop/README.md#public-key-contacts--公钥通讯录).
 This feature is available from v3.3.2; v3.3.1 and earlier do not include it.
 
+Desktop encryption and decryption report an existing output before writing; confirm replacement and retry, re-entering the decryption password. Unconfirmed operations publish atomically without replacement, so a target created during the operation is also preserved. The backend accepts replacement only at the exact paths from its preceding `key-exists` or `output-exists` response in the same session, once within five minutes and consumed by the next operation. POSIX pasted keys prefer a safe `$XDG_RUNTIME_DIR`, then private `~/.nekokem-tmp`; staging disables stdio buffering and omits `fsync`. Capabilities grant only event listening, unlistening and native open/save dialogs. Navigation allows only the platform local origin, rejecting HTTPS and new windows. Recipient lists show full fingerprints; names drop controls, separators, bidi and zero-width characters.
+
 ## Historical release v3.2.0
 
 v3.2.0 introduced five interface languages, system-language selection and security fixes, and changed the Android release signer. Its migration instructions and historical build records remain in the [v3.2.0 notes](release/v3.2.0.md). Updating from v3.2.0 to v3.3.0 does not require another uninstall.
@@ -312,7 +314,7 @@ Listing two or more public keys after the usual encryption command writes one NK
 
 Hybrid decrypt prompts once for a password when the key file contains NKPR; it decides by the file header, not the extension. For compatibility with existing deployments, the command still accepts legacy plaintext `private.key` containing X448 and ML-KEM-1024 PEM blocks.
 
-The output path cannot be a key file the operation uses: decryption cannot write over the private key, and encryption cannot write over any public key. Files are compared by identity rather than by path text, so aliases such as `./keys/../keys/private.key.enc` are refused too, and the key file is left unchanged.
+The output path cannot be a key file the operation uses: decryption cannot write over the private key, and encryption cannot write over any public key. Public-key reads refuse symbolic links. Existing regular files are compared by identity, so aliases such as `./keys/../keys/private.key.enc` naming the same file are refused. This check does not promise isolation from every path-resolution alias or external writers that ignore locks.
 
 Commands can use the corresponding PEM keys from other locations:
 

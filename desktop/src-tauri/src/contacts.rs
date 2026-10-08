@@ -106,7 +106,7 @@ impl Store {
             Source::Path(path) => (clean_name(file_name(path)), None, core::path(path)?),
             Source::Text(text) => {
                 let stage = Staged::new(text)?;
-                let input = stage.path().to_owned();
+                let input = stage.path().ok_or_else(||Failure::new("internal"))?.to_owned();
                 (String::new(), Some(stage), input)
             }
         };
@@ -138,7 +138,7 @@ impl Store {
     pub fn stage(&self, id: &str) -> Result<(Staged, String), Failure> {
         let record = self.read(checked(id)?)?;
         let mut stage = Staged::new(&record.public_key)?;
-        if core::fingerprint(stage.path()).as_deref() == Some(record.fingerprint.as_str()) {
+        if stage.path().and_then(core::fingerprint).as_deref() == Some(record.fingerprint.as_str()) {
             return Ok((stage, record.fingerprint));
         }
         if !stage.close() { return Err(Failure::new("cleanup-error")); }
@@ -164,13 +164,13 @@ impl Store {
         // components, never extra PEM blocks or text from the source file.
         let mut output = Staged::output()?;
         let result = (|| {
-            if unsafe { nekokem_export_public_key(input.as_ptr(), output.path().as_ptr()) } != 1 {
+            if unsafe { nekokem_export_public_key(input.as_ptr(), output.path().ok_or_else(||Failure::new("internal"))?.as_ptr()) } != 1 {
                 return Err(Failure::new("public-key-invalid"));
             }
-            if core::fingerprint(output.path()).as_deref() != Some(fingerprint.as_str()) {
+            if output.path().and_then(core::fingerprint).as_deref() != Some(fingerprint.as_str()) {
                 return Err(Failure::new(MISMATCH));
             }
-            let public_key = read_private(output.path(), MAX_PUBLIC_KEY_BYTES)
+            let public_key = read_private(output.path().ok_or_else(||Failure::new("internal"))?, MAX_PUBLIC_KEY_BYTES)
                 .and_then(|bytes| String::from_utf8(bytes).ok())
                 .filter(|key| valid_public_key(key))
                 .ok_or_else(|| Failure::new("public-key-invalid"))?;
@@ -270,7 +270,7 @@ fn file_name(path: &str) -> &str { path.rsplit(['/', '\\']).next().unwrap_or_def
 // bidirectional formatting characters so a name cannot disguise itself.
 fn clean_name(name: &str) -> String {
     let visible: String = name.chars()
-        .filter(|&c| !c.is_control() && !matches!(c, '\u{061c}' | '\u{200e}' | '\u{200f}' | '\u{202a}'..='\u{202e}' | '\u{2066}'..='\u{2069}'))
+        .filter(|&c| !c.is_control() && !matches!(c, '\u{061c}' | '\u{200b}'..='\u{200f}' | '\u{2028}'..='\u{202e}' | '\u{2060}' | '\u{2066}'..='\u{2069}' | '\u{feff}'))
         .collect();
     visible.trim().chars().take(MAX_NAME_CHARS).collect::<String>().trim_end().into()
 }
@@ -331,6 +331,12 @@ pub mod tests {
     fn rewrite(store: &Store, id: &str, json: &str) {
         let path = CString::new(store.file(id)).unwrap();
         assert_eq!(unsafe { desktop_write_private(path.as_ptr(), json.as_ptr(), json.len()) }, 1);
+    }
+
+    #[test]
+    fn source_names_drop_controls_separators_bidi_and_zero_width_characters() {
+        assert_eq!(clean_name(" a\u{0085}\u{2028}\u{2029}\u{061c}\u{200b}\u{200c}\u{200d}\u{200e}\u{200f}\u{202a}\u{202e}\u{2060}\u{2066}\u{2069}\u{feff}b.pub "),"ab.pub");
+        assert_eq!(clean_name(&"猫".repeat(129)).chars().count(),128);
     }
 
     #[test]
@@ -423,7 +429,7 @@ pub mod tests {
         let bob_record = store.read(&store.save(Source::Path(&bob), "Bob").unwrap().id).unwrap();
         let (mut staged, fingerprint) = store.stage(&saved.id).unwrap();
         assert_eq!(fingerprint, alice_fingerprint);
-        assert_eq!(fs::read_to_string(staged.path().to_str().unwrap()).unwrap(), store.read(&saved.id).unwrap().public_key);
+        assert_eq!(fs::read_to_string(staged.path().unwrap().to_str().unwrap()).unwrap(), store.read(&saved.id).unwrap().public_key);
         assert!(staged.close());
 
         // Bob's valid key under Alice's identity is detected by Core's fingerprint.
@@ -521,10 +527,9 @@ pub mod tests {
         use std::os::unix::fs::PermissionsExt;
         let _core = core_lock();
         let home = Directory::new();
-        let saved: Vec<_> = ["XDG_CONFIG_HOME", "HOME"].iter().map(|name| (*name, std::env::var_os(name))).collect();
-        let restore = || for (name, value) in &saved {
-            match value { Some(value) => std::env::set_var(name, value), None => std::env::remove_var(name) }
-        };
+        struct Environment(Vec<(&'static str,Option<std::ffi::OsString>)>);
+        impl Drop for Environment {fn drop(&mut self){for (name,value) in &self.0 {match value {Some(value)=>std::env::set_var(name,value),None=>std::env::remove_var(name)}}}}
+        let environment=Environment(["XDG_CONFIG_HOME","HOME"].iter().map(|&name|(name,std::env::var_os(name))).collect());
         std::env::set_var("HOME", &home.0);
         std::env::set_var("XDG_CONFIG_HOME", "relative/ignored");
         let opened = Store::open().map(|store| store.directory);
@@ -536,7 +541,7 @@ pub mod tests {
         fs::set_permissions(xdg.join("nekokem/contacts"), fs::Permissions::from_mode(0o700)).unwrap();
         fs::set_permissions(xdg.join("nekokem"), fs::Permissions::from_mode(0o755)).unwrap();
         let unsafe_parent = Store::open().map(|store| store.directory);
-        restore();
+        drop(environment);
         assert_eq!(opened.unwrap(), home.file(".config/nekokem/contacts"));
         assert_eq!(fs::metadata(home.0.join(".config/nekokem")).unwrap().permissions().mode() & 0o777, 0o700);
         assert_eq!(configured.unwrap(), format!("{}/nekokem/contacts", xdg.display()));

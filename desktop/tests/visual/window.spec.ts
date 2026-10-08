@@ -108,6 +108,7 @@ test('minimum native window fits all five languages and pasted-key layouts',asyn
   await page.locator('.contact-actions.confirming .text-button').click();
   await page.locator('.operation-tab').nth(1).click();await page.getByRole('radio').nth(2).check();
   await page.locator('[name=contacts]').first().check();
+  await expect(page.locator('.recipient-option code').first()).toHaveText(Array(32).fill('A1').join(':'));
   await expect(page.locator('.contact-preview code')).toBeVisible();await noHorizontalOverflow(page);
   await page.locator('[name=contacts]').nth(1).check();
   await expect(page.locator('.multi-hint')).toBeVisible();await noHorizontalOverflow(page);
