@@ -57,7 +57,8 @@ static void cli_paste_untrack(void)
 /*
  * Ctrl+C, Ctrl+Break and a closed console run this on another thread, then
  * the process exits. Core's partial outputs are delete-pending until their
- * commit, so Windows removes them with the process.
+ * commit, so Windows removes them with the process; Core first lets a
+ * publication in progress finish and blocks any later one.
  */
 static BOOL WINAPI cli_console_interrupted(DWORD event)
 {
@@ -69,6 +70,7 @@ static BOOL WINAPI cli_console_interrupted(DWORD event)
         (void)windows_delete_regular(cli_paste_file);
         (void)windows_remove_directory(cli_paste_directory);
     }
+    file_remove_temporary_outputs();
     return FALSE;
 }
 

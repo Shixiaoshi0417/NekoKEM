@@ -142,8 +142,10 @@ void atomic_file_abort(AtomicFile *file);
 /*
  * Removes the temporary file of every output not yet committed or aborted,
  * for a program about to die of a signal; outputs other threads are writing
- * are removed too. Async-signal-safe. Windows needs no call: an output stays
- * delete-pending until its commit, so the system removes it with the process.
+ * are removed too. Async-signal-safe. On Windows an output stays
+ * delete-pending until its commit, so the system removes it with the
+ * process; this call (from a console control handler) waits for a
+ * publication in progress and blocks later ones, so none is left half-done.
  */
 void file_remove_temporary_outputs(void);
 

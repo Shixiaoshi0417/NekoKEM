@@ -445,6 +445,13 @@ static char *win_random_path(const char *path, const char *suffix)
 
 static int win_dispose(HANDLE handle);
 
+/*
+ * Publishing clears an output's pending deletion and then renames it. Ctrl+C
+ * between the two would keep the temporary file, so file_remove_temporary_
+ * outputs waits for a publication in progress and blocks any later one.
+ */
+static SRWLOCK win_publication = SRWLOCK_INIT;
+
 int atomic_file_open(AtomicFile *file, const char *final_path, mode_t mode)
 {
     if (file == NULL || (mode != 0600 && mode != 0644)) return 0;
@@ -623,6 +630,7 @@ static int win_commit_pair(AtomicFile *first, AtomicFile *second, int replace)
     int published[2] = {0, 0};
     int preserve[2] = {0, 0};
     size_t count = second == NULL ? 1 : 2;
+    int publishing = 0;
     int success = 0;
     if (first == NULL || first == second || first->platform_state == NULL ||
         (second != NULL && second->platform_state == NULL)) return 0;
@@ -669,6 +677,9 @@ static int win_commit_pair(AtomicFile *first, AtomicFile *second, int replace)
     }
     if (count == 2 && old[0] != INVALID_HANDLE_VALUE && old[1] != INVALID_HANDLE_VALUE &&
         win_same(old[0], old[1])) goto cleanup;
+    /* Held until every output is published or disposed of again below. */
+    AcquireSRWLockExclusive(&win_publication);
+    publishing = 1;
     for (size_t i = 0; i < count; ++i) {
         WinAtomic *state = files[i]->platform_state;
         if (!win_keep(state->output) ||
@@ -730,6 +741,7 @@ cleanup:
             memset(files[i], 0, sizeof(*files[i]));
         } else atomic_file_abort(files[i]);
     }
+    if (publishing) ReleaseSRWLockExclusive(&win_publication);
     if (!success) print_system_error("Cannot commit atomic output transaction");
     return success;
 }
@@ -751,6 +763,8 @@ int atomic_file_commit(AtomicFile *file)
 
 void file_remove_temporary_outputs(void)
 {
+    /* Never released: the process is ending. */
+    AcquireSRWLockExclusive(&win_publication);
 }
 
 void atomic_file_abort(AtomicFile *file)
