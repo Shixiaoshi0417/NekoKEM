@@ -9,6 +9,8 @@
  * again while stopped. Call once at start, before any prompt.
  */
 void cli_install_interrupt_handlers(void);
+/* Disable process dumps before reading key material or passwords. */
+int cli_disable_core_dumps(void);
 void cli_print_help(const char *program);
 void cli_print_usage(const char *program);
 

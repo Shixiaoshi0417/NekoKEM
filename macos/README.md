@@ -33,6 +33,15 @@ GUI 构建说明见仓库的 [desktop/README.md](https://github.com/Shixiaoshi04
 
 ## 语言与文件安全
 
+
+新私钥口令必须是有效 UTF-8；解锁现有密钥保留原字节解释。交互解密拒绝已有
+`plaintext/<name>`，包括输入口令期间才创建的目标文件。菜单选 5 或 EOF 返回
+最近一次操作的结果，尚未操作视为成功。路径显示过滤控制字符、双向控制及零宽字符。
+CLI 启动禁用 core dump；粘贴密钥使用安全的 `XDG_RUNTIME_DIR`，否则使用
+`~/.nekokem-tmp` 下的 `0700` 私有目录，不对临时明文执行 fsync，并保留信号清理。
+SIGKILL 等强制终止仍可能留下暂存文件，确认无进程使用后仅清理自己的
+`nekokem-paste.*`。加密 PKCS#8 PEM 粘贴会立即拒绝，请改选 NKPR 文件。
+
 支持简体中文、繁体中文、英语、日语、韩语。CLI 优先级为 `--lang` → 保存的 `--set-lang` 偏好 → `LC_ALL` → `LC_MESSAGES` → `LANG` → CoreFoundation 首选语言；不支持的语言回退英语。`--lang system` 绕过已保存语言，`--set-lang system` 恢复自动检测。POSIX 配置沿用 Linux：绝对 `$XDG_CONFIG_HOME/nekokem/language`，否则为 `$HOME/.config/nekokem/language`，文件权限 `0600`。未设置 Locale 环境变量的 macOS 原生启动按 UTF-8 处理；显式 ASCII 设置仍回退英语。
 
 导入 NKPR 必须是当前用户拥有、权限为 `0600`、只有一个硬链接的普通文件，且没有扩展 ACL 的 allow 条目；不能用宽松权限替代这些检查。私有目录要求当前用户所有、`0700`，扩展 ACL 只允许空或 deny-only。普通文件先 `fsync` 再强制 `F_FULLFSYNC`，父目录使用 `fsync`；失败或不支持时拒绝，不静默降级。文件系统大小写或 Unicode 等价名称导致的密钥输出别名会触发拒绝及进程内回滚。细节、失败边界和原生测试范围见 [SECURITY-DESIGN.md](SECURITY-DESIGN.md)。
@@ -73,6 +82,18 @@ The internal checksums detect damaged files; they do not replace trusted build p
 See the repository's [desktop/README.md](https://github.com/Shixiaoshi0417/NekoKEM/blob/main/desktop/README.md) for GUI builds. GUI packages are `NekoKEM-macos-arm64-GUI.zip` and `NekoKEM-macos-arm64-GUI.dmg`. The ZIP contains `NekoKEM.app`, documentation, licenses, checksums and build metadata. Tauri's original `NekoKEM_4.1.0_aarch64.dmg` is checked before export under the stable package name. The GUI provides native file dialogs, progress, cancellation, five languages and animations that respect reduced-motion preferences.
 
 ## Language and file security
+
+
+New private-key passwords require valid UTF-8; existing-key passwords retain their
+original byte interpretation. Interactive decryption refuses an existing
+`plaintext/<name>`, including a destination created while the password is entered.
+Exit option 5 and EOF return the most recent operation's result (success before any
+operation). Displayed paths filter terminal controls, bidi controls and zero-width
+characters. CLI startup disables core dumps. Pasted keys use a safe `XDG_RUNTIME_DIR`
+or a `0700` private directory under `~/.nekokem-tmp`, without fsync for temporary
+plaintext; signal cleanup remains. SIGKILL can leave residues: remove only your own
+`nekokem-paste.*` after ensuring no process uses them. Encrypted PKCS#8 PEM paste is
+rejected immediately; select an NKPR file instead.
 
 Simplified Chinese, Traditional Chinese, English, Japanese and Korean are supported. CLI precedence is `--lang` → saved `--set-lang` preference → `LC_ALL` → `LC_MESSAGES` → `LANG` → CoreFoundation preferred language; unsupported languages fall back to English. `--lang system` bypasses the saved language and `--set-lang system` restores automatic detection. POSIX preferences follow Linux: absolute `$XDG_CONFIG_HOME/nekokem/language`, otherwise `$HOME/.config/nekokem/language`, with mode `0600`. Native macOS launches without locale environment variables use UTF-8; explicit ASCII settings still fall back to English.
 

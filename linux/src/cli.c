@@ -13,6 +13,13 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
+#ifndef _WIN32
+#include <pwd.h>
+#include <sys/resource.h>
+#ifdef __linux__
+#include <sys/prctl.h>
+#endif
+#endif
 #include "terminal.h"
 
 #define PUBLIC_KEY_PATH "keys/public.key"
@@ -79,8 +86,8 @@ void cli_install_interrupt_handlers(void)
     (void)SetConsoleCtrlHandler(cli_console_interrupted, TRUE);
 }
 #else
-static char cli_paste_file[64];
-static char cli_paste_directory[64];
+static char cli_paste_file[4096];
+static char cli_paste_directory[4096];
 static volatile sig_atomic_t cli_paste_active;
 
 static void cli_paste_track(const char *file, const char *directory)
@@ -184,8 +191,110 @@ void cli_install_interrupt_handlers(void)
 }
 #endif
 
+int cli_disable_core_dumps(void)
+{
+#ifndef _WIN32
+    const struct rlimit limit = {0, 0};
+    if (setrlimit(RLIMIT_CORE, &limit) != 0) {
+        print_system_error("Cannot disable core dumps");
+        return 0;
+    }
+#ifdef __linux__
+    if (prctl(PR_SET_DUMPABLE, 0, 0, 0, 0) != 0) {
+        print_system_error("Cannot disable process dumpability");
+        return 0;
+    }
+#endif
+#endif
+    return 1;
+}
+
+/* Reject malformed UTF-8 for newly created passwords without changing the
+ * byte interpretation of passwords used to unlock an existing private key. */
+static int password_is_utf8(const unsigned char *data, size_t length)
+{
+    size_t index = 0U;
+    while (index < length) {
+        unsigned int first = data[index++];
+        unsigned int scalar;
+        unsigned int minimum;
+        size_t continuation;
+        if (first < 0x80U) continue;
+        if (first >= 0xc2U && first <= 0xdfU) {
+            scalar = first & 0x1fU; minimum = 0x80U; continuation = 1U;
+        } else if (first >= 0xe0U && first <= 0xefU) {
+            scalar = first & 0x0fU; minimum = 0x800U; continuation = 2U;
+        } else if (first >= 0xf0U && first <= 0xf4U) {
+            scalar = first & 0x07U; minimum = 0x10000U; continuation = 3U;
+        } else return 0;
+        if (continuation > length - index) return 0;
+        while (continuation-- > 0U) {
+            unsigned int next = data[index++];
+            if ((next & 0xc0U) != 0x80U) return 0;
+            scalar = (scalar << 6U) | (next & 0x3fU);
+        }
+        if (scalar < minimum || scalar > 0x10ffffU ||
+            (scalar >= 0xd800U && scalar <= 0xdfffU)) return 0;
+    }
+    return 1;
+}
+
+#ifndef _WIN32
+static int private_temp_parent(const char *path)
+{
+    struct stat status;
+    return path != NULL && path[0] == '/' && lstat(path, &status) == 0 &&
+           S_ISDIR(status.st_mode) && status.st_uid == geteuid() &&
+           (status.st_mode & (mode_t)0777) == (mode_t)0700;
+}
+
+static char *create_paste_directory(void)
+{
+    const char *parent = getenv("XDG_RUNTIME_DIR");
+    char *fallback = NULL;
+    char *directory = NULL;
+    size_t capacity;
+    if (!private_temp_parent(parent)) {
+        const char *home = getenv("HOME");
+        struct stat status;
+        if (home == NULL || home[0] != '/') {
+            struct passwd *user = getpwuid(geteuid());
+            home = user == NULL ? NULL : user->pw_dir;
+        }
+        if (home == NULL || home[0] != '/' || lstat(home, &status) != 0 ||
+            !S_ISDIR(status.st_mode) || status.st_uid != geteuid()) {
+            errno = EACCES;
+            goto cleanup;
+        }
+        capacity = strlen(home) + sizeof("/.nekokem-tmp");
+        fallback = malloc(capacity);
+        if (fallback == NULL) goto cleanup;
+        (void)snprintf(fallback, capacity, "%s/.nekokem-tmp", home);
+        if (!ensure_directory(fallback, 0700)) goto cleanup;
+        parent = fallback;
+    }
+    capacity = strlen(parent) + sizeof("/nekokem-paste.XXXXXX");
+    /* The signal-cleanup buffers must retain every accepted temporary name. */
+    if (capacity + sizeof("/key.pem") > sizeof(cli_paste_file)) {
+        errno = ENAMETOOLONG;
+        goto cleanup;
+    }
+    directory = malloc(capacity);
+    if (directory == NULL) goto cleanup;
+    (void)snprintf(directory, capacity, "%s/nekokem-paste.XXXXXX", parent);
+    if (mkdtemp(directory) == NULL) {
+        free(directory);
+        directory = NULL;
+    }
+cleanup:
+    free(fallback);
+    return directory;
+}
+#endif
+
 static void print_usage(FILE *output, const char *program)
 {
+    const char *safe_program = file_display_safe_path(program);
     fprintf(output,
             file_message("Usage:\n"
             "  %s\n"
@@ -197,7 +306,8 @@ static void print_usage(FILE *output, const char *program)
             "[<public.key> ...]\n"
             "  %s decrypt hybrid <input_file> <output_file> "
             "<private.key|private.key.enc>\n"),
-            program, program, program, program, program, program, program);
+            safe_program, safe_program, safe_program, safe_program,
+            safe_program, safe_program, safe_program);
     fputs(file_message(
         "  --help                 Show this help\n"
         "  --lang LANGUAGE        Override language for this command\n"
@@ -249,6 +359,10 @@ static int read_password_line(const char *prompt,
     buffer = OPENSSL_zalloc(capacity);
     if (buffer == NULL) {
         print_openssl_error("Cannot allocate password buffer");
+        goto cleanup;
+    }
+    if (cli_terminal_is_echoing_pty()) {
+        fputs(file_message("Cannot hide secret input in an MSYS or mintty terminal; use Windows Terminal or redirected stdin\n"), stderr);
         goto cleanup;
     }
     if (!cli_terminal_hide(&original_terminal, &echo_disabled)) {
@@ -336,6 +450,10 @@ static int prompt_new_private_key_password(PasswordBuffer *password)
         fprintf(stderr, file_message("两次输入的密码不一致\n"));
         goto cleanup;
     }
+    if (!password_is_utf8(password->data, password->length)) {
+        fputs(file_message("New private-key passwords must be valid UTF-8\n"), stderr);
+        goto cleanup;
+    }
     success = 1;
 
 cleanup:
@@ -420,7 +538,7 @@ int cli_run_hybrid_encrypt(const char *input_path,
         return 0;
     }
     printf(file_message("Encrypted hybrid NKEM v3 %s -> %s\n"),
-           input_path, output_path);
+           file_display_safe_path(input_path), file_display_safe_path(output_path));
     return 1;
 }
 
@@ -435,7 +553,8 @@ int cli_run_hybrid_encrypt_multi(const char *input_path,
         return 0;
     }
     printf(file_message("Encrypted NKEM v4 for %zu recipients %s -> %s\n"),
-           public_key_count, input_path, output_path);
+           public_key_count, file_display_safe_path(input_path),
+           file_display_safe_path(output_path));
     return 1;
 }
 
@@ -456,7 +575,7 @@ int cli_run_hybrid_decrypt(const char *input_path,
     }
     password_buffer_cleanup(&password);
     printf(file_message("Decrypted NKEM %s -> %s\n"),
-           input_path, output_path);
+           file_display_safe_path(input_path), file_display_safe_path(output_path));
     success = 1;
 
 cleanup:
@@ -579,9 +698,6 @@ static int collect_pasted_key(int private_key, char **temporary_path)
 #ifndef _WIN32
     static const char filename[] = "/key.pem";
 #endif
-#ifndef _WIN32
-    char directory_template[] = "/tmp/nekokem-paste.XXXXXX";
-#endif
     const char *end_marker = private_key != 0 ? private_end : public_end;
     CliTerminal original_terminal;
     FILE *output = NULL;
@@ -609,7 +725,7 @@ static int collect_pasted_key(int private_key, char **temporary_path)
     *last_separator = '\0';
     cli_paste_track(path, directory);
 #else
-    directory = mkdtemp(directory_template);
+    directory = create_paste_directory();
     if (directory == NULL) {
         print_system_error("Cannot create private temporary directory");
         goto cleanup;
@@ -663,6 +779,10 @@ static int collect_pasted_key(int private_key, char **temporary_path)
             print_system_error("Cannot display private-key prompt");
             goto cleanup;
         }
+        if (cli_terminal_is_echoing_pty()) {
+            fputs(file_message("Cannot hide secret input in an MSYS or mintty terminal; use Windows Terminal or redirected stdin\n"), stderr);
+            goto cleanup;
+        }
         if (!cli_terminal_hide(&original_terminal, &echo_disabled)) {
             print_system_error("Cannot disable private-key echo");
             goto cleanup;
@@ -676,6 +796,12 @@ static int collect_pasted_key(int private_key, char **temporary_path)
     while (end_markers < 2U) {
         if (!read_pasted_key_line(&line, &line_length,
                                   &line_capacity)) {
+            goto cleanup;
+        }
+        if (private_key != 0 &&
+            (strstr(line, "-----BEGIN ENCRYPTED PRIVATE KEY-----") != NULL ||
+             strstr(line, "-----END ENCRYPTED PRIVATE KEY-----") != NULL)) {
+            fputs(file_message("Encrypted PKCS#8 PEM cannot be pasted; use an NKPR private-key file instead\n"), stderr);
             goto cleanup;
         }
         if (line_length > MAX_PASTED_KEY_SIZE - total_size) {
@@ -706,11 +832,7 @@ static int collect_pasted_key(int private_key, char **temporary_path)
             goto cleanup;
         }
     }
-#ifdef _WIN32
-    if (fflush(output) != 0 || fsync(fileno(output)) != 0) {
-#else
-    if (fflush(output) != 0 || file_sync_regular_fd(fileno(output)) != 0) {
-#endif
+    if (fflush(output) != 0) {
         print_system_error("Cannot flush temporary key file");
         goto cleanup;
     }
@@ -756,9 +878,7 @@ cleanup:
     if (success == 0) {
         cli_paste_untrack();
     }
-#ifdef _WIN32
     free(directory);
-#endif
     return success;
 }
 
@@ -936,7 +1056,7 @@ static int interactive_encrypt(void)
     if (output_path == NULL) {
         goto cleanup;
     }
-    printf(file_message("输出文件：%s\n"), output_path);
+    printf(file_message("输出文件：%s\n"), file_display_safe_path(output_path));
     success = cli_run_hybrid_encrypt(input_path, output_path, key_path);
 
 cleanup:
@@ -969,8 +1089,24 @@ static int interactive_decrypt(void)
     if (!ensure_directory("plaintext", 0700)) {
         goto cleanup;
     }
-    printf(file_message("输出文件：%s\n"), output_path);
-    success = cli_run_hybrid_decrypt(input_path, output_path, key_path);
+    {
+        int exists = 0;
+        if (!file_path_exists(output_path, &exists)) {
+            print_system_error("Cannot check the output file path");
+            goto cleanup;
+        }
+        if (exists != 0) {
+            fprintf(stderr, file_message("Output already exists; move or remove it before decrypting: %s\n"),
+                    file_display_safe_path(output_path));
+            goto cleanup;
+        }
+    }
+    printf(file_message("输出文件：%s\n"), file_display_safe_path(output_path));
+    {
+        int previous_policy = file_set_output_no_replace(1);
+        success = cli_run_hybrid_decrypt(input_path, output_path, key_path);
+        (void)file_set_output_no_replace(previous_policy);
+    }
 
 cleanup:
     cleanup_key_input(key_path, temporary);
@@ -999,6 +1135,7 @@ static int interactive_fingerprint(void)
 
 int cli_run_interactive_menu(void)
 {
+    int last_success = 1;
     for (;;) {
         char *choice;
 
@@ -1014,19 +1151,19 @@ int cli_run_interactive_menu(void)
                "\n"));
         choice = read_prompt_line(file_message("请选择 [1-5]："));
         if (choice == NULL) {
-            return cli_input_eof() != 0 ? 1 : 0;
+            return cli_input_eof() != 0 ? last_success : 0;
         }
         if (strcmp(choice, "1") == 0) {
-            (void)generate_hybrid_keypair(1, 0);
+            last_success = generate_hybrid_keypair(1, 0);
         } else if (strcmp(choice, "2") == 0) {
-            (void)interactive_encrypt();
+            last_success = interactive_encrypt();
         } else if (strcmp(choice, "3") == 0) {
-            (void)interactive_decrypt();
+            last_success = interactive_decrypt();
         } else if (strcmp(choice, "4") == 0) {
-            (void)interactive_fingerprint();
+            last_success = interactive_fingerprint();
         } else if (strcmp(choice, "5") == 0) {
             free(choice);
-            return 1;
+            return last_success;
         } else {
             fprintf(stderr, file_message("无效选择，请输入 1 到 5。\n"));
         }

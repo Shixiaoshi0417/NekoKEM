@@ -99,7 +99,7 @@ Android App 版本为 `3.1.1`，Core 版本保持 `3.1`，application ID 为
 协议编号：默认文件容器仍为 **NKEM v3**，NKPR 格式保持不变。
 
 v3.1.1 新增无需运行时共享库依赖的 Linux x86_64/aarch64 CLI 发行包、
-自动安装脚本和 GitHub Actions 构建流程。安装脚本自动选择最新 GitHub
+自动安装脚本和 GitHub Actions 构建流程。当前安装脚本固定下载 `v4.1.0`
 Release 中与本机架构匹配的包，先使用 Release 顶层 `SHA256SUMS.txt` 验证
 归档，再验证包内文件的 SHA-256：
 
@@ -109,6 +109,8 @@ curl --fail --location --output install.sh \
 less install.sh
 sh install.sh
 ```
+
+校验和只能检查下载完整性，不能证明来源。`NEKOKEM_VERIFY_ATTESTATION=1 sh install.sh` 还会使用 `gh attestation verify` 校验来源证明；仅适用于 `v4.1.0` 之后带证明的发布，当前固定的历史版本缺少证明时会拒绝安装。
 
 Linux CLI 支持 `nekokem --version`。此发行补丁不改变 Core API、密码参数、
 NKEM v3 或 NKPR 格式。
@@ -251,7 +253,9 @@ plaintext/test.jpg -> encrypted/test.jpg.nkem
 
 可以输入私钥文件路径，也可以继续粘贴两个兼容的明文 PEM 私钥块。私钥文件内容是 NKPR 容器时（按文件头识别，与扩展名无关，例如 Android 导出的 `private.nkpr`），程序会自动关闭终端回显并提示输入密码，在内存中认证、解密并解析 NKPR；解出的 PEM 不会写入磁盘。旧的明文 PEM 私钥（如 `private.key`）不需要密码。
 
-粘贴旧式私钥内容时终端回显同样会被临时关闭；内部使用的 `0600` 临时密钥文件会在操作结束后删除。在隐藏输入的提示处按 Ctrl+Z 时，程序暂停期间恢复回显，`fg` 继续后再次隐藏。
+粘贴旧式私钥内容时终端回显同样会被临时关闭；内部使用的 `0600` 临时密钥文件会在操作结束后删除。在隐藏输入的提示处按 Ctrl+Z 时，程序暂停期间恢复回显，`fg` 继续后再次隐藏。粘贴加密 PKCS#8 PEM 会立即拒绝并提示改用 NKPR 文件。Windows 检测到不能可靠关闭回显的 mintty/MSYS 伪终端时拒绝秘密输入，请改用 Windows Terminal 或重定向标准输入。
+
+交互解密拒绝已存在的 `plaintext/<name>`，包括输入口令期间才创建的目标；最终提交采用原子“不覆盖”操作。菜单选 5 或遇到 EOF 的退出状态等于最近一次操作结果，尚未操作视为成功。只有新设置的私钥口令要求有效 UTF-8，解锁已有密钥仍按原字节解释。显示文件名和路径时把终端控制、双向控制和零宽字符替换为 `?`，文件操作仍使用原始路径。
 
 输入文件必须以 `.nkem` 结尾。程序会确保当前工作目录下存在权限为 `0700` 的 `plaintext/`；如果不存在则自动创建。输出只使用容器文件名，自动去掉 `.nkem`，并恢复到 `plaintext/`：
 
@@ -394,7 +398,7 @@ v4 用随机 32 字节文件密钥只加密一次文件数据，并为每位接�
 - 公私钥生成使用同一个可回滚事务：两边都完成写入和 `fsync` 后才发布；第二次 rename 或目录 `fsync` 失败会恢复旧公私钥（原本不存在则两边都移除），避免只更新一把密钥；
 - POSIX 上，成对密钥提交持有父目录的进程间锁直到回滚和清理结束；回滚前核对已发布文件的 inode，避免删除其他写入者替换后的文件。目录中的 `0600` 锁文件 `.nekokem-pair.lock` 会保留，运行期间不要删除；
 - Hybrid keygen 直接把两个私钥 PEM 写入 OpenSSL memory BIO，再加密为 NKPR 暂存文件，并与公钥一致提交；没有明文私钥输出文件或明文私钥临时文件；
-- CLI 的 Core 接口当前是路径式 API。粘贴 PEM 因而使用 `/tmp` 下独占 `0700` 目录中的 `0600`、`O_NOFOLLOW|O_CLOEXEC` 临时文件，并在所有返回路径删除文件和目录。直接 memory BIO 需要新增内部 Core 适配层，memfd 的 `/proc/self/fd` 路径又会与私钥 `O_NOFOLLOW` 策略冲突；本阶段不改变公开 Core API，后续可在独立 API 设计中消除该临时路径；
+- CLI 的 Core 接口当前是路径式 API。粘贴 PEM 优先使用安全的 `$XDG_RUNTIME_DIR`，否则使用 `~/.nekokem-tmp` 下独占 `0700` 目录中的 `0600`、`O_NOFOLLOW|O_CLOEXEC` 临时文件；临时明文不执行 `fsync`，在所有返回路径删除文件和目录。SIGKILL 或断电仍可能留下暂存文件，仅在确认没有进程使用后清理自己的 `nekokem-paste.*`。POSIX CLI 启动时禁止 core dump，Linux 同时禁止进程 dumpability；
 - `secure_free()` 只用于 `OPENSSL_malloc()` 分配的敏感缓冲区，普通路径字符串和公开元数据仍由匹配的常规分配器释放。
 
 ## 性能测量

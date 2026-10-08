@@ -108,7 +108,7 @@ v3.2.0 introduced five interface languages, system-language selection and securi
 
 The Android App version is `3.1.1`; the Core version remains `3.1`, and the application ID is `com.shixiaoshi0417.nekokem`. See [`android/README.md`](android/README.md) for the Android project and build instructions. App version 3.1.1 does not change protocol numbering: the default file container remains **NKEM v3**, and the NKPR format is unchanged.
 
-v3.1.1 adds Linux x86_64/aarch64 CLI packages without runtime shared-library dependencies, an automatic installation script, and GitHub Actions builds. The installer selects the package for the local architecture from the latest GitHub Release. It first verifies the archive against the release's top-level `SHA256SUMS.txt`, then verifies SHA-256 hashes of the files inside the package:
+v3.1.1 adds Linux x86_64/aarch64 CLI packages without runtime shared-library dependencies, an automatic installation script, and GitHub Actions builds. The current installer selects the package for the local architecture from the fixed `v4.1.0` Release. It first verifies the archive against the release's top-level `SHA256SUMS.txt`, then verifies SHA-256 hashes of the files inside the package:
 
 ```sh
 curl --fail --location --output install.sh \
@@ -116,6 +116,8 @@ curl --fail --location --output install.sh \
 less install.sh
 sh install.sh
 ```
+
+Checksums verify download integrity, not provenance. `NEKOKEM_VERIFY_ATTESTATION=1 sh install.sh` additionally invokes `gh attestation verify`; this applies to attested releases after `v4.1.0` and refuses installation when proof is unavailable for the currently pinned historical release.
 
 The Linux CLI supports `nekokem --version`. This release patch does not change the Core API, cryptographic parameters, NKEM v3, or the NKPR format.
 
@@ -257,7 +259,9 @@ plaintext/test.jpg -> encrypted/test.jpg.nkem
 
 Enter a private-key file path or paste two compatible plaintext PEM private-key blocks. When the key file contains an NKPR container (recognized by its header, whatever the extension, for example `private.nkpr` exported by Android), the program automatically disables terminal echo and prompts for a password, then authenticates, decrypts, and parses NKPR in memory. The decrypted PEM is not written to disk. Legacy plaintext PEM private keys such as `private.key` need no password.
 
-Terminal echo is also temporarily disabled when pasting legacy private-key contents. The internal temporary key file has mode `0600` and is deleted after the operation. Ctrl+Z at a hidden prompt shows input again while the program is stopped, and `fg` hides it again.
+Terminal echo is also temporarily disabled when pasting legacy private-key contents. The internal temporary key file has mode `0600` and is deleted after the operation. Ctrl+Z at a hidden prompt shows input again while the program is stopped, and `fg` hides it again. Encrypted PKCS#8 PEM paste is rejected immediately with guidance to select an NKPR file. Secret input is refused in detected mintty/MSYS ptys that cannot reliably hide echo; use Windows Terminal or redirected standard input.
+
+Interactive decryption refuses an existing `plaintext/<name>`, including targets created while entering the password; final publication uses an atomic no-replace operation. Menu option 5 and EOF return the most recent operation's result, with success before any operation. Only newly set private-key passwords require valid UTF-8; existing-key passwords retain their original byte interpretation. Displayed names and paths replace terminal controls, bidi controls and zero-width characters with `?`, while filesystem operations use the original paths.
 
 The input file must end in `.nkem`. The program ensures a `plaintext/` directory with mode `0700` exists in the working directory, creating it if necessary. It uses only the container filename, removes `.nkem`, and restores the file into `plaintext/`:
 
@@ -400,7 +404,7 @@ v4 encrypts the file data once under a random 32-byte file key and stores one en
 - Public/private key generation uses one rollback-capable transaction. Both files are written and `fsync`ed before publishing. If the second rename or directory `fsync` fails, old public/private keys are restored; when previously absent, both new files are removed, avoiding an update to only one key.
 - On POSIX, paired key commits hold interprocess locks in their parent directories through rollback and cleanup. Rollback checks the published inode before removing a file, preserving a replacement made by another writer. The mode `0600` lock file `.nekokem-pair.lock` remains in each directory; do not delete it while operations are running.
 - Hybrid keygen writes both private-key PEM blocks directly into an OpenSSL memory BIO, encrypts them into an NKPR temporary file, and commits it together with the public key. There is no plaintext private-key output or temporary file.
-- The CLI currently uses a path-based Core API. Pasted PEM therefore uses a `0600`, `O_NOFOLLOW|O_CLOEXEC` temporary file inside an exclusive `0700` directory under `/tmp`, and deletes both on all return paths. Direct memory BIO use would require a new internal Core adapter; memfd's `/proc/self/fd` paths conflict with the private-key `O_NOFOLLOW` policy. This stage does not change the public Core API; a separate future API design can eliminate the temporary path.
+- The CLI currently uses a path-based Core API. Pasted PEM prefers a safe `$XDG_RUNTIME_DIR`, then an exclusive `0700` directory under `~/.nekokem-tmp`, with a `0600`, `O_NOFOLLOW|O_CLOEXEC` temporary file. Temporary plaintext is not `fsync`ed, and both file and directory are deleted on all return paths. SIGKILL or power loss can leave staging files; clean only your own `nekokem-paste.*` after ensuring no process uses them. POSIX CLI startup disables core dumps; Linux also disables process dumpability.
 - `secure_free()` is used only for sensitive buffers allocated by `OPENSSL_malloc()`; ordinary path strings and public metadata are released by their matching normal allocators.
 
 ## Performance measurements

@@ -2,6 +2,12 @@
 set -eu
 
 readonly_repository="Shixiaoshi0417/NekoKEM"
+release_tag="v4.1.0"
+verify_attestation=${NEKOKEM_VERIFY_ATTESTATION:-0}
+case "$verify_attestation" in
+    0 | 1) ;;
+    *) printf 'NekoKEM installer error: NEKOKEM_VERIFY_ATTESTATION must be 0 or 1\n' >&2; exit 1 ;;
+esac
 install_dir=${NEKOKEM_INSTALL_DIR:-/usr/local/bin}
 case "$install_dir" in
     /*) ;;
@@ -52,6 +58,10 @@ else
     fail "curl or wget is required to download the GitHub Release; this installer does not install dependencies"
 fi
 
+if [ "$verify_attestation" = "1" ]; then
+    require_tool gh
+fi
+
 tmp_base=${TMPDIR:-/tmp}
 work_dir=$(mktemp -d "$tmp_base/nekokem-install.XXXXXX") || \
     fail "cannot create a private temporary directory"
@@ -67,10 +77,10 @@ trap cleanup EXIT HUP INT TERM
 package_name="NekoKEM-linux-$release_arch"
 archive_name="$package_name.tar.gz"
 archive_path="$work_dir/$archive_name"
-release_url="https://github.com/$readonly_repository/releases/latest/download/$archive_name"
+release_url="https://github.com/$readonly_repository/releases/download/$release_tag/$archive_name"
 release_sums_name="SHA256SUMS.txt"
 release_sums_path="$work_dir/$release_sums_name"
-release_sums_url="https://github.com/$readonly_repository/releases/latest/download/$release_sums_name"
+release_sums_url="https://github.com/$readonly_repository/releases/download/$release_tag/$release_sums_name"
 
 download_release_file() {
     source_url=$1
@@ -79,16 +89,16 @@ download_release_file() {
     if [ "$download_tool" = "curl" ]; then
         curl --fail --location --silent --show-error --proto '=https' \
             --tlsv1.2 --retry 3 --output "$destination_path" \
-            "$source_url" || fail "cannot download $display_name from the latest GitHub Release"
+            "$source_url" || fail "cannot download $display_name from GitHub Release $release_tag"
     else
         wget --quiet --https-only --output-document="$destination_path" \
-            "$source_url" || fail "cannot download $display_name from the latest GitHub Release"
+            "$source_url" || fail "cannot download $display_name from GitHub Release $release_tag"
     fi
     [ -s "$destination_path" ] || fail "downloaded $display_name is empty"
 }
 
-printf 'Downloading the latest NekoKEM Linux release for %s...\n' \
-    "$release_arch"
+printf 'Downloading NekoKEM %s for Linux %s...\n' \
+    "$release_tag" "$release_arch"
 download_release_file "$release_url" "$archive_path" "$archive_name"
 download_release_file "$release_sums_url" "$release_sums_path" \
     "$release_sums_name"
@@ -115,6 +125,11 @@ expected_archive_sha=$(awk -v archive="$archive_name" '
     printf '%s  %s\n' "$expected_archive_sha" "$archive_name" | \
         sha256sum -c -
 ) || fail "release archive SHA-256 verification failed; the release was not installed"
+
+if [ "$verify_attestation" = "1" ]; then
+    gh attestation verify "$archive_path" --repo "$readonly_repository" ||
+        fail "release archive provenance verification failed; the release was not installed"
+fi
 
 member_list="$work_dir/archive-members"
 tar -tzf "$archive_path" > "$member_list" || \
@@ -168,7 +183,7 @@ chmod 0755 "$package_dir/nekokem" || fail "cannot mark the binary executable"
 package_version=$("$package_dir/nekokem" --version 2>/dev/null) ||
     fail "the downloaded binary cannot run on this system"
 case "$package_version" in
-    "NekoKEM "*) ;;
+    "NekoKEM ${release_tag#v}") ;;
     *) fail "the downloaded executable returned an unexpected version string" ;;
 esac
 
