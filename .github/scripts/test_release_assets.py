@@ -12,6 +12,7 @@ import unittest
 from unittest import mock
 import zipfile
 
+import publish_release
 import release_assets as assets
 
 VERSION = '4.2.0'
@@ -188,6 +189,35 @@ class ReleaseAssetTests(unittest.TestCase):
                                             'ANDROID_HOME': ''}):
             with self.assertRaises(assets.ReleaseError):
                 assets.android_tool('apksigner')
+
+
+
+class DraftResumeTests(unittest.TestCase):
+    expected = {'a.zip': 'sha256:' + 'a' * 64, 'b.zip': 'sha256:' + 'b' * 64,
+                'SHA256SUMS.txt': 'sha256:' + 'c' * 64}
+
+    def asset(self, identifier, name, digest, state='uploaded'):
+        return {'id': identifier, 'name': name, 'digest': digest, 'state': state}
+
+    def test_new_draft_uploads_everything(self):
+        self.assertEqual(publish_release.plan_upload([], self.expected),
+                         ([], sorted(self.expected)))
+
+    def test_interrupted_upload_resumes(self):
+        existing = [self.asset(1, 'a.zip', self.expected['a.zip']),
+                    self.asset(2, 'b.zip', None, state='starter'),
+                    self.asset(3, 'SHA256SUMS.txt', 'sha256:' + 'd' * 64)]
+        self.assertEqual(publish_release.plan_upload(existing, self.expected),
+                         ([2, 3], ['SHA256SUMS.txt', 'b.zip']))
+
+    def test_complete_draft_needs_nothing(self):
+        existing = [self.asset(index, name, digest)
+                    for index, (name, digest) in enumerate(self.expected.items())]
+        self.assertEqual(publish_release.plan_upload(existing, self.expected), ([], []))
+
+    def test_foreign_asset_is_refused(self):
+        with self.assertRaises(assets.ReleaseError):
+            publish_release.plan_upload([self.asset(9, 'other.bin', None)], self.expected)
 
 
 if __name__ == '__main__':

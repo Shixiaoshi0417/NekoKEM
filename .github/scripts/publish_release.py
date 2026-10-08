@@ -75,6 +75,25 @@ def check_attestation(repo, path, source, release_run):
                            f'{path.name} is not attested by Release run {release_run}')
 
 
+def plan_upload(existing, expected):
+    """Return the draft assets to delete and the file names to upload.
+
+    An interrupted upload can leave a draft with some assets, a partial one
+    or none. A complete asset with the expected digest is kept; a partial or
+    different one is replaced. A name this publication does not own is
+    refused rather than touched.
+    """
+    stale, kept = [], set()
+    for item in existing:
+        release_assets.require(item['name'] in expected,
+                               f"Unexpected asset {item['name']} on the draft")
+        if item.get('state') == 'uploaded' and item.get('digest') == expected[item['name']]:
+            kept.add(item['name'])
+        else:
+            stale.append(item['id'])
+    return stale, sorted(set(expected) - kept)
+
+
 def main():
     repo = os.environ['REPO']
     tag = os.environ['TAG']
@@ -129,8 +148,11 @@ def main():
                                'GitHub did not create the expected draft')
     release_id = release['id']
     expected = {asset.name: 'sha256:' + release_assets.sha256(asset) for asset in assets}
-    if not release['assets']:
-        gh('release', 'upload', tag, '--repo', repo, *[str(asset) for asset in assets])
+    stale, missing = plan_upload(release['assets'], expected)
+    for asset_id in stale:
+        gh('api', '-X', 'DELETE', f'repos/{repo}/releases/assets/{asset_id}')
+    if missing:
+        gh('release', 'upload', tag, '--repo', repo, *[str(public / name) for name in missing])
     release = api(f'repos/{repo}/releases/{release_id}')
     release_assets.require({item['name']: item['digest'] for item in release['assets']} == expected,
                            'Uploaded assets differ from the verified files')
