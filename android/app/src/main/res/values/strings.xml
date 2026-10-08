@@ -222,4 +222,6 @@
     <string name="key_source_contacts_multiple">Saved public-key contacts (%1$d recipients)</string>
     <string name="contact_recipients_selected">Recipients selected</string>
     <string name="contact_failed_recipient">Unavailable recipient: %1$s</string>
+    <string name="recovery_backups_title">Recovery backups retained</string>
+    <string name="recovery_backups_message">%1$d recovery backup(s) remain in app-private storage because an earlier key or document replacement could not finish safely. They have not been deleted. Export and check the current keys/files before manually recovering or removing these backups; see the Android README.</string>
 </resources>

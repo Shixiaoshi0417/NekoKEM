@@ -33,4 +33,13 @@ class DisplayNameTest {
         assertEquals("fallback", displaySafeName(" \n‮ ", "fallback"))
         assertEquals("a b", displaySafeName("  a b  ", "fallback"))
     }
+    @Test
+    fun saveNamesUseTheSameVisibleCharacterRulesWithoutChangingExtensions() {
+        val spoof = "dir/\uFEFFreport\u0085\u2028\u2029\u202E\u2066\u200B\u200D.txt"
+        assertEquals("report.txt.nkem", encryptedOutputName(spoof, "default"))
+        assertEquals("report.txt", decryptedOutputName(spoof + ".NKEM", "default", "plain"))
+        assertEquals("decrypted_report.txt", decryptedOutputName(spoof, "default", "plain"))
+        assertEquals("default.nkem", encryptedOutputName("\u0085\u202E\u200B", "default"))
+    }
+
 }

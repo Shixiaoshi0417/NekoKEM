@@ -251,6 +251,8 @@ private fun NekoKEMRoute(
     var progressCancelRequested by remember { mutableStateOf(false) }
     var completedOperation by remember { mutableStateOf<CompletedOperation?>(null) }
     var failedOperation by remember { mutableStateOf<FailedOperation?>(null) }
+    var recoveryBackupCount by remember { mutableStateOf(0) }
+    var recoveryWarningDismissed by remember { mutableStateOf(false) }
     val selectedInputUri = selectedInputState.uriString?.let(Uri::parse)
     val selectedInputName = selectedInputState.displayName
     val selectedDocument = if (
@@ -301,6 +303,9 @@ private fun NekoKEMRoute(
             }
         }
         contactsState = pageWork { publicKeyContacts.readState() }
+        val backups = pageWork { keyManager.recoveryBackupCount() + fileWorkflow.recoveryBackupCount() }
+        if (backups > recoveryBackupCount) recoveryWarningDismissed = false
+        recoveryBackupCount = backups
         // Checkbox state only: deleted entries leave the pending selection. Chosen
         // recipients are kept and reported as unavailable, never dropped silently.
         contactSelection = contactSelection.filter { id -> contactsState.contacts.any { it.id == id } }
@@ -409,11 +414,7 @@ private fun NekoKEMRoute(
 
     /** Takes ownership of [privateKeyPassword]. */
     fun importPublicKeyFrom(uri: Uri, privateKeyPassword: ByteArray?) {
-        val displayName = try {
-            fileWorkflow.describe(uri).displayName
-        } catch (_: Exception) {
-            context.getString(R.string.default_public_key_filename)
-        }
+        var displayName = context.getString(R.string.default_public_key_filename)
         runKeyOperation(
             operationResource = R.string.operation_import_public_key,
             sensitiveInput = privateKeyPassword,
@@ -421,6 +422,7 @@ private fun NekoKEMRoute(
                 keyCompletionDetails(displayName, state.fingerprint)
             },
         ) {
+            displayName = fileWorkflow.describe(uri).displayName
             fileWorkflow.importPublicKey(uri, privateKeyPassword)
         }
     }
@@ -453,12 +455,13 @@ private fun NekoKEMRoute(
         running = false
     }
 
-    fun reportFileResult(
+    suspend fun reportFileResult(
         @StringRes operationResource: Int,
         code: Int,
         progress: OperationProgressSnapshot,
         fileName: String,
     ) {
+        refreshState()
         when (code) {
             NativeBridge.RESULT_SUCCESS -> clearFileSelection(
                 if (operationResource == R.string.operation_encrypt_file) {
@@ -498,12 +501,14 @@ private fun NekoKEMRoute(
         ActivityResultContracts.OpenDocument(),
     ) { uri ->
         if (uri != null) {
-            val document = fileWorkflow.describe(uri)
-            transitionInputSelection(
-                InputSelectionEvent.SELECT_NEW,
-                document.uri,
-                document.displayName,
-            )
+            scope.launch {
+                val document = pageWork { fileWorkflow.describe(uri) }
+                transitionInputSelection(
+                    InputSelectionEvent.SELECT_NEW,
+                    document.uri,
+                    document.displayName,
+                )
+            }
         }
     }
 
@@ -539,14 +544,13 @@ private fun NekoKEMRoute(
         if (uri == null) {
             showSnackbar(R.string.snackbar_operation_cancelled)
         } else if (!running) {
-            val document = fileWorkflow.describe(uri)
             running = true
             scope.launch {
                 val outcome = try {
                     pageWork {
                         fileWorkflow.stageTemporaryPublicKey(
                             uri,
-                            document.displayName,
+                            fileWorkflow.describe(uri).displayName,
                         )
                     }
                 } catch (_: Exception) {
@@ -603,14 +607,13 @@ private fun NekoKEMRoute(
         if (uri == null) {
             showSnackbar(R.string.snackbar_operation_cancelled)
         } else if (!running) {
-            val document = fileWorkflow.describe(uri)
             running = true
             scope.launch {
                 val outcome = try {
                     pageWork {
                         fileWorkflow.stageTemporaryPrivateKey(
                             uri,
-                            document.displayName,
+                            fileWorkflow.describe(uri).displayName,
                         )
                     }
                 } catch (_: Exception) {
@@ -693,12 +696,8 @@ private fun NekoKEMRoute(
             return@rememberLauncherForActivityResult
         }
 
-        val destinationName = try {
-            fileWorkflow.describe(destination).displayName
-        } catch (_: Exception) {
-            selectedDocument?.displayName
-                ?: context.getString(R.string.default_selected_filename)
-        }
+        var destinationName = selectedDocument?.displayName
+            ?: context.getString(R.string.default_selected_filename)
 
         when (action) {
             PendingOutputAction.ENCRYPT_FILE -> {
@@ -717,6 +716,7 @@ private fun NekoKEMRoute(
                     scope.launch {
                         val result = try {
                             pageWork {
+                                destinationName = fileWorkflow.describe(destination).displayName
                                 fileWorkflow.commitPreparedEncryption(
                                     prepared,
                                     destination,
@@ -755,6 +755,7 @@ private fun NekoKEMRoute(
                     scope.launch {
                         val result = try {
                             pageWork {
+                                destinationName = fileWorkflow.describe(destination).displayName
                                 fileWorkflow.commitPreparedDecryption(
                                     prepared,
                                     destination,
@@ -787,6 +788,7 @@ private fun NekoKEMRoute(
                         )
                     },
                 ) {
+                    destinationName = fileWorkflow.describe(destination).displayName
                     fileWorkflow.exportPublicKey(destination)
                 }
             }
@@ -798,6 +800,7 @@ private fun NekoKEMRoute(
                         keyCompletionDetails(destinationName)
                     },
                 ) {
+                    destinationName = fileWorkflow.describe(destination).displayName
                     fileWorkflow.exportEncryptedPrivateKey(destination)
                 }
             }
@@ -959,6 +962,10 @@ private fun NekoKEMRoute(
     // This page's cache starts empty; PageCache removes earlier pages' files
     // only after their operations have returned.
     LaunchedEffect(Unit) {
+        pageWork {
+            keyManager.cleanupExpiredCandidates()
+            fileWorkflow.cleanupExpiredOutputBackups()
+        }
         refreshState()
     }
 
@@ -1060,13 +1067,7 @@ private fun NekoKEMRoute(
                             password.fill(0)
                             showSnackbar(R.string.snackbar_operation_cancelled)
                         } else {
-                            val displayName = try {
-                                fileWorkflow.describe(uri).displayName
-                            } catch (_: Exception) {
-                                context.getString(
-                                    R.string.default_private_key_filename,
-                                )
-                            }
+                            var displayName = context.getString(R.string.default_private_key_filename)
                             runKeyOperation(
                                 operationResource =
                                     R.string.operation_import_private_key,
@@ -1075,6 +1076,7 @@ private fun NekoKEMRoute(
                                     keyCompletionDetails(displayName)
                                 },
                             ) {
+                                displayName = fileWorkflow.describe(uri).displayName
                                 fileWorkflow.importEncryptedPrivateKey(uri, password)
                             }
                         }
@@ -1463,6 +1465,19 @@ private fun NekoKEMRoute(
             operationResource = failure.operationResource,
             reason = failure.reason,
             onDismiss = { resetOperationState() },
+        )
+    }
+
+    if (recoveryBackupCount > 0 && !recoveryWarningDismissed && !running) {
+        AlertDialog(
+            onDismissRequest = { recoveryWarningDismissed = true },
+            title = { Text(stringResource(R.string.recovery_backups_title)) },
+            text = { Text(stringResource(R.string.recovery_backups_message, recoveryBackupCount)) },
+            confirmButton = {
+                TextButton(onClick = { recoveryWarningDismissed = true }) {
+                    Text(stringResource(R.string.action_close))
+                }
+            },
         )
     }
 

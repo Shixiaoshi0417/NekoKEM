@@ -221,4 +221,6 @@
     <string name="key_source_contacts_multiple">公钥通讯录（%1$d 位接收方）</string>
     <string name="contact_recipients_selected">已选择接收方</string>
     <string name="contact_failed_recipient">无法使用的接收方：%1$s</string>
+    <string name="recovery_backups_title">已保留恢复备份</string>
+    <string name="recovery_backups_message">应用私有存储中保留了 %1$d 个恢复备份，因为此前的密钥或文档替换未能安全完成。这些备份没有被删除。请先导出并检查当前密钥和文件，再手动恢复或清理备份；详见 Android README。</string>
 </resources>

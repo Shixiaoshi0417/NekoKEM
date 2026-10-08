@@ -3,6 +3,7 @@ package com.shixiaoshi0417.nekokem.files
 import android.content.Context
 import android.net.Uri
 import android.provider.OpenableColumns
+import androidx.annotation.WorkerThread
 import android.system.Os
 import android.system.OsConstants
 import com.shixiaoshi0417.nekokem.R
@@ -24,6 +25,7 @@ import java.io.FileOutputStream
 import java.io.IOException
 import java.io.RandomAccessFile
 import java.security.MessageDigest
+import java.util.concurrent.ConcurrentHashMap
 
 data class SelectedDocument(
     val uri: Uri,
@@ -165,7 +167,16 @@ class SafFileWorkflow(
             val needsRestore = state != OutputState.UNMODIFIED
             state = OutputState.FINISHED
             if (needsRestore && saved != null && !restoreFileToUri(saved, destination)) {
-                // Keep the private backup if the provider cannot restore it.
+                // Recovery files survive startup cleanup until manually recovered.
+                val recovery = File(outputBackupDirectory, saved.name.removeSuffix(TEMPORARY_SUFFIX) + RECOVERY_SUFFIX)
+                try {
+                    Os.rename(saved.absolutePath, recovery.absolutePath)
+                    activeOutputBackups.remove(saved.absolutePath)
+                    backup = recovery
+                } catch (_: Exception) {
+                    // The original backup is also recognized as recovery material.
+                    activeOutputBackups.remove(saved.absolutePath)
+                }
                 return
             }
             clearAndDelete(saved)
@@ -173,6 +184,7 @@ class SafFileWorkflow(
         }
     }
 
+    @WorkerThread
     fun describe(uri: Uri): SelectedDocument = SelectedDocument(
         uri = uri,
         displayName = displaySafeName(queryDisplayName(uri), defaultSelectedFilename),
@@ -796,6 +808,45 @@ class SafFileWorkflow(
         }
     }
 
+    /** Old empty staging backups are disposable; every nonempty backup may need recovery. */
+    @WorkerThread
+    fun cleanupExpiredOutputBackups(now: Long = System.currentTimeMillis()): Int {
+        if (!ownedPrivateDirectory(outputBackupDirectory)) return 0
+        outputBackupDirectory.listFiles().orEmpty().forEach { file ->
+            if (isExpiredEmptyOutputBackup(file, now)) clearAndDelete(file)
+        }
+        return recoveryBackupCount()
+    }
+
+    @WorkerThread
+    fun recoveryBackupCount(): Int {
+        if (!ownedPrivateDirectory(outputBackupDirectory)) return 0
+        return outputBackupDirectory.listFiles().orEmpty().count { file ->
+            file.name.startsWith(OUTPUT_BACKUP_PREFIX) &&
+                !activeOutputBackups.contains(file.absolutePath) &&
+                (file.name.endsWith(RECOVERY_SUFFIX) ||
+                    (file.name.endsWith(TEMPORARY_SUFFIX) && file.length() > 0L)) &&
+                ownedSingleRegularFile(file)
+        }
+    }
+
+    private fun isExpiredEmptyOutputBackup(file: File, now: Long): Boolean =
+        file.name.startsWith(OUTPUT_BACKUP_PREFIX) && file.name.endsWith(TEMPORARY_SUFFIX) &&
+            !activeOutputBackups.contains(file.absolutePath) && ownedSingleRegularFile(file) && file.length() == 0L &&
+            file.lastModified() > 0L && now >= file.lastModified() &&
+            now - file.lastModified() >= TEMPORARY_MAX_AGE_MILLIS
+
+    private fun ownedSingleRegularFile(file: File): Boolean = try {
+        val status = Os.lstat(file.absolutePath)
+        OsConstants.S_ISREG(status.st_mode) && status.st_uid == Os.getuid() && status.st_nlink == 1L
+    } catch (_: Exception) { false }
+
+    private fun ownedPrivateDirectory(directory: File): Boolean = try {
+        val status = Os.lstat(directory.absolutePath)
+        OsConstants.S_ISDIR(status.st_mode) && status.st_uid == Os.getuid() &&
+            (status.st_mode and PERMISSION_MASK) == PRIVATE_DIRECTORY_MODE
+    } catch (_: Exception) { false }
+
     private fun queryDisplayName(uri: Uri): String? = try {
         contentResolver.query(
             uri,
@@ -973,6 +1024,7 @@ class SafFileWorkflow(
                     outputBackupDirectory,
                 )
                 backup = saved
+                activeOutputBackups.add(saved.absolutePath)
                 FileOutputStream(saved, false).use { backupStream ->
                     var total = 0L
                     while (true) {
@@ -1165,6 +1217,7 @@ class SafFileWorkflow(
             // Deletion is still attempted; no path or contents are logged.
         } finally {
             file.delete()
+            activeOutputBackups.remove(file.absolutePath)
         }
     }
 
@@ -1177,6 +1230,7 @@ class SafFileWorkflow(
     }
 
     private companion object {
+        val activeOutputBackups = ConcurrentHashMap.newKeySet<String>()
         const val COPY_BUFFER_SIZE = 64 * 1024
         // Plaintext and containers have separate limits, so every file that
         // can be encrypted can also be decrypted again: a container adds
@@ -1208,6 +1262,8 @@ class SafFileWorkflow(
         const val TEMPORARY_PUBLIC_CANONICAL_PREFIX = "nkem-selected-pub-"
         const val TEMPORARY_PRIVATE_PREFIX = "nkem-selected-prv-"
         const val TEMPORARY_SUFFIX = ".tmp"
+        const val RECOVERY_SUFFIX = ".recovery"
+        const val TEMPORARY_MAX_AGE_MILLIS = 24L * 60L * 60L * 1000L
         const val WRITE_TRUNCATE_MODE = "wt"
         const val READ_WRITE_MODE = "rw"
         const val SHA256_ALGORITHM = "SHA-256"

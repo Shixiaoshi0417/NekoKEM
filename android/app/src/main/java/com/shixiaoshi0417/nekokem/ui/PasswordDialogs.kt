@@ -31,6 +31,8 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.DialogProperties
+import androidx.compose.ui.window.SecureFlagPolicy
 import com.shixiaoshi0417.nekokem.R
 import java.security.MessageDigest
 
@@ -51,9 +53,12 @@ fun GeneratePasswordDialog(
     }
 
     AlertDialog(
+        properties = DialogProperties(securePolicy = SecureFlagPolicy.SecureOn),
         onDismissRequest = {
             password.fill(0)
             confirmation.fill(0)
+            password = ByteArray(0)
+            confirmation = ByteArray(0)
             onDismiss()
         },
         title = { Text(stringResource(R.string.generate_password_title)) },
@@ -116,6 +121,8 @@ fun GeneratePasswordDialog(
                 onClick = {
                     password.fill(0)
                     confirmation.fill(0)
+                    password = ByteArray(0)
+                    confirmation = ByteArray(0)
                     onDismiss()
                 },
             ) {
@@ -141,8 +148,10 @@ fun SinglePasswordDialog(
     }
 
     AlertDialog(
+        properties = DialogProperties(securePolicy = SecureFlagPolicy.SecureOn),
         onDismissRequest = {
             password.fill(0)
+            password = ByteArray(0)
             onDismiss()
         },
         title = { Text(stringResource(titleResource)) },
@@ -184,6 +193,7 @@ fun SinglePasswordDialog(
             TextButton(
                 onClick = {
                     password.fill(0)
+                    password = ByteArray(0)
                     onDismiss()
                 },
             ) {

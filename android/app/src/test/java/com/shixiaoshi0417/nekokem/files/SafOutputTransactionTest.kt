@@ -236,4 +236,40 @@ class SafOutputTransactionTest {
         assertTrue(backups().isEmpty())
     }
 
+    @Test fun startupCleansOnlyExpiredOwnedEmptyBackups() {
+        val directory = File(context.cacheDir, "nekokem-output-backups").apply { mkdir() }
+        android.system.Os.chmod(directory.absolutePath, 0x1C0)
+        val now = System.currentTimeMillis()
+        val old = now - 25L * 60L * 60L * 1000L
+        fun backup(name: String, content: String, modified: Long = old): File =
+            File(directory, name).apply { writeText(content); setLastModified(modified) }
+        val expired = backup("nkem-output-backup-expired.tmp", "")
+        val fresh = backup("nkem-output-backup-fresh.tmp", "", now)
+        val foreign = backup("foreign.tmp", "")
+        val original = backup("nkem-output-backup-original.tmp", "only surviving original")
+        val recovery = backup("nkem-output-backup-kept.recovery", "restore failed")
+        val target = temporary.newFile("external-backup-target").apply { writeText("outside data") }
+        val symlink = File(directory, "nkem-output-backup-link.tmp")
+        java.nio.file.Files.createSymbolicLink(symlink.toPath(), target.toPath())
+        assertEquals(2, workflow.cleanupExpiredOutputBackups(now))
+        assertFalse(expired.exists())
+        assertTrue(fresh.exists())
+        assertTrue(foreign.exists())
+        assertEquals("only surviving original", original.readText())
+        assertEquals("restore failed", recovery.readText())
+        assertTrue(java.nio.file.Files.isSymbolicLink(symlink.toPath()))
+        assertEquals("outside data", target.readText())
+    }
+
+    @Test fun failedRestoreIsMarkedForRecoveryAndSurvivesStartupCleanup() {
+        failWrite = true
+        failRestore = true
+        assertNotEquals(NativeBridge.RESULT_SUCCESS, commit())
+        val saved = backups().single()
+        assertTrue(saved.name.endsWith(".recovery"))
+        saved.setLastModified(System.currentTimeMillis() - 25L * 60L * 60L * 1000L)
+        assertEquals(1, workflow.cleanupExpiredOutputBackups())
+        assertArrayEquals(original, saved.readBytes())
+    }
+
 }

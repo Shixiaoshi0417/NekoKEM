@@ -207,4 +207,6 @@
     <string name="key_source_contacts_multiple">公鑰通訊錄（%1$d 位接收者）</string>
     <string name="contact_recipients_selected">已選擇接收者</string>
     <string name="contact_failed_recipient">無法使用的接收者：%1$s</string>
+    <string name="recovery_backups_title">已保留復原備份</string>
+    <string name="recovery_backups_message">應用程式私人儲存空間中保留了 %1$d 個復原備份，因為先前的金鑰或文件替換未能安全完成。這些備份沒有被刪除。請先匯出並檢查目前的金鑰和檔案，再手動復原或清理備份；詳見 Android README。</string>
 </resources>
