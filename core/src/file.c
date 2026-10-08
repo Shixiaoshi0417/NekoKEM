@@ -26,6 +26,7 @@
 #include <sys/acl.h>
 #endif
 #ifndef _WIN32
+#include <stdatomic.h>
 #include <unistd.h>
 #endif
 
@@ -736,6 +737,56 @@ cleanup:
     return success;
 }
 
+/*
+ * Temporary outputs not yet committed or aborted, for a program about to die
+ * of a signal. A slot holds the AtomicFile's own path string; the lock-free
+ * slots let threads share them and a signal handler read them.
+ */
+#define TEMPORARY_OUTPUT_SLOTS 8U
+static _Atomic(char *) temporary_outputs[TEMPORARY_OUTPUT_SLOTS];
+
+static void temporary_output_track(char *path)
+{
+    size_t index;
+
+    for (index = 0U; index < TEMPORARY_OUTPUT_SLOTS; ++index) {
+        char *expected = NULL;
+
+        if (atomic_compare_exchange_strong(&temporary_outputs[index],
+                                           &expected, path)) {
+            return;
+        }
+    }
+    /* Beyond the slots an output only misses the cleanup on a signal. */
+}
+
+static void temporary_output_untrack(const char *path)
+{
+    size_t index;
+
+    for (index = 0U; index < TEMPORARY_OUTPUT_SLOTS; ++index) {
+        char *expected = (char *)path;
+
+        if (atomic_compare_exchange_strong(&temporary_outputs[index],
+                                           &expected, NULL)) {
+            return;
+        }
+    }
+}
+
+void file_remove_temporary_outputs(void)
+{
+    size_t index;
+
+    for (index = 0U; index < TEMPORARY_OUTPUT_SLOTS; ++index) {
+        char *path = atomic_load(&temporary_outputs[index]);
+
+        if (path != NULL) {
+            (void)unlink(path);
+        }
+    }
+}
+
 int atomic_file_open(AtomicFile *file, const char *final_path, mode_t mode)
 {
     static const char suffix[] = ".tmp.XXXXXX";
@@ -773,9 +824,11 @@ int atomic_file_open(AtomicFile *file, const char *final_path, mode_t mode)
     descriptor = mkstemp(file->temporary_path);
     if (descriptor < 0) {
         print_system_error("Cannot create temporary output file");
-        atomic_file_abort(file);
+        free(file->temporary_path);
+        file->temporary_path = NULL;
         return 0;
     }
+    temporary_output_track(file->temporary_path);
     flags = fcntl(descriptor, F_GETFD);
     if (flags < 0 || fcntl(descriptor, F_SETFD, flags | FD_CLOEXEC) < 0) {
         print_system_error("Cannot protect temporary output descriptor");
@@ -1218,6 +1271,7 @@ cleanup:
 
 static void atomic_file_release(AtomicFile *file)
 {
+    temporary_output_untrack(file->temporary_path);
     free(file->temporary_path);
     file->temporary_path = NULL;
     file->final_path = NULL;
@@ -1518,6 +1572,7 @@ void atomic_file_abort(AtomicFile *file)
     }
     if (file->temporary_path != NULL) {
         (void)unlink(file->temporary_path);
+        temporary_output_untrack(file->temporary_path);
         free(file->temporary_path);
         file->temporary_path = NULL;
     }

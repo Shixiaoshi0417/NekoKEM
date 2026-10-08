@@ -31,9 +31,11 @@ parent has stricter write checks.
 
 The backend uses file-handle FlushFileBuffers. It does not claim the same namespace
 power-loss semantics as POSIX parent-directory fsync, and Windows power-loss testing
-has not been performed. Two output renames are not cross-file crash atomic. Process
-termination can leave private temporary plaintext; recovery journals and physical
-secure erasure remain outside this change. These limitations must remain visible
+has not been performed. Two output renames are not cross-file crash atomic. An
+uncommitted output is delete-pending from creation until its commit, so the system
+removes partial plaintext however the process ends; a pasted key file can remain
+after forced termination. Recovery journals and physical secure erasure remain
+outside this change. These limitations must remain visible
 when evaluating security parity. No independent professional audit is claimed.
 
 Performance measurements report the host/architecture, fixed file size, sample count

@@ -443,6 +443,8 @@ static char *win_random_path(const char *path, const char *suffix)
     return name;
 }
 
+static int win_dispose(HANDLE handle);
+
 int atomic_file_open(AtomicFile *file, const char *final_path, mode_t mode)
 {
     if (file == NULL || (mode != 0600 && mode != 0644)) return 0;
@@ -458,6 +460,9 @@ int atomic_file_open(AtomicFile *file, const char *final_path, mode_t mode)
     state->output = win_create(temporary, 0);
     free(temporary);
     if (state->output == INVALID_HANDLE_VALUE || !win_regular(state->output, 1)) goto fail;
+    /* Delete-pending until committed: however the process ends, the system
+     * removes the partial output with its last handle. */
+    if (!win_dispose(state->output)) goto fail;
     HANDLE stream_handle = INVALID_HANDLE_VALUE;
     if (!DuplicateHandle(GetCurrentProcess(), state->output, GetCurrentProcess(),
                          &stream_handle, 0, FALSE, DUPLICATE_SAME_ACCESS)) goto fail;
@@ -522,6 +527,13 @@ static int win_rename(HANDLE handle, const wchar_t *destination, int replace, in
 static int win_dispose(HANDLE handle)
 {
     FILE_DISPOSITION_INFO disposition = {TRUE};
+    return SetFileInformationByHandle(handle, FileDispositionInfo, &disposition, sizeof(disposition)) != 0;
+}
+
+/* Cancels a pending deletion set through the same handle. */
+static int win_keep(HANDLE handle)
+{
+    FILE_DISPOSITION_INFO disposition = {FALSE};
     return SetFileInformationByHandle(handle, FileDispositionInfo, &disposition, sizeof(disposition)) != 0;
 }
 
@@ -655,7 +667,8 @@ static int win_commit_pair(AtomicFile *first, AtomicFile *second, int replace)
         win_same(old[0], old[1])) goto cleanup;
     for (size_t i = 0; i < count; ++i) {
         WinAtomic *state = files[i]->platform_state;
-        if (!win_rename(state->output, state->path.full, old[i] != INVALID_HANDLE_VALUE, 1)) goto cleanup;
+        if (!win_keep(state->output) ||
+            !win_rename(state->output, state->path.full, old[i] != INVALID_HANDLE_VALUE, 1)) goto cleanup;
         published[i] = 1;
         /* Verify the published name identifies the retained output handle. */
         HANDLE named = CreateFileW(state->path.full, FILE_READ_ATTRIBUTES,
@@ -730,6 +743,10 @@ int atomic_file_commit_pair_new(AtomicFile *first, AtomicFile *second)
 int atomic_file_commit(AtomicFile *file)
 {
     return atomic_file_commit_pair(file, NULL);
+}
+
+void file_remove_temporary_outputs(void)
+{
 }
 
 void atomic_file_abort(AtomicFile *file)

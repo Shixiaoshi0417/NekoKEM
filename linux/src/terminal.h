@@ -7,6 +7,9 @@
 #include <io.h>
 #include "windows_io.h"
 typedef DWORD CliTerminal;
+/* The console mode to restore when Ctrl+C or a closed console ends a hidden prompt. */
+static DWORD cli_visible_mode;
+static volatile LONG cli_echo_hidden;
 /* Read native console UTF-16 explicitly: one-byte CRT reads are unreliable for
  * UTF-8 console code points. Pipes remain raw UTF-8 bytes for automation. */
 static unsigned char cli_console_bytes[4];
@@ -71,10 +74,16 @@ static inline int cli_terminal_hide(CliTerminal *original, int *disabled)
 {
     HANDLE input = GetStdHandle(STD_INPUT_HANDLE);
     if (GetFileType(input) != FILE_TYPE_CHAR) return 1;
-    if (!GetConsoleMode(input, original) ||
-        !SetConsoleMode(input, *original & ~(DWORD)ENABLE_ECHO_INPUT)) return 0;
+    if (!GetConsoleMode(input, original)) return 0;
+    cli_visible_mode = *original;
+    InterlockedExchange(&cli_echo_hidden, 1);
+    if (!SetConsoleMode(input, *original & ~(DWORD)ENABLE_ECHO_INPUT)) {
+        InterlockedExchange(&cli_echo_hidden, 0);
+        return 0;
+    }
     if (!FlushConsoleInputBuffer(input)) {
         (void)SetConsoleMode(input, *original);
+        InterlockedExchange(&cli_echo_hidden, 0);
         return 0;
     }
     *disabled = 1;
@@ -84,29 +93,45 @@ static inline int cli_terminal_restore(CliTerminal *original, int discard)
 {
     HANDLE input = GetStdHandle(STD_INPUT_HANDLE);
     int restored = SetConsoleMode(input, *original) != 0;
+    InterlockedExchange(&cli_echo_hidden, 0);
     if (discard && !FlushConsoleInputBuffer(input)) return 0;
     return restored;
 }
 #else
+#include <signal.h>
+#include <stdatomic.h>
 #include <termios.h>
 #include <unistd.h>
 static inline int cli_input_getc(void) { return fgetc(stdin); }
 static inline int cli_input_error(void) { return ferror(stdin); }
 static inline int cli_input_eof(void) { return feof(stdin); }
 typedef struct termios CliTerminal;
+/* What the signal handlers in cli.c apply while a prompt hides input. */
+static struct termios cli_visible_terminal;
+static struct termios cli_hidden_terminal;
+static volatile sig_atomic_t cli_echo_hidden;
 static inline int cli_terminal_hide(CliTerminal *original, int *disabled)
 {
     if (!isatty(STDIN_FILENO)) return 1;
     if (tcgetattr(STDIN_FILENO, original) != 0) return 0;
     struct termios hidden = *original;
     hidden.c_lflag &= (tcflag_t)~ECHO;
-    if (tcsetattr(STDIN_FILENO, TCSAFLUSH, &hidden) != 0) return 0;
+    cli_visible_terminal = *original;
+    cli_hidden_terminal = hidden;
+    atomic_signal_fence(memory_order_seq_cst);
+    cli_echo_hidden = 1;
+    if (tcsetattr(STDIN_FILENO, TCSAFLUSH, &hidden) != 0) {
+        cli_echo_hidden = 0;
+        return 0;
+    }
     *disabled = 1;
     return 1;
 }
 static inline int cli_terminal_restore(CliTerminal *original, int discard)
 {
-    return tcsetattr(STDIN_FILENO, discard ? TCSAFLUSH : TCSANOW, original) == 0;
+    int restored = tcsetattr(STDIN_FILENO, discard ? TCSAFLUSH : TCSANOW, original) == 0;
+    cli_echo_hidden = 0;
+    return restored;
 }
 #endif
 #endif

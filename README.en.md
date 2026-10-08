@@ -251,7 +251,7 @@ plaintext/test.jpg -> encrypted/test.jpg.nkem
 
 Enter a private-key file path or paste two compatible plaintext PEM private-key blocks. When the key file contains an NKPR container (recognized by its header, whatever the extension, for example `private.nkpr` exported by Android), the program automatically disables terminal echo and prompts for a password, then authenticates, decrypts, and parses NKPR in memory. The decrypted PEM is not written to disk. Legacy plaintext PEM private keys such as `private.key` need no password.
 
-Terminal echo is also temporarily disabled when pasting legacy private-key contents. The internal temporary key file has mode `0600` and is deleted after the operation.
+Terminal echo is also temporarily disabled when pasting legacy private-key contents. The internal temporary key file has mode `0600` and is deleted after the operation. Ctrl+Z at a hidden prompt shows input again while the program is stopped, and `fg` hides it again.
 
 The input file must end in `.nkem`. The program ensures a `plaintext/` directory with mode `0700` exists in the working directory, creating it if necessary. It uses only the container filename, removes `.nkem`, and restores the file into `plaintext/`:
 
@@ -388,6 +388,7 @@ v4 encrypts the file data once under a random 32-byte file key and stores one en
 - Dynamic resources have a single owner and `goto cleanup` paths; ownership transfer immediately clears the source pointer.
 - Private-key objects are released immediately after decapsulation, shared secrets are cleared immediately after KDF, and AES keys live only until file encryption/decryption finishes.
 - Output is still written to a temporary file in the same directory. Contents are `fsync`ed before rename, and the parent directory after rename. Authentication, parsing, cancellation, or I/O failure closes and removes temporary files.
+- When SIGINT, SIGTERM, SIGHUP, SIGQUIT or SIGPIPE ends the Linux/macOS CLI, it first removes uncommitted temporary outputs and a pasted key and restores terminal echo, then dies of that signal. On Windows, an uncommitted output is delete-pending until its commit, so the system removes it however the process ends, and Ctrl+C restores console echo. On Linux and macOS, SIGKILL, a crash or a power loss can still leave an owner-only `<output>.tmp.XXXXXX` holding partial plaintext that was never authenticated; delete such files.
 - Public/private key generation uses one rollback-capable transaction. Both files are written and `fsync`ed before publishing. If the second rename or directory `fsync` fails, old public/private keys are restored; when previously absent, both new files are removed, avoiding an update to only one key.
 - On POSIX, paired key commits hold interprocess locks in their parent directories through rollback and cleanup. Rollback checks the published inode before removing a file, preserving a replacement made by another writer. The mode `0600` lock file `.nekokem-pair.lock` remains in each directory; do not delete it while operations are running.
 - Hybrid keygen writes both private-key PEM blocks directly into an OpenSSL memory BIO, encrypts them into an NKPR temporary file, and commits it together with the public key. There is no plaintext private-key output or temporary file.
