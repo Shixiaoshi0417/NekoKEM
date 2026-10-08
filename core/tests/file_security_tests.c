@@ -409,6 +409,20 @@ cleanup:
     return success;
 }
 
+static char symlink_target_path[256];
+static nlink_t symlink_target_links;
+
+/* At publication the backup must link the symbolic link, not its target. */
+static void record_symlink_target_links(const char *final_path)
+{
+    struct stat status;
+
+    (void)final_path;
+    symlink_target_links = lstat(symlink_target_path, &status) == 0
+                               ? status.st_nlink
+                               : 0;
+}
+
 static int test_symlink_output_replacement(const char *root)
 {
     static const unsigned char target_data[] = "target-data";
@@ -421,14 +435,20 @@ static int test_symlink_output_replacement(const char *root)
 
     if (!make_path(target_path, sizeof(target_path), root, "target.bin") ||
         !make_path(output_path, sizeof(output_path), root, "output.link") ||
+        !make_path(symlink_target_path, sizeof(symlink_target_path), root,
+                   "target.bin") ||
         !write_plain_file(target_path, target_data,
                           sizeof(target_data), 0600) ||
         symlink(target_path, output_path) != 0 ||
         !stage_bytes(&output, output_path,
                      output_data, sizeof(output_data)) ||
         fstat(fileno(output.stream), &status) != 0 ||
-        (status.st_mode & (mode_t)0777) != (mode_t)0600 ||
-        !atomic_file_commit(&output) ||
+        (status.st_mode & (mode_t)0777) != (mode_t)0600) {
+        goto cleanup;
+    }
+    symlink_target_links = 0;
+    file_test_set_before_noreplace_rename(record_symlink_target_links);
+    if (!atomic_file_commit(&output) || symlink_target_links != 1 ||
         lstat(output_path, &status) != 0 ||
         !S_ISREG(status.st_mode) ||
         !file_equals(output_path, output_data, sizeof(output_data)) ||
@@ -439,6 +459,7 @@ static int test_symlink_output_replacement(const char *root)
     success = 1;
 
 cleanup:
+    file_test_fault_reset();
     atomic_file_abort(&output);
     (void)unlink(output_path);
     (void)unlink(target_path);

@@ -548,7 +548,11 @@ static int win_same(HANDLE a, HANDLE b)
 static HANDLE win_open_identity(const char *utf8)
 {
     wchar_t *wide = windows_utf8_path(utf8);
-    if (wide == NULL) return INVALID_HANDLE_VALUE;
+    /* A refused path is an error, never a missing file. */
+    if (wide == NULL) {
+        SetLastError(ERROR_INVALID_NAME);
+        return INVALID_HANDLE_VALUE;
+    }
     HANDLE handle = CreateFileW(wide, FILE_READ_ATTRIBUTES,
             FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, NULL, OPEN_EXISTING,
             FILE_FLAG_OPEN_REPARSE_POINT | FILE_FLAG_BACKUP_SEMANTICS, NULL);

@@ -188,7 +188,8 @@ static int file_rename(const char *old_path, const char *new_path)
 /*
  * Volumes and policies without hard links make link() fail: FAT and some
  * network shares, and Android, whose SELinux policy denies apps link() in
- * their own data directories (EACCES).
+ * their own data directories (EACCES). linkat without AT_SYMLINK_FOLLOW
+ * links a symbolic link itself; Darwin's link() would link its target.
  */
 static int file_link(const char *existing_path, const char *new_path)
 {
@@ -198,7 +199,7 @@ static int file_link(const char *existing_path, const char *new_path)
         return -1;
     }
 #endif
-    return link(existing_path, new_path);
+    return linkat(AT_FDCWD, existing_path, AT_FDCWD, new_path, 0);
 }
 
 static int file_rename_new(const char *temporary_path, const char *final_path)
@@ -1237,7 +1238,16 @@ static char *create_backup_link(const char *final_path, int *existed)
     }
     created = 0;
     if (file_link(final_path, backup_path) == 0) {
-        return backup_path;
+        struct stat linked;
+
+        /* The backup must be the entry examined above, nothing it names. */
+        if (lstat(backup_path, &linked) == 0 &&
+            linked.st_dev == status.st_dev && linked.st_ino == status.st_ino) {
+            return backup_path;
+        }
+        created = 1;
+        errno = EBUSY;
+        goto cleanup;
     }
     if (errno == EEXIST) {
         /* Another process took the name; it is not ours to remove. */
