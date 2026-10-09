@@ -286,6 +286,13 @@ mod tests {
         fn OpenSSL_version(kind:c_int)->*const c_char;
         fn protected_private_key_read(path:*const c_char,password:*const u8,length:usize,pem:*mut *mut u8,pem_length:*mut usize)->c_int;
         fn CRYPTO_clear_free(memory:*mut c_void,length:usize,file:*const c_char,line:c_int);
+        fn desktop_write_private(path:*const c_char,bytes:*const u8,length:usize)->c_int;
+    }
+    // An existing output as Core writes one: owner-only on every platform.
+    // Windows Core never replaces a file other accounts can open.
+    fn write_owner_only(path:&str,bytes:&[u8]) {
+        let name=CString::new(path).unwrap();
+        assert_eq!(unsafe{desktop_write_private(name.as_ptr(),bytes.as_ptr(),bytes.len())},1);
     }
     #[cfg(windows)]
     #[test]
@@ -365,8 +372,7 @@ mod tests {
     fn existing_output_requires_one_session_confirmation() {
         let dir=Directory::new();let backend=Arc::new(Backend::default());
         let mut r=request(Kind::Keygen);r.public_path=dir.file("public.key");r.private_path=dir.file("private.key.enc");r.password=Zeroizing::new("public test password".into());r.confirmation=r.password.clone();run(&backend,r).unwrap();
-        fs::write(dir.file("plain"),b"public test input").unwrap();fs::write(dir.file("output"),b"existing output").unwrap();
-        #[cfg(unix)] {use std::os::unix::fs::PermissionsExt;fs::set_permissions(dir.file("output"),fs::Permissions::from_mode(0o600)).unwrap();}
+        fs::write(dir.file("plain"),b"public test input").unwrap();write_owner_only(&dir.file("output"),b"existing output");
         let encrypt=|overwrite|{let mut r=request(Kind::Encrypt);r.input=dir.file("plain");r.output=dir.file("output");r.key_path=dir.file("public.key");r.overwrite=overwrite;r};
         assert_eq!(run(&backend,encrypt(true)).err().unwrap().code,"invalid-request");
         assert_eq!(run(&backend,encrypt(false)).err().unwrap().code,"output-exists");
@@ -384,10 +390,7 @@ mod tests {
         let hold=Reservation{backend:backend.clone(),job:job.clone()};
         let created=AtomicBool::new(false);let output=dir.file("race-output");
         let result=execute(&backend,r,job,|_,_|{
-            if !created.swap(true,Ordering::AcqRel) {
-                fs::write(&output,b"competing writer").unwrap();
-                #[cfg(unix)] {use std::os::unix::fs::PermissionsExt;fs::set_permissions(&output,fs::Permissions::from_mode(0o600)).unwrap();}
-            }
+            if !created.swap(true,Ordering::AcqRel) {write_owner_only(&output,b"competing writer");}
         });
         drop(hold);assert!(created.load(Ordering::Acquire));
         assert_eq!(result.err().unwrap().code,"output-exists");
