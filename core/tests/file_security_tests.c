@@ -957,7 +957,6 @@ cleanup:
     return success;
 }
 
-#ifdef __APPLE__
 static int test_filesystem_alias_rejection(const char *root,
                                           const char *first_name,
                                           const char *second_name)
@@ -1022,6 +1021,7 @@ cleanup:
     return success;
 }
 
+#ifdef __APPLE__
 static int set_test_acl(const char *path, acl_tag_t tag,
                         acl_perm_t permission, int inherit)
 {
@@ -1116,6 +1116,383 @@ cleanup:
 }
 #endif
 
+static void remove_test_artifacts(const char *root)
+{
+    DIR *stream = opendir(root);
+    struct dirent *entry;
+    char path[512];
+
+    while (stream != NULL && (entry = readdir(stream)) != NULL) {
+        if ((strstr(entry->d_name, ".tmp.") != NULL ||
+             strstr(entry->d_name, ".bak.") != NULL) &&
+            make_path(path, sizeof(path), root, entry->d_name)) {
+            (void)unlink(path);
+        }
+    }
+    if (stream != NULL) (void)closedir(stream);
+}
+
+static int test_backups_preserve_pair(const char *root,
+                                       const char *first_name,
+                                       const unsigned char *first_value,
+                                       size_t first_length,
+                                       const char *second_name,
+                                       const unsigned char *second_value,
+                                       size_t second_length)
+{
+    DIR *stream = opendir(root);
+    struct dirent *entry;
+    unsigned int found[2] = {0U, 0U};
+    const char *names[2] = {first_name, second_name};
+    const unsigned char *values[2] = {first_value, second_value};
+    size_t lengths[2] = {first_length, second_length};
+    char path[512];
+    int valid = stream != NULL;
+
+    while (stream != NULL && (entry = readdir(stream)) != NULL) {
+        size_t index;
+
+        for (index = 0U; index < 2U; ++index) {
+            size_t name_length = strlen(names[index]);
+            if (strncmp(entry->d_name, names[index], name_length) == 0 &&
+                strncmp(entry->d_name + name_length, ".bak.", 5U) == 0) {
+                if (!make_path(path, sizeof(path), root, entry->d_name) ||
+                    !file_equals(path, values[index], lengths[index])) valid = 0;
+                ++found[index];
+            }
+        }
+    }
+    if (stream != NULL && closedir(stream) != 0) valid = 0;
+    return valid && found[0] == 1U && found[1] == 1U;
+}
+
+static int test_failed_pair_restore_keeps_new_pair(const char *root,
+                                                   unsigned int restore_call,
+                                                   unsigned int fsync_call)
+{
+    static const unsigned char old_public[] = "restore-old-public";
+    static const unsigned char old_private[] = "restore-old-private";
+    static const unsigned char new_public[] = "restore-new-public";
+    static const unsigned char new_private[] = "restore-new-private";
+    char public_path[256];
+    char private_path[256];
+    AtomicFile first = {0};
+    AtomicFile second = {0};
+    int success = 0;
+
+    if (!make_path(public_path, sizeof(public_path), root, "restore-public") ||
+        !make_path(private_path, sizeof(private_path), root, "restore-private") ||
+        !write_plain_file(public_path, old_public, sizeof(old_public), 0600) ||
+        !write_plain_file(private_path, old_private, sizeof(old_private), 0600) ||
+        !stage_bytes(&first, public_path, new_public, sizeof(new_public)) ||
+        !stage_bytes(&second, private_path, new_private, sizeof(new_private))) goto cleanup;
+    file_test_fault_set(FILE_TEST_FAULT_FSYNC, fsync_call);
+    file_test_set_restore_failure(restore_call);
+    if (atomic_file_commit_pair(&first, &second) != 0 ||
+        !file_equals(public_path, new_public, sizeof(new_public)) ||
+        !file_equals(private_path, new_private, sizeof(new_private)) ||
+        !has_transaction_artifact(root)) goto cleanup;
+    {
+        DIR *stream = opendir(root);
+        struct dirent *entry;
+        unsigned int public_backups = 0U;
+        unsigned int private_backups = 0U;
+        char path[512];
+        int backups_valid = stream != NULL;
+
+        while (stream != NULL && (entry = readdir(stream)) != NULL) {
+            if (strncmp(entry->d_name, "restore-public.bak.", 19U) == 0) {
+                if (!make_path(path, sizeof(path), root, entry->d_name) ||
+                    !file_equals(path, old_public, sizeof(old_public))) backups_valid = 0;
+                ++public_backups;
+            } else if (strncmp(entry->d_name, "restore-private.bak.", 20U) == 0) {
+                if (!make_path(path, sizeof(path), root, entry->d_name) ||
+                    !file_equals(path, old_private, sizeof(old_private))) backups_valid = 0;
+                ++private_backups;
+            }
+        }
+        if (stream != NULL && closedir(stream) != 0) backups_valid = 0;
+        if (!backups_valid || public_backups != 1U || private_backups != 1U) goto cleanup;
+    }
+    success = 1;
+cleanup:
+    file_test_fault_reset();
+    atomic_file_abort(&first);
+    atomic_file_abort(&second);
+    remove_test_artifacts(root);
+    (void)unlink(public_path);
+    (void)unlink(private_path);
+    return success;
+}
+
+static char foreign_recovery_public[256];
+static unsigned int foreign_recovery_publish;
+static int foreign_recovery_written;
+static const unsigned char recovery_foreign[] = "foreign-recovery-public";
+
+static void replace_first_new_output(const char *path)
+{
+    char temporary[300];
+    int result;
+
+    (void)path;
+    if (++foreign_recovery_publish != 2U) return;
+    result = snprintf(temporary, sizeof(temporary), "%s.outside", foreign_recovery_public);
+    if (result > 0 && (size_t)result < sizeof(temporary) &&
+        write_plain_file(temporary, recovery_foreign, sizeof(recovery_foreign), 0600) &&
+        rename(temporary, foreign_recovery_public) == 0) foreign_recovery_written = 1;
+    (void)unlink(temporary);
+}
+
+static int test_external_replacement_with_failed_restore(const char *root)
+{
+    static const unsigned char old_public[] = "external-old-public";
+    static const unsigned char old_private[] = "external-old-private";
+    static const unsigned char new_public[] = "external-new-public";
+    static const unsigned char new_private[] = "external-new-private";
+    char private_path[256] = {0};
+    char staged_public[512] = {0};
+    AtomicFile first = {0};
+    AtomicFile second = {0};
+    int success = 0;
+
+    if (!make_path(foreign_recovery_public, sizeof(foreign_recovery_public), root,
+                     "external-public") ||
+        !make_path(private_path, sizeof(private_path), root, "external-private") ||
+        !write_plain_file(foreign_recovery_public, old_public, sizeof(old_public), 0600) ||
+        !write_plain_file(private_path, old_private, sizeof(old_private), 0600) ||
+        !stage_bytes(&first, foreign_recovery_public, new_public, sizeof(new_public)) ||
+        !stage_bytes(&second, private_path, new_private, sizeof(new_private))) goto cleanup;
+    if (snprintf(staged_public, sizeof(staged_public), "%s", first.temporary_path) < 0) goto cleanup;
+    foreign_recovery_publish = 0U;
+    foreign_recovery_written = 0;
+    file_test_set_before_noreplace_rename(replace_first_new_output);
+    file_test_fault_set(FILE_TEST_FAULT_FSYNC, 3U);
+    file_test_set_restore_failure(1U);
+    if (atomic_file_commit_pair(&first, &second) != 0 || !foreign_recovery_written ||
+        !file_equals(foreign_recovery_public, recovery_foreign, sizeof(recovery_foreign)) ||
+        !file_equals(private_path, new_private, sizeof(new_private)) ||
+        !file_equals(staged_public, new_public, sizeof(new_public)) ||
+        !test_backups_preserve_pair(root, "external-public", old_public, sizeof(old_public),
+                                     "external-private", old_private, sizeof(old_private))) goto cleanup;
+    file_remove_temporary_outputs();
+    if (!file_equals(staged_public, new_public, sizeof(new_public))) goto cleanup;
+    success = 1;
+cleanup:
+    file_test_fault_reset();
+    atomic_file_abort(&first);
+    atomic_file_abort(&second);
+    remove_test_artifacts(root);
+    (void)unlink(foreign_recovery_public);
+    (void)unlink(private_path);
+    return success;
+}
+
+static int test_residue_stem_identity_alias(const char *root)
+{
+    static const unsigned char current[] = "NKPRcurrent-key";
+    static const unsigned char previous[] = "NKPRprevious-key";
+    char key[256] = {0};
+    char alias[256] = {0};
+    char backup[256] = {0};
+    char unknown[256] = {0};
+    char missing[256] = {0};
+    int lock = -1;
+    int success = 0;
+
+    if (!make_path(key, sizeof(key), root, "residue-stem.key") ||
+        !make_path(alias, sizeof(alias), root, "StemAlias.key") ||
+        !make_path(backup, sizeof(backup), root, "StemAlias.key.bak.ABC123") ||
+        !make_path(unknown, sizeof(unknown), root, "missing-stem.key.bak.DEF456") ||
+        !make_path(missing, sizeof(missing), root, "MISSING-STEM.KEY") ||
+        !write_plain_file(key, current, sizeof(current), 0600) ||
+        link(key, alias) != 0 ||
+        !write_plain_file(backup, previous, sizeof(previous), 0600)) goto cleanup;
+    lock = file_pair_lock_acquire(key);
+    if (lock < 0 || !file_delete_private_key_under_lock(key) ||
+        access(backup, F_OK) == 0 || !file_equals(alias, current, sizeof(current))) goto cleanup;
+    if (!write_plain_file(unknown, previous, sizeof(previous), 0600) ||
+        file_delete_private_key_under_lock(missing) != 0 ||
+        !file_equals(unknown, previous, sizeof(previous))) goto cleanup;
+    success = 1;
+cleanup:
+    file_pair_lock_release(lock);
+    (void)unlink(key);
+    (void)unlink(alias);
+    (void)unlink(backup);
+    (void)unlink(unknown);
+    return success;
+}
+
+static int test_key_residue_deletion(const char *root)
+{
+    static const unsigned char private_data[] = "NKPRprivate-test";
+    char key[256];
+    char backup[256];
+    char old_backup[256];
+    char temporary[256];
+    char foreign[256];
+    char symbolic[256];
+    unsigned char *bytes = NULL;
+    size_t length = 0U;
+    FILE *capture = NULL;
+    int stderr_copy = -1;
+    char warnings[2048];
+    int lock = -1;
+    int success = 0;
+
+    if (!make_path(key, sizeof(key), root, "residue.key") ||
+        !make_path(backup, sizeof(backup), root, "residue.key.bak.ABC123") ||
+        !make_path(old_backup, sizeof(old_backup), root, "residue.key.bak.DEF456") ||
+        !make_path(temporary, sizeof(temporary), root, "residue.key.tmp.GHI789") ||
+        !make_path(foreign, sizeof(foreign), root, "residue.key.bak.JKL012") ||
+        !make_path(symbolic, sizeof(symbolic), root, "residue.key.tmp.MNO345") ||
+        !write_plain_file(key, private_data, sizeof(private_data), 0600) ||
+        link(key, backup) != 0 ||
+        !write_plain_file(old_backup, private_data, sizeof(private_data), 0600) ||
+        !write_plain_file(temporary, (const unsigned char *)"partial", 7U, 0600)) goto cleanup;
+    capture = tmpfile();
+    stderr_copy = dup(STDERR_FILENO);
+    if (capture == NULL || stderr_copy < 0 || fflush(stderr) != 0 ||
+        dup2(fileno(capture), STDERR_FILENO) < 0) goto cleanup;
+    if (file_read_sensitive(key, 1024U, &bytes, &length) != 0 ||
+        fflush(stderr) != 0 || fseek(capture, 0L, SEEK_SET) != 0) goto cleanup;
+    {
+        size_t count = fread(warnings, 1U, sizeof(warnings) - 1U, capture);
+        warnings[count] = '\0';
+    }
+    if (strstr(warnings, backup) == NULL || strstr(warnings, "cleanup or recovery") == NULL ||
+        strstr(warnings, "multiple hard links") == NULL ||
+        dup2(stderr_copy, STDERR_FILENO) < 0) goto cleanup;
+    (void)close(stderr_copy);
+    stderr_copy = -1;
+    lock = file_pair_lock_acquire(key);
+    if (lock < 0 || !file_delete_private_key_under_lock(key) ||
+        access(key, F_OK) == 0 || access(backup, F_OK) == 0 ||
+        access(old_backup, F_OK) == 0 || access(temporary, F_OK) == 0) goto cleanup;
+    /* A foreign-looking backup and a symlink are retained rather than
+     * treating a reserved prefix alone as proof of ownership. */
+    if (!write_plain_file(key, private_data, sizeof(private_data), 0600) ||
+        !write_plain_file(foreign, (const unsigned char *)"unrelated", 9U, 0600) ||
+        symlink(foreign, symbolic) != 0 ||
+        file_delete_private_key_under_lock(key) != 0 ||
+        access(foreign, F_OK) != 0 || access(symbolic, F_OK) != 0) goto cleanup;
+    (void)unlink(symbolic);
+    (void)unlink(foreign);
+    if (!write_plain_file(key, private_data, sizeof(private_data), 0600)) goto cleanup;
+    file_test_fault_set(FILE_TEST_FAULT_FSYNC, 1U);
+    if (file_delete_private_key_under_lock(key) != 0 || access(key, F_OK) == 0) goto cleanup;
+    success = 1;
+cleanup:
+    if (stderr_copy >= 0) {
+        (void)fflush(stderr);
+        (void)dup2(stderr_copy, STDERR_FILENO);
+        (void)close(stderr_copy);
+    }
+    if (capture != NULL) (void)fclose(capture);
+    file_test_fault_reset();
+    file_pair_lock_release(lock);
+    secure_free(bytes, length);
+    (void)unlink(symbolic);
+    (void)unlink(foreign);
+    (void)unlink(temporary);
+    (void)unlink(old_backup);
+    (void)unlink(backup);
+    (void)unlink(key);
+    return success;
+}
+
+static int test_pair_lock_is_bounded(const char *root)
+{
+    char key[256];
+    char lock_path[256];
+    int held = -1;
+    int acquired = -1;
+    int success = 0;
+
+    if (!make_path(key, sizeof(key), root, "locked.key") ||
+        !make_path(lock_path, sizeof(lock_path), root, ".nekokem-pair.lock")) goto cleanup;
+    held = file_pair_lock_acquire(key);
+    if (held < 0) goto cleanup;
+    acquired = file_pair_lock_acquire(key);
+    if (acquired >= 0 || (errno != EWOULDBLOCK && errno != EAGAIN)) goto cleanup;
+    file_pair_lock_release(held);
+    held = -1;
+    if (chmod(lock_path, 0666) != 0) goto cleanup;
+    acquired = file_pair_lock_acquire(key);
+    if (acquired >= 0 || errno != EACCES || chmod(lock_path, 0600) != 0) goto cleanup;
+    acquired = file_pair_lock_acquire(key);
+    if (acquired < 0) goto cleanup;
+    success = 1;
+cleanup:
+    file_pair_lock_release(acquired);
+    file_pair_lock_release(held);
+    (void)chmod(lock_path, 0600);
+    return success;
+}
+
+static int test_unbuffered_streams(const char *root)
+{
+    static const unsigned char data[] = "key-material-buffering";
+    char key[256];
+    char output[256];
+    FILE *stream = NULL;
+    AtomicFile staged = {0};
+    struct stat status;
+    int success = 0;
+
+    if (!make_path(key, sizeof(key), root, "unbuffered-input") ||
+        !make_path(output, sizeof(output), root, "unbuffered-output") ||
+        !write_plain_file(key, data, sizeof(data), 0600)) goto cleanup;
+    stream = file_open_regular(key);
+    if (stream == NULL || fgetc(stream) != data[0] ||
+        lseek(fileno(stream), 0, SEEK_CUR) != 1 ||
+        !atomic_file_open(&staged, output, 0600) ||
+        (fcntl(fileno(staged.stream), F_GETFD) & FD_CLOEXEC) == 0 ||
+        fputc('x', staged.stream) == EOF ||
+        fstat(fileno(staged.stream), &status) != 0 || status.st_size != 1) goto cleanup;
+    success = 1;
+cleanup:
+    if (stream != NULL) (void)fclose(stream);
+    atomic_file_abort(&staged);
+    (void)unlink(key);
+    (void)unlink(output);
+    return success;
+}
+
+static int test_single_no_replace_scope(const char *root)
+{
+    static const unsigned char old[] = "old-output";
+    static const unsigned char changed[] = "new-output";
+    char path[256];
+    AtomicFile output = {0};
+    int previous = file_set_output_no_replace(1);
+    int success = 0;
+
+    if (!make_path(path, sizeof(path), root, "scoped-output") ||
+        !write_plain_file(path, old, sizeof(old), 0600) ||
+        !stage_bytes(&output, path, changed, sizeof(changed)) ||
+        atomic_file_commit(&output) != 0 || errno != EEXIST ||
+        !file_equals(path, old, sizeof(old)) || unlink(path) != 0 ||
+        !stage_bytes(&output, path, changed, sizeof(changed))) goto cleanup;
+    competing_publish_call = 0U;
+    competing_publish_target = 1U;
+    competing_write_succeeded = 0;
+    file_test_set_links_unavailable(1);
+    file_test_set_before_noreplace_rename(create_competing_key);
+    if (atomic_file_commit(&output) != 0 || errno != EEXIST ||
+        !competing_write_succeeded ||
+        !file_equals(path, competing_key, sizeof(competing_key))) goto cleanup;
+    success = 1;
+cleanup:
+    file_test_fault_reset();
+    file_test_set_links_unavailable(0);
+    (void)file_set_output_no_replace(previous);
+    atomic_file_abort(&output);
+    (void)unlink(path);
+    return success;
+}
+
 int main(void)
 {
     char test_directory[] = "/tmp/nekokem-file-security.XXXXXX";
@@ -1163,13 +1540,13 @@ int main(void)
         fprintf(stderr, "Darwin extended ACL subtest failed\n");
         goto cleanup;
     }
+#endif
     if (!test_filesystem_alias_rejection(test_directory, "Case.key", "case.key") ||
         !test_filesystem_alias_rejection(test_directory,
                                          "caf\xc3\xa9.key", "cafe\xcc\x81.key")) {
-        fprintf(stderr, "Darwin filesystem alias rollback subtest failed\n");
+        fprintf(stderr, "Filesystem alias rollback subtest failed\n");
         goto cleanup;
     }
-#endif
     if (!test_symlink_output_replacement(test_directory)) {
         fprintf(stderr, "Symlink output replacement subtest failed\n");
         goto cleanup;
@@ -1210,6 +1587,34 @@ int main(void)
     file_test_set_links_unavailable(0);
     if (!test_pair_alias_rejection(test_directory)) {
         fprintf(stderr, "Pair alias rejection subtest failed\n");
+        goto cleanup;
+    }
+    file_test_set_links_unavailable(1);
+    if (!test_failed_pair_restore_keeps_new_pair(test_directory, 1U, 5U) ||
+        !test_failed_pair_restore_keeps_new_pair(test_directory, 2U, 5U)) {
+        file_test_set_links_unavailable(0);
+        fprintf(stderr, "Copy-backed pair recovery subtest failed\n");
+        goto cleanup;
+    }
+    file_test_set_links_unavailable(0);
+    file_test_set_links_unavailable(1);
+    if (!test_failed_pair_restore_keeps_new_pair(test_directory, 1U, 5U) ||
+        !test_failed_pair_restore_keeps_new_pair(test_directory, 2U, 5U) ||
+        !test_failed_pair_restore_keeps_new_pair(test_directory, 1U, 4U)) {
+        file_test_set_links_unavailable(0);
+        fprintf(stderr, "Copy-backed pair recovery subtest failed\n");
+        goto cleanup;
+    }
+    file_test_set_links_unavailable(0);
+    if (!test_failed_pair_restore_keeps_new_pair(test_directory, 1U, 3U) ||
+        !test_failed_pair_restore_keeps_new_pair(test_directory, 2U, 3U) ||
+        !test_key_residue_deletion(test_directory) ||
+        !test_residue_stem_identity_alias(test_directory) ||
+        !test_external_replacement_with_failed_restore(test_directory) ||
+        !test_pair_lock_is_bounded(test_directory) ||
+        !test_unbuffered_streams(test_directory) ||
+        !test_single_no_replace_scope(test_directory)) {
+        fprintf(stderr, "File audit regression subtest failed\n");
         goto cleanup;
     }
     if (has_transaction_artifact(test_directory)) {

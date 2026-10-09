@@ -48,7 +48,7 @@ static int generate_keypair(const char *public_key_path,
         if (exists != 0) {
             fprintf(stderr,
                     file_message("Key file %s already exists; key generation never replaces existing keys\n"),
-                    paths[index]);
+                    file_display_safe_path(paths[index]));
             return 0;
         }
     }
