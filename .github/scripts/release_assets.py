@@ -46,6 +46,8 @@ INTERNAL_SUMS = (
     'NekoKEM-macos-arm64-gui/gui-SHA256SUMS.txt',
     'NekoKEM-windows-x86_64/windows-SHA256SUMS.txt',
 )
+# The build-tools version publish.yml installs for the APK checks.
+BUILD_TOOLS = '35.0.0'
 # The v3.2.0 release signer; a rotation must change this deliberately.
 SIGNER = '5a091b86b1cb339f081c1afa2aa71b986c07597343ce336f22d866b05c39fb50'
 REPOSITORY_URL = 'https://github.com/Shixiaoshi0417/NekoKEM'
@@ -128,12 +130,12 @@ def zip_member(path, name):
 
 
 def android_tool(name):
+    """The pinned build-tools copy, never a newer one a runner image ships."""
     roots = [os.environ.get(key) for key in ('ANDROID_SDK_ROOT', 'ANDROID_HOME')]
-    for root in roots:
-        tool = Path(root) / 'build-tools' / '35.0.0' / name if root else None
-        if tool is not None and tool.is_file():
-            return str(tool)
-    raise ReleaseError(f'Android build-tools 35.0.0 {name} is not installed')
+    tools = [Path(root) / 'build-tools' / BUILD_TOOLS / name for root in roots if root]
+    tools = [tool for tool in tools if tool.is_file()]
+    require(tools, f'Android build-tools {BUILD_TOOLS} {name} is not installed')
+    return str(tools[0])
 
 
 def check_apk(apk, version, version_code):

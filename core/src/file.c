@@ -30,6 +30,7 @@
 #include <sys/acl.h>
 #endif
 #ifndef _WIN32
+#include <signal.h>
 #include <stdatomic.h>
 #include <unistd.h>
 #endif
@@ -873,6 +874,23 @@ static void temporary_output_untrack(const char *path)
             return;
         }
     }
+}
+
+/*
+ * Holds back the signals a CLI handles by removing temporary outputs, so a
+ * pair is published or rolled back as a whole before the handler runs.
+ */
+static int file_defer_interrupts(sigset_t *previous)
+{
+    static const int interrupts[] = {SIGHUP, SIGINT, SIGQUIT, SIGPIPE, SIGTERM};
+    sigset_t deferred;
+    size_t index;
+
+    (void)sigemptyset(&deferred);
+    for (index = 0U; index < sizeof(interrupts) / sizeof(interrupts[0]); ++index) {
+        (void)sigaddset(&deferred, interrupts[index]);
+    }
+    return pthread_sigmask(SIG_BLOCK, &deferred, previous) == 0;
 }
 
 void file_remove_temporary_outputs(void)
@@ -1806,6 +1824,8 @@ static int atomic_file_commit_pair_mode(AtomicFile *first,
     int preserve_new_stage[2] = {0, 0};
     size_t count = second == NULL ? 1U : 2U;
     size_t index;
+    sigset_t previous_signals;
+    int signals_deferred = 0;
     int saved_errno = 0;
     int success = 0;
     int same_target = 0;
@@ -1879,6 +1899,7 @@ static int atomic_file_commit_pair_mode(AtomicFile *first,
                                          files[index]->temporary_path);
         }
     }
+    signals_deferred = file_defer_interrupts(&previous_signals);
     for (index = 0U; index < count; ++index) {
         if (index != 0U) {
             struct stat first_status;
@@ -2094,6 +2115,9 @@ rollback:
         if (lock_descriptors[index] >= 0) {
             (void)close(lock_descriptors[index]);
         }
+    }
+    if (signals_deferred != 0) {
+        (void)pthread_sigmask(SIG_SETMASK, &previous_signals, NULL);
     }
     if (success == 0) {
         errno = saved_errno != 0 ? saved_errno : EIO;

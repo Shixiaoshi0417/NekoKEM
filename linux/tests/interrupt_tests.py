@@ -27,6 +27,17 @@ def echo_on(descriptor):
     return bool(termios.tcgetattr(descriptor)[3] & termios.ECHO)
 
 
+def writing_plaintext(directory):
+    """Whether a temporary output already holds decrypted bytes."""
+    for path in glob.glob(os.path.join(directory, '*.tmp.*')):
+        try:
+            if os.path.getsize(path) > 0:
+                return True
+        except FileNotFoundError:
+            pass
+    return False
+
+
 def drain(descriptor, seconds):
     data = b''
     end = time.monotonic() + seconds
@@ -80,10 +91,10 @@ class InterruptTests(unittest.TestCase):
         process.stdin.write(PASSWORD)
         process.stdin.flush()
         end = time.monotonic() + 60
-        while time.monotonic() < end and not any(
-                os.path.getsize(path) > 0 for path in glob.glob(os.path.join(output, '*'))):
+        while time.monotonic() < end and not writing_plaintext(output):
             time.sleep(0.002)
-        self.assertTrue(glob.glob(os.path.join(output, '*.tmp.*')), 'decryption never started')
+        # 64 MiB is far more than one 2 ms poll can decrypt, so it is still running.
+        self.assertTrue(writing_plaintext(output), 'decryption never started')
         process.send_signal(signal.SIGINT)
         self.assertEqual(process.wait(timeout=30), -signal.SIGINT)
         process.stdin.close()

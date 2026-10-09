@@ -125,27 +125,39 @@ typedef struct termios CliTerminal;
 static struct termios cli_visible_terminal;
 static struct termios cli_hidden_terminal;
 static volatile sig_atomic_t cli_echo_hidden;
+/* The terminal and that state change together, with the handlers held back. */
+static inline void cli_terminal_hold(sigset_t *previous)
+{
+    static const int held[] = {SIGHUP, SIGINT, SIGQUIT, SIGPIPE, SIGTERM, SIGTSTP, SIGCONT};
+    sigset_t set;
+    (void)sigemptyset(&set);
+    for (size_t i = 0; i < sizeof(held) / sizeof(held[0]); ++i) (void)sigaddset(&set, held[i]);
+    (void)sigprocmask(SIG_BLOCK, &set, previous);
+}
 static inline int cli_terminal_hide(CliTerminal *original, int *disabled)
 {
     if (!isatty(STDIN_FILENO)) return 1;
     if (tcgetattr(STDIN_FILENO, original) != 0) return 0;
     struct termios hidden = *original;
     hidden.c_lflag &= (tcflag_t)~ECHO;
+    sigset_t previous;
+    cli_terminal_hold(&previous);
     cli_visible_terminal = *original;
     cli_hidden_terminal = hidden;
-    atomic_signal_fence(memory_order_seq_cst);
-    cli_echo_hidden = 1;
-    if (tcsetattr(STDIN_FILENO, TCSAFLUSH, &hidden) != 0) {
-        cli_echo_hidden = 0;
-        return 0;
-    }
+    int applied = tcsetattr(STDIN_FILENO, TCSAFLUSH, &hidden) == 0;
+    cli_echo_hidden = applied;
+    (void)sigprocmask(SIG_SETMASK, &previous, NULL);
+    if (!applied) return 0;
     *disabled = 1;
     return 1;
 }
 static inline int cli_terminal_restore(CliTerminal *original, int discard)
 {
+    sigset_t previous;
+    cli_terminal_hold(&previous);
     int restored = tcsetattr(STDIN_FILENO, discard ? TCSAFLUSH : TCSANOW, original) == 0;
     cli_echo_hidden = 0;
+    (void)sigprocmask(SIG_SETMASK, &previous, NULL);
     return restored;
 }
 #endif

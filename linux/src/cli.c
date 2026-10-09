@@ -42,23 +42,55 @@ typedef struct {
  * handlers below can remove them without allocating.
  */
 #ifdef _WIN32
+/*
+ * The console handler runs on another thread; this lock orders it with the
+ * main thread, and the handler keeps it, since the process is ending.
+ */
+static SRWLOCK cli_paste_lock = SRWLOCK_INIT;
 static char cli_paste_file[4096];
 static char cli_paste_directory[4096];
-static volatile LONG cli_paste_active;
+static int cli_paste_active;
+/* While the paste stream writes the file, nothing can open it to delete it;
+ * a DELETE-only duplicate of that handle can mark it for deletion instead. */
+static HANDLE cli_paste_handle;
 
-static void cli_paste_track(const char *file, const char *directory)
+static void cli_paste_track(const char *file, const char *directory, FILE *stream)
 {
-    if (strlen(file) < sizeof(cli_paste_file) &&
-        strlen(directory) < sizeof(cli_paste_directory)) {
-        memcpy(cli_paste_file, file, strlen(file) + 1U);
-        memcpy(cli_paste_directory, directory, strlen(directory) + 1U);
-        InterlockedExchange(&cli_paste_active, 1);
+    HANDLE handle = NULL;
+
+    if (strlen(file) >= sizeof(cli_paste_file) ||
+        strlen(directory) >= sizeof(cli_paste_directory)) {
+        return;
     }
+    if (!DuplicateHandle(GetCurrentProcess(), (HANDLE)_get_osfhandle(_fileno(stream)),
+                         GetCurrentProcess(), &handle, DELETE, FALSE, 0)) {
+        handle = NULL;
+    }
+    AcquireSRWLockExclusive(&cli_paste_lock);
+    memcpy(cli_paste_file, file, strlen(file) + 1U);
+    memcpy(cli_paste_directory, directory, strlen(directory) + 1U);
+    cli_paste_handle = handle;
+    cli_paste_active = 1;
+    ReleaseSRWLockExclusive(&cli_paste_lock);
+}
+
+/* Once the paste stream is closed; deletion by name works from then on. */
+static void cli_paste_release_handle(void)
+{
+    AcquireSRWLockExclusive(&cli_paste_lock);
+    if (cli_paste_handle != NULL) {
+        CloseHandle(cli_paste_handle);
+        cli_paste_handle = NULL;
+    }
+    ReleaseSRWLockExclusive(&cli_paste_lock);
 }
 
 static void cli_paste_untrack(void)
 {
-    InterlockedExchange(&cli_paste_active, 0);
+    cli_paste_release_handle();
+    AcquireSRWLockExclusive(&cli_paste_lock);
+    cli_paste_active = 0;
+    ReleaseSRWLockExclusive(&cli_paste_lock);
 }
 
 /*
@@ -73,9 +105,18 @@ static BOOL WINAPI cli_console_interrupted(DWORD event)
     if (InterlockedCompareExchange(&cli_echo_hidden, 0, 0) != 0) {
         (void)SetConsoleMode(GetStdHandle(STD_INPUT_HANDLE), cli_visible_mode);
     }
-    if (InterlockedCompareExchange(&cli_paste_active, 0, 0) != 0) {
-        (void)windows_delete_regular(cli_paste_file);
-        (void)windows_remove_directory(cli_paste_directory);
+    AcquireSRWLockExclusive(&cli_paste_lock);
+    if (cli_paste_active != 0) {
+        FILE_DISPOSITION_INFO disposition = {TRUE};
+
+        if (cli_paste_handle != NULL) {
+            /* Removed when the process's handles close. */
+            (void)SetFileInformationByHandle(cli_paste_handle, FileDispositionInfo,
+                                             &disposition, sizeof(disposition));
+        } else {
+            (void)windows_delete_regular(cli_paste_file);
+            (void)windows_remove_directory(cli_paste_directory);
+        }
     }
     file_remove_temporary_outputs();
     return FALSE;
@@ -89,6 +130,10 @@ void cli_install_interrupt_handlers(void)
 static char cli_paste_file[4096];
 static char cli_paste_directory[4096];
 static volatile sig_atomic_t cli_paste_active;
+
+static void cli_paste_release_handle(void)
+{
+}
 
 static void cli_paste_track(const char *file, const char *directory)
 {
@@ -723,7 +768,7 @@ static int collect_pasted_key(int private_key, char **temporary_path)
     char *last_separator = strrchr(directory, '/');
     if (last_separator == NULL) goto cleanup;
     *last_separator = '\0';
-    cli_paste_track(path, directory);
+    cli_paste_track(path, directory, output);
 #else
     directory = create_paste_directory();
     if (directory == NULL) {
@@ -842,6 +887,7 @@ static int collect_pasted_key(int private_key, char **temporary_path)
         goto cleanup;
     }
     output = NULL;
+    cli_paste_release_handle();
 
     *temporary_path = strdup(path);
     if (*temporary_path == NULL) {
@@ -864,6 +910,7 @@ cleanup:
     } else if (descriptor >= 0) {
         (void)close(descriptor);
     }
+    cli_paste_release_handle();
     if (success == 0) {
         if (path != NULL) {
             (void)unlink(path);

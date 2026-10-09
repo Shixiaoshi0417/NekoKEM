@@ -360,7 +360,8 @@ class LocalKeyManager internal constructor(
             } else {
                 stagedInput = publicKeyFileRecord(input)
                 val inputFingerprint = publicKeyFingerprint(input)
-                val pairing = if (inputFingerprint == null) {
+                // Unlocking the private key costs a KDF: only for a parsed key.
+                val pairing = if (stagedInput == null || inputFingerprint == null) {
                     NativeBridge.RESULT_SUCCESS
                 } else {
                     checkPublicKeyPairing(inputFingerprint, privateKeyPassword)
