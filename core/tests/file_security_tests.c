@@ -5,6 +5,7 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <openssl/crypto.h>
+#include <signal.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -841,6 +842,77 @@ static void swap_first_key_before_second_publish(const char *final_path)
     }
 }
 
+static volatile sig_atomic_t deferred_interrupts;
+static unsigned int interrupt_publish_count;
+
+/* What the CLI's handler does, without dying of the signal. */
+static void remove_outputs_on_interrupt(int signal_number)
+{
+    (void)signal_number;
+    file_remove_temporary_outputs();
+    ++deferred_interrupts;
+}
+
+static void interrupt_before_second_publish(const char *final_path)
+{
+    (void)final_path;
+    if (++interrupt_publish_count == 2U) {
+        (void)raise(SIGINT);
+    }
+}
+
+/* An interrupt between a pair's renames waits until the pair is complete. */
+static int test_pair_commit_defers_interrupts(const char *root)
+{
+    static const unsigned char new_public[] = "deferred-public";
+    static const unsigned char new_private[] = "deferred-private";
+    char public_path[256] = {0};
+    char private_path[256] = {0};
+    AtomicFile public_output = {0};
+    AtomicFile private_output = {0};
+    struct sigaction action;
+    struct sigaction previous;
+    int installed = 0;
+    int success = 0;
+
+    memset(&action, 0, sizeof(action));
+    action.sa_handler = remove_outputs_on_interrupt;
+    (void)sigemptyset(&action.sa_mask);
+    if (!make_path(public_path, sizeof(public_path), root, "deferred-public.key") ||
+        !make_path(private_path, sizeof(private_path), root, "deferred-private.key") ||
+        sigaction(SIGINT, &action, &previous) != 0) {
+        goto cleanup;
+    }
+    installed = 1;
+    deferred_interrupts = 0;
+    interrupt_publish_count = 0U;
+    if (!stage_bytes(&public_output, public_path, new_public, sizeof(new_public)) ||
+        !stage_bytes(&private_output, private_path,
+                     new_private, sizeof(new_private))) {
+        goto cleanup;
+    }
+    file_test_set_before_noreplace_rename(interrupt_before_second_publish);
+    if (!atomic_file_commit_pair(&public_output, &private_output) ||
+        interrupt_publish_count != 2U || deferred_interrupts != 1 ||
+        !file_equals(public_path, new_public, sizeof(new_public)) ||
+        !file_equals(private_path, new_private, sizeof(new_private)) ||
+        has_transaction_artifact(root)) {
+        goto cleanup;
+    }
+    success = 1;
+
+cleanup:
+    file_test_fault_reset();
+    if (installed != 0) {
+        (void)sigaction(SIGINT, &previous, NULL);
+    }
+    atomic_file_abort(&public_output);
+    atomic_file_abort(&private_output);
+    (void)unlink(public_path);
+    (void)unlink(private_path);
+    return success;
+}
+
 static int test_replaced_output_keeps_backup(const char *root)
 {
     static const unsigned char old_public[] = "old-public";
@@ -1189,6 +1261,10 @@ int main(void)
     }
     if (!test_replaced_output_keeps_backup(test_directory)) {
         fprintf(stderr, "Replaced output backup subtest failed\n");
+        goto cleanup;
+    }
+    if (!test_pair_commit_defers_interrupts(test_directory)) {
+        fprintf(stderr, "Deferred interrupt subtest failed\n");
         goto cleanup;
     }
     file_test_set_links_unavailable(1);
