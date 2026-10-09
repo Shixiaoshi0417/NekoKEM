@@ -32,12 +32,21 @@ data class SelectedDocument(
 
 /**
  * A provider-chosen display name as one plain line: dialogs print it next to
- * key fingerprints, so it must not carry line breaks, bidirectional overrides
- * or invisible characters that could fake or reorder another line.
+ * key fingerprints, so it must not carry controls, line or paragraph breaks,
+ * or invisible format characters (bidirectional overrides among them) that
+ * could fake or reorder another line. The zero-width joiners stay: scripts
+ * and emoji sequences need them. The name also suggests output file names,
+ * so the cap leaves any real file name and its extension whole.
  */
 internal fun displaySafeName(name: String?, fallback: String): String {
-    val visible = name.orEmpty().filterNot { character ->
-        character.isISOControl() || character in UNSAFE_NAME_CHARACTERS
+    val raw = name.orEmpty()
+    val visible = buildString {
+        var index = 0
+        while (index < raw.length) {
+            val codePoint = raw.codePointAt(index)
+            if (isSafeNameCodePoint(codePoint)) appendCodePoint(codePoint)
+            index += Character.charCount(codePoint)
+        }
     }.trim()
     val end = if (visible.codePointCount(0, visible.length) > MAX_DISPLAY_NAME_LENGTH) {
         visible.offsetByCodePoints(0, MAX_DISPLAY_NAME_LENGTH)
@@ -45,11 +54,16 @@ internal fun displaySafeName(name: String?, fallback: String): String {
     return visible.substring(0, end).trimEnd().ifEmpty { fallback }
 }
 
-// Line and paragraph separators, bidirectional formatting and zero-width characters.
-private const val UNSAFE_NAME_CHARACTERS =
-    "\u2028\u2029\u061C\u200B\u200C\u200D\u200E\u200F\u202A\u202B\u202C\u202D\u202E" +
-        "\u2060\u2066\u2067\u2068\u2069\uFEFF"
-private const val MAX_DISPLAY_NAME_LENGTH = 128
+private fun isSafeNameCodePoint(codePoint: Int): Boolean = when (Character.getType(codePoint)) {
+    Character.CONTROL.toInt(), Character.LINE_SEPARATOR.toInt(),
+    Character.PARAGRAPH_SEPARATOR.toInt(), Character.SURROGATE.toInt() -> false
+    Character.FORMAT.toInt() -> codePoint == ZERO_WIDTH_NON_JOINER || codePoint == ZERO_WIDTH_JOINER
+    else -> true
+}
+
+private const val ZERO_WIDTH_NON_JOINER = 0x200C
+private const val ZERO_WIDTH_JOINER = 0x200D
+private const val MAX_DISPLAY_NAME_LENGTH = 255
 
 data class PreparedEncryptionResult(
     val code: Int,
