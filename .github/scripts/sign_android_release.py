@@ -32,6 +32,9 @@ def main():
     output.mkdir()
     try:
         store, child, values, rotated = prepare(root, os.environ)
+        # Verification runs curl, openssl and build tools: none of them gets a secret.
+        for key in [key for key in os.environ if key.startswith('NEKOKEM_RELEASE_')]:
+            del os.environ[key]
         apk = output / 'app-release.apk'
         # v2 only, as every release since v3.2.0; v1 is unused at minSdk 26.
         subprocess.run([str(release.build_tools() / 'apksigner'), 'sign',

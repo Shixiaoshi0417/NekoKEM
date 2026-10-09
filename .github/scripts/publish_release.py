@@ -46,7 +46,8 @@ def peel_tag(repo, tag):
 
 def checked_run(repo, run_id, name, path):
     run = api(f'repos/{repo}/actions/runs/{run_id}')
-    release_assets.require(run['name'] == name and run['path'] == path,
+    # The API may append @<ref> to the workflow path.
+    release_assets.require(run['name'] == name and run['path'].split('@', 1)[0] == path,
                            f'Run {run_id} is not the {name} workflow')
     release_assets.require(run['head_branch'] == 'main' and
                            run['head_repository']['full_name'] == repo,
