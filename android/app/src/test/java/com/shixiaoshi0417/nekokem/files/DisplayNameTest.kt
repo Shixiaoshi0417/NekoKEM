@@ -29,6 +29,8 @@ class DisplayNameTest {
         assertEquals(family, displaySafeName(family, "fallback"))
         assertEquals("\u0645\u06CC\u200C\u062E\u0648\u0627\u0647\u0645",
             displaySafeName("\u0645\u06CC\u200C\u062E\u0648\u0627\u0647\u0645", "fallback"))
+        // Between ASCII characters, or at an edge, a joiner only hides something.
+        assertEquals("ab.txt", displaySafeName("\u200Da\u200Db\u200C.txt\u200D", "fallback"))
     }
 
     @Test
