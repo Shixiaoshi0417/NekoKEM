@@ -270,7 +270,11 @@ then runs actual X11 WebKit startup/normal-close checks as ordinary users on bot
 architectures with sandboxing retained. Rust/Core and private-file tests remain.
 Wayland and distributions other than this Ubuntu/Fedora baseline have not
 received equivalent native testing.
-The build wrapper adds AArch64's dynamic-loader capability only to ARM64 RPMs.
+The build wrapper declares the matching dynamic-loader capability in each native
+RPM: `ld-linux-x86-64.so.2` on x86_64 and `ld-linux-aarch64.so.1` on ARM64.
+Core's thread-local state can make this a direct ELF dependency; packaging still
+checks that every actual ELF dependency is declared.
+构建脚本为两种架构的 RPM 分别声明对应的动态加载器依赖，打包仍检查全部实际 ELF 依赖。
 See [Linux GUI security boundaries](LINUX-SECURITY.md).
 
 ## Security boundary / 安全边界

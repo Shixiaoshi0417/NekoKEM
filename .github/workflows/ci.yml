@@ -997,7 +997,9 @@ jobs:
         run: TAURI_CONFIG="$(cat tauri.linux.conf.json)" cargo test --locked --target '${{ matrix.arch }}-unknown-linux-gnu' --bin nekokem-gui -- --test-threads=1
       - name: Build the native Linux desktop package
         working-directory: desktop
-        run: bash scripts/build-linux-gui.sh '${{ matrix.arch }}'
+        run: |
+          python3 tests/test_linux_bundle_config.py
+          bash scripts/build-linux-gui.sh '${{ matrix.arch }}'
       - name: Verify ELF hardening and package the exact installed application
         run: |
           python3 desktop/scripts/package-linux-gui.py \
