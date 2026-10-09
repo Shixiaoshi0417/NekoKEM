@@ -26,7 +26,8 @@ typedef struct {
     HANDLE output;
 } WinAtomic;
 
-static int win_inspect_key_artifacts(const char *path, HANDLE key, int remove_own);
+static int win_inspect_key_artifacts(const char *path, HANDLE key, int remove_own,
+                                      const char *ignored_path);
 
 static int win_error(void)
 {
@@ -319,7 +320,7 @@ static int win_read(const char *path, size_t maximum, unsigned char **buffer,
     *buffer = NULL;
     *length = 0;
     const char *stage = "open";
-    if (sensitive && !quiet) (void)win_inspect_key_artifacts(path, INVALID_HANDLE_VALUE, 0);
+    if (sensitive && !quiet) (void)win_inspect_key_artifacts(path, INVALID_HANDLE_VALUE, 0, NULL);
     HANDLE handle = win_open(path, GENERIC_READ, FILE_SHARE_READ, sensitive);
     if (handle == INVALID_HANDLE_VALUE) goto cleanup;
     stage = "stream";
@@ -582,19 +583,22 @@ static char *win_utf8_display(const wchar_t *wide)
     return result;
 }
 
-static int win_inspect_key_artifacts(const char *path, HANDLE key, int remove_own)
+static int win_inspect_key_artifacts(const char *path, HANDLE key, int remove_own,
+                                      const char *ignored_path)
 {
     WinPath checked;
     HANDLE opened = INVALID_HANDLE_VALUE;
     HANDLE search = INVALID_HANDLE_VALUE;
     wchar_t *pattern = NULL;
     wchar_t *candidate = NULL;
+    wchar_t *ignored = NULL;
     BY_HANDLE_FILE_INFORMATION key_info;
     WIN32_FIND_DATAW entry;
     int have_key = 0;
     int success = 1;
 
     if (!win_path_open(&checked, path, 1)) return 0;
+    if (ignored_path != NULL) ignored = windows_utf8_path(ignored_path);
     if (key == INVALID_HANDLE_VALUE) {
         opened = CreateFileW(checked.full, FILE_READ_ATTRIBUTES | READ_CONTROL,
                 FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, NULL, OPEN_EXISTING,
@@ -628,6 +632,10 @@ static int win_inspect_key_artifacts(const char *path, HANDLE key, int remove_ow
         goto cleanup;
     }
     do {
+        const wchar_t *ignored_name = ignored != NULL ? wcsrchr(ignored, L'\\') : NULL;
+        if (ignored_name != NULL &&
+            (case_sensitive ? wcscmp(entry.cFileName, ignored_name + 1)
+                            : _wcsicmp(entry.cFileName, ignored_name + 1)) == 0) continue;
         if ((case_sensitive ? wcsncmp(entry.cFileName, name, name_length)
                             : _wcsnicmp(entry.cFileName, name, name_length)) != 0 ||
             !win_artifact_suffix(entry.cFileName + name_length)) continue;
@@ -663,6 +671,7 @@ cleanup:
     if (opened != INVALID_HANDLE_VALUE) CloseHandle(opened);
     free(pattern);
     free(candidate);
+    free(ignored);
     win_path_close(&checked);
     return success;
 }
@@ -678,7 +687,7 @@ int file_delete_private_key_under_lock(const char *path)
     int success = 0;
     if (key == INVALID_HANDLE_VALUE && error != ERROR_FILE_NOT_FOUND) goto cleanup;
     if (key != INVALID_HANDLE_VALUE && (!win_regular(key, 0) || !win_acl(key, 1))) goto cleanup;
-    success = win_inspect_key_artifacts(path, key, 1);
+    success = win_inspect_key_artifacts(path, key, 1, NULL);
     /* Windows has no supported directory fsync. Flush the retained file
      * handle and submit its synchronous delete disposition before closing. */
     if (key != INVALID_HANDLE_VALUE && (!win_flush(key) || !win_dispose(key))) {
@@ -798,7 +807,7 @@ static int win_commit_pair(AtomicFile *first, AtomicFile *second, int replace)
             goto cleanup;
         } else {
             /* Never overwrite a reparse point, hard-linked or broadly accessible output. */
-            (void)win_inspect_key_artifacts(files[i]->final_path, old[i], 0);
+            (void)win_inspect_key_artifacts(files[i]->final_path, old[i], 0, files[i]->temporary_path);
             if (!win_regular(old[i], 1)) goto cleanup;
 
         }

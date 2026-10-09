@@ -94,10 +94,21 @@ static int restore_failure_retains_pair(unsigned int restore_call)
     return EXIT_SUCCESS;
 }
 
+static unsigned int residue_warning_count;
+static const char *record_residue_warning(const char *message)
+{
+    if (strcmp(message, "Key transaction residue at %s; inspect it before cleanup or recovery\n") == 0)
+        ++residue_warning_count;
+    return message;
+}
+
 static int file_audit_regressions(void)
 {
     FILE *input = file_open_regular("plain");
-    CHECK(input != NULL && fgetc(input) == 'b' && _telli64(_fileno(input)) == 1);
+    unsigned char prefix[2];
+    /* A bulk read avoids the CRT's internal single-character input slot. */
+    CHECK(input != NULL && fread(prefix, 1, sizeof(prefix), input) == sizeof(prefix) &&
+          memcmp(prefix, "bi", sizeof(prefix)) == 0 && _telli64(_fileno(input)) == 2);
     CHECK(fclose(input) == 0);
     AtomicFile output = {0};
     CHECK(atomic_file_open(&output, "unbuffered-output", 0600));
@@ -107,6 +118,13 @@ static int file_audit_regressions(void)
     CHECK(!write_private("plain", "replacement", 11));
     CHECK(equals("plain", "binary\r\n\032"));
     (void)file_set_output_no_replace(previous);
+    file_set_message_translator(record_residue_warning);
+    residue_warning_count = 0;
+    CHECK(write_private("plain", "binary\r\n\032", 9) && residue_warning_count == 0);
+    CHECK(write_private("plain.tmp.0123456789abcdef0123456789abcdef", "old-staging", 11));
+    CHECK(write_private("plain", "binary\r\n\032", 9) && residue_warning_count == 1);
+    file_set_message_translator(NULL);
+    CHECK(windows_delete_regular("plain.tmp.0123456789abcdef0123456789abcdef"));
     CHECK(restore_failure_retains_pair(1) == EXIT_SUCCESS);
     CHECK(restore_failure_retains_pair(2) == EXIT_SUCCESS);
     CHECK(restore_failure_retains_pair(3) == EXIT_SUCCESS);
