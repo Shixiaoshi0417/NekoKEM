@@ -20,7 +20,6 @@ class VersionChecks(unittest.TestCase):
             'desktop/package.json', 'desktop/package-lock.json',
             'desktop/src-tauri/tauri.conf.json', 'desktop/src-tauri/Cargo.toml',
             'desktop/src-tauri/Cargo.lock', 'linux/src/main.c', 'linux/packaging/README',
-            'linux/install.sh',
             'linux/scripts/build-linux-release.sh', 'macos/scripts/build-macos-cli.sh',
             'windows/scripts/build-windows-cli.sh', 'desktop/scripts/package-linux-gui.py',
             '.github/workflows/ci.yml', '.github/workflows/release.yml',
@@ -37,7 +36,7 @@ class VersionChecks(unittest.TestCase):
 
     def test_application_signing_package_and_workflow_drift_is_detected(self):
         version = check_versions.check_versions(self.root)[0]
-        for relative in ('desktop/src-tauri/Cargo.toml', 'linux/src/main.c', 'linux/install.sh',
+        for relative in ('desktop/src-tauri/Cargo.toml', 'linux/src/main.c',
                          '.github/scripts/verify_android_release.py',
                          '.github/workflows/release.yml',
                          'android/app/src/main/res/values-ko/strings.xml'):

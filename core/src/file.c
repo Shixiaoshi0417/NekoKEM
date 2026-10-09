@@ -249,9 +249,27 @@ static int file_rename_new(const char *temporary_path, const char *final_path)
 #endif
 }
 
-/* Both publication paths atomically refuse an existing destination. */
-static int file_publish_new(const char *temporary_path, const char *final_path)
+static int publication_unsupported(int error)
 {
+    return error == EINVAL || error == ENOTSUP || error == ENOSYS
+#if defined(EOPNOTSUPP) && EOPNOTSUPP != ENOTSUP
+           || error == EOPNOTSUPP
+#endif
+        ;
+}
+
+/*
+ * Both publication paths atomically refuse an existing destination. Where a
+ * filesystem has neither hard links nor a no-replace rename (FAT and exFAT on
+ * macOS, some network and FUSE mounts), a single output may fall back to the
+ * existence check and rename used before create-only outputs; only a writer
+ * racing that check can then be replaced. Key pairs never take that path.
+ */
+static int file_publish_new(const char *temporary_path, const char *final_path,
+                            int checked_fallback)
+{
+    struct stat status;
+
 #ifdef NEKOKEM_TEST_FAULT_INJECTION
     if (test_fault_should_fail(FILE_TEST_FAULT_RENAME)) {
         errno = EIO;
@@ -273,8 +291,20 @@ static int file_publish_new(const char *temporary_path, const char *final_path)
     if (errno == EEXIST) {
         return -1;
     }
-    /* Never fall back to a check followed by an overwriting rename(). */
-    return file_rename_new(temporary_path, final_path);
+    if (file_rename_new(temporary_path, final_path) == 0) {
+        return 0;
+    }
+    if (checked_fallback == 0 || !publication_unsupported(errno)) {
+        return -1;
+    }
+    if (lstat(final_path, &status) == 0) {
+        errno = EEXIST;
+        return -1;
+    }
+    if (errno != ENOENT) {
+        return -1;
+    }
+    return file_rename(temporary_path, final_path);
 }
 
 #endif
@@ -1360,6 +1390,8 @@ static size_t artifact_key_stem_length(const char *name, const char *key_name,
     return 0U;
 }
 
+#define KEY_RESIDUE_STALE_SECONDS 600
+
 static int inspect_key_artifacts(const char *path, const struct stat *key,
                                   int remove_own, const char *ignored_path)
 {
@@ -1393,6 +1425,7 @@ static int inspect_key_artifacts(const char *path, const struct stat *key,
         int same;
         int ours;
         int confirmed;
+        int stale;
         size_t stem_length;
         unsigned char magic[27];
 
@@ -1429,13 +1462,16 @@ static int inspect_key_artifacts(const char *path, const struct stat *key,
         fprintf(stderr, file_message("Key transaction residue at %s; inspect it before cleanup or recovery\n"),
                 file_display_safe_path(candidate));
         same = key != NULL && status.st_dev == key->st_dev && status.st_ino == key->st_ino;
+        /* A key generation stages its file before taking the pair lock, so a
+         * recent temporary file may still be written by another process. */
+        stale = time(NULL) - status.st_mtime > KEY_RESIDUE_STALE_SECONDS;
         /* Same-inode residues belong to this key. An older backup must be
          * an owner-only NKPR file; temporary files may be incomplete writes. */
         ours = confirmed != 0 && S_ISREG(status.st_mode) && status.st_uid == geteuid() &&
                (status.st_mode & (mode_t)0777) == (mode_t)0600 &&
                (same != 0 ||
                 (status.st_nlink == (nlink_t)1 &&
-                 (strncmp(entry->d_name + stem_length, ".tmp.", 5U) == 0 ||
+                 ((stale != 0 && strncmp(entry->d_name + stem_length, ".tmp.", 5U) == 0) ||
                   ((file_peek_regular(candidate, magic, 4U) &&
                     memcmp(magic, "NKPR", 4U) == 0) ||
                    (file_peek_regular(candidate, magic, sizeof(magic)) &&
@@ -1494,10 +1530,12 @@ int file_delete_private_key_under_lock(const char *path)
         print_system_error("Cannot sync the private-key directory after deletion");
         return 0;
     }
+    /* The key itself is gone: a retained residue is reported, not a failure,
+     * so deleting a key pair can go on to the public key and be retried. */
     if (success == 0) {
         fprintf(stderr, file_message("Some key transaction residues were retained; inspect them before cleanup\n"));
     }
-    return success;
+    return 1;
 }
 
 static int write_descriptor_all(int descriptor, const unsigned char *buffer,
@@ -1900,6 +1938,16 @@ static int atomic_file_commit_pair_mode(AtomicFile *first,
         }
     }
     signals_deferred = file_defer_interrupts(&previous_signals);
+    /* Every backup exists before the first publication: a backup that fails
+     * (ENOSPC for a copy where links are unavailable) then publishes nothing,
+     * instead of leaving one new key beside an old one. */
+    for (index = 0U; index < count && replace != 0; ++index) {
+        backups[index] = create_backup_link(files[index]->final_path, &existed[index]);
+        if (existed[index] < 0 || (existed[index] != 0 && backups[index] == NULL)) {
+            saved_errno = errno != 0 ? errno : EIO;
+            goto rollback;
+        }
+    }
     for (index = 0U; index < count; ++index) {
         if (index != 0U) {
             struct stat first_status;
@@ -1921,18 +1969,11 @@ static int atomic_file_commit_pair_mode(AtomicFile *first,
                 goto rollback;
             }
         }
-        if (replace != 0) {
-            backups[index] = create_backup_link(files[index]->final_path, &existed[index]);
-            if (existed[index] < 0 || (existed[index] != 0 && backups[index] == NULL)) {
-                saved_errno = errno != 0 ? errno : EIO;
-                goto rollback;
-            }
-        }
         if ((replace != 0
                  ? file_rename(files[index]->temporary_path,
                                files[index]->final_path)
                  : file_publish_new(files[index]->temporary_path,
-                                    files[index]->final_path)) != 0) {
+                                    files[index]->final_path, count == 1U)) != 0) {
             saved_errno = errno;
             goto rollback;
         }
@@ -1955,8 +1996,10 @@ rollback:
         struct stat restored_identity[2];
         size_t reverse = count;
 
-        /* Keep each new inode available until the whole rollback succeeds.
-         * A failed second restore must not strand an old/new key mixture. */
+        /* Keep each new inode of a pair available until the whole rollback
+         * succeeds: a failed second restore must not strand an old/new key
+         * mixture. A single output cannot mix, so it is never copied, however
+         * large a decrypted file is. */
         for (index = 0U; index < count; ++index) {
             struct stat status;
             int created = 0;
@@ -1964,6 +2007,7 @@ rollback:
             if (published[index] == 0) continue;
             ours[index] = path_identifies_descriptor(files[index]->final_path,
                                                        published_descriptors[index]);
+            if (count == 1U) continue;
             if (published_descriptors[index] >= 0 &&
                 fstat(published_descriptors[index], &status) == 0 &&
                 copy_backup_descriptor(published_descriptors[index], &status,

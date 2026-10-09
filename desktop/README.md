@@ -57,7 +57,7 @@ characters, then save. Notes can be edited and entries deleted after an inline
 confirmation. On **Encrypt file**, choose **Saved contact** and explicitly select a
 recipient; a contact's **Use for encryption** action opens that page with it selected.
 Lists and the selection show the full SHA-256 fingerprint, the list also shows the source
-file name; the multi-select list also shows every full fingerprint and wraps it without truncating it. Source names drop control, bidirectional, zero-width and Unicode line/paragraph separator characters. A completed encryption names the recipient and its fingerprint. Notes are labels only: verify fingerprints with recipients through a
+file name; the multi-select list also shows every full fingerprint and wraps it without truncating it. Source names drop control characters, Unicode line/paragraph separators and every Unicode format character (bidirectional and zero-width controls among them); a zero-width joiner or non-joiner stays only between two visible non-ASCII characters, as emoji and some scripts need. A completed encryption names the recipient and its fingerprint. Notes are labels only: verify fingerprints with recipients through a
 trusted channel. Decryption and fingerprints keep their file/paste key sources.
 
 Contacts live beside the shared language preference, in `LocalAppData/NekoKEM/contacts`
@@ -300,11 +300,14 @@ Encryption and decryption report an existing output before writing it. Choose an
 path, or tick “Replace the existing output file” and start again. This confirmation
 covers one run at the same output path and follows the same session/expiry rule as
 key replacement. Without confirmation, the final Core commit is atomically create-only:
-a file created by another writer during processing is preserved and reported too.
+a file created by another writer during processing is preserved and reported too. On
+volumes with neither hard links nor a no-replace rename (FAT or exFAT on macOS, some
+network mounts), the commit instead checks the target immediately before an ordinary rename.
 For decryption, re-enter the password after the first attempt clears it.
 加解密会先提示已有输出文件；请选择新路径，或勾选“覆盖已有输出文件”后重新开始。
 确认仅适用于同一输出路径的一次操作，使用与密钥替换相同的会话与过期规则；
-未确认时 Core 最终提交以原子方式拒绝覆盖，处理过程中其他写入者新建的目标也会保留并提示。
+未确认时 Core 最终提交以原子方式拒绝覆盖，处理过程中其他写入者新建的目标也会保留并提示；
+在既不支持硬链接也不支持不覆盖重命名的卷上（如 macOS 上的 FAT、exFAT 和部分网络挂载），改为在普通重命名前一刻检查目标。
 解密首次尝试清除口令后，需要重新输入。
 
 On Windows, the same local fixed-NTFS, owner/ACL, ancestor pinning, regular-file, hard-link,

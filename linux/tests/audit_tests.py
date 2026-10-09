@@ -169,7 +169,7 @@ class AuditTests(unittest.TestCase):
                 process.stdin.close()
                 process.stderr.close()
 
-    def test_installer_pins_release_and_requires_requested_attestation(self):
+    def test_installer_uses_one_release_and_requires_requested_attestation(self):
         fixtures = self.root / 'fixtures'
         fixtures.mkdir()
         package = 'NekoKEM-linux-x86_64'
@@ -193,27 +193,52 @@ class AuditTests(unittest.TestCase):
         tools.mkdir()
         scripts = {
             'uname': '#!/bin/sh\ncase "$1" in -s) echo Linux;; -m) echo x86_64;; esac\n',
-            'curl': '#!/bin/sh\nwhile [ "$#" -gt 0 ]; do case "$1" in --output) shift; destination=$1;; https:*) url=$1;; esac; shift; done\nprintf "%s\\n" "$url" >> "$FIXTURES/urls"\ncp "$FIXTURES/${url##*/}" "$destination"\n',
+            'curl': '#!/bin/sh\nwhile [ "$#" -gt 0 ]; do case "$1" in --output) shift; destination=$1;; --write-out) shift; write_out=$1;; https:*) url=$1;; esac; shift; done\nprintf "%s\\n" "$url" >> "$FIXTURES/urls"\nif [ -n "${write_out:-}" ]; then printf "%s" "$LATEST_URL"; exit 0; fi\ncp "$FIXTURES/${url##*/}" "$destination"\n',
             'gh': '#!/bin/sh\nprintf "%s\\n" "$*" > "$FIXTURES/gh-args"\nexit "${ATTESTATION_STATUS:-0}"\n',
         }
         for name, text in scripts.items():
             (tools / name).write_text(text)
             (tools / name).chmod(0o755)
         environment = dict(self.env, PATH=str(tools) + ':' + os.environ['PATH'], FIXTURES=str(fixtures),
-                           NEKOKEM_INSTALL_DIR=str(self.root / 'installed'), NEKOKEM_VERIFY_ATTESTATION='1')
+                           NEKOKEM_INSTALL_DIR=str(self.root / 'installed'), NEKOKEM_VERIFY_ATTESTATION='1',
+                           LATEST_URL='https://github.com/Shixiaoshi0417/NekoKEM/releases/tag/v4.1.0')
+        environment.pop('NEKOKEM_RELEASE_TAG', None)
         (self.root / 'installed').mkdir()
         failed = subprocess.run(['sh', str(INSTALLER)], cwd=self.root, env=dict(environment, ATTESTATION_STATUS='1'),
                                 capture_output=True, timeout=10)
         self.assertNotEqual(failed.returncode, 0)
         self.assertFalse((self.root / 'installed/nekokem').exists())
+        (fixtures / 'urls').unlink()
         passed = subprocess.run(['sh', str(INSTALLER)], cwd=self.root, env=environment,
                                 capture_output=True, timeout=10)
         self.assertEqual(passed.returncode, 0, passed.stderr)
         self.assertIn('attestation verify ', (fixtures / 'gh-args').read_text())
         self.assertIn('--repo Shixiaoshi0417/NekoKEM', (fixtures / 'gh-args').read_text())
+        # "latest" is resolved once; every download then names that release.
         urls = (fixtures / 'urls').read_text().splitlines()
-        self.assertTrue(all('/releases/download/v4.1.0/' in url for url in urls))
+        self.assertEqual(urls[0], 'https://github.com/Shixiaoshi0417/NekoKEM/releases/latest')
+        self.assertTrue(urls[1:] and all('/releases/download/v4.1.0/' in url for url in urls[1:]))
         self.assertTrue((self.root / 'installed/nekokem').exists())
+
+        (self.root / 'installed/nekokem').unlink()
+        (fixtures / 'urls').unlink()
+        pinned = subprocess.run(['sh', str(INSTALLER)], cwd=self.root,
+                                env=dict(environment, NEKOKEM_RELEASE_TAG='v4.1.0', LATEST_URL='unused'),
+                                capture_output=True, timeout=10)
+        self.assertEqual(pinned.returncode, 0, pinned.stderr)
+        urls = (fixtures / 'urls').read_text().splitlines()
+        self.assertTrue(urls and all('/releases/download/v4.1.0/' in url for url in urls))
+
+        # A binary from another release, or no recognizable tag, installs nothing.
+        (self.root / 'installed/nekokem').unlink()
+        for latest in ('https://github.com/Shixiaoshi0417/NekoKEM/releases/tag/v4.2.0',
+                       'https://github.com/Shixiaoshi0417/NekoKEM/releases',
+                       'https://github.com/Shixiaoshi0417/NekoKEM/releases/tag/v4.1.0-rc1'):
+            refused = subprocess.run(['sh', str(INSTALLER)], cwd=self.root,
+                                     env=dict(environment, LATEST_URL=latest),
+                                     capture_output=True, timeout=10)
+            self.assertNotEqual(refused.returncode, 0, latest)
+            self.assertFalse((self.root / 'installed/nekokem').exists(), latest)
 
 
 if __name__ == '__main__':

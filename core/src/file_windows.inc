@@ -657,8 +657,15 @@ static int win_inspect_key_artifacts(const char *path, HANDLE key, int remove_ow
                     win_acl(residue, 1) && GetFileInformationByHandle(residue, &info);
         int same = valid && have_key && info.dwVolumeSerialNumber == key_info.dwVolumeSerialNumber &&
                    info.nFileIndexHigh == key_info.nFileIndexHigh && info.nFileIndexLow == key_info.nFileIndexLow;
+        /* A key generation stages its file before taking the pair lock, so a
+         * recent temporary file may still belong to another process. */
+        FILETIME now;
+        GetSystemTimeAsFileTime(&now);
+        ULONGLONG written = ((ULONGLONG)info.ftLastWriteTime.dwHighDateTime << 32) | info.ftLastWriteTime.dwLowDateTime;
+        ULONGLONG current = ((ULONGLONG)now.dwHighDateTime << 32) | now.dwLowDateTime;
+        int stale = valid && current > written && current - written > 600ULL * 10000000ULL;
         int ours = valid && (same || (info.nNumberOfLinks == 1 &&
-            (wcsncmp(entry.cFileName + name_length, L".tmp.", 5) == 0 ||
+            ((stale && wcsncmp(entry.cFileName + name_length, L".tmp.", 5) == 0) ||
              (ReadFile(residue, magic, sizeof(magic), &count, NULL) &&
               ((count >= 4 && memcmp(magic, "NKPR", 4) == 0) ||
                (count == sizeof(magic) && memcmp(magic, "-----BEGIN PRIVATE KEY-----", sizeof(magic)) == 0))))));
@@ -687,14 +694,16 @@ int file_delete_private_key_under_lock(const char *path)
     int success = 0;
     if (key == INVALID_HANDLE_VALUE && error != ERROR_FILE_NOT_FOUND) goto cleanup;
     if (key != INVALID_HANDLE_VALUE && (!win_regular(key, 0) || !win_acl(key, 1))) goto cleanup;
-    success = win_inspect_key_artifacts(path, key, 1, NULL);
+    int retained = !win_inspect_key_artifacts(path, key, 1, NULL);
     /* Windows has no supported directory fsync. Flush the retained file
      * handle and submit its synchronous delete disposition before closing. */
     if (key != INVALID_HANDLE_VALUE && (!win_flush(key) || !win_dispose(key))) {
         print_system_error("Cannot sync the private-key directory after deletion");
-        success = 0;
+        goto cleanup;
     }
-    if (!success) fprintf(stderr, file_message("Some key transaction residues were retained; inspect them before cleanup\n"));
+    /* The key itself is gone: a retained residue is reported, not a failure. */
+    success = 1;
+    if (retained) fprintf(stderr, file_message("Some key transaction residues were retained; inspect them before cleanup\n"));
 cleanup:
     if (key != INVALID_HANDLE_VALUE) CloseHandle(key);
     win_path_close(&checked);

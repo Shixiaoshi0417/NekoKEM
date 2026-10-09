@@ -285,12 +285,22 @@ static int password_is_utf8(const unsigned char *data, size_t length)
 }
 
 #ifndef _WIN32
+/* The desktop bridge's staging policy: owned, 0700 and no extended ACL grant. */
 static int private_temp_parent(const char *path)
 {
     struct stat status;
-    return path != NULL && path[0] == '/' && lstat(path, &status) == 0 &&
-           S_ISDIR(status.st_mode) && status.st_uid == geteuid() &&
-           (status.st_mode & (mode_t)0777) == (mode_t)0700;
+    int directory;
+    int safe;
+
+    if (path == NULL || path[0] != '/') return 0;
+    directory = open(path, O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC);
+    if (directory < 0) return 0;
+    safe = fstat(directory, &status) == 0 && S_ISDIR(status.st_mode) &&
+           status.st_uid == geteuid() &&
+           (status.st_mode & (mode_t)0777) == (mode_t)0700 &&
+           file_private_acl_is_safe(directory);
+    (void)close(directory);
+    return safe;
 }
 
 static char *create_paste_directory(void)
@@ -330,6 +340,12 @@ static char *create_paste_directory(void)
     if (mkdtemp(directory) == NULL) {
         free(directory);
         directory = NULL;
+    } else if (!private_temp_parent(directory)) {
+        /* An inherited ACL entry would expose the pasted key file. */
+        (void)rmdir(directory);
+        free(directory);
+        directory = NULL;
+        errno = EACCES;
     }
 cleanup:
     free(fallback);

@@ -305,7 +305,8 @@ test: $(TARGET) test-openssl analyze test-ubsan test-parser test-file-security t
 			"$$test_dir/keys/private.key" \
 			"$$test_dir/keys/private.key.enc"; \
 		rmdir "$$test_dir/plaintext" "$$test_dir/encrypted" \
-			"$$test_dir/keys" "$$test_dir" 2>/dev/null || true; \
+			"$$test_dir/keys" "$$test_dir/runtime" "$$test_dir" \
+			2>/dev/null || true; \
 	}; \
 	trap cleanup EXIT INT TERM; \
 	mkdir "$$test_dir/encrypted"; \
@@ -444,17 +445,19 @@ test: $(TARGET) test-openssl analyze test-ubsan test-parser test-file-security t
 		2>long-input-error.txt; \
 	grep -F 'Input exceeds 4096 bytes and was discarded' \
 		long-input-error.txt >/dev/null; \
+	mkdir -m 0700 runtime; \
 	if { printf '2\n2\n'; \
 		awk 'BEGIN { for (i = 0; i < 17000; ++i) printf "A"; \
 			printf "\\n"; }'; \
 		printf '5\n'; \
-	} | ./nekokem >long-paste-output.txt 2>long-paste-error.txt; then \
+	} | XDG_RUNTIME_DIR="$$test_dir/runtime" ./nekokem \
+		>long-paste-output.txt 2>long-paste-error.txt; then \
 		echo "Failed paste returned success" >&2; exit 1; \
 	fi; \
 	grep -F 'Pasted-key line exceeds 16384 bytes and was discarded' \
 		long-paste-error.txt >/dev/null; \
-	test -z "$$(find /tmp -maxdepth 1 -type d \
-		-name 'nekokem-paste.*' -print -quit)"; \
+	test -z "$$(find runtime -mindepth 1 -print -quit)"; \
+	rmdir runtime; \
 	cp keys/private.key.enc menu-before.enc; \
 	if printf '1\n5\n' | ./nekokem --lang en >/dev/null 2>menu-refused.txt; then \
 		echo "Failed menu operation returned success" >&2; exit 1; \

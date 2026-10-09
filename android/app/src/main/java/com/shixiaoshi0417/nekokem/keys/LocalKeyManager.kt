@@ -778,9 +778,12 @@ class LocalKeyManager internal constructor(
             }
         }
 
-    fun recoveryBackupCount(): Int = keysDirectory.listFiles().orEmpty().count { file ->
-        (file.name.startsWith(PUBLIC_BACKUP_PREFIX) || file.name.startsWith(PRIVATE_BACKUP_PREFIX)) &&
-            ownedRegularFile(file)
+    /** Counted under the mutation lock, so an import's short-lived backup is never reported. */
+    fun recoveryBackupCount(): Int = keyMutationLock.withLock {
+        keysDirectory.listFiles().orEmpty().count { file ->
+            (file.name.startsWith(PUBLIC_BACKUP_PREFIX) || file.name.startsWith(PRIVATE_BACKUP_PREFIX)) &&
+                ownedRegularFile(file)
+        }
     }
 
     private fun ownedRegularFile(file: File): Boolean = try {

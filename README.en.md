@@ -100,7 +100,7 @@ interface languages are updated. Cryptographic parameters, file formats and secr
 remain unchanged. See the [desktop GUI documentation](desktop/README.md#public-key-contacts--公钥通讯录).
 This feature is available from v3.3.2; v3.3.1 and earlier do not include it.
 
-Desktop encryption and decryption report an existing output before writing; confirm replacement and retry, re-entering the decryption password. Unconfirmed operations publish atomically without replacement, so a target created during the operation is also preserved. The backend accepts replacement only at the exact paths from its preceding `key-exists` or `output-exists` response in the same session, once within five minutes and consumed by the next operation. POSIX pasted keys prefer a safe `$XDG_RUNTIME_DIR`, then private `~/.nekokem-tmp`; staging disables stdio buffering and omits `fsync`. Capabilities grant only event listening, unlistening and native open/save dialogs. Navigation allows only the platform local origin, rejecting HTTPS and new windows. Recipient lists show full fingerprints; names drop controls, separators, bidi and zero-width characters.
+Desktop encryption and decryption report an existing output before writing; confirm replacement and retry, re-entering the decryption password. Unconfirmed operations publish atomically without replacement, so a target created during the operation is also preserved; on volumes with neither hard links nor a no-replace rename (FAT or exFAT on macOS, some network mounts), the commit instead checks the target immediately before an ordinary rename. The backend accepts replacement only at the exact paths from its preceding `key-exists` or `output-exists` response in the same session, once within five minutes and consumed by the next operation. POSIX pasted keys prefer a safe `$XDG_RUNTIME_DIR`, then private `~/.nekokem-tmp`; staging disables stdio buffering and omits `fsync`. Capabilities grant only event listening, unlistening and native open/save dialogs. Navigation allows only the platform local origin, rejecting HTTPS and new windows. Recipient lists show full fingerprints; names drop controls, separators and every Unicode format character, keeping a zero-width joiner or non-joiner only between two visible non-ASCII characters.
 
 ## Historical release v3.2.0
 
@@ -110,7 +110,7 @@ v3.2.0 introduced five interface languages, system-language selection and securi
 
 The Android App version is `3.1.1`; the Core version remains `3.1`, and the application ID is `com.shixiaoshi0417.nekokem`. See [`android/README.md`](android/README.md) for the Android project and build instructions. App version 3.1.1 does not change protocol numbering: the default file container remains **NKEM v3**, and the NKPR format is unchanged.
 
-v3.1.1 adds Linux x86_64/aarch64 CLI packages without runtime shared-library dependencies, an automatic installation script, and GitHub Actions builds. The current installer selects the package for the local architecture from the fixed `v4.1.0` Release. It first verifies the archive against the release's top-level `SHA256SUMS.txt`, then verifies SHA-256 hashes of the files inside the package:
+v3.1.1 adds Linux x86_64/aarch64 CLI packages without runtime shared-library dependencies, an automatic installation script, and GitHub Actions builds. The current installer selects the package for the local architecture from the latest published Release, resolved once so every download comes from the same release; `NEKOKEM_RELEASE_TAG=v4.1.0 sh install.sh` installs a specific release, and the installed binary must report that version. It first verifies the archive against the release's top-level `SHA256SUMS.txt`, then verifies SHA-256 hashes of the files inside the package:
 
 ```sh
 curl --fail --location --output install.sh \
@@ -119,7 +119,7 @@ less install.sh
 sh install.sh
 ```
 
-Checksums verify download integrity, not provenance. `NEKOKEM_VERIFY_ATTESTATION=1 sh install.sh` additionally invokes `gh attestation verify`; this applies to attested releases after `v4.1.0` and refuses installation when proof is unavailable for the currently pinned historical release.
+Checksums verify download integrity, not provenance. `NEKOKEM_VERIFY_ATTESTATION=1 sh install.sh` additionally invokes `gh attestation verify`; this applies to attested releases after `v4.1.0` and refuses installation of `v4.1.0` and earlier, which carry no provenance attestation.
 
 The Linux CLI supports `nekokem --version`. This release patch does not change the Core API, cryptographic parameters, NKEM v3, or the NKPR format.
 
@@ -263,7 +263,7 @@ Enter a private-key file path or paste two compatible plaintext PEM private-key 
 
 Terminal echo is also temporarily disabled when pasting legacy private-key contents. The internal temporary key file has mode `0600` and is deleted after the operation. Ctrl+Z at a hidden prompt shows input again while the program is stopped, and `fg` hides it again. Encrypted PKCS#8 PEM paste is rejected immediately with guidance to select an NKPR file. Secret input is refused in detected mintty/MSYS ptys that cannot reliably hide echo; use Windows Terminal or redirected standard input.
 
-Interactive decryption refuses an existing `plaintext/<name>`, including targets created while entering the password; final publication uses an atomic no-replace operation. Menu option 5 and EOF return the most recent operation's result, with success before any operation. Only newly set private-key passwords require valid UTF-8; existing-key passwords retain their original byte interpretation. Displayed names and paths replace terminal controls, bidi controls and zero-width characters with `?`, while filesystem operations use the original paths.
+Interactive decryption refuses an existing `plaintext/<name>`, including targets created while entering the password; final publication uses an atomic no-replace operation, or, on volumes with neither hard links nor a no-replace rename, a check immediately before an ordinary rename. Menu option 5 and EOF return the most recent operation's result, with success before any operation. Only newly set private-key passwords require valid UTF-8; existing-key passwords retain their original byte interpretation. Displayed names and paths replace terminal controls, bidi controls and zero-width characters with `?`, while filesystem operations use the original paths.
 
 The input file must end in `.nkem`. The program ensures a `plaintext/` directory with mode `0700` exists in the working directory, creating it if necessary. It uses only the container filename, removes `.nkem`, and restores the file into `plaintext/`:
 

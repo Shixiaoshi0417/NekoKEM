@@ -17,7 +17,10 @@ Download and inspect the installer, then run it:
     sh install.sh
 
 The installer detects x86_64 or aarch64, downloads the matching archive from
-the fixed v4.1.0 GitHub Release, verifies the archive's SHA256SUMS, and
+the latest published GitHub Release (resolved once, so the archive, its
+checksums and the expected version come from one release; set
+NEKOKEM_RELEASE_TAG=vX.Y.Z for a specific release), verifies the archive's
+SHA256SUMS, and
 installs nekokem in /usr/local/bin. It uses sudo only when the destination is
 not writable; if sudo is unavailable, it prints a manual recovery command.
 The installer never compiles source code or installs OpenSSL or other packages.
@@ -28,9 +31,9 @@ verification with:
     NEKOKEM_VERIFY_ATTESTATION=1 sh install.sh
 
 This runs gh attestation verify on the archive before extraction and installation.
-A failed or unavailable attestation stops installation. The pinned v4.1.0
-release predates these attestations, so enabling this option for that release
-will stop installation until a verified attestation is available.
+A failed or unavailable attestation stops installation. v4.1.0 and earlier
+releases predate these attestations, so enabling this option for them stops
+installation.
 
 After installation:
 

@@ -191,6 +191,7 @@ static int reject_pem_password(char *buffer, int size,
 
 static int parse_hybrid_private_keys(const unsigned char *pem,
                                      size_t pem_len,
+                                     int decrypted,
                                      HybridKeys *keys)
 {
     BIO *input = NULL;
@@ -214,9 +215,13 @@ static int parse_hybrid_private_keys(const unsigned char *pem,
     loaded.mlkem = PEM_read_bio_PrivateKey(
         input, NULL, reject_pem_password, NULL);
     if (loaded.x448 == NULL || loaded.mlkem == NULL) {
-        /* Damaged NKPR magic takes the plaintext parser path as well. */
         ERR_clear_error();
-        fputs(file_message("Private-key password is incorrect or NKPR data is corrupted"), stderr);
+        /* Only decrypted NKPR contents point at the password; a plaintext
+         * file that fails (a public key, any other file, damaged NKPR magic)
+         * was never decrypted with one. */
+        fputs(file_message(decrypted != 0
+                               ? "Private-key password is incorrect or NKPR data is corrupted"
+                               : "Cannot parse both hybrid key components"), stderr);
         fputc('\n', stderr);
         goto cleanup;
     }
@@ -301,7 +306,7 @@ int hybrid_load_private_keys(const char *path, HybridKeys *keys)
                              &pem, &pem_len)) {
         goto cleanup;
     }
-    success = parse_hybrid_private_keys(pem, pem_len, keys);
+    success = parse_hybrid_private_keys(pem, pem_len, 0, keys);
     if (success && !x448_private_key_is_usable(keys->x448)) {
         hybrid_keys_cleanup(keys);
         success = 0;
@@ -328,7 +333,7 @@ int hybrid_load_protected_private_keys(
                                     &pem, &pem_len)) {
         goto cleanup;
     }
-    success = parse_hybrid_private_keys(pem, pem_len, keys);
+    success = parse_hybrid_private_keys(pem, pem_len, 1, keys);
     if (success && !x448_private_key_is_usable(keys->x448)) {
         hybrid_keys_cleanup(keys);
         success = 0;
@@ -398,11 +403,11 @@ int hybrid_load_decryption_keys(
         loaded = protected_private_key_decode(contents, contents_len,
                                               password, password_len,
                                               &pem, &pem_len) &&
-                 parse_hybrid_private_keys(pem, pem_len, keys);
+                 parse_hybrid_private_keys(pem, pem_len, 1, keys);
     } else if (contents_len > MAX_PRIVATE_KEY_FILE_SIZE) {
         fprintf(stderr, file_message("Sensitive input exceeds the size limit\n"));
     } else {
-        loaded = parse_hybrid_private_keys(contents, contents_len, keys);
+        loaded = parse_hybrid_private_keys(contents, contents_len, 0, keys);
     }
 
 cleanup:

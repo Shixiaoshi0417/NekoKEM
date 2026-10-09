@@ -2,7 +2,8 @@
 set -eu
 
 readonly_repository="Shixiaoshi0417/NekoKEM"
-release_tag="v4.1.0"
+# Empty installs the latest published release; vX.Y.Z installs that release.
+release_tag=${NEKOKEM_RELEASE_TAG:-}
 verify_attestation=${NEKOKEM_VERIFY_ATTESTATION:-0}
 case "$verify_attestation" in
     0 | 1) ;;
@@ -73,6 +74,27 @@ cleanup() {
     fi
 }
 trap cleanup EXIT HUP INT TERM
+
+valid_release_tag() {
+    awk -v tag="$1" 'BEGIN { exit !(tag ~ /^v[0-9]+\.[0-9]+\.[0-9]+$/) }'
+}
+
+# Resolve "latest" once, so the archive, its checksums and the expected
+# version all come from one release, even while another is being published.
+if [ -z "$release_tag" ]; then
+    latest_url="https://github.com/$readonly_repository/releases/latest"
+    if [ "$download_tool" = "curl" ]; then
+        resolved_url=$(curl --fail --location --silent --show-error --proto '=https' \
+            --tlsv1.2 --retry 3 --output /dev/null --write-out '%{url_effective}' \
+            "$latest_url") || fail "cannot find the latest GitHub Release"
+    else
+        resolved_url=$(wget --https-only --spider --server-response "$latest_url" 2>&1 |
+            awk '{ sub(/\r$/, "") } tolower($1) == "location:" { location = $2 } END { print location }')
+    fi
+    release_tag=${resolved_url##*/}
+fi
+valid_release_tag "$release_tag" ||
+    fail "cannot determine a release version (expected vX.Y.Z, got '$release_tag')"
 
 package_name="NekoKEM-linux-$release_arch"
 archive_name="$package_name.tar.gz"

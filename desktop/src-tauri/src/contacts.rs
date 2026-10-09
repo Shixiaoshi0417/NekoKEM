@@ -60,11 +60,12 @@ struct Record {
 impl Record {
     fn is_valid(&self, id: &str) -> bool {
         self.version == RECORD_VERSION && identity(&self.fingerprint).as_deref() == Some(id) &&
-            self.name == clean_name(&self.name) && clean_note(&self.note).is_ok_and(|note| note == self.note) &&
+            (self.name == clean_name(&self.name) || self.name == legacy_clean_name(&self.name)) &&
+            clean_note(&self.note).is_ok_and(|note| note == self.note) &&
             valid_public_key(&self.public_key)
     }
     fn contact(&self, id: &str) -> Contact {
-        Contact { id: id.into(), fingerprint: self.fingerprint.clone(), name: self.name.clone(), note: self.note.clone() }
+        Contact { id: id.into(), fingerprint: self.fingerprint.clone(), name: clean_name(&self.name), note: self.note.clone() }
     }
 }
 
@@ -266,9 +267,41 @@ pub fn clean_note(note: &str) -> Result<String, Failure> {
 
 fn file_name(path: &str) -> &str { path.rsplit(['/', '\\']).next().unwrap_or_default() }
 
-// Source names come from files received from others: drop control and
-// bidirectional formatting characters so a name cannot disguise itself.
+// Source names come from files received from others: drop controls, line
+// separators and every format character (Unicode Cf, as Android filters by
+// category) so a name cannot disguise itself. A zero-width joiner or
+// non-joiner stays only between two visible non-ASCII characters, where
+// scripts and emoji sequences need it.
 fn clean_name(name: &str) -> String {
+    let kept: Vec<char> = name.chars()
+        .filter(|&c| joiner(c) || !(c.is_control() || matches!(c, '\u{2028}' | '\u{2029}') || format_character(c)))
+        .collect();
+    let visible: String = kept.iter().enumerate()
+        .filter(|&(index, &c)| !joiner(c) ||
+            (index > 0 && joinable(kept[index - 1]) && kept.get(index + 1).is_some_and(|&next| joinable(next))))
+        .map(|(_, &c)| c)
+        .collect();
+    let mut capped: String = visible.trim().chars().take(MAX_NAME_CHARS).collect();
+    // The cap may have cut the character a joiner was joining.
+    if capped.ends_with(joiner) { capped.pop(); }
+    capped.trim_end().into()
+}
+
+fn joiner(c: char) -> bool { matches!(c, '\u{200c}' | '\u{200d}') }
+
+fn joinable(c: char) -> bool { !c.is_ascii() && !joiner(c) && !c.is_whitespace() }
+
+fn format_character(c: char) -> bool {
+    matches!(c, '\u{ad}' | '\u{600}'..='\u{605}' | '\u{61c}' | '\u{6dd}' | '\u{70f}' | '\u{890}'..='\u{891}' |
+        '\u{8e2}' | '\u{180e}' | '\u{200b}'..='\u{200f}' | '\u{202a}'..='\u{202e}' | '\u{2060}'..='\u{2064}' |
+        '\u{2066}'..='\u{206f}' | '\u{feff}' | '\u{fff9}'..='\u{fffb}' | '\u{110bd}' | '\u{110cd}' |
+        '\u{13430}'..='\u{1343f}' | '\u{1bca0}'..='\u{1bca3}' | '\u{1d173}'..='\u{1d17a}' | '\u{e0001}' |
+        '\u{e0020}'..='\u{e007f}')
+}
+
+// Names saved by v4.0 and v4.1 used this narrower filter; they stay valid
+// records and are cleaned again for display.
+fn legacy_clean_name(name: &str) -> String {
     let visible: String = name.chars()
         .filter(|&c| !c.is_control() && !matches!(c, '\u{061c}' | '\u{200b}'..='\u{200f}' | '\u{2028}'..='\u{202e}' | '\u{2060}' | '\u{2066}'..='\u{2069}' | '\u{feff}'))
         .collect();
@@ -337,6 +370,24 @@ pub mod tests {
     fn source_names_drop_controls_separators_bidi_and_zero_width_characters() {
         assert_eq!(clean_name(" a\u{0085}\u{2028}\u{2029}\u{061c}\u{200b}\u{200c}\u{200d}\u{200e}\u{200f}\u{202a}\u{202e}\u{2060}\u{2066}\u{2069}\u{feff}b.pub "),"ab.pub");
         assert_eq!(clean_name(&"猫".repeat(129)).chars().count(),128);
+        // Every format character, not only a hand-made list.
+        assert_eq!(clean_name("a\u{00ad}\u{2061}\u{2064}\u{180e}\u{206a}\u{fff9}\u{e0041}b"),"ab");
+    }
+
+    #[test]
+    fn joiners_stay_only_between_visible_non_ascii_characters() {
+        let family = "\u{1f468}\u{200d}\u{1f469}\u{200d}\u{1f467}.pub";
+        assert_eq!(clean_name(family), family);
+        assert_eq!(clean_name("\u{645}\u{6cc}\u{200c}\u{62e}"), "\u{645}\u{6cc}\u{200c}\u{62e}");
+        assert_eq!(clean_name("\u{200d}a\u{200d}b\u{200c}.pub\u{200d}"), "ab.pub");
+        // Judged after filtering: a hidden character or a second joiner is no neighbour.
+        assert_eq!(clean_name("\u{e9}\u{200d}\u{200b}a"), "\u{e9}a");
+        assert_eq!(clean_name("\u{e9}\u{200d}\u{200d}\u{e9}"), "\u{e9}\u{e9}");
+        assert_eq!(clean_name("\u{3000}\u{200d}\u{e9}"), "\u{e9}");
+        let capped = clean_name(&format!("{}\u{200d}\u{e9}", "\u{e9}".repeat(MAX_NAME_CHARS)));
+        assert!(!capped.ends_with('\u{200d}'));
+        let capped = clean_name(&format!("{}\u{200d}\u{e9}", "\u{e9}".repeat(MAX_NAME_CHARS - 1)));
+        assert_eq!(capped.chars().count(), MAX_NAME_CHARS - 1);
     }
 
     #[test]
@@ -469,6 +520,15 @@ pub mod tests {
         assert_eq!((repaired.id.as_str(), repaired.note.as_str()), (saved.id.as_str(), "Alice again"));
         assert!(store.stage(&saved.id).is_ok());
         assert_eq!(store.list().unwrap().unreadable, 0);
+
+        // A name saved under the v4.0/v4.1 filter stays usable and is shown cleaned.
+        let mut legacy: serde_json::Value = serde_json::from_str(&original).unwrap();
+        legacy["name"] = "Al\u{ad}ice.pub".into();
+        rewrite(&store, &saved.id, &legacy.to_string());
+        assert!(store.stage(&saved.id).is_ok());
+        let listed = store.list().unwrap();
+        assert_eq!(listed.unreadable, 0);
+        assert!(listed.contacts.iter().any(|contact| contact.id == saved.id && contact.name == "Alice.pub"));
 
         // Damaged records can still be deleted; foreign names are ignored.
         rewrite(&store, &saved.id, "{");

@@ -84,7 +84,6 @@ def check_versions(root):
 
     matches('linux/src/main.c', r'#define NEKOKEM_CLI_VERSION "([^"]+)"')
     matches('linux/packaging/README', r'^NekoKEM Linux CLI ([^\n]+)')
-    matches('linux/install.sh', r'(?m)^release_tag="v([^"]+)"')
     matches('linux/scripts/build-linux-release.sh', r'NekoKEM ([0-9]+\.[0-9]+\.[0-9]+)')
     matches('macos/scripts/build-macos-cli.sh', r'NekoKEM ([0-9]+\.[0-9]+\.[0-9]+)')
     matches('macos/scripts/build-macos-cli.sh', r"'version':\s*'([^']+)'")

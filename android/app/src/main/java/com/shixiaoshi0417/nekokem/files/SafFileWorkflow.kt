@@ -42,27 +42,34 @@ data class SelectedDocument(
  * suggests output file names, so the cap leaves a real file name whole.
  */
 internal fun displaySafeName(name: String?, fallback: String): String {
-    val raw = name.orEmpty()
+    // Joiners are judged by their neighbours after everything else unsafe is
+    // gone, so a hidden character or a second joiner is never a neighbour.
+    val kept = name.orEmpty().codePoints()
+        .filter { isJoiner(it) || isSafeNameCodePoint(it) }
+        .toArray()
     val visible = buildString {
-        var index = 0
-        while (index < raw.length) {
-            val codePoint = raw.codePointAt(index)
-            val next = index + Character.charCount(codePoint)
-            val keep = if (codePoint == ZERO_WIDTH_NON_JOINER || codePoint == ZERO_WIDTH_JOINER) {
-                length > 0 && codePointBefore(length) > MAX_ASCII &&
-                    next < raw.length && raw.codePointAt(next) > MAX_ASCII
-            } else {
-                isSafeNameCodePoint(codePoint)
-            }
-            if (keep) appendCodePoint(codePoint)
-            index = next
+        kept.forEachIndexed { index, codePoint ->
+            if (!isJoiner(codePoint) ||
+                (index > 0 && isJoinable(kept[index - 1]) &&
+                    index + 1 < kept.size && isJoinable(kept[index + 1]))
+            ) appendCodePoint(codePoint)
         }
     }.trim()
     val end = if (visible.codePointCount(0, visible.length) > MAX_DISPLAY_NAME_LENGTH) {
         visible.offsetByCodePoints(0, MAX_DISPLAY_NAME_LENGTH)
     } else visible.length
-    return visible.substring(0, end).trimEnd().ifEmpty { fallback }
+    var capped = visible.substring(0, end)
+    // The cap may have cut the character a joiner was joining.
+    if (capped.isNotEmpty() && isJoiner(capped.codePointBefore(capped.length))) capped = capped.dropLast(1)
+    return capped.trimEnd().ifEmpty { fallback }
 }
+
+private fun isJoiner(codePoint: Int): Boolean =
+    codePoint == ZERO_WIDTH_NON_JOINER || codePoint == ZERO_WIDTH_JOINER
+
+private fun isJoinable(codePoint: Int): Boolean =
+    codePoint > MAX_ASCII && !isJoiner(codePoint) &&
+        !Character.isWhitespace(codePoint) && !Character.isSpaceChar(codePoint)
 
 private fun isSafeNameCodePoint(codePoint: Int): Boolean = when (Character.getType(codePoint)) {
     Character.CONTROL.toInt(), Character.LINE_SEPARATOR.toInt(),

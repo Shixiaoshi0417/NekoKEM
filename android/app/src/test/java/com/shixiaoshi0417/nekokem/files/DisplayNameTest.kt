@@ -31,6 +31,10 @@ class DisplayNameTest {
             displaySafeName("\u0645\u06CC\u200C\u062E\u0648\u0627\u0647\u0645", "fallback"))
         // Between ASCII characters, or at an edge, a joiner only hides something.
         assertEquals("ab.txt", displaySafeName("\u200Da\u200Db\u200C.txt\u200D", "fallback"))
+        // Judged after filtering: a hidden character or a second joiner is no neighbour.
+        assertEquals("\u00E9a", displaySafeName("\u00E9\u200D\u200Ba", "fallback"))
+        assertEquals("\u00E9\u00E9", displaySafeName("\u00E9\u200D\u200D\u00E9", "fallback"))
+        assertEquals("\u00E9", displaySafeName("\u3000\u200D\u00E9", "fallback"))
     }
 
     @Test
@@ -39,6 +43,9 @@ class DisplayNameTest {
         assertEquals(name, displaySafeName(name, "fallback"))
         val capped = displaySafeName("\uD83D\uDD11".repeat(300), "fallback")
         assertEquals(255, capped.codePointCount(0, capped.length))
+        // The cap never leaves a joiner without the character it joined.
+        val joined = displaySafeName("\u00E9".repeat(254) + "\u200D\u00E9", "fallback")
+        assertEquals("\u00E9".repeat(254), joined)
     }
 
     @Test
