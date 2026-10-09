@@ -362,7 +362,7 @@ jobs:
       - name: Build, verify, and package
         run: bash linux/scripts/build-linux-release.sh "${{ matrix.arch }}" "$GITHUB_WORKSPACE/dist"
 
-      - name: Test latest-release installer
+      - name: Test pinned-release installer
         run: |
           sh core/tests/install_script_tests.sh \
             "${{ matrix.arch }}" \

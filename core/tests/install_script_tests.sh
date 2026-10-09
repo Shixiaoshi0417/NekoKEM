@@ -24,6 +24,7 @@ cleanup_tests() {
     rm -rf -- "$test_root"
 }
 trap cleanup_tests EXIT HUP INT TERM
+export NEKOKEM_TEST_DOWNLOADS="$test_root/downloads.log"
 
 if [ -n "${NEKOKEM_TEST_RUNNER:-}" ]; then
     runner_path=$(command -v "$NEKOKEM_TEST_RUNNER") || {
@@ -89,8 +90,9 @@ while [ "$#" -gt 0 ]; do
     shift
 done
 [ -n "$output" ] && [ -n "$url" ]
-archive_url="https://github.com/Shixiaoshi0417/NekoKEM/releases/latest/download/NekoKEM-linux-${NEKOKEM_TEST_ARCH}.tar.gz"
-sums_url="https://github.com/Shixiaoshi0417/NekoKEM/releases/latest/download/SHA256SUMS.txt"
+printf '%s\n' "$url" >> "$NEKOKEM_TEST_DOWNLOADS"
+archive_url="https://github.com/Shixiaoshi0417/NekoKEM/releases/download/v4.1.0/NekoKEM-linux-${NEKOKEM_TEST_ARCH}.tar.gz"
+sums_url="https://github.com/Shixiaoshi0417/NekoKEM/releases/download/v4.1.0/SHA256SUMS.txt"
 case "$url" in
     "$archive_url") cp "$NEKOKEM_TEST_ARCHIVE" "$output" ;;
     "$sums_url") cp "$NEKOKEM_TEST_SUMS" "$output" ;;
@@ -117,6 +119,11 @@ NEKOKEM_INSTALL_DIR="$install_root" \
 test "$("$install_root/nekokem" --version)" = "NekoKEM 4.1.0"
 grep -F "Installed NekoKEM 4.1.0 to $install_root/nekokem" \
     "$test_root/success.log" >/dev/null
+printf '%s\n' \
+    "https://github.com/Shixiaoshi0417/NekoKEM/releases/download/v4.1.0/NekoKEM-linux-$release_arch.tar.gz" \
+    'https://github.com/Shixiaoshi0417/NekoKEM/releases/download/v4.1.0/SHA256SUMS.txt' \
+    > "$test_root/expected-downloads.log"
+cmp "$test_root/expected-downloads.log" "$NEKOKEM_TEST_DOWNLOADS"
 
 bad_stage="$test_root/bad-stage"
 bad_archive="$test_root/NekoKEM-linux-$release_arch.tar.gz"
