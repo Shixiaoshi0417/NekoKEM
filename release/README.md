@@ -51,12 +51,16 @@ publishes the release as Latest. A published release is never modified.
 Android is built in two jobs. `build-apk` runs Gradle with
 `-PnekokemUnsignedRelease=true` and no signing material, and its Gradle cache
 is disabled. `signed-apk` then signs that APK with `apksigner` (APK Signature
-Scheme v2, as every release since v3.2.0) in a job that runs no build code:
-`.github/scripts/sign_android_release.py` receives the secrets in its own step
-environment only, never through `GITHUB_ENV`, keeps them in a private temporary
-directory that is removed before the step ends, checks that signing changed no
-APK entry and verifies the signer, identity, ABI and 16 KB alignment. CI runs
-the same path on every change with a throwaway key.
+Scheme v2, as every release since v3.2.0) in a job that runs no build code.
+It first checks that the downloaded APK has the SHA-256 `build-apk` recorded,
+since another job of the same run could replace a named artifact. Only the
+signing step receives the secrets, in its own environment and never through
+`GITHUB_ENV`; `.github/scripts/sign_android_release.py sign` keeps them in a
+private temporary directory removed before the step ends. A later step without
+any secret (`sign_android_release.py verify`) checks that signing changed no
+APK entry and verifies the signer, identity, ABI and 16 KB alignment, so the
+tools that parse the APK never run beside the key. CI runs the same path on
+every change with a throwaway key.
 
 Only `signed-apk` uses the GitHub Environment named `NekoKEM`, and only when
 Release runs on `main`. Set the Environment's deployment branches to `main`

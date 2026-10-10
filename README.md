@@ -41,7 +41,8 @@ v4.1.0 之后发布的版本，每个附件还带有 GitHub 构建来源证明�
 
 ```sh
 gh attestation verify NekoKEM-linux-x86_64.tar.gz --repo Shixiaoshi0417/NekoKEM \
-  --signer-workflow Shixiaoshi0417/NekoKEM/.github/workflows/release.yml
+  --signer-workflow Shixiaoshi0417/NekoKEM/.github/workflows/release.yml \
+  --source-ref refs/heads/main --deny-self-hosted-runners
 ```
 
 README 使用专用圆角展示图；Android 保留现有方形白底图案，Windows CLI/GUI EXE 保留方形图案并将外部白色区域改为透明。Windows 应用未进行 Authenticode 签名。

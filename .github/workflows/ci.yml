@@ -221,10 +221,13 @@ jobs:
           set -Eeuo pipefail
           (cd android && bash ./gradlew --no-daemon --stacktrace \
             -PnekokemUnsignedRelease=true assembleRelease)
-          python3 .github/scripts/sign_android_release.py \
+          python3 .github/scripts/sign_android_release.py sign \
             android/app/build/outputs/apk/release/app-release-unsigned.apk \
             "$RUNNER_TEMP/throwaway-signed"
           test ! -e "$RUNNER_TEMP/nekokem-release-signing"
+          python3 .github/scripts/sign_android_release.py verify \
+            android/app/build/outputs/apk/release/app-release-unsigned.apk \
+            "$RUNNER_TEMP/throwaway-signed"
           rm -rf -- "$RUNNER_TEMP/throwaway-signed"
 
       - name: Preserve executed JVM test reports

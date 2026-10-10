@@ -41,7 +41,8 @@ Releases after v4.1.0 also carry GitHub build provenance for every asset. With t
 
 ```sh
 gh attestation verify NekoKEM-linux-x86_64.tar.gz --repo Shixiaoshi0417/NekoKEM \
-  --signer-workflow Shixiaoshi0417/NekoKEM/.github/workflows/release.yml
+  --signer-workflow Shixiaoshi0417/NekoKEM/.github/workflows/release.yml \
+  --source-ref refs/heads/main --deny-self-hosted-runners
 ```
 
 README uses a dedicated rounded display image. Android retains the existing square artwork with its white background; Windows CLI/GUI EXE icons retain the square artwork with the outer white area made transparent. Windows applications are not Authenticode signed.
