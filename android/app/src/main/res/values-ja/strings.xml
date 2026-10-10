@@ -49,7 +49,12 @@
     <string name="delete_keypair_title">鍵ペアを完全に削除しますか？</string>
     <string name="delete_keypair_message">ローカルの公開鍵、暗号化された NKPR 秘密鍵、および関連する一時キャッシュを削除します。</string>
     <string name="replace_private_key_title">既存の秘密鍵を置き換えますか？</string>
-    <string name="replace_private_key_message">インポートする暗号化 NKPR 秘密鍵の形式とパスワードを確認した後にのみ、現在のローカル秘密鍵を置き換えます。</string>
+    <string name="replace_private_key_message">インポートする暗号化 NKPR 秘密鍵の形式とパスワードを確認し、現在の公開鍵と対になっていることを確かめた後にのみ、現在のローカル秘密鍵を置き換えます。</string>
+    <string name="replace_public_key_title">この端末の公開鍵を置き換えますか？</string>
+    <string name="replace_public_key_message">あなた自身の公開鍵、つまり他の人があなた宛てにファイルを暗号化するときに使う鍵を置き換えます。他の人の公開鍵を保存する場合は、公開鍵アドレス帳に追加してください。</string>
+    <string name="replace_public_key_pair_note">この端末には秘密鍵が保存されているため、新しい公開鍵はその秘密鍵と対になっている必要があります。確認のため、秘密鍵のパスワードを入力します。</string>
+    <string name="import_public_key_password_title">鍵ペアの確認</string>
+    <string name="import_public_key_password_message">この端末の秘密鍵のパスワードを入力してください。公開鍵がその秘密鍵と対になっている場合のみ置き換えます。</string>
     <string name="replace_keypair_title">既存の鍵ペアを置き換えますか？</string>
     <string name="replace_keypair_message">新しい鍵ペアを生成すると、現在の公開鍵と秘密鍵が置き換えられます。現在の公開鍵で暗号化したファイルは現在の秘密鍵でしか復号できないため、先に暗号化秘密鍵をエクスポートしてバックアップしてください。</string>
     <string name="action_generate_keypair">鍵ペアを生成</string>
@@ -134,6 +139,7 @@
     <string name="error_reason_core">NekoKEM Core が操作を拒否しました。</string>
     <string name="error_reason_unexpected">Android の操作中に予期しないエラーが発生しました。</string>
     <string name="error_reason_fingerprint_mismatch">確認後に一時的な鍵が変更されたか、フィンガープリントが一致しなくなりました。</string>
+    <string name="error_reason_key_pair_mismatch">この鍵は、この端末に保存されているもう一方の鍵と対になっていません。別の鍵ペアに切り替えるには、現在の鍵ペアを削除してから両方の鍵をインポートしてください。</string>
     <string name="error_reason_public_key_copy">SAF 公開鍵データを完全にコピーできませんでした。</string>
     <string name="error_reason_public_key_parse">Core がハイブリッド公開鍵の両方の構成要素を解析または検証できませんでした。</string>
     <string name="error_reason_public_key_normalize">Core が鍵を解析しましたが、正規化された公開鍵を出力できませんでした。</string>

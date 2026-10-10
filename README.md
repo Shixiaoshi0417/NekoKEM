@@ -37,6 +37,14 @@ Android v4.1.0 沿用 v3.2.0/v3.3.0 签名，可直接覆盖升级；建议先�
 
 下载后先用 [SHA256SUMS.txt](https://github.com/Shixiaoshi0417/NekoKEM/releases/download/v4.1.0/SHA256SUMS.txt) 校验对应归档，再校验包内文件。Linux GUI 需要 glibc 2.39+、GTK3 和 WebKitGTK 4.1；macOS 实际验证于 macOS 15，部署目标为 11.0。安装步骤与签名限制见下文各平台说明。
 
+v4.1.0 之后发布的版本，每个附件还带有 GitHub 构建来源证明，可用 GitHub CLI 确认文件由本仓库 `main` 分支上的 Release 工作流构建（把文件名换成实际下载的附件）：
+
+```sh
+gh attestation verify NekoKEM-linux-x86_64.tar.gz --repo Shixiaoshi0417/NekoKEM \
+  --signer-workflow Shixiaoshi0417/NekoKEM/.github/workflows/release.yml \
+  --source-ref refs/heads/main --deny-self-hosted-runners
+```
+
 README 使用专用圆角展示图；Android 保留现有方形白底图案，Windows CLI/GUI EXE 保留方形图案并将外部白色区域改为透明。Windows 应用未进行 Authenticode 签名。
 
 ## 多人加密
@@ -57,7 +65,8 @@ HMAC-SHA512 头部 MAC 保证所有接收方解出相同内容。格式见 [`doc
 在侧边菜单的“公钥通讯录”导入接收方公钥并填写备注，之后在加密页选择已保存条目。
 支持编辑备注、删除、相同指纹去重及 App 内持久保存。每次使用都会通过现有 Core
 重新校验公钥和指纹；条目失效时需要显式重选。备注仅用于识别，请与接收方核对指纹。
-自己的默认密钥与通讯录独立保存，密码参数和文件格式不变。功能说明和设备测试见
+自己的默认密钥与通讯录独立保存，且公私钥始终属于同一密钥对：导入的私钥必须与已存公钥配对，
+替换自己的公钥需要确认，本机已有私钥时还需输入其口令。密码参数和文件格式不变。功能说明和设备测试见
 [Android 文档](android/README.md#公钥通讯录)。本版同时支持 Android 预测性返回：
 二级页面和侧边菜单随返回手势跟手移动，详见 [预测性返回](android/README.md#预测性返回)。
 以上功能自 v3.3.2 起提供；v3.3.1 及更早版本不包含。
@@ -237,7 +246,7 @@ plaintext/test.jpg -> encrypted/test.jpg.nkem
 
 可以输入私钥文件路径，也可以继续粘贴两个兼容的明文 PEM 私钥块。私钥文件内容是 NKPR 容器时（按文件头识别，与扩展名无关，例如 Android 导出的 `private.nkpr`），程序会自动关闭终端回显并提示输入密码，在内存中认证、解密并解析 NKPR；解出的 PEM 不会写入磁盘。旧的明文 PEM 私钥（如 `private.key`）不需要密码。
 
-粘贴旧式私钥内容时终端回显同样会被临时关闭；内部使用的 `0600` 临时密钥文件会在操作结束后删除。
+粘贴旧式私钥内容时终端回显同样会被临时关闭；内部使用的 `0600` 临时密钥文件会在操作结束后删除。在隐藏输入的提示处按 Ctrl+Z 时，程序暂停期间恢复回显，`fg` 继续后再次隐藏。
 
 输入文件必须以 `.nkem` 结尾。程序会确保当前工作目录下存在权限为 `0700` 的 `plaintext/`；如果不存在则自动创建。输出只使用容器文件名，自动去掉 `.nkem`，并恢复到 `plaintext/`：
 
@@ -374,6 +383,7 @@ v4 用随机 32 字节文件密钥只加密一次文件数据，并为每位接�
 - 动态资源采用单一所有者和 `goto cleanup` 路径，成功转移所有权时立即清空源指针；
 - 私钥对象在解封装完成后立即释放，共享秘密在 KDF 完成后立即清零释放，AES 密钥仅存活到文件加解密结束；
 - 输出仍先写入同目录的临时文件，文件内容 `fsync` 完成后才重命名，重命名后再 `fsync` 父目录；认证、解析、取消或 I/O 失败会关闭并删除临时文件；
+- Linux/macOS CLI 被 SIGINT、SIGTERM、SIGHUP、SIGQUIT 或 SIGPIPE 终止时，会先删除未提交的临时输出与粘贴的密钥并恢复终端回显，再按该信号退出；正在发布的密钥对会先完成或回滚。Windows 上未提交的输出在提交前一直处于待删除状态，进程结束时由系统删除；Ctrl+C 会等正在进行的发布完成并恢复控制台回显，只有在清除该状态与发布重命名之间的瞬间被强制终止才可能留下该文件。Linux 和 macOS 上 SIGKILL、崩溃或断电仍可能留下仅所有者可读、含未经认证部分明文的 `<输出>.tmp.XXXXXX`，请删除此类文件；
 - 公私钥生成使用同一个可回滚事务：两边都完成写入和 `fsync` 后才发布；第二次 rename 或目录 `fsync` 失败会恢复旧公私钥（原本不存在则两边都移除），避免只更新一把密钥；
 - POSIX 上，成对密钥提交持有父目录的进程间锁直到回滚和清理结束；回滚前核对已发布文件的 inode，避免删除其他写入者替换后的文件。目录中的 `0600` 锁文件 `.nekokem-pair.lock` 会保留，运行期间不要删除；
 - Hybrid keygen 直接把两个私钥 PEM 写入 OpenSSL memory BIO，再加密为 NKPR 暂存文件，并与公钥一致提交；没有明文私钥输出文件或明文私钥临时文件；

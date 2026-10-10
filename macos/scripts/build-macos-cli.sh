@@ -107,6 +107,7 @@ if [[ "$build_tests" == 1 ]]; then
     python3 "$repo_root/linux/tests/i18n_tests.py" "$output/nekokem"
     python3 "$repo_root/macos/tests/system_language_tests.py" "$output/nekokem"
     python3 "$repo_root/macos/tests/cli_tests.py" "$output/nekokem"
+    python3 "$repo_root/linux/tests/interrupt_tests.py" "$output/nekokem"
 fi
 
 install -m 0644 "$prefix/LICENSE.txt" "$output/OPENSSL-LICENSE.txt"

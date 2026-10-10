@@ -443,6 +443,15 @@ static char *win_random_path(const char *path, const char *suffix)
     return name;
 }
 
+static int win_dispose(HANDLE handle);
+
+/*
+ * Publishing clears an output's pending deletion and then renames it. Ctrl+C
+ * between the two would keep the temporary file, so file_remove_temporary_
+ * outputs waits for a publication in progress and blocks any later one.
+ */
+static SRWLOCK win_publication = SRWLOCK_INIT;
+
 int atomic_file_open(AtomicFile *file, const char *final_path, mode_t mode)
 {
     if (file == NULL || (mode != 0600 && mode != 0644)) return 0;
@@ -458,6 +467,9 @@ int atomic_file_open(AtomicFile *file, const char *final_path, mode_t mode)
     state->output = win_create(temporary, 0);
     free(temporary);
     if (state->output == INVALID_HANDLE_VALUE || !win_regular(state->output, 1)) goto fail;
+    /* Delete-pending until committed: however the process ends, the system
+     * removes the partial output with its last handle. */
+    if (!win_dispose(state->output)) goto fail;
     HANDLE stream_handle = INVALID_HANDLE_VALUE;
     if (!DuplicateHandle(GetCurrentProcess(), state->output, GetCurrentProcess(),
                          &stream_handle, 0, FALSE, DUPLICATE_SAME_ACCESS)) goto fail;
@@ -525,6 +537,13 @@ static int win_dispose(HANDLE handle)
     return SetFileInformationByHandle(handle, FileDispositionInfo, &disposition, sizeof(disposition)) != 0;
 }
 
+/* Cancels a pending deletion set through the same handle. */
+static int win_keep(HANDLE handle)
+{
+    FILE_DISPOSITION_INFO disposition = {FALSE};
+    return SetFileInformationByHandle(handle, FileDispositionInfo, &disposition, sizeof(disposition)) != 0;
+}
+
 static int win_same(HANDLE a, HANDLE b)
 {
     BY_HANDLE_FILE_INFORMATION first, second;
@@ -536,7 +555,11 @@ static int win_same(HANDLE a, HANDLE b)
 static HANDLE win_open_identity(const char *utf8)
 {
     wchar_t *wide = windows_utf8_path(utf8);
-    if (wide == NULL) return INVALID_HANDLE_VALUE;
+    /* A refused path is an error, never a missing file. */
+    if (wide == NULL) {
+        SetLastError(ERROR_INVALID_NAME);
+        return INVALID_HANDLE_VALUE;
+    }
     HANDLE handle = CreateFileW(wide, FILE_READ_ATTRIBUTES,
             FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, NULL, OPEN_EXISTING,
             FILE_FLAG_OPEN_REPARSE_POINT | FILE_FLAG_BACKUP_SEMANTICS, NULL);
@@ -607,6 +630,7 @@ static int win_commit_pair(AtomicFile *first, AtomicFile *second, int replace)
     int published[2] = {0, 0};
     int preserve[2] = {0, 0};
     size_t count = second == NULL ? 1 : 2;
+    int publishing = 0;
     int success = 0;
     if (first == NULL || first == second || first->platform_state == NULL ||
         (second != NULL && second->platform_state == NULL)) return 0;
@@ -653,9 +677,13 @@ static int win_commit_pair(AtomicFile *first, AtomicFile *second, int replace)
     }
     if (count == 2 && old[0] != INVALID_HANDLE_VALUE && old[1] != INVALID_HANDLE_VALUE &&
         win_same(old[0], old[1])) goto cleanup;
+    /* Held until every output is published or disposed of again below. */
+    AcquireSRWLockExclusive(&win_publication);
+    publishing = 1;
     for (size_t i = 0; i < count; ++i) {
         WinAtomic *state = files[i]->platform_state;
-        if (!win_rename(state->output, state->path.full, old[i] != INVALID_HANDLE_VALUE, 1)) goto cleanup;
+        if (!win_keep(state->output) ||
+            !win_rename(state->output, state->path.full, old[i] != INVALID_HANDLE_VALUE, 1)) goto cleanup;
         published[i] = 1;
         /* Verify the published name identifies the retained output handle. */
         HANDLE named = CreateFileW(state->path.full, FILE_READ_ATTRIBUTES,
@@ -713,6 +741,7 @@ cleanup:
             memset(files[i], 0, sizeof(*files[i]));
         } else atomic_file_abort(files[i]);
     }
+    if (publishing) ReleaseSRWLockExclusive(&win_publication);
     if (!success) print_system_error("Cannot commit atomic output transaction");
     return success;
 }
@@ -730,6 +759,12 @@ int atomic_file_commit_pair_new(AtomicFile *first, AtomicFile *second)
 int atomic_file_commit(AtomicFile *file)
 {
     return atomic_file_commit_pair(file, NULL);
+}
+
+void file_remove_temporary_outputs(void)
+{
+    /* Never released: the process is ending. */
+    AcquireSRWLockExclusive(&win_publication);
 }
 
 void atomic_file_abort(AtomicFile *file)
