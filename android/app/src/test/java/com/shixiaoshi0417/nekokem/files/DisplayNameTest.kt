@@ -29,6 +29,12 @@ class DisplayNameTest {
         assertEquals(family, displaySafeName(family, "fallback"))
         assertEquals("\u0645\u06CC\u200C\u062E\u0648\u0627\u0647\u0645",
             displaySafeName("\u0645\u06CC\u200C\u062E\u0648\u0627\u0647\u0645", "fallback"))
+        // Between ASCII characters, or at an edge, a joiner only hides something.
+        assertEquals("ab.txt", displaySafeName("\u200Da\u200Db\u200C.txt\u200D", "fallback"))
+        // Judged after filtering: a hidden character or a second joiner is no neighbour.
+        assertEquals("\u00E9a", displaySafeName("\u00E9\u200D\u200Ba", "fallback"))
+        assertEquals("\u00E9\u00E9", displaySafeName("\u00E9\u200D\u200D\u00E9", "fallback"))
+        assertEquals("\u00E9", displaySafeName("\u3000\u200D\u00E9", "fallback"))
     }
 
     @Test
@@ -37,6 +43,9 @@ class DisplayNameTest {
         assertEquals(name, displaySafeName(name, "fallback"))
         val capped = displaySafeName("\uD83D\uDD11".repeat(300), "fallback")
         assertEquals(255, capped.codePointCount(0, capped.length))
+        // The cap never leaves a joiner without the character it joined.
+        val joined = displaySafeName("\u00E9".repeat(254) + "\u200D\u00E9", "fallback")
+        assertEquals("\u00E9".repeat(254), joined)
     }
 
     @Test
@@ -46,4 +55,13 @@ class DisplayNameTest {
         assertEquals("a b", displaySafeName("  a b  ", "fallback"))
         assertEquals("fallback", displaySafeName("\uD800", "fallback"))
     }
+    @Test
+    fun saveNamesUseTheSameVisibleCharacterRulesWithoutChangingExtensions() {
+        val spoof = "dir/\uFEFFreport\u0085\u2028\u2029\u202E\u2066\u200B\u200D.txt"
+        assertEquals("report.txt.nkem", encryptedOutputName(spoof, "default"))
+        assertEquals("report.txt", decryptedOutputName(spoof + ".NKEM", "default", "plain"))
+        assertEquals("decrypted_report.txt", decryptedOutputName(spoof, "default", "plain"))
+        assertEquals("default.nkem", encryptedOutputName("\u0085\u202E\u200B", "default"))
+    }
+
 }

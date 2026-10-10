@@ -2,7 +2,7 @@
 
 GitHub Actions has three workflow definitions:
 
-- `ci.yml` (`CI`) builds and tests pull requests targeting `main`, pushes to
+- `ci.yml` (`CI`) builds and tests pull requests targeting any branch, pushes to
   `main`, and manual runs. It contains the Linux Core/analyzer/sanitizer/fuzz
   suite, x86_64/aarch64 release-package and installer tests, Android JVM and
   API 26/29/35 device tests, native Windows CLI security/interoperability/performance
@@ -46,7 +46,42 @@ Release artifacts and verifies the internal checksums, every package's version,
 source commit and run, the APK's signer and identity, and that every public asset
 carries this Release run's attestation. It fills the build records into the notes
 from the built commit, creates a draft, checks every uploaded digest and only then
-publishes the release as Latest. A published release is never modified.
+publishes the release. Uploads and edits use the returned release ID, and every
+release-list page is checked. Only the highest published stable semantic version
+is marked Latest; publishing an older version preserves the existing Latest.
+An interrupted upload can resume from an exact partial draft. Verification or
+API failures restore that release to a draft; if recovery itself fails, the log
+names its release ID and reports that its status needs manual inspection. A
+release that was already published before the run is never modified. Windows
+CLI and GUI package metadata includes the application version, which Publish
+checks along with the source commit and build run.
+
+CI runs `scripts/check_versions.py` and mutation tests before its Linux suite.
+The application version in `desktop/package.json` is compared with CLI, Android,
+Tauri, npm/Cargo lockfiles, the fixed installer tag, packaging declarations, workflow package arguments,
+Android signing version/name/code and all five Android display strings. This
+check changes no application, Core or container version.
+
+## Toolchain version policy
+
+CI and Release explicitly select Rust `1.99.0`, Node.js `24.21.0` and Python
+`3.13.16`. OpenSSL remains `4.0.3`, Android build-tools remain `35.0.0`, and their
+existing checksum/SDK checks stay in place. Publish uses exactly build-tools
+`35.0.0` even when a runner also has a newer version. The Publish token is
+available only to the publication step. Windows OpenSSL caches are saved only
+after successful build steps; Release continues to use no caches.
+
+MSYS2 deliberately retains `update: true`: its rolling repository does not
+maintain an installable, supported set of historical package versions, and
+partially upgrading its runtime and UCRT64 compiler packages can break their
+ABI or dependency relationships. The setup action is pinned by commit, the
+installed compiler version identifies the OpenSSL cache and is recorded in
+Windows CLI/GUI build metadata, and native CI checks validate the resulting
+packages. Runner system packages, JDK 17 security updates, platform-tools and
+SDK command-line tools likewise follow the supported runner/repository updates;
+the API 26/29/35 tests, native compiler checks and pinned NDK/CMake/build-tools
+validate these boundaries. These components are intentionally not claimed to
+form a fully reproducible toolchain snapshot.
 
 Android is built in two jobs. `build-apk` runs Gradle with
 `-PnekokemUnsignedRelease=true` and no signing material, and its Gradle cache

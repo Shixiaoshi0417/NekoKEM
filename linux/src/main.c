@@ -14,19 +14,21 @@ int cli_main(int argc, char **argv)
 int main(int argc, char **argv)
 #endif
 {
+    if (!cli_disable_core_dumps()) return EXIT_FAILURE;
     cli_install_interrupt_handlers();
     if (!cli_language_init(&argc, argv)) return EXIT_FAILURE;
     if (argc == 2 && strcmp(argv[1], "--help") == 0) {
         cli_print_help(argv[0]);
-        return EXIT_SUCCESS;
+        return fflush(stdout) == 0 && !ferror(stdout)
+                   ? EXIT_SUCCESS : EXIT_FAILURE;
     }
     if (argc == 3 && strcmp(argv[1], "--set-lang") == 0) {
         return cli_language_save(argv[2]) ? EXIT_SUCCESS : EXIT_FAILURE;
     }
     if (argc == 2 && strcmp(argv[1], "--version") == 0) {
-        return puts("NekoKEM " NEKOKEM_CLI_VERSION) == EOF
-                   ? EXIT_FAILURE
-                   : EXIT_SUCCESS;
+        int written = puts("NekoKEM " NEKOKEM_CLI_VERSION);
+        return written != EOF && fflush(stdout) == 0 && !ferror(stdout)
+                   ? EXIT_SUCCESS : EXIT_FAILURE;
     }
     if (!file_disable_buffering(stdin)) {
         return EXIT_FAILURE;

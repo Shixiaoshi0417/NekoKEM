@@ -19,7 +19,7 @@ const failure = ref<Message | null>(null);
 const feedbackArea = ref<'form' | 'list'>('form');
 const progress = ref<bridge.Progress | null>(null);
 // Saved-contact recipients, in selection order: shared by the Contacts and Encrypt pages.
-const form = reactive({ input: '', output: '', keyPath: '', publicPath: '', privatePath: '', password: '', confirmation: '', keyText: '', source: 'path' as KeySource, contacts: [] as string[], replace: false });
+const form = reactive({ input: '', output: '', keyPath: '', publicPath: '', privatePath: '', password: '', confirmation: '', keyText: '', source: 'path' as KeySource, contacts: [] as string[], replace: false, overwrite: false });
 const contactForm = reactive({ keyPath: '', keyText: '', paste: false, note: '' });
 // Replacing keys is offered only after Core reported existing keys at the
 // chosen paths, must be ticked for each run and is withdrawn when they change.
@@ -29,6 +29,9 @@ function withdrawReplace() {
   form.replace = false;
 }
 watch(() => [form.publicPath, form.privatePath], withdrawReplace);
+const overwriteOffered = ref(false);
+function withdrawOverwrite() { overwriteOffered.value = false; form.overwrite = false; }
+watch(() => form.output, withdrawOverwrite);
 type Field = Exclude<keyof typeof form, 'source'> | 'contactKeyPath' | 'contactKeyText' | 'note' | 'noteDraft';
 type PathField = 'input' | 'output' | 'keyPath' | 'publicPath' | 'privatePath' | 'contactKeyPath';
 const invalidField = ref<Field | null>(null);
@@ -106,6 +109,7 @@ function switchTab(value: View) {
   confirming.value = null;
   highlighted.value = null;
   withdrawReplace();
+  withdrawOverwrite();
   if ((value === 'decrypt' || value === 'fingerprint') && form.source === 'contact') form.source = 'path';
   operation.value = value;
   if (value === 'encrypt' || value === 'contacts') void refreshContacts();
@@ -250,8 +254,10 @@ async function start() {
     password: form.password, confirmation: form.confirmation, keyText: form.source === 'paste' ? form.keyText : '',
     paste: form.source === 'paste', contacts: chosen.map(contact => contact.id),
     replace: operation.value === 'keygen' && replaceOffered.value && form.replace,
+    overwrite: ['encrypt', 'decrypt'].includes(operation.value) && overwriteOffered.value && form.overwrite,
   };
   withdrawReplace();
+  withdrawOverwrite();
   // The native layer owns zeroizing secrets. Do not retain them in the form.
   clearSecrets();
   let unavailable = false;
@@ -261,6 +267,7 @@ async function start() {
   } catch (error) {
     failure.value = errorCode(error);
     if (request.kind === 'keygen' && failure.value === 'key-exists') replaceOffered.value = true;
+    if (['encrypt', 'decrypt'].includes(request.kind) && failure.value === 'output-exists') overwriteOffered.value = true;
     // Nothing was encrypted. Deselect the contact that could not be used and
     // require the user to start again with the recipients that remain.
     unavailable = chosen.length > 0 && contactFailures.includes(failure.value);
@@ -449,7 +456,7 @@ onUnmounted(() => unlisten?.());
               <div v-else class="contact-choice enter-field">
                 <div class="recipient-heading"><span id="recipients-label">{{ t('recipients') }}</span><span class="count">{{ form.contacts.length }} / {{ maxRecipients }}</span></div>
                 <div v-if="contacts.length" class="recipient-options" role="group" aria-labelledby="recipients-label" v-bind="fieldAttrs('contacts')">
-                  <label v-for="contact in contacts" :key="contact.id" class="recipient-option" :class="{ selected: form.contacts.includes(contact.id) }"><input type="checkbox" name="contacts" :value="contact.id" :checked="form.contacts.includes(contact.id)" :disabled="!form.contacts.includes(contact.id) && atRecipientLimit" @change="toggleContact(contact)"><span class="recipient-label">{{ label(contact) }}</span><code>{{ contact.fingerprint.slice(0, 11) }}…</code></label>
+                  <label v-for="contact in contacts" :key="contact.id" class="recipient-option" :class="{ selected: form.contacts.includes(contact.id) }"><input type="checkbox" name="contacts" :value="contact.id" :checked="form.contacts.includes(contact.id)" :disabled="!form.contacts.includes(contact.id) && atRecipientLimit" @change="toggleContact(contact)"><span class="recipient-label">{{ label(contact) }}</span><code>{{ contact.fingerprint }}</code></label>
                 </div>
                 <div v-if="selectedContacts.length === 1" class="contact-preview"><span>{{ t('fingerprint') }}</span><code>{{ selectedContacts[0]!.fingerprint }}</code></div>
                 <p v-else-if="selectedContacts.length > 1" class="hint multi-hint">{{ t('multiRecipientHint') }}</p>
@@ -471,7 +478,8 @@ onUnmounted(() => unlisten?.());
         </fieldset>
         <div v-if="busy" class="progress-block enter-feedback" role="status"><div class="progress-label"><span>{{ cancelling ? t('cancelling') : progress ? t('progress') : t('preparing') }}</span><strong v-if="percent !== null">{{ percent }}%</strong></div><div class="progress-track" role="progressbar" :aria-label="t('progress')" :aria-valuenow="percent ?? undefined" aria-valuemin="0" aria-valuemax="100" :aria-valuetext="percent === null ? t('preparing') : undefined"><div class="progress-fill" :class="{ indeterminate: percent === null }" :style="{ width: `${percent ?? 32}%` }"></div></div></div>
         <template v-if="feedbackArea === 'form'">
-          <div v-if="failure" id="operation-error" class="notice enter-feedback" :class="{ neutral: failure === 'cancelled' }" role="alert"><AppIcon :name="failure === 'cancelled' ? 'close' : 'alert'" /><div><span>{{ t(failure) }}</span><p v-if="failedContact" class="result-path failed-contact">{{ t('recipient') }}: {{ label(failedContact) }} · {{ failedContact.fingerprint.slice(0, 11) }}…</p></div></div>
+          <div v-if="overwriteOffered" class="replace-option enter-field"><label class="recipient-option" :class="{ selected: form.overwrite }"><input v-model="form.overwrite" type="checkbox" name="overwrite" aria-describedby="overwrite-hint">{{ t('overwriteOutput') }}</label><p id="overwrite-hint" class="hint warning">{{ t('overwriteOutputHint') }}</p></div>
+          <div v-if="failure" id="operation-error" class="notice enter-feedback" :class="{ neutral: failure === 'cancelled' }" role="alert"><AppIcon :name="failure === 'cancelled' ? 'close' : 'alert'" /><div><span>{{ t(failure) }}</span><p v-if="failedContact" class="result-path failed-contact">{{ t('recipient') }}: {{ label(failedContact) }} · {{ failedContact.fingerprint }}</p></div></div>
           <div v-if="result" class="notice success enter-feedback" role="status"><AppIcon name="check" /><div><strong>{{ t(successMessage) }}</strong><p v-if="result.output" class="result-path">{{ result.output }}</p><p v-if="recipients.length" class="result-path">{{ recipients.length > 1 ? t('recipients') : t('recipient') }}: {{ recipients.map(label).join(', ') }}</p><textarea v-if="result.fingerprint" class="fingerprint" :value="result.fingerprint" readonly rows="3" :aria-label="t('fingerprint')"></textarea></div></div>
         </template>
         <footer class="actions"><span class="format"><span class="format-dot" aria-hidden="true"></span>X448 + ML-KEM-1024<span>{{ formatLabel }}</span></span><button v-if="busy && ['encrypt', 'decrypt'].includes(operation)" class="secondary" type="button" :disabled="cancelling || cancelPending" @click="cancel">{{ t('cancel') }}</button><button class="primary" type="submit" :disabled="locked || !loaded"><span class="spinner" v-if="busy || contactBusy" aria-hidden="true"></span>{{ busy || contactBusy ? t('working') : operation === 'contacts' ? t('saveContact') : operation === 'keygen' && form.replace ? t('replaceKeysAction') : t(operation) }}<AppIcon v-if="!busy && !contactBusy" name="arrow" /></button></footer>

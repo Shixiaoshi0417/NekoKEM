@@ -207,4 +207,6 @@
     <string name="key_source_contacts_multiple">공개키 주소록(수신자 %1$d명)</string>
     <string name="contact_recipients_selected">수신자를 선택했습니다</string>
     <string name="contact_failed_recipient">사용할 수 없는 수신자: %1$s</string>
+    <string name="recovery_backups_title">복구 백업 보존됨</string>
+    <string name="recovery_backups_message">이전 키 또는 문서 교체를 안전하게 완료하지 못해 앱 전용 저장소에 복구 백업 %1$d개가 남아 있습니다. 이 백업은 삭제하지 않았습니다. 현재 키와 파일을 내보내 확인한 후 수동으로 복구하거나 삭제하세요. 자세한 내용은 Android README를 참조하세요.</string>
 </resources>

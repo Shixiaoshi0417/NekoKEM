@@ -34,6 +34,8 @@ pub struct Request {
     #[serde(default)] pub paste:bool,
     // Keygen only: the user confirmed replacing existing key files.
     #[serde(default)] pub replace:bool,
+    // Encryption/decryption only: one confirmed overwrite of the offered output.
+    #[serde(default)] pub overwrite:bool,
     // Saved recipient contacts (encryption only), in the user's order. One contact
     // writes NKEM v3; two or more write one NKEM v4 file that each of them decrypts.
     // Never combined with another key source.
@@ -47,15 +49,40 @@ pub struct Outcome {
     pub recipients:Vec<String>,
 }
 pub struct Job { pub id:String, pub cancellable:bool, pub cancelled:AtomicBool }
-pub struct Backend { pub active:Mutex<Option<Arc<Job>>>, pub close_after:AtomicBool }
-impl Default for Backend { fn default()->Self { Self{active:Mutex::new(None),close_after:AtomicBool::new(false)} } }
+#[derive(PartialEq,Eq)]
+enum Confirmation { Keypair(String,String), Output(String) }
+struct Offer { target:Confirmation, at:Instant }
+pub struct Backend { pub active:Mutex<Option<Arc<Job>>>, pub close_after:AtomicBool, offer:Mutex<Option<Offer>> }
+impl Default for Backend { fn default()->Self { Self{active:Mutex::new(None),close_after:AtomicBool::new(false),offer:Mutex::new(None)} } }
 impl Backend {
     pub fn reserve(&self, request:&Request)->Result<Arc<Job>,Failure> {
         if request.id.is_empty() || request.id.len()>64 || !request.id.bytes().all(|c|c.is_ascii_alphanumeric()||c==b'-') { return Err(Failure::new("invalid-request")); }
         self.claim(request.id.clone(),matches!(request.kind,Kind::Encrypt|Kind::Decrypt))
     }
     // Contact-store changes share the same exclusive slot as Core operations.
-    pub fn reserve_internal(&self)->Result<Arc<Job>,Failure> { self.claim("contacts".into(),false) }
+    pub fn reserve_internal(&self)->Result<Arc<Job>,Failure> {
+        let job=self.claim("contacts".into(),false)?;
+        self.offer.lock().map_err(|_|Failure::new("internal"))?.take();
+        Ok(job)
+    }
+    fn offer(&self,target:Confirmation)->Result<(),Failure> {
+        *self.offer.lock().map_err(|_|Failure::new("internal"))?=Some(Offer{target,at:Instant::now()});
+        Ok(())
+    }
+    fn consume_offer(&self,request:&Request)->Result<(),Failure> {
+        // Each offer belongs to this backend session and only its next operation.
+        // Exact path spellings are intentional; aliases require a fresh offer.
+        let offer=self.offer.lock().map_err(|_|Failure::new("internal"))?.take();
+        let target=if request.replace {
+            Some(Confirmation::Keypair(request.public_path.clone(),request.private_path.clone()))
+        } else if request.overwrite {Some(Confirmation::Output(request.output.clone()))} else {None};
+        if let Some(target)=target {
+            if !offer.is_some_and(|offer|offer.target==target && offer.at.elapsed()<Duration::from_secs(300)) {
+                return Err(Failure::new("invalid-request"));
+            }
+        }
+        Ok(())
+    }
     fn claim(&self,id:String,cancellable:bool)->Result<Arc<Job>,Failure> {
         let mut active=self.active.lock().map_err(|_|Failure::new("internal"))?;
         if active.is_some() { return Err(Failure::new("busy")); }
@@ -92,6 +119,7 @@ extern "C" {
     fn nekokem_public_key_fingerprint(key:*const c_char,output:*mut c_char,size:usize)->c_int;
     fn file_path_exists(path:*const c_char,exists:*mut c_int)->c_int;
     fn file_paths_are_same_file(first:*const c_char,second:*const c_char,same:*mut c_int)->c_int;
+    fn file_set_output_no_replace(enabled:c_int)->c_int;
     fn desktop_stage_key(bytes:*const u8,length:usize)->*mut c_char;
     fn desktop_stage_output()->*mut c_char;
     fn desktop_remove_staged_key(path:*mut c_char)->c_int;
@@ -142,28 +170,38 @@ impl Staged {
         let pointer=unsafe{desktop_stage_output()};
         if pointer.is_null() {return Err(Failure::new("core-error"));} Ok(Self(pointer))
     }
-    pub fn path(&self)->&CStr {unsafe{CStr::from_ptr(self.0)}}
+    pub fn path(&self)->Option<&CStr> {
+        if self.0.is_null(){None}else{Some(unsafe{CStr::from_ptr(self.0)})}
+    }
     pub fn close(&mut self)->bool {if self.0.is_null(){return true;} let p=std::mem::replace(&mut self.0,std::ptr::null_mut());unsafe{desktop_remove_staged_key(p)==1}}
 }
 impl Drop for Staged {fn drop(&mut self){let _=self.close();}}
 struct ProgressContext<F:Fn(u64,u64)> { job:Arc<Job>, emit:F, last_emit:Option<Instant> }
+struct OutputMode(c_int);
+impl OutputMode {
+    fn new(no_replace:bool)->Self {Self(unsafe{file_set_output_no_replace(i32::from(no_replace))})}
+}
+impl Drop for OutputMode {fn drop(&mut self){unsafe{file_set_output_no_replace(self.0)};}}
 unsafe extern "C" fn progress<F:Fn(u64,u64)>(done:u64,total:u64,data:*mut c_void)->c_int {
     // Core borrows this stack-owned context synchronously; it never retains the pointer.
     let state=unsafe{&mut *(data as *mut ProgressContext<F>)};
     if state.job.cancelled.load(Ordering::Acquire) {return 0;}
     if done==total || state.last_emit.map_or(true,|at|at.elapsed()>=Duration::from_millis(100)) {
-        let emitted=std::panic::catch_unwind(std::panic::AssertUnwindSafe(||(state.emit)(done,total)));
-        if emitted.is_err(){return 0;} state.last_emit=Some(Instant::now());
+        // Release uses panic=abort, so catch_unwind cannot recover a panic here.
+        // The emitter must remain non-panicking; IPC errors are ignored by its caller.
+        (state.emit)(done,total); state.last_emit=Some(Instant::now());
     }
     i32::from(!state.job.cancelled.load(Ordering::Acquire))
 }
-pub fn execute<F:Fn(u64,u64)>(request:Request,job:Arc<Job>,emit:F)->Result<Outcome,Failure> {
+pub fn execute<F:Fn(u64,u64)>(backend:&Backend,request:Request,job:Arc<Job>,emit:F)->Result<Outcome,Failure> {
     let _guard=CORE_LOCK.lock().map_err(|_|Failure::new("internal"))?;
+    backend.consume_offer(&request)?;
     if request.password.len()>1024 || request.confirmation.len()>1024 {return Err(Failure::new("password-limit"));}
     if !request.contacts.is_empty() && (request.kind!=Kind::Encrypt || request.paste || !request.key_path.is_empty() || !request.key_text.is_empty()) {
         return Err(Failure::new("invalid-request"));
     }
     if request.replace && request.kind!=Kind::Keygen {return Err(Failure::new("invalid-request"));}
+    if request.overwrite && !matches!(request.kind,Kind::Encrypt|Kind::Decrypt) {return Err(Failure::new("invalid-request"));}
     if request.contacts.len()>MAX_RECIPIENTS {return Err(Failure::new("recipient-limit"));}
     let mut seen=std::collections::HashSet::new();
     if !request.contacts.iter().all(|id|seen.insert(id.as_str())) {return Err(Failure::new("invalid-request"));}
@@ -174,6 +212,7 @@ pub fn execute<F:Fn(u64,u64)>(request:Request,job:Arc<Job>,emit:F)->Result<Outco
         // refuses as well, and this names the reason.
         let public=path(&request.public_path)?; let private=path(&request.private_path)?;
         if !request.replace && [&public,&private].iter().any(|target|exists(target)==Some(true)) {
+            backend.offer(Confirmation::Keypair(request.public_path.clone(),request.private_path.clone()))?;
             return Err(Failure::new("key-exists"));
         }
         let commit=if request.replace {nekokem_replace_keypair} else {nekokem_generate_keypair};
@@ -198,7 +237,9 @@ pub fn execute<F:Fn(u64,u64)>(request:Request,job:Arc<Job>,emit:F)->Result<Outco
             staged.push(stage); recipients.push(fingerprint);
         }
     } else if request.paste {staged.push(Staged::new(&request.key_text)?);}
-    let keys=if staged.is_empty(){vec![path(&request.key_path)?]}else{staged.iter().map(|stage|stage.path().to_owned()).collect()};
+    let keys=if staged.is_empty(){vec![path(&request.key_path)?]}else{
+        staged.iter().map(|stage|stage.path().map(CStr::to_owned).ok_or_else(||Failure::new("internal"))).collect::<Result<Vec<_>,_>>()?
+    };
     let mut state=ProgressContext{job,emit,last_emit:None};
     let data=&mut state as *mut _ as *mut c_void;
     let result=(|| {
@@ -207,6 +248,13 @@ pub fn execute<F:Fn(u64,u64)>(request:Request,job:Arc<Job>,emit:F)->Result<Outco
             return Ok(Outcome{output:None,fingerprint:Some(fingerprint),recipients:Vec::new()});
         }
         let input=path(&request.input)?; let output=path(&request.output)?;
+        if !request.overwrite && exists(&output)==Some(true) {
+            backend.offer(Confirmation::Output(request.output.clone()))?;
+            return Err(Failure::new("output-exists"));
+        }
+        // A competing writer may create the target after the preflight check.
+        // Core's thread-local mode makes the actual commit atomically create-only.
+        let output_mode=OutputMode::new(!request.overwrite);
         let status=unsafe{match request.kind {
             Kind::Encrypt if keys.len()>1=>{
                 let pointers:Vec<*const c_char>=keys.iter().map(|key|key.as_ptr()).collect();
@@ -216,6 +264,11 @@ pub fn execute<F:Fn(u64,u64)>(request:Request,job:Arc<Job>,emit:F)->Result<Outco
             Kind::Decrypt=>nekokem_decrypt_file_with_progress(input.as_ptr(),output.as_ptr(),keys[0].as_ptr(),request.password.as_ptr(),request.password.len(),Some(progress::<F>),data),
             _=>unreachable!(),
         }};
+        drop(output_mode);
+        if status==0 && !request.overwrite && exists(&output)==Some(true) {
+            backend.offer(Confirmation::Output(request.output.clone()))?;
+            return Err(Failure::new("output-exists"));
+        }
         let fingerprint=if recipients.len()==1 {recipients.first().cloned()} else {None};
         match status {1=>Ok(Outcome{output:Some(request.output.clone()),fingerprint,recipients:recipients.clone()}),-1=>Err(Failure::new("cancelled")),_=>Err(Failure::new("core-error"))}
     })();
@@ -233,6 +286,13 @@ mod tests {
         fn OpenSSL_version(kind:c_int)->*const c_char;
         fn protected_private_key_read(path:*const c_char,password:*const u8,length:usize,pem:*mut *mut u8,pem_length:*mut usize)->c_int;
         fn CRYPTO_clear_free(memory:*mut c_void,length:usize,file:*const c_char,line:c_int);
+        fn desktop_write_private(path:*const c_char,bytes:*const u8,length:usize)->c_int;
+    }
+    // An existing output as Core writes one: owner-only on every platform.
+    // Windows Core never replaces a file other accounts can open.
+    fn write_owner_only(path:&str,bytes:&[u8]) {
+        let name=CString::new(path).unwrap();
+        assert_eq!(unsafe{desktop_write_private(name.as_ptr(),bytes.as_ptr(),bytes.len())},1);
     }
     #[cfg(windows)]
     #[test]
@@ -271,8 +331,8 @@ mod tests {
         assert!(unsafe { CStr::from_ptr(version) }.to_bytes().starts_with(b"OpenSSL 4.0.3 "),
                 "GUI linked runtime does not match pinned OpenSSL 4.0.3");
     }
-    fn request(kind:Kind)->Request {Request{id:"test-job".into(),kind,input:String::new(),output:String::new(),key_path:String::new(),public_path:String::new(),private_path:String::new(),password:Zeroizing::new(String::new()),confirmation:Zeroizing::new(String::new()),key_text:Zeroizing::new(String::new()),paste:false,replace:false,contacts:Vec::new()}}
-    fn run(backend:&Arc<Backend>,r:Request)->Result<Outcome,Failure>{let job=backend.reserve(&r)?;let _hold=Reservation{backend:backend.clone(),job:job.clone()};execute(r,job,|_,_|{})}
+    fn request(kind:Kind)->Request {Request{id:"test-job".into(),kind,input:String::new(),output:String::new(),key_path:String::new(),public_path:String::new(),private_path:String::new(),password:Zeroizing::new(String::new()),confirmation:Zeroizing::new(String::new()),key_text:Zeroizing::new(String::new()),paste:false,replace:false,overwrite:false,contacts:Vec::new()}}
+    fn run(backend:&Arc<Backend>,r:Request)->Result<Outcome,Failure>{let job=backend.reserve(&r)?;let _hold=Reservation{backend:backend.clone(),job:job.clone()};execute(&backend,r,job,|_,_|{})}
     struct Directory(PathBuf);
     impl Directory{fn new()->Self{let path=std::env::temp_dir().join(format!("nekokem-rust-{}-{}",std::process::id(),SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_nanos()));let name=super::path(path.to_str().unwrap()).unwrap();assert_eq!(unsafe{desktop_private_directory(name.as_ptr())},1);Self(path)}fn file(&self,name:&str)->String{self.0.join(name).to_str().unwrap().into()}}
     impl Drop for Directory {fn drop(&mut self){let _=fs::remove_dir_all(&self.0);}}
@@ -280,15 +340,69 @@ mod tests {
     #[test] fn keygen_replaces_existing_keys_only_when_confirmed(){
         let dir=Directory::new();let backend=Arc::new(Backend::default());
         let keygen=|replace:bool|{let mut r=request(Kind::Keygen);r.public_path=dir.file("public.key");r.private_path=dir.file("private.key.enc");r.password=Zeroizing::new("public test password".into());r.confirmation=r.password.clone();r.replace=replace;run(&backend,r)};
+        assert_eq!(keygen(true).err().unwrap().code,"invalid-request");
+        assert!(!std::path::Path::new(&dir.file("public.key")).exists());
         keygen(false).unwrap();
         let public=fs::read(dir.file("public.key")).unwrap();let private=fs::read(dir.file("private.key.enc")).unwrap();
         assert_eq!(keygen(false).err().unwrap().code,"key-exists");
         assert_eq!(fs::read(dir.file("public.key")).unwrap(),public);assert_eq!(fs::read(dir.file("private.key.enc")).unwrap(),private);
         keygen(true).unwrap();
         assert_ne!(fs::read(dir.file("public.key")).unwrap(),public);assert_ne!(fs::read(dir.file("private.key.enc")).unwrap(),private);
+        assert_eq!(keygen(true).err().unwrap().code,"invalid-request");
         // Core removes its backups and temporary files after the replacement.
         assert!(fs::read_dir(&dir.0).unwrap().all(|entry|{let name=entry.unwrap().file_name().to_string_lossy().into_owned();!name.contains(".bak")&&!name.contains(".tmp")}));
         let mut r=request(Kind::Encrypt);r.replace=true;assert_eq!(run(&backend,r).err().unwrap().code,"invalid-request");
+    }
+    #[test]
+    fn replacement_offers_are_session_bound_exact_single_use_and_expiring() {
+        let backend=Backend::default();let other=Backend::default();
+        let mut r=request(Kind::Keygen);r.public_path="public.key".into();r.private_path="private.key.enc".into();r.replace=true;
+        let target=||Confirmation::Keypair("public.key".into(),"private.key.enc".into());
+        backend.offer(target()).unwrap();
+        assert_eq!(other.consume_offer(&r).err().unwrap().code,"invalid-request");
+        r.public_path="other.key".into();assert!(backend.consume_offer(&r).is_err());
+        r.public_path="public.key".into();assert!(backend.consume_offer(&r).is_err());
+        backend.offer(target()).unwrap();backend.consume_offer(&r).unwrap();assert!(backend.consume_offer(&r).is_err());
+        *backend.offer.lock().unwrap()=Some(Offer{target:target(),at:Instant::now()-Duration::from_secs(301)});
+        assert!(backend.consume_offer(&r).is_err());
+        backend.offer(target()).unwrap();backend.consume_offer(&request(Kind::Fingerprint)).unwrap();assert!(backend.consume_offer(&r).is_err());
+        backend.offer(target()).unwrap();let job=backend.reserve_internal().unwrap();backend.finish(&job);assert!(backend.consume_offer(&r).is_err());
+    }
+    #[test]
+    fn existing_output_requires_one_session_confirmation() {
+        let dir=Directory::new();let backend=Arc::new(Backend::default());
+        let mut r=request(Kind::Keygen);r.public_path=dir.file("public.key");r.private_path=dir.file("private.key.enc");r.password=Zeroizing::new("public test password".into());r.confirmation=r.password.clone();run(&backend,r).unwrap();
+        fs::write(dir.file("plain"),b"public test input").unwrap();write_owner_only(&dir.file("output"),b"existing output");
+        let encrypt=|overwrite|{let mut r=request(Kind::Encrypt);r.input=dir.file("plain");r.output=dir.file("output");r.key_path=dir.file("public.key");r.overwrite=overwrite;r};
+        assert_eq!(run(&backend,encrypt(true)).err().unwrap().code,"invalid-request");
+        assert_eq!(run(&backend,encrypt(false)).err().unwrap().code,"output-exists");
+        assert_eq!(fs::read(dir.file("output")).unwrap(),b"existing output");
+        run(&backend,encrypt(true)).unwrap();assert_ne!(fs::read(dir.file("output")).unwrap(),b"existing output");
+        assert_eq!(run(&backend,encrypt(true)).err().unwrap().code,"invalid-request");
+    }
+    #[test]
+    fn an_output_created_during_encryption_is_preserved_until_confirmed() {
+        let dir=Directory::new();let backend=Arc::new(Backend::default());
+        let mut r=request(Kind::Keygen);r.public_path=dir.file("public.key");r.private_path=dir.file("private.key.enc");r.password=Zeroizing::new("public test password".into());r.confirmation=r.password.clone();run(&backend,r).unwrap();
+        fs::write(dir.file("plain"),vec![7u8;200000]).unwrap();
+        let encrypt=|overwrite|{let mut r=request(Kind::Encrypt);r.input=dir.file("plain");r.output=dir.file("race-output");r.key_path=dir.file("public.key");r.overwrite=overwrite;r};
+        let r=encrypt(false);let job=backend.reserve(&r).unwrap();
+        let hold=Reservation{backend:backend.clone(),job:job.clone()};
+        let created=AtomicBool::new(false);let output=dir.file("race-output");
+        let result=execute(&backend,r,job,|_,_|{
+            if !created.swap(true,Ordering::AcqRel) {write_owner_only(&output,b"competing writer");}
+        });
+        drop(hold);assert!(created.load(Ordering::Acquire));
+        assert_eq!(result.err().unwrap().code,"output-exists");
+        assert_eq!(fs::read(&output).unwrap(),b"competing writer");
+        run(&backend,encrypt(true)).unwrap();assert_ne!(fs::read(output).unwrap(),b"competing writer");
+    }
+    #[test]
+    fn staged_path_is_absent_after_close() {
+        let _serial=STAGING_TESTS.lock().unwrap_or_else(|error|error.into_inner());
+        let _core=CORE_LOCK.lock().unwrap_or_else(|error|error.into_inner());
+        let mut staged=Staged::new("public test bytes").unwrap();assert!(staged.path().is_some());
+        assert!(staged.close());assert!(staged.path().is_none());assert!(staged.close());
     }
     #[test] fn actual_core_roundtrip_fingerprint_wrong_password_paste_and_cancel(){
         let dir=Directory::new();let backend=Arc::new(Backend::default());let mut r=request(Kind::Keygen);
@@ -300,7 +414,7 @@ mod tests {
         let mut r=request(Kind::Keygen);r.public_path=dir.file("public.key");r.private_path=dir.file("private.key.enc");r.password=Zeroizing::new("public-test-中文-😀".into());r.confirmation=r.password.clone();assert_eq!(run(&backend,r).err().unwrap().code,"key-exists");
         let mut r=request(Kind::Decrypt);r.input=dir.file("cipher.nkem");r.output=dir.file("private.key.enc");r.key_path=dir.file("private.key.enc");r.password=Zeroizing::new("public-test-中文-😀".into());assert_eq!(run(&backend,r).err().unwrap().code,"output-is-key");
         assert_eq!(fs::read(dir.file("private.key.enc")).unwrap(),protected);
-        let mut r=request(Kind::Decrypt);r.input=dir.file("cipher.nkem");r.output=dir.file("output");r.key_path=dir.file("private.key.enc");r.password=Zeroizing::new("wrong".into());assert_eq!(run(&backend,r).err().unwrap().code,"core-error");assert_eq!(fs::read(dir.file("output")).unwrap(),data);
+        let mut r=request(Kind::Decrypt);r.input=dir.file("cipher.nkem");r.output=dir.file("wrong-output");r.key_path=dir.file("private.key.enc");r.password=Zeroizing::new("wrong".into());assert_eq!(run(&backend,r).err().unwrap().code,"core-error");assert_eq!(fs::read(dir.file("output")).unwrap(),data);
         let mut r=request(Kind::Fingerprint);r.key_path=dir.file("public.key");let fingerprint=run(&backend,r).unwrap().fingerprint;
         let mut r=request(Kind::Fingerprint);r.paste=true;r.key_text=Zeroizing::new(fs::read_to_string(dir.file("public.key")).unwrap());assert_eq!(run(&backend,r).unwrap().fingerprint,fingerprint);
         // NKPR is a binary container. Extract this generated public test fixture
@@ -313,7 +427,8 @@ mod tests {
         let text=unsafe{String::from_utf8(std::slice::from_raw_parts(pem,length).to_vec()).unwrap()};
         unsafe{CRYPTO_clear_free(pem.cast(),length,std::ptr::null(),0)};
         let mut r=request(Kind::Decrypt);r.input=dir.file("cipher.nkem");r.output=dir.file("pasted-output");r.paste=true;r.key_text=Zeroizing::new(text);run(&backend,r).unwrap();assert_eq!(fs::read(dir.file("pasted-output")).unwrap(),data);
-        let mut r=request(Kind::Encrypt);r.input=dir.file("plain");r.output=dir.file("cipher.nkem");r.key_path=dir.file("public.key");let before=fs::read(&r.output).unwrap();let job=backend.reserve(&r).unwrap();let _hold=Reservation{backend:backend.clone(),job:job.clone()};let cancel=job.clone();assert_eq!(execute(r,job,move|_,_|{cancel.cancelled.store(true,Ordering::Release);}).err().unwrap().code,"cancelled");assert_eq!(fs::read(dir.file("cipher.nkem")).unwrap(),before);
+        let mut check=request(Kind::Encrypt);check.input=dir.file("plain");check.output=dir.file("cipher.nkem");check.key_path=dir.file("public.key");assert_eq!(run(&backend,check).err().unwrap().code,"output-exists");
+        let mut r=request(Kind::Encrypt);r.input=dir.file("plain");r.output=dir.file("cipher.nkem");r.key_path=dir.file("public.key");r.overwrite=true;let before=fs::read(&r.output).unwrap();let job=backend.reserve(&r).unwrap();let _hold=Reservation{backend:backend.clone(),job:job.clone()};let cancel=job.clone();assert_eq!(execute(&backend,r,job,move|_,_|{cancel.cancelled.store(true,Ordering::Release);}).err().unwrap().code,"cancelled");assert_eq!(fs::read(dir.file("cipher.nkem")).unwrap(),before);
     }
     #[test]
     fn contact_store_changes_share_the_exclusive_operation_slot() {
@@ -335,7 +450,10 @@ mod tests {
         // Contact-store tests stage keys only while holding the Core lock.
         let _core=CORE_LOCK.lock().unwrap_or_else(|error|error.into_inner());
         let prefix=if cfg!(windows){"nekokem-paste-"}else{"nekokem-gui-"};
-        fs::read_dir(std::env::temp_dir()).unwrap().filter(|entry|entry.as_ref().unwrap().file_name().to_string_lossy().starts_with(prefix)).count()
+        let mut probe=Staged::output().unwrap();
+        let directory=std::path::Path::new(probe.path().unwrap().to_str().unwrap()).parent().unwrap().parent().unwrap().to_owned();
+        assert!(probe.close());
+        fs::read_dir(directory).unwrap().filter(|entry|entry.as_ref().unwrap().file_name().to_string_lossy().starts_with(prefix)).count()
     }
 
     #[test]
@@ -390,8 +508,9 @@ mod tests {
 
         // After an explicit re-import, cancellation still preserves the existing output.
         {let _core=contact::core_lock();Store::open().unwrap().save(Source::Path(&alice),"Alice").unwrap();}
-        let r=encrypt(&alice_id,"alice.nkem");let job=backend.reserve(&r).unwrap();let _hold=Reservation{backend:backend.clone(),job:job.clone()};let cancel=job.clone();
-        assert_eq!(execute(r,job,move|_,_|{cancel.cancelled.store(true,Ordering::Release);}).err().unwrap().code,"cancelled");
+        assert_eq!(run(&backend,encrypt(&alice_id,"alice.nkem")).err().unwrap().code,"output-exists");
+        let mut r=encrypt(&alice_id,"alice.nkem");r.overwrite=true;let job=backend.reserve(&r).unwrap();let _hold=Reservation{backend:backend.clone(),job:job.clone()};let cancel=job.clone();
+        assert_eq!(execute(&backend,r,job,move|_,_|{cancel.cancelled.store(true,Ordering::Release);}).err().unwrap().code,"cancelled");
         assert_eq!(fs::read(keys.file("alice.nkem")).unwrap(),before);
         // Every operation-specific public-key snapshot was removed.
         assert_eq!(staging_entries(),staged);
@@ -426,8 +545,8 @@ mod tests {
         assert_eq!(outcome.fingerprint,None);
         assert_eq!(fs::read(keys.file("group.nkem")).unwrap()[4],4);
         for person in [0,1] {
-            run(&backend,decrypt(person,"group.out")).unwrap();
-            assert_eq!(fs::read(keys.file("group.out")).unwrap(),data);
+            let output=format!("group-{person}.out");run(&backend,decrypt(person,&output)).unwrap();
+            assert_eq!(fs::read(keys.file(&output)).unwrap(),data);
         }
         assert_eq!(run(&backend,decrypt(2,"carol.out")).err().unwrap().code,"core-error");
         assert!(fs::metadata(keys.file("carol.out")).is_err());
@@ -458,8 +577,9 @@ mod tests {
 
         // Cancelling a multi-recipient encryption commits nothing.
         {let _core=contact::core_lock();let store=Store::open().unwrap();store.save(Source::Path(&people[1].0),"Bob").unwrap();}
-        let r=encrypt(&[&ids[0],&ids[1]],"group.nkem");let job=backend.reserve(&r).unwrap();let _hold=Reservation{backend:backend.clone(),job:job.clone()};let cancel=job.clone();
-        assert_eq!(execute(r,job,move|_,_|{cancel.cancelled.store(true,Ordering::Release);}).err().unwrap().code,"cancelled");
+        assert_eq!(run(&backend,encrypt(&[&ids[0],&ids[1]],"group.nkem")).err().unwrap().code,"output-exists");
+        let mut r=encrypt(&[&ids[0],&ids[1]],"group.nkem");r.overwrite=true;let job=backend.reserve(&r).unwrap();let _hold=Reservation{backend:backend.clone(),job:job.clone()};let cancel=job.clone();
+        assert_eq!(execute(&backend,r,job,move|_,_|{cancel.cancelled.store(true,Ordering::Release);}).err().unwrap().code,"cancelled");
         assert_eq!(fs::read(keys.file("group.nkem")).unwrap(),before);
         assert_eq!(staging_entries(),staged);
     }
@@ -506,10 +626,38 @@ mod tests {
 
     #[cfg(unix)]
     #[test]
+    fn staging_prefers_private_runtime_and_rejects_unsafe_runtime_or_symlinks() {
+        let _serial=STAGING_TESTS.lock().unwrap_or_else(|error|error.into_inner());
+        let _core=CORE_LOCK.lock().unwrap_or_else(|error|error.into_inner());
+        use std::{ffi::OsString,os::unix::fs::{symlink,PermissionsExt}};
+        struct Environment(Vec<(&'static str,Option<OsString>)>);
+        impl Drop for Environment {fn drop(&mut self){for (name,value) in &self.0 {match value {Some(value)=>std::env::set_var(name,value),None=>std::env::remove_var(name)}}}}
+        let home=Directory::new();let runtime=home.0.join("runtime");
+        fs::create_dir(&runtime).unwrap();fs::set_permissions(&runtime,fs::Permissions::from_mode(0o700)).unwrap();
+        let _environment=Environment(["HOME","XDG_RUNTIME_DIR"].iter().map(|&name|(name,std::env::var_os(name))).collect());
+        std::env::set_var("HOME",&home.0);std::env::set_var("XDG_RUNTIME_DIR",&runtime);
+        let mut stage=Staged::new("public test bytes").unwrap();
+        assert!(std::path::Path::new(stage.path().unwrap().to_str().unwrap()).starts_with(&runtime));assert!(stage.close());
+        fs::set_permissions(&runtime,fs::Permissions::from_mode(0o755)).unwrap();
+        let fallback=home.0.join(".nekokem-tmp");
+        let mut stage=Staged::new("public test bytes").unwrap();
+        assert!(std::path::Path::new(stage.path().unwrap().to_str().unwrap()).starts_with(&fallback));assert!(stage.close());
+        fs::set_permissions(&runtime,fs::Permissions::from_mode(0o700)).unwrap();
+        let alias=home.0.join("runtime-link");symlink(&runtime,&alias).unwrap();std::env::set_var("XDG_RUNTIME_DIR",alias);
+        let mut stage=Staged::new("public test bytes").unwrap();
+        assert!(std::path::Path::new(stage.path().unwrap().to_str().unwrap()).starts_with(&fallback));assert!(stage.close());
+        fs::set_permissions(fallback,fs::Permissions::from_mode(0o755)).unwrap();
+        assert!(Staged::new("public test bytes").is_err());
+    }
+
+    #[cfg(unix)]
+    #[test]
     fn posix_staging_permissions_cleanup_and_link_rejection() {
         let _serial=STAGING_TESTS.lock().unwrap_or_else(|error|error.into_inner());
         use std::os::unix::fs::{symlink, MetadataExt, PermissionsExt};
         let bytes = "public staging test fixture\n";
+        {
+        let _core=CORE_LOCK.lock().unwrap_or_else(|error|error.into_inner());
         let mut staged = Staged::new(bytes).unwrap();
         let name = unsafe { CStr::from_ptr(staged.0) }.to_str().unwrap();
         let file = PathBuf::from(name);
@@ -521,6 +669,7 @@ mod tests {
         assert!(staged.close());
         assert!(!file.exists());
         assert!(!directory.exists());
+        }
 
         let dir = Directory::new();
         fs::set_permissions(&dir.0, fs::Permissions::from_mode(0o755)).unwrap();
@@ -550,13 +699,16 @@ mod tests {
         assert!(fs::symlink_metadata(dir.file("public-link")).unwrap().file_type().is_symlink());
         assert!(fs::symlink_metadata(dir.file("private.key.enc")).is_err());
 
+        let _core=CORE_LOCK.lock().unwrap_or_else(|error|error.into_inner());
         let mut staged = Staged::new(bytes).unwrap();
         let file = PathBuf::from(unsafe { CStr::from_ptr(staged.0) }.to_str().unwrap());
         let directory = file.parent().unwrap().to_owned();
-        fs::hard_link(&file, dir.file("key-hard-link")).unwrap();
+        // A runtime directory may be tmpfs or another volume than the test root.
+        let hard_link=file.with_file_name("key-hard-link");
+        fs::hard_link(&file, &hard_link).unwrap();
         assert!(!staged.close());
         assert_eq!(fs::read(&file).unwrap(), bytes.as_bytes());
-        fs::remove_file(dir.file("key-hard-link")).unwrap();
+        fs::remove_file(hard_link).unwrap();
         fs::remove_file(file).unwrap();
         fs::remove_dir(directory).unwrap();
     }

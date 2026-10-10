@@ -47,7 +47,7 @@ async fn run_operation(request:Request,state:State<'_,Arc<Backend>>,app:tauri::A
     let hold=Reservation{backend,job:job.clone()};
     tauri::async_runtime::spawn_blocking(move||{
         let id=job.id.clone();let emitter=app.clone();let backend=hold.backend.clone();
-        let result=core::execute(request,job,move|processed,total|{let _=emitter.emit("operation-progress",ProgressEvent{id:id.clone(),processed,total});});
+        let result=core::execute(&backend,request,job,move|processed,total|{let _=emitter.emit("operation-progress",ProgressEvent{id:id.clone(),processed,total});});
         drop(hold);
         if backend.close_after.load(Ordering::Acquire){app.exit(0);}
         result
@@ -60,6 +60,11 @@ struct ContactImport{
     #[serde(default)] key_text:Zeroizing<String>,
     #[serde(default)] paste:bool,
     #[serde(default)] note:String,
+}
+fn allowed_navigation(scheme:&str,host:Option<&str>,port:Option<u16>)->bool {
+    (scheme=="tauri"&&host==Some("localhost")&&port.is_none()) ||
+    (cfg!(windows)&&scheme=="http"&&host==Some("tauri.localhost")&&port.is_none()) ||
+    (cfg!(debug_assertions)&&scheme=="http"&&host==Some("127.0.0.1")&&port==Some(1420))
 }
 // Contact changes run off the UI thread, exclusively with Core operations, and
 // delay window/app shutdown until their atomic record update has finished.
@@ -102,9 +107,8 @@ fn main(){
             let config=app.config().app.windows.iter().find(|window|window.label=="main").expect("Main window config missing");
             let builder=tauri::WebviewWindowBuilder::from_config(app,config)?
                 .on_navigation(|url|{
-                    (url.scheme()=="tauri"&&url.host_str()==Some("localhost")) ||
-                    (matches!(url.scheme(),"http"|"https")&&url.host_str()==Some("tauri.localhost")) ||
-                    (cfg!(debug_assertions)&&url.scheme()=="http"&&url.host_str()==Some("127.0.0.1")&&url.port()==Some(1420))
+                    url.username().is_empty()&&url.password().is_none()&&
+                    allowed_navigation(url.scheme(),url.host_str(),url.port())
                 })
                 .on_new_window(|_,_|tauri::webview::NewWindowResponse::Deny);
             #[cfg(any(target_os="macos",target_os="linux"))]
@@ -130,4 +134,20 @@ fn main(){
                 if _app.state::<Arc<Backend>>().defer_close(){api.prevent_exit();}
             }
         });
+}
+
+#[cfg(test)]
+mod navigation_tests {
+    use super::*;
+    #[test]
+    fn navigation_accepts_only_the_platform_local_origin() {
+        assert!(allowed_navigation("tauri",Some("localhost"),None));
+        assert_eq!(allowed_navigation("http",Some("tauri.localhost"),None),cfg!(windows));
+        assert!(!allowed_navigation("https",Some("tauri.localhost"),None));
+        assert!(!allowed_navigation("http",Some("tauri.localhost"),Some(8000)));
+        assert!(!allowed_navigation("https",Some("example.com"),None));
+        assert!(!allowed_navigation("tauri",Some("example.com"),None));
+        assert_eq!(allowed_navigation("http",Some("127.0.0.1"),Some(1420)),cfg!(debug_assertions));
+        assert!(!allowed_navigation("http",Some("127.0.0.1"),Some(1421)));
+    }
 }

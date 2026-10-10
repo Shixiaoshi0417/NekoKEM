@@ -44,6 +44,10 @@ gh attestation verify NekoKEM-linux-x86_64.tar.gz --repo Shixiaoshi0417/NekoKEM 
   --signer-workflow Shixiaoshi0417/NekoKEM/.github/workflows/release.yml
 ```
 
+Publish 按已知 release ID 上传和发布，分页检查现有版本；只有最高正式语义版本才设为 Latest。匹配的部分草稿可以续传，上传或校验失败会恢复草稿；恢复失败会明确报告 release ID 和未确认的状态。Publish 校验 Windows CLI/GUI 包内的版本、源码提交和构建运行记录。CI 检查应用、打包参数与 Android 签名校验中的版本一致性，不自动修改版本号。
+
+Rust、Node 和 Python 分别固定为 `1.99.0`、`24.21.0` 和 `3.13.16`。MSYS2 使用滚动仓库，保留完整更新以避免历史包组合和局部升级造成 ABI、依赖不匹配，并记录实际编译器版本。Release 继续无缓存构建，APK 构建与签名分离，签名只允许在 `main` 上执行；详见 [发布流程](release/README.md)。
+
 README 使用专用圆角展示图；Android 保留现有方形白底图案，Windows CLI/GUI EXE 保留方形图案并将外部白色区域改为透明。Windows 应用未进行 Authenticode 签名。
 
 ## 多人加密
@@ -70,6 +74,8 @@ HMAC-SHA512 头部 MAC 保证所有接收方解出相同内容。格式见 [`doc
 二级页面和侧边菜单随返回手势跟手移动，详见 [预测性返回](android/README.md#预测性返回)。
 以上功能自 v3.3.2 起提供；v3.3.1 及更早版本不包含。
 
+Android 所有本机密钥变更在进程内串行，并与 Core 共用目录锁。启动仅清理超过 24 小时的本应用临时候选和空输出备份；潜在恢复副本保留并提示。口令对话框禁止截图和录屏，应用持有的口令数组用后及时清零；Compose 和输入法产生的不可变字符串副本不能可靠清零。应用明确排除云备份和设备迁移。SAF 保存失败会尝试恢复原内容，但提供方可能留下空目标，需要手动删除。R8 保持关闭，待发布版设备回归覆盖 JNI 和回调后再评估；详见 [Android 安全边界](android/README.md)。
+
 ## 桌面 GUI 公钥通讯录
 
 Windows、macOS 与 Linux 共用的 Rust + Tauri 2 + Vue 3 + TypeScript GUI 新增“公钥通讯录”页面：
@@ -80,6 +86,8 @@ Windows、macOS 与 Linux 共用的 Rust + Tauri 2 + Vue 3 + TypeScript GUI 新�
 要求重新选择，不会改用其他公钥。备注仅用于识别，请与接收方核对完整指纹。五种界面语言同步更新，
 密码参数、文件格式和秘密清理机制不变。详见 [桌面 GUI 文档](desktop/README.md#public-key-contacts--公钥通讯录)。
 此功能自 v3.3.2 起提供；v3.3.1 及更早版本不包含。
+
+桌面端加解密遇到已有输出时先提示，确认覆盖后重试；解密重试需要重新输入口令。未经确认的操作最终采用原子“不覆盖”提交，操作途中出现的目标也不会被覆盖；在既不支持硬链接也不支持不覆盖重命名的卷上（如 macOS 上的 FAT、exFAT 和部分网络挂载），改为在普通重命名前一刻检查目标。后端仅接受同一会话上次 `key-exists` 或 `output-exists` 返回的完全相同路径，确认在五分钟内有效且被下一次操作消耗。POSIX 粘贴密钥优先使用安全的 `$XDG_RUNTIME_DIR`，否则使用私有 `~/.nekokem-tmp`；暂存文件关闭 stdio 缓冲、不执行 `fsync`。权限仅开放事件监听、取消监听及原生打开和保存对话框；导航只允许平台本地来源，拒绝 HTTPS 和新窗口。多选列表显示完整指纹，名称过滤控制字符、分隔符和全部 Unicode 格式字符，零宽连接符和非连接符只在两个可见的非 ASCII 字符之间保留。
 
 ## 历史版本 v3.2.0
 
@@ -93,8 +101,9 @@ Android App 版本为 `3.1.1`，Core 版本保持 `3.1`，application ID 为
 协议编号：默认文件容器仍为 **NKEM v3**，NKPR 格式保持不变。
 
 v3.1.1 新增无需运行时共享库依赖的 Linux x86_64/aarch64 CLI 发行包、
-自动安装脚本和 GitHub Actions 构建流程。安装脚本自动选择最新 GitHub
-Release 中与本机架构匹配的包，先使用 Release 顶层 `SHA256SUMS.txt` 验证
+自动安装脚本和 GitHub Actions 构建流程。当前安装脚本下载最新已发布
+Release 中与本机架构匹配的包（只解析一次，所有下载都来自同一发布；
+`NEKOKEM_RELEASE_TAG=v4.1.0 sh install.sh` 安装指定版本，安装的程序必须报告该版本），先使用 Release 顶层 `SHA256SUMS.txt` 验证
 归档，再验证包内文件的 SHA-256：
 
 ```sh
@@ -103,6 +112,8 @@ curl --fail --location --output install.sh \
 less install.sh
 sh install.sh
 ```
+
+校验和只能检查下载完整性，不能证明来源。`NEKOKEM_VERIFY_ATTESTATION=1 sh install.sh` 还会使用 `gh attestation verify` 校验来源证明；仅适用于 `v4.1.0` 之后带证明的发布，`v4.1.0` 及更早版本没有来源证明，会拒绝安装。
 
 Linux CLI 支持 `nekokem --version`。此发行补丁不改变 Core API、密码参数、
 NKEM v3 或 NKPR 格式。
@@ -155,7 +166,7 @@ macOS 文件层保留严格的所有者、权限、符号链接和硬链接检�
 
 Linux 原生 GUI 支持 `x86_64` 与 `aarch64`（ARM64），复用 Rust + Tauri 2 + Vue 3 + TypeScript 界面、五语言自动检测、原生文件选择、进度/取消、键盘导航和遵循系统减少动态效果设置的动画。每种架构提供 `NekoKEM-linux-<架构>-GUI.deb`、`NekoKEM-linux-<架构>-GUI.rpm` 和 `NekoKEM-linux-<架构>-GUI.tar.gz`。Ubuntu 使用 `sudo apt install ./NekoKEM-linux-x86_64-GUI.deb`；Fedora 使用 `sudo dnf install ./NekoKEM-linux-x86_64-GUI.rpm`，ARM64 将文件名中的架构换为 `aarch64`。安装后可从系统应用菜单打开；便携包使用 `NekoKEM-GUI.sh` 启动。图标直接使用现有透明外部白色区域的方形 PNG，README 仍用圆角展示图。
 
-构建与原生 CI 基线为 Ubuntu 24.04，CI 另在同架构 Fedora 44 容器中安装并启动 RPM。RPM 原生构建，以共享库能力声明依赖；运行需要系统 GTK3、WebKitGTK 4.1 和 glibc 2.39 或更新版本，GUI 便携包仍依赖这些系统库。OpenSSL 4.0.3 静态链接并隐藏符号，避免影响 WebKit 系统 TLS 库，保留汇编、线程、Fortify、栈保护、PIE 和完整 RELRO。Linux 文件权限、认证后提交及取消清理沿用 CLI/Core；Core 4.0 新增 NKEM v4 多接收方容器，NKEM v3、NKPR v1、KDF 参数与 64 KiB 流式处理不变。详见 [Linux 安装与构建](desktop/README.md#linux-installation-and-build--linux-安装与构建) 和 [Linux GUI 安全边界](desktop/LINUX-SECURITY.md)。
+构建与原生 CI 基线为 Ubuntu 24.04，CI 另在同架构 Fedora 44 容器中安装并启动 RPM。RPM 原生构建，以共享库能力声明依赖，并包含对应架构的动态加载器；运行需要系统 GTK3、WebKitGTK 4.1 和 glibc 2.39 或更新版本，GUI 便携包仍依赖这些系统库。OpenSSL 4.0.3 静态链接并隐藏符号，避免影响 WebKit 系统 TLS 库，保留汇编、线程、Fortify、栈保护、PIE 和完整 RELRO。Linux 文件权限、认证后提交及取消清理沿用 CLI/Core；Core 4.0 新增 NKEM v4 多接收方容器，NKEM v3、NKPR v1、KDF 参数与 64 KiB 流式处理不变。详见 [Linux 安装与构建](desktop/README.md#linux-installation-and-build--linux-安装与构建) 和 [Linux GUI 安全边界](desktop/LINUX-SECURITY.md)。
 
 v4.1.0 Release 包含上述两种架构的全部 Linux GUI 安装包和便携包，现有静态 Linux CLI 包继续保留。原生窗口测试使用 X11 会话，不代表已验证所有 Linux 发行版或 Wayland 实机。
 
@@ -245,7 +256,9 @@ plaintext/test.jpg -> encrypted/test.jpg.nkem
 
 可以输入私钥文件路径，也可以继续粘贴两个兼容的明文 PEM 私钥块。私钥文件内容是 NKPR 容器时（按文件头识别，与扩展名无关，例如 Android 导出的 `private.nkpr`），程序会自动关闭终端回显并提示输入密码，在内存中认证、解密并解析 NKPR；解出的 PEM 不会写入磁盘。旧的明文 PEM 私钥（如 `private.key`）不需要密码。
 
-粘贴旧式私钥内容时终端回显同样会被临时关闭；内部使用的 `0600` 临时密钥文件会在操作结束后删除。在隐藏输入的提示处按 Ctrl+Z 时，程序暂停期间恢复回显，`fg` 继续后再次隐藏。
+粘贴旧式私钥内容时终端回显同样会被临时关闭；内部使用的 `0600` 临时密钥文件会在操作结束后删除。在隐藏输入的提示处按 Ctrl+Z 时，程序暂停期间恢复回显，`fg` 继续后再次隐藏。粘贴加密 PKCS#8 PEM 会立即拒绝并提示改用 NKPR 文件。Windows 检测到不能可靠关闭回显的 mintty/MSYS 伪终端时拒绝秘密输入，请改用 Windows Terminal 或重定向标准输入。
+
+交互解密拒绝已存在的 `plaintext/<name>`，包括输入口令期间才创建的目标；最终提交采用原子“不覆盖”操作；在既不支持硬链接也不支持不覆盖重命名的卷上，改为在普通重命名前一刻检查目标。菜单选 5 或遇到 EOF 的退出状态等于最近一次操作结果，尚未操作视为成功。只有新设置的私钥口令要求有效 UTF-8，解锁已有密钥仍按原字节解释。显示文件名和路径时把终端控制、双向控制和零宽字符替换为 `?`，文件操作仍使用原始路径。
 
 输入文件必须以 `.nkem` 结尾。程序会确保当前工作目录下存在权限为 `0700` 的 `plaintext/`；如果不存在则自动创建。输出只使用容器文件名，自动去掉 `.nkem`，并恢复到 `plaintext/`：
 
@@ -296,7 +309,7 @@ encrypted/test.jpg.nkem -> plaintext/test.jpg
 
 私钥文件内容是 NKPR 时，Hybrid decrypt 会自动提示一次密码；判断依据是文件头，不看扩展名。为兼容已有部署，命令仍接受包含 X448、ML-KEM-1024 两个 PEM 块的旧式明文 `private.key`。
 
-输出路径不能是本次操作使用的密钥文件：解密时不能写到私钥上，加密时不能写到任一公钥上。比较的是文件身份而非路径字符串，`./keys/../keys/private.key.enc` 这类别名同样会被拒绝，密钥文件保持不变。
+输出路径不能是本次操作使用的密钥文件：解密时不能写到私钥上，加密时不能写到任一公钥上。公钥读取拒绝符号链接。对已存在的普通文件比较身份，`./keys/../keys/private.key.enc` 这类指向同一文件的别名会被拒绝；此检查不承诺隔离所有路径解析或忽略锁的外部写入。
 
 命令可以使用其他位置的相应 PEM 密钥：
 
@@ -340,7 +353,9 @@ NKPR 是独立于 NKEM 文件容器的私钥存储格式；NKEM v3 不修改 NKP
 32-byte salt || 12-byte nonce || encrypted hybrid private PEM || 16-byte tag
 ```
 
-`header || salt || nonce` 全部作为 AES-GCM AAD。读取器严格验证版本、算法、参数、长度和 GCM 标签；错误密码与任何受认证字段或密文的修改都会失败。解密缓冲区即使在标签验证前产生数据也始终只驻留内存，并在失败路径清零。
+`header || salt || nonce` 全部作为 AES-GCM AAD。读取器严格验证版本、算法、参数、长度和 GCM 标签；错误密码与任何受认证字段或密文的修改都会失败，并对外统一报告无法解锁私钥，不区分错误口令与容器损坏。解密缓冲区即使在标签验证前产生数据也始终只驻留内存，并在失败路径清零。
+
+NKPR 的 AES-GCM 不具备密钥承诺性，不保证一个容器只能由唯一口令或保护密钥认证，也不提供跨保护密钥的明文一致性保证。此处说明现有格式的边界，不改变 NKPR 格式或密码参数。
 
 ## NKEM v3 hybrid 文件格式
 
@@ -348,13 +363,13 @@ v3 使用 X448、ML-KEM-1024、共享秘密组合和 HKDF-SHA512，并将 HKDF s
 
 ## NKEM v4 多接收方文件格式
 
-v4 用随机 32 字节文件密钥只加密一次文件数据，并为每位接收方（最多 64 位）各保存一条记录：X448 临时公钥、ML-KEM-1024 密文和用 AES-256-GCM 包装的文件密钥。包装密钥由 HKDF-SHA512 从该接收方的两个共享秘密派生，并绑定 X448 临时公钥与接收方 X448 公钥。HMAC-SHA512 头部 MAC 覆盖头部、salt 和全部接收方记录，承诺文件密钥，使所有接收方解出相同内容；记录不含指纹，解密时尝试全部记录，失败时的报错和耗时都不暴露哪条记录属于自己。完整布局见 [`docs/NKEM-v4.md`](docs/NKEM-v4.md)。`nekokem_encrypt_file_multi_with_progress()` 为两个及以上公钥写出 v4，只有一个公钥时写出 v3。
+v4 用随机 32 字节文件密钥只加密一次文件数据，并为每位接收方（最多 64 位）各保存一条记录：X448 临时公钥、ML-KEM-1024 密文和用 AES-256-GCM 包装的文件密钥。包装密钥由 HKDF-SHA512 从该接收方的两个共享秘密派生，并绑定 X448 临时公钥与接收方 X448 公钥。HMAC-SHA512 头部 MAC 覆盖头部、salt 和全部接收方记录，承诺文件密钥，使所有接收方解出相同内容；记录不含指纹，解密时尝试全部记录。不可关联性仅面向不持有相应私钥的非收件人：收件人可以识别自己的记录，并跨文件确认自己参与；统一错误和完整试解不会阻止收件人进行这种识别。完整布局见 [`docs/NKEM-v4.md`](docs/NKEM-v4.md)。`nekokem_encrypt_file_multi_with_progress()` 为两个及以上公钥写出 v4，只有一个公钥时写出 v3。
 
 ## 安全实现说明
 
 ### OpenSSL EVP
 
-- X448、ML-KEM-1024、HKDF、Argon2id 和 AES-256-GCM 均使用 OpenSSL EVP/provider API，不自行实现密码算法，也不引入 liboqs；
+- X448、ML-KEM-1024、HKDF、Argon2id 和 AES-256-GCM 均使用 OpenSSL EVP/provider API，不自行实现密码算法，也不引入 liboqs；导入公钥和容器中的 X448 临时公钥必须使用规范编码 `u < p`，现有正常密钥不受影响；
 - 所有 `EVP_PKEY`、`EVP_PKEY_CTX`、`EVP_CIPHER_CTX`、`EVP_KDF`、`EVP_KDF_CTX`、`EVP_MD_CTX` 和 `BIO` 都有统一的成功/失败释放路径；
 - OpenSSL 错误路径通过 `ERR_get_error()` 循环取出并清空当前线程的错误队列；
 - 私钥保留在 OpenSSL 的不透明 `EVP_PKEY`/provider 对象内，不导出原始私钥副本，并使用 `EVP_PKEY_free()` 释放。
@@ -383,10 +398,11 @@ v4 用随机 32 字节文件密钥只加密一次文件数据，并为每位接�
 - 私钥对象在解封装完成后立即释放，共享秘密在 KDF 完成后立即清零释放，AES 密钥仅存活到文件加解密结束；
 - 输出仍先写入同目录的临时文件，文件内容 `fsync` 完成后才重命名，重命名后再 `fsync` 父目录；认证、解析、取消或 I/O 失败会关闭并删除临时文件；
 - Linux/macOS CLI 被 SIGINT、SIGTERM、SIGHUP、SIGQUIT 或 SIGPIPE 终止时，会先删除未提交的临时输出与粘贴的密钥并恢复终端回显，再按该信号退出；正在发布的密钥对会先完成或回滚。Windows 上未提交的输出在提交前一直处于待删除状态，进程结束时由系统删除；Ctrl+C 会等正在进行的发布完成并恢复控制台回显，只有在清除该状态与发布重命名之间的瞬间被强制终止才可能留下该文件。Linux 和 macOS 上 SIGKILL、崩溃或断电仍可能留下仅所有者可读、含未经认证部分明文的 `<输出>.tmp.XXXXXX`，请删除此类文件；
-- 公私钥生成使用同一个可回滚事务：两边都完成写入和 `fsync` 后才发布；第二次 rename 或目录 `fsync` 失败会恢复旧公私钥（原本不存在则两边都移除），避免只更新一把密钥；
-- POSIX 上，成对密钥提交持有父目录的进程间锁直到回滚和清理结束；回滚前核对已发布文件的 inode，避免删除其他写入者替换后的文件。目录中的 `0600` 锁文件 `.nekokem-pair.lock` 会保留，运行期间不要删除；
+- 公私钥生成使用同一个可回滚事务：两边都完成写入和 `fsync` 后才发布；第二次 rename 或目录 `fsync` 失败会尝试恢复旧公私钥（原本不存在则两边都移除）。任何一侧恢复失败立即停止回滚，保留或重新发布完整新一对，并保留旧备份；外部写入或持续 I/O 失败阻止恢复时保留新暂存副本，明确报告两边状态。跨文件事务不承诺断电原子性；
+- POSIX 上，成对密钥提交持有父目录的进程间锁直到回滚和清理结束；回滚前核对已发布文件的 inode，避免删除其他写入者替换后的文件。目录中的 `0600` 锁文件 `.nekokem-pair.lock` 会保留，运行期间不要删除；获取锁使用非阻塞有限重试，每个目录约一秒，失败提示完整锁路径；
+- 读取、替换和删除密钥会检查同名 `.bak.*`、`.tmp.*` 事务残留及多硬链接，提示清理或恢复；备份在发布前最后阶段创建。删除私钥清理可识别且权限安全的自有残留，POSIX 同步父目录。未知、不安全或符号链接残留保留并提示人工处理；外部硬链接无法一并保证删除。Windows 使用保留句柄刷新和同步删除，不支持 POSIX 目录 `fsync`，不承诺相同的断电元数据持久性；
 - Hybrid keygen 直接把两个私钥 PEM 写入 OpenSSL memory BIO，再加密为 NKPR 暂存文件，并与公钥一致提交；没有明文私钥输出文件或明文私钥临时文件；
-- CLI 的 Core 接口当前是路径式 API。粘贴 PEM 因而使用 `/tmp` 下独占 `0700` 目录中的 `0600`、`O_NOFOLLOW|O_CLOEXEC` 临时文件，并在所有返回路径删除文件和目录。直接 memory BIO 需要新增内部 Core 适配层，memfd 的 `/proc/self/fd` 路径又会与私钥 `O_NOFOLLOW` 策略冲突；本阶段不改变公开 Core API，后续可在独立 API 设计中消除该临时路径；
+- CLI 的 Core 接口当前是路径式 API。粘贴 PEM 优先使用安全的 `$XDG_RUNTIME_DIR`，否则使用 `~/.nekokem-tmp` 下独占 `0700` 目录中的 `0600`、`O_NOFOLLOW|O_CLOEXEC` 临时文件；临时明文不执行 `fsync`，在所有返回路径删除文件和目录。SIGKILL 或断电仍可能留下暂存文件，仅在确认没有进程使用后清理自己的 `nekokem-paste.*`。POSIX CLI 启动时禁止 core dump，Linux 同时禁止进程 dumpability；
 - `secure_free()` 只用于 `OPENSSL_malloc()` 分配的敏感缓冲区，普通路径字符串和公开元数据仍由匹配的常规分配器释放。
 
 ## 性能测量

@@ -7,6 +7,9 @@ import com.shixiaoshi0417.nekokem.nativecore.NativeBridge
 import java.io.File
 import java.io.IOException
 import java.nio.file.Files
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.Executors
+import java.util.concurrent.TimeUnit
 import org.junit.Assert.*
 import org.junit.Rule
 import org.junit.Test
@@ -98,4 +101,48 @@ class LocalKeyGenerationTest {
             privateCheck = { error("must not validate a failed native transaction") },
             expectedResult = NativeBridge.RESULT_CORE_ERROR,
         )
+    @Test fun differentPagesCannotMutateKeysConcurrently() {
+        val entered = CountDownLatch(1)
+        val release = CountDownLatch(1)
+        val secondEntered = CountDownLatch(1)
+        fun manager(first: Boolean): LocalKeyManager {
+            val files = temporary.newFolder()
+            val context = object : ContextWrapper(RuntimeEnvironment.getApplication()) {
+                override fun getFilesDir(): File = files
+            }
+            val backend = object : KeyGeneration {
+                override fun generate(publicPath: String, privatePath: String, password: ByteArray, replace: Boolean): Int {
+                    if (first) {
+                        entered.countDown()
+                        check(release.await(5, TimeUnit.SECONDS))
+                    } else secondEntered.countDown()
+                    File(publicPath).writeText("public")
+                    File(privatePath).writeText("private")
+                    return NativeBridge.RESULT_SUCCESS
+                }
+                override fun hasPrivateKey(privatePath: String) = true
+            }
+            return LocalKeyManager(context, backend)
+        }
+        val first = manager(true)
+        val second = manager(false)
+        val executor = Executors.newFixedThreadPool(2)
+        val firstPassword = "first".toByteArray()
+        val secondPassword = "second".toByteArray()
+        try {
+            val firstResult = executor.submit<Int> { first.generateKeypair(firstPassword) }
+            assertTrue(entered.await(5, TimeUnit.SECONDS))
+            val secondResult = executor.submit<Int> { second.generateKeypair(secondPassword) }
+            assertFalse("the next page must wait for the first mutation", secondEntered.await(200, TimeUnit.MILLISECONDS))
+            release.countDown()
+            assertEquals(NativeBridge.RESULT_SUCCESS, firstResult.get(5, TimeUnit.SECONDS))
+            assertEquals(NativeBridge.RESULT_SUCCESS, secondResult.get(5, TimeUnit.SECONDS))
+            assertArrayEquals(ByteArray(firstPassword.size), firstPassword)
+            assertArrayEquals(ByteArray(secondPassword.size), secondPassword)
+        } finally {
+            release.countDown()
+            executor.shutdownNow()
+        }
+    }
+
 }

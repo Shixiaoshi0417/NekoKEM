@@ -260,7 +260,8 @@ test-progress test-progress-large: $(CORE_LIBRARY)
 
 test: $(TARGET) test-openssl analyze test-ubsan test-parser test-file-security test-gcm-limit test-aes-stream \
 	test-key-management test-version-rejection test-progress test-hybrid-kdf test-input-boundaries \
-	test-asan test-pem-interaction test-i18n test-multi-recipient test-key-safety test-interrupts
+	test-asan test-pem-interaction test-i18n test-multi-recipient test-key-safety test-interrupts \
+	test-cli-audit test-crypto-audit
 	@set -eu; \
 	test_dir=$$(mktemp -d); \
 	cleanup() { \
@@ -304,7 +305,8 @@ test: $(TARGET) test-openssl analyze test-ubsan test-parser test-file-security t
 			"$$test_dir/keys/private.key" \
 			"$$test_dir/keys/private.key.enc"; \
 		rmdir "$$test_dir/plaintext" "$$test_dir/encrypted" \
-			"$$test_dir/keys" "$$test_dir" 2>/dev/null || true; \
+			"$$test_dir/keys" "$$test_dir/runtime" "$$test_dir" \
+			2>/dev/null || true; \
 	}; \
 	trap cleanup EXIT INT TERM; \
 	mkdir "$$test_dir/encrypted"; \
@@ -443,17 +445,23 @@ test: $(TARGET) test-openssl analyze test-ubsan test-parser test-file-security t
 		2>long-input-error.txt; \
 	grep -F 'Input exceeds 4096 bytes and was discarded' \
 		long-input-error.txt >/dev/null; \
-	{ printf '2\n2\n'; \
+	mkdir -m 0700 runtime; \
+	if { printf '2\n2\n'; \
 		awk 'BEGIN { for (i = 0; i < 17000; ++i) printf "A"; \
 			printf "\\n"; }'; \
 		printf '5\n'; \
-	} | ./nekokem >long-paste-output.txt 2>long-paste-error.txt; \
+	} | XDG_RUNTIME_DIR="$$test_dir/runtime" ./nekokem \
+		>long-paste-output.txt 2>long-paste-error.txt; then \
+		echo "Failed paste returned success" >&2; exit 1; \
+	fi; \
 	grep -F 'Pasted-key line exceeds 16384 bytes and was discarded' \
 		long-paste-error.txt >/dev/null; \
-	test -z "$$(find /tmp -maxdepth 1 -type d \
-		-name 'nekokem-paste.*' -print -quit)"; \
+	test -z "$$(find runtime -mindepth 1 -print -quit)"; \
+	rmdir runtime; \
 	cp keys/private.key.enc menu-before.enc; \
-	printf '1\n5\n' | ./nekokem --lang en >/dev/null 2>menu-refused.txt; \
+	if printf '1\n5\n' | ./nekokem --lang en >/dev/null 2>menu-refused.txt; then \
+		echo "Failed menu operation returned success" >&2; exit 1; \
+	fi; \
 	grep -F 'keygen never replaces existing keys' menu-refused.txt \
 		>/dev/null; \
 	cmp keys/private.key.enc menu-before.enc; \
@@ -490,10 +498,12 @@ test: $(TARGET) test-openssl analyze test-ubsan test-parser test-file-security t
 	sha256sum interactive-original.txt plaintext/interactive.txt; \
 	cmp interactive-original.txt plaintext/interactive.txt; \
 	umask 077; \
-	{ printf '3\n2\n'; sleep 1; \
+	if { printf '3\n2\n'; sleep 1; \
 		printf 'PRIVATE-ECHO-SENTINEL\n-----END PRIVATE KEY-----\n-----END PRIVATE KEY-----\n'; \
 	} | /usr/bin/script -qec './nekokem' private-echo-check.log \
-		>/dev/null 2>&1; \
+		>/dev/null 2>&1; then \
+		echo "Invalid pasted private key returned success" >&2; exit 1; \
+	fi; \
 	if grep -q 'PRIVATE-ECHO-SENTINEL' private-echo-check.log; then \
 		echo "Pasted private-key input was echoed" >&2; \
 		exit 1; \
@@ -537,3 +547,16 @@ test-i18n: $(TARGET)
 	python3 ../scripts/check_i18n.py
 	python3 ../scripts/test_i18n_checks.py
 	python3 tests/i18n_tests.py ./$(TARGET)
+
+.PHONY: test-cli-audit test-crypto-audit
+test-cli-audit: $(TARGET)
+	python3 tests/audit_tests.py ./$(TARGET)
+
+test-crypto-audit: $(CORE_LIBRARY)
+	@set -eu; \
+	crypto_binary=$$(mktemp /tmp/nekokem-crypto-audit-tests.XXXXXX); \
+	trap 'rm -f "$$crypto_binary"' EXIT INT TERM; \
+	$(CC) $(CPPFLAGS) $(CFLAGS) $(LDFLAGS) \
+		../core/tests/crypto_audit_tests.c $(CORE_LIBRARY) $(LDLIBS) \
+		-o "$$crypto_binary"; \
+	"$$crypto_binary"

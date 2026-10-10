@@ -195,11 +195,11 @@ class Tests(unittest.TestCase):
         self.assertIn(b'Password exceeds 1024 bytes', result.stderr)
         result = self.run_cli(password=b'a'*5000+b'\n5\n')
         self.assertIn(b'Input exceeds 4096 bytes', result.stderr)
-        result = self.run_cli(password=b'2\n2\n'+b'a'*17000+b'\n5\n')
+        result = self.run_cli(password=b'2\n2\n'+b'a'*17000+b'\n5\n', ok=False)
         self.assertIn(b'Pasted-key line exceeds 16384 bytes', result.stderr)
         self.assertFalse((self.root/'keys/private.key.enc').exists())
 
-    def terminal_run(self, arguments, rounds):
+    def terminal_run(self, arguments, rounds, expected_returncode=0):
         master, slave = pty.openpty()
         transcript = bytearray()
 
@@ -246,7 +246,7 @@ class Tests(unittest.TestCase):
                 self.assertLess(time.monotonic(), deadline, bytes(transcript))
             while receive():
                 pass
-            self.assertEqual(process.returncode, 0, bytes(transcript))
+            self.assertEqual(process.returncode, expected_returncode, bytes(transcript))
             return bytes(transcript)
         finally:
             if process.poll() is None:
@@ -261,7 +261,7 @@ class Tests(unittest.TestCase):
             (b'password:', password+b'\n', True),
         ])
         self.assertNotIn(password, transcript)
-        # Choose the private-key paste action, supply invalid bounded PEM and exit.
+        # The failed decryption remains the latest operation when option 5 exits.
         private = b'PRIVATE-ECHO-SENTINEL'
         transcript = self.terminal_run([], [
             (b'Select [1-5]:', b'3\n', False),
@@ -269,7 +269,7 @@ class Tests(unittest.TestCase):
             (b'input will not be echoed.', private+b'\n-----END PRIVATE KEY-----\n-----END PRIVATE KEY-----\n', True),
             (b'.nkem file path:', b'missing.nkem\n', False),
             (b'Select [1-5]:', b'5\n', False),
-        ])
+        ], expected_returncode=1)
         self.assertNotIn(private, transcript)
         self.assert_no_transaction_artifacts()
 

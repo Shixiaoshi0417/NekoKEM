@@ -96,11 +96,12 @@ from pathlib import Path
 import subprocess, sys
 root=Path(sys.argv[1])
 # The version the executable itself reports; Publish compares it with the tag.
-reported=subprocess.run([str(root/'nekokem.exe'),'--version'],capture_output=True,text=True).stdout.strip()
+reported=subprocess.run([str(root/'nekokem.exe'),'--version'],capture_output=True,text=True,check=True).stdout.strip()
 version=re.fullmatch(r'NekoKEM ([0-9]+\.[0-9]+\.[0-9]+)',reported)
+if version is None: raise SystemExit('Windows CLI reported an invalid application version')
 metadata={'source_sha':os.environ.get('GITHUB_SHA') or subprocess.check_output(['git','rev-parse','HEAD'],text=True).strip(),
           'run_id':os.environ.get('GITHUB_RUN_ID'), 'platform':'windows-x86_64',
-          'version':version.group(1) if version else None,
+          'version':version.group(1),
           'openssl_version':'4.0.3', 'compiler':subprocess.check_output(['gcc','--version'],text=True).splitlines()[0],
           'authenticode_signed':False, 'apk_signing_material_used':False,
           'exe_sha256':hashlib.sha256((root/'nekokem.exe').read_bytes()).hexdigest()}

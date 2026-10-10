@@ -2,8 +2,6 @@ name: CI
 
 on:
   pull_request:
-    branches:
-      - main
   push:
     branches:
       - main
@@ -40,6 +38,11 @@ jobs:
           sudo apt-get update
           sudo apt-get install --yes --no-install-recommends \
             afl++ build-essential ca-certificates curl perl
+
+      - name: Check application and signing version consistency
+        run: |
+          python3 scripts/check_versions.py
+          python3 scripts/test_version_checks.py -v
 
       - name: Test atomic performance report saving
         run: python3 scripts/test_profile_reports.py -v
@@ -119,6 +122,9 @@ jobs:
 
       - name: Test release signing configuration and identity persistence
         run: python3 .github/scripts/test_release_signing.py -v
+
+      - name: Test publication and failure recovery
+        run: python3 .github/scripts/test_publish_release.py -v
 
       - name: Test public release asset selection and checks
         run: python3 .github/scripts/test_release_assets.py -v
@@ -356,7 +362,7 @@ jobs:
       - name: Build, verify, and package
         run: bash linux/scripts/build-linux-release.sh "${{ matrix.arch }}" "$GITHUB_WORKSPACE/dist"
 
-      - name: Test latest-release installer
+      - name: Test pinned-release installer
         run: |
           sh core/tests/install_script_tests.sh \
             "${{ matrix.arch }}" \
@@ -446,6 +452,7 @@ jobs:
       - uses: msys2/setup-msys2@ec48f7c5447b3140e2b088413ae3a55687bccb6e # v2
         with:
           msystem: UCRT64
+          # MSYS2 requires a coherent rolling package set; see release/README.md.
           update: true
           install: >-
             make perl curl tar
@@ -481,7 +488,7 @@ jobs:
           bash performance-baseline-source/windows/scripts/build-windows-cli.sh \
             "$(cygpath -u "$RUNNER_TEMP")/windows-cli-performance-baseline"
       - uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
-        if: always() && steps.openssl-cache.outputs.cache-hit != 'true'
+        if: success() && steps.openssl-cache.outputs.cache-hit != 'true'
         with:
           path: ${{ runner.temp }}/windows-openssl
           key: ${{ steps.openssl-cache.outputs.cache-primary-key }}
@@ -625,7 +632,7 @@ jobs:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
       - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
         with:
-          node-version: '24'
+          node-version: '24.21.0'
       - name: Install locked frontend dependencies
         run: |
           npm ci --ignore-scripts
@@ -653,18 +660,19 @@ jobs:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
       - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
         with:
-          node-version: '24'
+          node-version: '24.21.0'
       - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
         id: python
         with:
-          python-version: '3.13'
+          python-version: '3.13.16'
       - uses: dtolnay/rust-toolchain@7e38f4b43b4db5c8dd498af069a4f6196df1d067 # master
         with:
-          toolchain: stable-x86_64-pc-windows-gnu
+          toolchain: 1.99.0-x86_64-pc-windows-gnu
           targets: x86_64-pc-windows-gnu
       - uses: msys2/setup-msys2@ec48f7c5447b3140e2b088413ae3a55687bccb6e # v2
         with:
           msystem: UCRT64
+          # MSYS2 requires a coherent rolling package set; see release/README.md.
           update: true
           install: >-
             make perl curl tar
@@ -692,7 +700,7 @@ jobs:
           export NEKOKEM_OPENSSL_PREFIX="$(cygpath -u "$RUNNER_TEMP")/windows-openssl"
           bash windows/scripts/build-windows-cli.sh "$(cygpath -u "$RUNNER_TEMP")/windows-cli"
       - uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
-        if: steps.openssl-cache.outputs.cache-hit != 'true'
+        if: success() && steps.openssl-cache.outputs.cache-hit != 'true'
         with:
           path: ${{ runner.temp }}/windows-openssl
           key: ${{ steps.openssl-cache.outputs.cache-primary-key }}
@@ -776,7 +784,7 @@ jobs:
           $loaderHash = (Get-FileHash "$root/WebView2Loader.dll" -Algorithm SHA256).Hash.ToLowerInvariant()
           "$hash  nekokem-gui.exe","$loaderHash  WebView2Loader.dll" | Set-Content "$root/SHA256SUMS.txt"
           $version = (Get-Content desktop/src-tauri/tauri.conf.json -Raw | ConvertFrom-Json).version
-          @{ source_sha=$env:GITHUB_SHA; run_id=$env:GITHUB_RUN_ID; version=$version; exe_sha256=$hash; platform='windows-x86_64'; openssl_version='4.0.3'; authenticode_signed=$false; apk_signing_material_used=$false } | ConvertTo-Json | Set-Content "$root/build-metadata.json"
+          @{ source_sha=$env:GITHUB_SHA; run_id=$env:GITHUB_RUN_ID; version=$version; exe_sha256=$hash; platform='windows-x86_64'; compiler_version='${{ steps.compiler.outputs.version }}'; openssl_version='4.0.3'; authenticode_signed=$false; apk_signing_material_used=$false } | ConvertTo-Json | Set-Content "$root/build-metadata.json"
           Compress-Archive -Path "$root/*" -DestinationPath "$env:RUNNER_TEMP/NekoKEM-Windows-GUI.zip"
           Remove-Item $env:TEMP -Recurse -Force
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
@@ -807,7 +815,7 @@ jobs:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
       - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
         with:
-          python-version: '3.13'
+          python-version: '3.13.16'
       - name: Identify native Apple compiler and SDK
         id: compiler
         run: |
@@ -867,13 +875,13 @@ jobs:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
       - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
         with:
-          python-version: '3.13'
+          python-version: '3.13.16'
       - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
         with:
-          node-version: '24'
+          node-version: '24.21.0'
       - uses: dtolnay/rust-toolchain@7e38f4b43b4db5c8dd498af069a4f6196df1d067 # master
         with:
-          toolchain: stable
+          toolchain: 1.99.0
           targets: aarch64-apple-darwin
       - name: Identify native Apple compiler and SDK
         id: compiler
@@ -946,13 +954,13 @@ jobs:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
       - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
         with:
-          python-version: '3.13'
+          python-version: '3.13.16'
       - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
         with:
-          node-version: '24'
+          node-version: '24.21.0'
       - uses: dtolnay/rust-toolchain@7e38f4b43b4db5c8dd498af069a4f6196df1d067 # master
         with:
-          toolchain: stable
+          toolchain: 1.99.0
           targets: ${{ matrix.arch }}-unknown-linux-gnu
       - name: Install native GTK/WebKit and desktop test tools
         run: |
@@ -989,7 +997,9 @@ jobs:
         run: TAURI_CONFIG="$(cat tauri.linux.conf.json)" cargo test --locked --target '${{ matrix.arch }}-unknown-linux-gnu' --bin nekokem-gui -- --test-threads=1
       - name: Build the native Linux desktop package
         working-directory: desktop
-        run: bash scripts/build-linux-gui.sh '${{ matrix.arch }}'
+        run: |
+          python3 tests/test_linux_bundle_config.py
+          bash scripts/build-linux-gui.sh '${{ matrix.arch }}'
       - name: Verify ELF hardening and package the exact installed application
         run: |
           python3 desktop/scripts/package-linux-gui.py \

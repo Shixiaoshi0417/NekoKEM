@@ -1,10 +1,12 @@
 #include "hybrid.h"
 #include "private_key.h"
 #include "secure_mem.h"
+#include "x448_encoding.h"
 
 #include <openssl/buffer.h>
 #include <openssl/core_names.h>
 #include <openssl/crypto.h>
+#include <openssl/err.h>
 #include <openssl/kdf.h>
 #include <openssl/params.h>
 #include <openssl/pem.h>
@@ -16,6 +18,8 @@
 #define X448_MAX_SHARED_SECRET_SIZE 1024U
 #define MAX_PUBLIC_KEY_FILE_SIZE (1024U * 1024U)
 #define MAX_PRIVATE_KEY_FILE_SIZE (1024U * 1024U)
+
+static int x448_private_key_is_usable(EVP_PKEY *key);
 
 static int bio_remaining_is_whitespace(BIO *input)
 {
@@ -45,6 +49,23 @@ static int validate_key(EVP_PKEY *key,
 {
     if (key == NULL || EVP_PKEY_is_a(key, algorithm) != 1) {
         fprintf(stderr, file_message("%s is not an %s key\n"), file_message(description), algorithm);
+        return 0;
+    }
+    return 1;
+}
+
+static int validate_x448_public_encoding(EVP_PKEY *key)
+{
+    unsigned char encoded[X448_PUBLIC_KEY_SIZE];
+    size_t length = sizeof(encoded);
+
+    if (EVP_PKEY_get_raw_public_key(key, encoded, &length) != 1 ||
+        length != sizeof(encoded)) {
+        print_openssl_error("Cannot read the recipient X448 public key");
+        return 0;
+    }
+    if (!x448_public_is_canonical(encoded)) {
+        fprintf(stderr, file_message("Non-canonical X448 public key\n"));
         return 0;
     }
     return 1;
@@ -170,6 +191,7 @@ static int reject_pem_password(char *buffer, int size,
 
 static int parse_hybrid_private_keys(const unsigned char *pem,
                                      size_t pem_len,
+                                     int decrypted,
                                      HybridKeys *keys)
 {
     BIO *input = NULL;
@@ -193,11 +215,19 @@ static int parse_hybrid_private_keys(const unsigned char *pem,
     loaded.mlkem = PEM_read_bio_PrivateKey(
         input, NULL, reject_pem_password, NULL);
     if (loaded.x448 == NULL || loaded.mlkem == NULL) {
-        print_openssl_error("Cannot parse both hybrid key components");
+        ERR_clear_error();
+        /* Only decrypted NKPR contents point at the password; a plaintext
+         * file that fails (a public key, any other file, damaged NKPR magic)
+         * was never decrypted with one. */
+        fputs(file_message(decrypted != 0
+                               ? "Private-key password is incorrect or NKPR data is corrupted"
+                               : "Cannot parse both hybrid key components"), stderr);
+        fputc('\n', stderr);
         goto cleanup;
     }
     if (!validate_key(loaded.x448, X448_ALGORITHM_NAME,
                       "First hybrid key component") ||
+        !validate_x448_public_encoding(loaded.x448) ||
         !validate_key(loaded.mlkem, KEM_ALGORITHM_NAME,
                       "Second hybrid key component") ||
         !bio_remaining_is_whitespace(input)) {
@@ -246,6 +276,7 @@ int hybrid_load_public_keys(const char *path, HybridKeys *keys)
     }
     if (!validate_key(loaded.x448, X448_ALGORITHM_NAME,
                       "First hybrid key component") ||
+        !validate_x448_public_encoding(loaded.x448) ||
         !validate_key(loaded.mlkem, KEM_ALGORITHM_NAME,
                       "Second hybrid key component") ||
         !bio_remaining_is_whitespace(input)) {
@@ -275,7 +306,11 @@ int hybrid_load_private_keys(const char *path, HybridKeys *keys)
                              &pem, &pem_len)) {
         goto cleanup;
     }
-    success = parse_hybrid_private_keys(pem, pem_len, keys);
+    success = parse_hybrid_private_keys(pem, pem_len, 0, keys);
+    if (success && !x448_private_key_is_usable(keys->x448)) {
+        hybrid_keys_cleanup(keys);
+        success = 0;
+    }
 
 cleanup:
     secure_free(pem, pem_len);
@@ -298,7 +333,11 @@ int hybrid_load_protected_private_keys(
                                     &pem, &pem_len)) {
         goto cleanup;
     }
-    success = parse_hybrid_private_keys(pem, pem_len, keys);
+    success = parse_hybrid_private_keys(pem, pem_len, 1, keys);
+    if (success && !x448_private_key_is_usable(keys->x448)) {
+        hybrid_keys_cleanup(keys);
+        success = 0;
+    }
 
 cleanup:
     secure_free(pem, pem_len);
@@ -364,11 +403,11 @@ int hybrid_load_decryption_keys(
         loaded = protected_private_key_decode(contents, contents_len,
                                               password, password_len,
                                               &pem, &pem_len) &&
-                 parse_hybrid_private_keys(pem, pem_len, keys);
+                 parse_hybrid_private_keys(pem, pem_len, 1, keys);
     } else if (contents_len > MAX_PRIVATE_KEY_FILE_SIZE) {
         fprintf(stderr, file_message("Sensitive input exceeds the size limit\n"));
     } else {
-        loaded = parse_hybrid_private_keys(contents, contents_len, keys);
+        loaded = parse_hybrid_private_keys(contents, contents_len, 0, keys);
     }
 
 cleanup:
@@ -458,7 +497,8 @@ int hybrid_x448_encapsulate(
         return 0;
     }
     if (!validate_key(recipient_public_key, X448_ALGORITHM_NAME,
-                      "Hybrid recipient public key")) {
+                      "Hybrid recipient public key") ||
+        !validate_x448_public_encoding(recipient_public_key)) {
         return 0;
     }
     ephemeral_key = generate_key(X448_ALGORITHM_NAME);
@@ -508,6 +548,10 @@ int hybrid_x448_decapsulate(
     }
     if (ephemeral_public_len != X448_PUBLIC_KEY_SIZE) {
         fprintf(stderr, file_message("Invalid X448 ephemeral public-key length\n"));
+        return 0;
+    }
+    if (!x448_public_is_canonical(ephemeral_public)) {
+        fprintf(stderr, file_message("Non-canonical X448 public key\n"));
         return 0;
     }
     ephemeral_key = EVP_PKEY_new_raw_public_key_ex(

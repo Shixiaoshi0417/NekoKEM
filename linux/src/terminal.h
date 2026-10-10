@@ -70,6 +70,20 @@ static inline int cli_unlink(const char *path) { return windows_delete_regular(p
 static inline int cli_rmdir(const char *path) { return windows_remove_directory(path) ? 0 : -1; }
 #define unlink cli_unlink
 #define rmdir cli_rmdir
+static inline int cli_terminal_is_echoing_pty(void)
+{
+    HANDLE input = GetStdHandle(STD_INPUT_HANDLE);
+    union { FILE_NAME_INFO info; unsigned char storage[4096]; } name;
+    if (GetFileType(input) != FILE_TYPE_PIPE ||
+        !GetFileInformationByHandleEx(input, FileNameInfo, &name, sizeof(name))) return 0;
+    size_t count = name.info.FileNameLength / sizeof(wchar_t);
+    size_t capacity = (sizeof(name) - offsetof(FILE_NAME_INFO, FileName)) / sizeof(wchar_t);
+    if (count >= capacity) return 1;
+    name.info.FileName[count] = L'\0';
+    return (wcsstr(name.info.FileName, L"msys-") != NULL ||
+            wcsstr(name.info.FileName, L"cygwin-") != NULL) &&
+           wcsstr(name.info.FileName, L"-pty") != NULL;
+}
 static inline int cli_terminal_hide(CliTerminal *original, int *disabled)
 {
     HANDLE input = GetStdHandle(STD_INPUT_HANDLE);
@@ -102,6 +116,7 @@ static inline int cli_terminal_restore(CliTerminal *original, int discard)
 #include <stdatomic.h>
 #include <termios.h>
 #include <unistd.h>
+static inline int cli_terminal_is_echoing_pty(void) { return 0; }
 static inline int cli_input_getc(void) { return fgetc(stdin); }
 static inline int cli_input_error(void) { return ferror(stdin); }
 static inline int cli_input_eof(void) { return feof(stdin); }

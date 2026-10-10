@@ -158,7 +158,7 @@ def check_apk(apk, version, version_code):
 
 def verify(artifacts, version, source, run, apk_check=check_apk):
     artifacts = Path(artifacts)
-    require(re.fullmatch(r'\d+\.\d+\.\d+', version) is not None, 'Invalid version')
+    require(re.fullmatch(r'[0-9]+\.[0-9]+\.[0-9]+', version) is not None, 'Invalid version')
     require(re.fullmatch(r'[0-9a-f]{40}', source) is not None, 'Invalid source commit')
     check_internal_sums(artifacts)
 

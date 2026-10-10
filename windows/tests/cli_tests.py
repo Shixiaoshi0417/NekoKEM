@@ -73,6 +73,41 @@ class Tests(unittest.TestCase):
         finally:
             preference.unlink(missing_ok=True)
             if not existed and directory.exists(): directory.rmdir()
+    def test_msys_named_pipe_refuses_secret_input(self):
+        import msvcrt
+        from ctypes import wintypes
+        kernel = ctypes.WinDLL('kernel32', use_last_error=True)
+        kernel.CreateNamedPipeW.argtypes = [wintypes.LPCWSTR, wintypes.DWORD,
+            wintypes.DWORD, wintypes.DWORD, wintypes.DWORD, wintypes.DWORD,
+            wintypes.DWORD, ctypes.c_void_p]
+        kernel.CreateNamedPipeW.restype = wintypes.HANDLE
+        kernel.CreateFileW.argtypes = [wintypes.LPCWSTR, wintypes.DWORD,
+            wintypes.DWORD, ctypes.c_void_p, wintypes.DWORD, wintypes.DWORD,
+            wintypes.HANDLE]
+        kernel.CreateFileW.restype = wintypes.HANDLE
+        kernel.CloseHandle.argtypes = [wintypes.HANDLE]
+        kernel.CloseHandle.restype = wintypes.BOOL
+        name = rf'\\.\pipe\msys-nekokem-audit-{os.getpid()}-pty0-from-master'
+        invalid = ctypes.c_void_p(-1).value
+        server = kernel.CreateNamedPipeW(name, 2, 0, 1, 1024, 1024, 0, None)
+        self.assertNotEqual(server, invalid, ctypes.get_last_error())
+        client = None
+        try:
+            client = kernel.CreateFileW(name, 0x80000000, 0, None, 3, 0, None)
+            self.assertNotEqual(client, invalid, ctypes.get_last_error())
+            descriptor = msvcrt.open_osfhandle(client, os.O_RDONLY | os.O_BINARY)
+            client = None  # The Python stream now owns the handle.
+            with os.fdopen(descriptor, 'rb', buffering=0) as input_stream:
+                result = subprocess.run([EXE, '--lang', 'en', 'keygen'], cwd=self.root,
+                    stdin=input_stream, capture_output=True, timeout=10)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn(b'MSYS or mintty terminal', result.stderr)
+            self.assertFalse((self.root/'keys/private.key.enc').exists())
+        finally:
+            if client is not None and client != invalid:
+                kernel.CloseHandle(client)
+            kernel.CloseHandle(server)
+
     def test_version_help_languages_and_unicode_paths(self):
         self.assertEqual(self.run_cli('--version').stdout,b'NekoKEM 4.1.0\n')
         for lang,text in [('en','Usage:'),('zh-CN','用法'),('zh-TW','用法'),('ja','使用方法'),('ko','사용법')]:

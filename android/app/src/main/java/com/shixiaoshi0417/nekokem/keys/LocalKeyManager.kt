@@ -11,6 +11,8 @@ import java.io.FileInputStream
 import java.io.FileOutputStream
 import java.io.RandomAccessFile
 import java.security.MessageDigest
+import java.util.concurrent.locks.ReentrantLock
+import kotlin.concurrent.withLock
 
 data class LocalKeyState(
     val privateKeyExists: Boolean,
@@ -45,7 +47,10 @@ class LocalKeyManager internal constructor(
      * Takes ownership of [password] and clears it before returning. Existing
      * key files are replaced only with [replace], after the user confirmed it.
      */
-    fun generateKeypair(password: ByteArray, replace: Boolean = false): Int = try {
+    fun generateKeypair(password: ByteArray, replace: Boolean = false): Int =
+        keyMutationLock.withLock { generateKeypairLocked(password, replace) }
+
+    private fun generateKeypairLocked(password: ByteArray, replace: Boolean): Int = try {
         if (password.isEmpty()) {
             NativeBridge.RESULT_INVALID_ARGUMENT
         } else if (!preparePrivateDirectory(keysDirectory)) {
@@ -322,6 +327,22 @@ class LocalKeyManager internal constructor(
     fun importPublicKeyDetailed(
         input: File,
         privateKeyPassword: ByteArray? = null,
+    ): PublicKeyImportResult = keyMutationLock.withLock {
+        try {
+            withPairDirectoryLock { importPublicKeyDetailedLocked(input, privateKeyPassword) }
+        } catch (_: Exception) {
+            privateKeyPassword?.fill(0)
+            PublicKeyImportResult(
+                RESULT_STORAGE_ERROR, null, null, NativeBridge.RESULT_CORE_ERROR,
+                NativeBridge.RESULT_CORE_ERROR, RESULT_PUBLIC_KEY_PERMISSION_FAILED,
+                RESULT_PUBLIC_KEY_COMMIT_FAILED, null,
+            )
+        }
+    }
+
+    private fun importPublicKeyDetailedLocked(
+        input: File,
+        privateKeyPassword: ByteArray?,
     ): PublicKeyImportResult {
         var candidate: File? = null
         var stagedInput: PublicKeyFileRecord? = null
@@ -426,8 +447,9 @@ class LocalKeyManager internal constructor(
     internal fun defaultPublicKeyRecord(): PublicKeyFileRecord? =
         publicKeyFileRecord(publicKey)
 
-    internal fun deleteDefaultPublicKeyForTest(): Boolean =
-        if (!publicKey.exists()) true else publicKey.delete()
+    internal fun deleteDefaultPublicKeyForTest(): Boolean = keyMutationLock.withLock {
+        withPairDirectoryLock { if (!publicKey.exists()) true else publicKey.delete() }
+    }
 
     internal fun publicKeyFileRecord(file: File): PublicKeyFileRecord? {
         val digest = MessageDigest.getInstance(SHA256_ALGORITHM)
@@ -590,7 +612,17 @@ class LocalKeyManager internal constructor(
      * and a private key that does not belong to the current public key is
      * refused, so the two key files always form one pair.
      */
-    fun importEncryptedPrivateKey(input: File, password: ByteArray): Int {
+    fun importEncryptedPrivateKey(input: File, password: ByteArray): Int =
+        keyMutationLock.withLock {
+            try {
+                withPairDirectoryLock { importEncryptedPrivateKeyLocked(input, password) }
+            } catch (_: Exception) {
+                password.fill(0)
+                RESULT_STORAGE_ERROR
+            }
+        }
+
+    private fun importEncryptedPrivateKeyLocked(input: File, password: ByteArray): Int {
         var candidate: File? = null
 
         return try {
@@ -608,7 +640,7 @@ class LocalKeyManager internal constructor(
                         password,
                     )
                     if (pair == null) {
-                        // Only to tell why: a wrong password or an invalid file.
+                        // Invalid data and wrong passwords share the authentication failure.
                         NativeBridge.nativeCheckPassword(candidate.absolutePath, password)
                             .takeIf { it != NativeBridge.RESULT_SUCCESS }
                             ?: NativeBridge.RESULT_CORE_ERROR
@@ -684,29 +716,86 @@ class LocalKeyManager internal constructor(
 
     // Staged operation files belong to their own operations and pages, which
     // remove them; deleting the key must not clean files another page uses.
-    fun deletePrivateKey(): Int = try {
-        NativeBridge.nativeDeletePrivateKey(privateKey.absolutePath)
-    } catch (_: Exception) {
-        RESULT_STORAGE_ERROR
-    }
-
-    fun deletePublicKey(): Int = try {
-        if (deleteOwnedRegularFile(publicKey)) {
-            NativeBridge.RESULT_SUCCESS
-        } else {
+    fun deletePrivateKey(): Int = keyMutationLock.withLock {
+        try {
+            NativeBridge.nativeDeletePrivateKey(privateKey.absolutePath)
+        } catch (_: Exception) {
             RESULT_STORAGE_ERROR
         }
-    } catch (_: Exception) {
-        RESULT_STORAGE_ERROR
     }
 
-    fun deleteKeypair(): Int {
-        val privateResult = deletePrivateKey()
-        if (privateResult != NativeBridge.RESULT_SUCCESS) {
-            return privateResult
+    fun deletePublicKey(): Int = keyMutationLock.withLock {
+        try {
+            withPairDirectoryLock { deletePublicKeyLocked() }
+        } catch (_: Exception) {
+            RESULT_STORAGE_ERROR
         }
-        return deletePublicKey()
     }
+
+    private fun deletePublicKeyLocked(): Int =
+        if (deleteOwnedRegularFile(publicKey)) NativeBridge.RESULT_SUCCESS else RESULT_STORAGE_ERROR
+
+    fun deleteKeypair(): Int = keyMutationLock.withLock {
+        try {
+            withPairDirectoryLock {
+                val result = NativeBridge.nativeDeletePrivateKeyUnderPairLock(privateKey.absolutePath)
+                if (result == NativeBridge.RESULT_SUCCESS) deletePublicKeyLocked() else result
+            }
+        } catch (_: Exception) {
+            RESULT_STORAGE_ERROR
+        }
+    }
+
+    private fun <T> withPairDirectoryLock(block: () -> T): T {
+        check(preparePrivateDirectory(keysDirectory))
+        val descriptor = NativeBridge.nativeAcquirePairLock(privateKey.absolutePath)
+        check(descriptor >= 0)
+        try {
+            return block()
+        } finally {
+            NativeBridge.nativeReleasePairLock(descriptor)
+        }
+    }
+
+    /** Deletes only old import candidates; recovery backups remain available. */
+    fun cleanupExpiredCandidates(now: Long = System.currentTimeMillis()): Int =
+        keyMutationLock.withLock {
+            try {
+                if (!keysDirectory.exists()) return@withLock 0
+                withPairDirectoryLock {
+                    keysDirectory.listFiles().orEmpty().forEach { file ->
+                        if (isExpiredImportCandidate(file.name, file.lastModified(), now)) {
+                            val status = Os.lstat(file.absolutePath)
+                            if (OsConstants.S_ISREG(status.st_mode) && status.st_uid == Os.getuid() &&
+                                status.st_nlink == 1L
+                            ) clearAndDeleteRegularFile(file)
+                        }
+                    }
+                    recoveryBackupCount()
+                }
+            } catch (_: Exception) {
+                recoveryBackupCount()
+            }
+        }
+
+    /** Counted under the mutation lock, so an import's short-lived backup is never reported. */
+    fun recoveryBackupCount(): Int = keyMutationLock.withLock {
+        keysDirectory.listFiles().orEmpty().count { file ->
+            (file.name.startsWith(PUBLIC_BACKUP_PREFIX) || file.name.startsWith(PRIVATE_BACKUP_PREFIX)) &&
+                ownedRegularFile(file)
+        }
+    }
+
+    private fun ownedRegularFile(file: File): Boolean = try {
+        val status = Os.lstat(file.absolutePath)
+        OsConstants.S_ISREG(status.st_mode) && status.st_uid == Os.getuid() && status.st_nlink == 1L
+    } catch (_: Exception) { false }
+
+    internal fun isExpiredImportCandidate(name: String, modified: Long, now: Long): Boolean =
+        name.endsWith(TEMPORARY_SUFFIX) &&
+            (name.startsWith(PUBLIC_IMPORT_PREFIX) || name.startsWith(PRIVATE_IMPORT_PREFIX)) &&
+            !name.startsWith(PUBLIC_BACKUP_PREFIX) && !name.startsWith(PRIVATE_BACKUP_PREFIX) &&
+            modified > 0L && now >= modified && now - modified >= TEMPORARY_MAX_AGE_MILLIS
 
     private fun deleteOwnedRegularFile(file: File): Boolean {
         val status = try {
@@ -832,12 +921,12 @@ class LocalKeyManager internal constructor(
             return false
         }
         val initialStatus = Os.lstat(directory.absolutePath)
-        if (!OsConstants.S_ISDIR(initialStatus.st_mode)) {
+        if (!OsConstants.S_ISDIR(initialStatus.st_mode) || initialStatus.st_uid != Os.getuid()) {
             return false
         }
         Os.chmod(directory.absolutePath, PRIVATE_DIRECTORY_MODE)
         val status = Os.lstat(directory.absolutePath)
-        return OsConstants.S_ISDIR(status.st_mode) &&
+        return OsConstants.S_ISDIR(status.st_mode) && status.st_uid == Os.getuid() &&
             (status.st_mode and PERMISSION_MASK) == PRIVATE_DIRECTORY_MODE
     }
 
@@ -858,6 +947,8 @@ class LocalKeyManager internal constructor(
     }
 
     companion object {
+        private val keyMutationLock = ReentrantLock()
+        private const val TEMPORARY_MAX_AGE_MILLIS = 24L * 60L * 60L * 1000L
         const val RESULT_STORAGE_ERROR = -4
         const val RESULT_FINGERPRINT_MISMATCH = -6
         const val RESULT_PUBLIC_KEY_COPY_FAILED = -10

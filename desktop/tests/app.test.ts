@@ -40,6 +40,23 @@ describe('Desktop operation boundaries',()=>{
   expect(calls()).toEqual([false,true,false,false]);
  });
  it('clears password fields immediately and preserves cancellation failure semantics',async()=>{const app=await ready();await app.findAll('nav button')[2]!.trigger('click');await app.get('[name=keyPath]').setValue('private.key.enc');await app.get('[name=input]').setValue('input.nkem');await app.get('[name=output]').setValue('output');await app.get('[name=password]').setValue('public-test-password');vi.mocked(bridge.runOperation).mockRejectedValue({code:'cancelled'});await app.get('form').trigger('submit');expect((app.get('[name=password]').element as HTMLInputElement).value).toBe('');await flushPromises();expect(app.get('[role=alert]').text()).toContain('no new output');expect(app.text()).not.toContain('public-test-password');});
+ it('offers output replacement only after the backend refuses an existing path',async()=>{
+  const app=await ready();
+  await app.get('[name=keyPath]').setValue('public.key');await app.get('[name=input]').setValue('plain');await app.get('[name=output]').setValue('out.nkem');
+  expect(app.find('[name=overwrite]').exists()).toBe(false);
+  vi.mocked(bridge.runOperation).mockRejectedValueOnce({code:'output-exists'});
+  await app.get('form').trigger('submit');await flushPromises();
+  expect(vi.mocked(bridge.runOperation).mock.calls[0]![0].overwrite).toBe(false);
+  expect(app.get('[role=alert]').text()).toContain('left unchanged');
+  await app.get('[name=overwrite]').setValue(true);
+  await app.get('form').trigger('submit');await flushPromises();
+  expect(vi.mocked(bridge.runOperation).mock.calls[1]![0].overwrite).toBe(true);
+  expect(app.find('[name=overwrite]').exists()).toBe(false);
+  vi.mocked(bridge.runOperation).mockRejectedValueOnce({code:'output-exists'});
+  await app.get('form').trigger('submit');await flushPromises();
+  await app.get('[name=output]').setValue('other.nkem');await flushPromises();
+  expect(app.find('[name=overwrite]').exists()).toBe(false);
+ });
  it('rejects passwords exceeding the UTF-8 byte limit',async()=>{const app=await ready();await app.findAll('nav button')[0]!.trigger('click');await app.get('[name=publicPath]').setValue('public.key');await app.get('[name=privatePath]').setValue('private.key.enc');await app.get('[name=password]').setValue('中'.repeat(400));await app.get('[name=confirmation]').setValue('中'.repeat(400));await app.get('form').trigger('submit');expect(bridge.runOperation).not.toHaveBeenCalled();expect(app.get('[role=alert]').text()).toContain('1024 UTF-8 bytes');});
  it('locks navigation and ignores stale progress events during a job',async()=>{let callback:(value:bridge.Progress)=>void=()=>{};vi.mocked(bridge.onProgress).mockImplementation(async fn=>{callback=fn;return()=>{};});let finish:(result:bridge.Outcome)=>void=()=>{};vi.mocked(bridge.runOperation).mockReturnValue(new Promise(resolve=>{finish=resolve;}));const app=await ready();await app.get('[name=keyPath]').setValue('public.key');await app.get('[name=input]').setValue('plain');await app.get('[name=output]').setValue('out.nkem');await app.get('form').trigger('submit');const request=vi.mocked(bridge.runOperation).mock.calls[0]![0];callback({id:'stale-job',processed:50,total:100});await flushPromises();expect(app.text()).not.toContain('50%');expect(app.findAll('nav button').every(button=>button.attributes('disabled')!==undefined)).toBe(true);callback({id:request.id,processed:50,total:100});await flushPromises();expect(app.text()).toContain('50%');finish({output:'out.nkem',fingerprint:null});await flushPromises();expect(app.text()).toContain('Completed');});
  it('keeps every desktop message complete in all five languages',()=>{for(const [key,values] of Object.entries(catalog)){expect(values,key).toHaveLength(5);const placeholders=values.map(value=>(value.match(/\{\w+\}/g)??[]).sort().join());for(const value of values){expect(value.trim(),key).not.toBe('');}expect(new Set(placeholders).size,key).toBe(1);}});
@@ -266,10 +283,11 @@ describe('Desktop public-key contacts',()=>{
   const boxes=app.findAll('[name=contacts]');
   expect(document.activeElement).toBe(boxes[0]!.element);expect(app.get('.recipient-options').attributes('aria-invalid')).toBe('true');
   expect(app.findAll('.recipient-label').map(item=>item.text())).toEqual(['Alice','bob.pub']);
-  expect(app.findAll('.recipient-option code').map(item=>item.text())).toEqual(['AA:AA:AA:AA…','BB:BB:BB:BB…']);
+  expect(app.findAll('.recipient-option code').map(item=>item.text())).toEqual([alice.fingerprint,bob.fingerprint]);
   await boxes[1]!.setValue(true);
   expect(app.find('[role=alert]').exists()).toBe(false);
   expect(app.get('.contact-preview code').text()).toBe(bob.fingerprint);
+  expect(app.findAll('.recipient-options code').map(code=>code.text())).toContain(bob.fingerprint);
   expect(app.get('.format').text()).toContain('NKEM v3');
   await app.get('form').trigger('submit');await flushPromises();
   const request=vi.mocked(bridge.runOperation).mock.calls[0]![0];
@@ -284,7 +302,7 @@ describe('Desktop public-key contacts',()=>{
   await app.findAll('[name=contacts]')[0]!.setValue(true);await app.get('[name=input]').setValue('plain');await app.get('[name=output]').setValue('out.nkem');
   await app.get('form').trigger('submit');await flushPromises();
   expect(app.get('[role=alert]').text()).toContain('damaged or has unsafe permissions');
-  expect(app.get('.failed-contact').text()).toBe('Recipient: Alice · AA:AA:AA:AA…');
+  expect(app.get('.failed-contact').text()).toBe(`Recipient: Alice · ${alice.fingerprint}`);
   expect(app.findAll('[name=contacts]').map(box=>(box.element as HTMLInputElement).checked)).toEqual([false,false]);
   expect(app.get('.recipient-options').attributes('aria-invalid')).toBe('true');
   expect(bridge.listContacts).toHaveBeenCalledTimes(2);
