@@ -650,7 +650,7 @@ static int win_inspect_key_artifacts(const char *path, HANDLE key, int remove_ow
         HANDLE residue = CreateFileW(candidate, GENERIC_READ | DELETE | READ_CONTROL,
                 FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, NULL, OPEN_EXISTING,
                 FILE_FLAG_OPEN_REPARSE_POINT, NULL);
-        BY_HANDLE_FILE_INFORMATION info;
+        BY_HANDLE_FILE_INFORMATION info = {0};
         unsigned char magic[27];
         DWORD count = 0;
         int valid = residue != INVALID_HANDLE_VALUE && win_regular(residue, 0) &&

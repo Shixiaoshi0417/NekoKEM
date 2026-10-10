@@ -500,14 +500,21 @@ private fun NekoKEMRoute(
     val selectFileLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.OpenDocument(),
     ) { uri ->
-        if (uri != null) {
+        // Busy until the name is known: no operation starts on the previous
+        // file, and no slower lookup replaces a newer selection.
+        if (uri != null && !running) {
+            running = true
             scope.launch {
-                val document = pageWork { fileWorkflow.describe(uri) }
-                transitionInputSelection(
-                    InputSelectionEvent.SELECT_NEW,
-                    document.uri,
-                    document.displayName,
-                )
+                try {
+                    val document = pageWork { fileWorkflow.describe(uri) }
+                    transitionInputSelection(
+                        InputSelectionEvent.SELECT_NEW,
+                        document.uri,
+                        document.displayName,
+                    )
+                } finally {
+                    running = false
+                }
             }
         }
     }
