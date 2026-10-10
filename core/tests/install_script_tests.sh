@@ -77,11 +77,16 @@ cat > "$mock_bin/curl" <<'MOCK_CURL'
 set -eu
 output=
 url=
+write_out=
 while [ "$#" -gt 0 ]; do
     case "$1" in
         --output)
             shift
             output=${1:?}
+            ;;
+        --write-out)
+            shift
+            write_out=${1:?}
             ;;
         https://*)
             url=$1
@@ -91,6 +96,11 @@ while [ "$#" -gt 0 ]; do
 done
 [ -n "$output" ] && [ -n "$url" ]
 printf '%s\n' "$url" >> "$NEKOKEM_TEST_DOWNLOADS"
+if [ "$url" = "https://github.com/Shixiaoshi0417/NekoKEM/releases/latest" ]; then
+    [ "$write_out" = '%{url_effective}' ] || exit 1
+    printf '%s' "${NEKOKEM_TEST_LATEST:-https://github.com/Shixiaoshi0417/NekoKEM/releases/tag/v4.1.0}"
+    exit 0
+fi
 archive_url="https://github.com/Shixiaoshi0417/NekoKEM/releases/download/v4.1.0/NekoKEM-linux-${NEKOKEM_TEST_ARCH}.tar.gz"
 sums_url="https://github.com/Shixiaoshi0417/NekoKEM/releases/download/v4.1.0/SHA256SUMS.txt"
 case "$url" in
@@ -120,6 +130,7 @@ test "$("$install_root/nekokem" --version)" = "NekoKEM 4.1.0"
 grep -F "Installed NekoKEM 4.1.0 to $install_root/nekokem" \
     "$test_root/success.log" >/dev/null
 printf '%s\n' \
+    'https://github.com/Shixiaoshi0417/NekoKEM/releases/latest' \
     "https://github.com/Shixiaoshi0417/NekoKEM/releases/download/v4.1.0/NekoKEM-linux-$release_arch.tar.gz" \
     'https://github.com/Shixiaoshi0417/NekoKEM/releases/download/v4.1.0/SHA256SUMS.txt' \
     > "$test_root/expected-downloads.log"
