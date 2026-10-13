@@ -37,7 +37,8 @@ GUI 构建说明见仓库的 [desktop/README.md](https://github.com/Shixiaoshi04
 新私钥口令必须是有效 UTF-8；解锁现有密钥保留原字节解释。交互解密拒绝已有
 `plaintext/<name>`，包括输入口令期间才创建的目标文件。菜单选 5 或 EOF 返回
 最近一次操作的结果，尚未操作视为成功。路径显示过滤控制字符、双向控制及零宽字符。
-CLI 启动禁用 core dump；粘贴密钥使用安全的 `XDG_RUNTIME_DIR`，否则使用
+CLI 启动禁用 core dump；粘贴密钥使用安全的 `XDG_RUNTIME_DIR`，其次使用不进入
+Time Machine 的用户临时目录（`/var/folders/.../T`），最后使用
 `~/.nekokem-tmp` 下的 `0700` 私有目录，不对临时明文执行 fsync，并保留信号清理。
 SIGKILL 等强制终止仍可能留下暂存文件，确认无进程使用后仅清理自己的
 `nekokem-paste.*`。加密 PKCS#8 PEM 粘贴会立即拒绝，请改选 NKPR 文件。
@@ -89,8 +90,9 @@ original byte interpretation. Interactive decryption refuses an existing
 `plaintext/<name>`, including a destination created while the password is entered.
 Exit option 5 and EOF return the most recent operation's result (success before any
 operation). Displayed paths filter terminal controls, bidi controls and zero-width
-characters. CLI startup disables core dumps. Pasted keys use a safe `XDG_RUNTIME_DIR`
-or a `0700` private directory under `~/.nekokem-tmp`, without fsync for temporary
+characters. CLI startup disables core dumps. Pasted keys use a safe `XDG_RUNTIME_DIR`,
+then the per-user temporary directory (`/var/folders/.../T`, outside Time Machine),
+then a `0700` private directory under `~/.nekokem-tmp`, without fsync for temporary
 plaintext; signal cleanup remains. SIGKILL can leave residues: remove only your own
 `nekokem-paste.*` after ensuring no process uses them. Encrypted PKCS#8 PEM paste is
 rejected immediately; select an NKPR file instead.

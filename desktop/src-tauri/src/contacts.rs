@@ -299,11 +299,11 @@ fn format_character(c: char) -> bool {
         '\u{e0020}'..='\u{e007f}')
 }
 
-// Names saved by v4.0 and v4.1 used this narrower filter; they stay valid
+// Exactly the filter v4.0.0 to v4.1.0 shipped: names they saved stay valid
 // records and are cleaned again for display.
 fn legacy_clean_name(name: &str) -> String {
     let visible: String = name.chars()
-        .filter(|&c| !c.is_control() && !matches!(c, '\u{061c}' | '\u{200b}'..='\u{200f}' | '\u{2028}'..='\u{202e}' | '\u{2060}' | '\u{2066}'..='\u{2069}' | '\u{feff}'))
+        .filter(|&c| !c.is_control() && !matches!(c, '\u{061c}' | '\u{200e}' | '\u{200f}' | '\u{202a}'..='\u{202e}' | '\u{2066}'..='\u{2069}'))
         .collect();
     visible.trim().chars().take(MAX_NAME_CHARS).collect::<String>().trim_end().into()
 }
@@ -521,14 +521,18 @@ pub mod tests {
         assert!(store.stage(&saved.id).is_ok());
         assert_eq!(store.list().unwrap().unreadable, 0);
 
-        // A name saved under the v4.0/v4.1 filter stays usable and is shown cleaned.
-        let mut legacy: serde_json::Value = serde_json::from_str(&original).unwrap();
-        legacy["name"] = "Al\u{ad}ice.pub".into();
-        rewrite(&store, &saved.id, &legacy.to_string());
-        assert!(store.stage(&saved.id).is_ok());
-        let listed = store.list().unwrap();
-        assert_eq!(listed.unreadable, 0);
-        assert!(listed.contacts.iter().any(|contact| contact.id == saved.id && contact.name == "Alice.pub"));
+        // Names saved by v4.0.0 to v4.1.0 stay usable and are shown cleaned.
+        for (stored, shown) in [("Al\u{ad}ice.pub", "Alice.pub"), ("a\u{200b}b.pub", "ab.pub"),
+                                ("Ali\u{200d}ce.pub", "Alice.pub"), ("key\u{feff}.pub", "key.pub"),
+                                ("a\u{2060}b.pub", "ab.pub"), ("x\u{2028}y.pub", "xy.pub")] {
+            let mut legacy: serde_json::Value = serde_json::from_str(&original).unwrap();
+            legacy["name"] = stored.into();
+            rewrite(&store, &saved.id, &legacy.to_string());
+            assert!(store.stage(&saved.id).is_ok(), "{stored:?}");
+            let listed = store.list().unwrap();
+            assert_eq!(listed.unreadable, 0, "{stored:?}");
+            assert!(listed.contacts.iter().any(|contact| contact.id == saved.id && contact.name == shown), "{stored:?}");
+        }
 
         // Damaged records can still be deleted; foreign names are ignored.
         rewrite(&store, &saved.id, "{");

@@ -318,7 +318,7 @@ and 16384 UTF-8 bytes per line, matching the CLI, and remain subject to Core for
 
 On macOS, operations use Core's POSIX regular-file, ownership, private mode,
 link/output and atomic-commit checks. Private files/directories reject extended
-allow ACLs even when their mode is 0600/0700. Regular-file commits require successful fsync and F_FULLFSYNC; failure is reported. Pasted keys use an owner-only 0700 `$XDG_RUNTIME_DIR` when valid, otherwise a private `$HOME/.nekokem-tmp` (the account home if HOME is unset), with a new 0700 random subdirectory, an exclusive 0600 no-follow file and descriptor-relative operations. Temporary pasted-key bytes use unbuffered stdio and are never fsynced. Cleanup rejects symlinks, extra hard links and unsafe permissions.
+allow ACLs even when their mode is 0600/0700. Regular-file commits require successful fsync and F_FULLFSYNC; failure is reported. Pasted keys use an owner-only 0700 `$XDG_RUNTIME_DIR` when valid, then on macOS the per-user temporary directory (outside Time Machine), otherwise a private `$HOME/.nekokem-tmp` (the account home if HOME is unset), with a new 0700 random subdirectory, an exclusive 0600 no-follow file and descriptor-relative operations. Temporary pasted-key bytes use unbuffered stdio and are never fsynced. Cleanup rejects symlinks, extra hard links and unsafe permissions.
 See the [macOS filesystem design](../macos/SECURITY-DESIGN.md) for platform limits.
 
 On Linux, the same Core POSIX file checks and descriptor-relative pasted-key
@@ -331,7 +331,7 @@ Only bundled local content runs with incognito enabled in the main WebView
 (Windows InPrivate/macOS nonpersistent WKWebView/Linux ephemeral WebKitGTK storage). CSP blocks remote scripts,
 frames and network requests. Only native open/save dialogs and the listed Rust
 commands are exposed. The capability list grants only event listen/unlisten and open/save dialogs, rather than `core:default`. Navigation permits only the platform local app origin (`tauri://localhost`, or Windows `http://tauri.localhost`); HTTPS and new windows are refused. Debug builds additionally allow the local Vite origin. Developer tools are unavailable in the production release.
-粘贴密钥优先暂存于符合当前所有者及 `0700` 要求的 `$XDG_RUNTIME_DIR`，否则使用私有 `$HOME/.nekokem-tmp`；临时写入关闭 stdio 缓冲，不做持久化同步。权限仅包含事件监听/取消监听与打开/保存对话框；导航只允许对应平台的本地应用来源，拒绝 HTTPS 与新窗口。
+粘贴密钥优先暂存于符合当前所有者及 `0700` 要求的 `$XDG_RUNTIME_DIR`，macOS 上其次使用不进入 Time Machine 的用户临时目录，否则使用私有 `$HOME/.nekokem-tmp`；临时写入关闭 stdio 缓冲，不做持久化同步。权限仅包含事件监听/取消监听与打开/保存对话框；导航只允许对应平台的本地应用来源，拒绝 HTTPS 与新窗口。
 
 Passwords/key text are not stored in browser storage, configuration or logs. Both
 form references and live secret input values clear before native invocation,

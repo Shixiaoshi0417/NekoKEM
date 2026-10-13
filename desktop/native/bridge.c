@@ -137,20 +137,42 @@ const char *desktop_language(void)
     return cli_language_tag();
 }
 #ifndef _WIN32
+/* An existing directory only this user can use: owned, 0700, no ACL grant. */
+static int private_parent(const char *path)
+{
+    struct stat status;
+    int directory = path != NULL && path[0] == '/' ?
+        open(path, O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC) : -1;
+    int safe = directory >= 0 && fstat(directory, &status) == 0 &&
+        S_ISDIR(status.st_mode) && status.st_uid == geteuid() &&
+        (status.st_mode & (mode_t)0777) == (mode_t)0700 &&
+        file_private_acl_is_safe(directory);
+    if (directory >= 0) (void)close(directory);
+    return safe;
+}
+
 /* Creates a new private 0700 staging directory and returns its descriptor. */
 static int stage_directory(char *directory_path, size_t capacity)
 {
     char fallback[PATH_MAX];
     const char *base = getenv("XDG_RUNTIME_DIR");
     struct stat status;
-    int runtime = base != NULL && base[0] == '/' ?
-        open(base, O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC) : -1;
-    int private_runtime = runtime >= 0 && fstat(runtime, &status) == 0 &&
-        S_ISDIR(status.st_mode) && status.st_uid == geteuid() &&
-        (status.st_mode & (mode_t)0777) == (mode_t)0700 &&
-        file_private_acl_is_safe(runtime);
-    if (runtime >= 0) (void)close(runtime);
-    if (!private_runtime) {
+#ifdef __APPLE__
+    char darwin[PATH_MAX];
+#endif
+    if (!private_parent(base)) {
+        base = NULL;
+#ifdef __APPLE__
+        /* The per-user temporary directory: private, cleaned by the system
+         * and left out of Time Machine, unlike a folder in the home. */
+        size_t length = confstr(_CS_DARWIN_USER_TEMP_DIR, darwin, sizeof(darwin));
+        if (length > 1U && length <= sizeof(darwin)) {
+            if (darwin[length - 2U] == '/') darwin[length - 2U] = '\0';
+            if (private_parent(darwin)) base = darwin;
+        }
+#endif
+    }
+    if (base == NULL) {
         /* Same private user-directory fallback as the CLI, never shared /tmp. */
         const char *home = getenv("HOME");
         if (home == NULL || home[0] != '/') {

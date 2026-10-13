@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 use std::{ffi::{c_char,c_int,c_void,CStr,CString}, sync::{atomic::{AtomicBool,Ordering},Arc,Mutex}};
 use zeroize::Zeroizing;
-use std::time::{Duration,Instant};
+use std::time::{Duration,Instant,SystemTime};
 
 pub static CORE_LOCK: Mutex<()> = Mutex::new(());
 // Same limit as Core's NEKOKEM_MAX_RECIPIENTS for one NKEM v4 container.
@@ -51,7 +51,14 @@ pub struct Outcome {
 pub struct Job { pub id:String, pub cancellable:bool, pub cancelled:AtomicBool }
 #[derive(PartialEq,Eq)]
 enum Confirmation { Keypair(String,String), Output(String) }
-struct Offer { target:Confirmation, at:Instant }
+// Instant stops while the machine sleeps; the wall clock covers that time.
+struct Offer { target:Confirmation, at:Instant, wall:SystemTime }
+const OFFER_LIFETIME:Duration=Duration::from_secs(300);
+impl Offer {
+    fn fresh(&self)->bool {
+        self.at.elapsed()<OFFER_LIFETIME && self.wall.elapsed().is_ok_and(|elapsed|elapsed<OFFER_LIFETIME)
+    }
+}
 pub struct Backend { pub active:Mutex<Option<Arc<Job>>>, pub close_after:AtomicBool, offer:Mutex<Option<Offer>> }
 impl Default for Backend { fn default()->Self { Self{active:Mutex::new(None),close_after:AtomicBool::new(false),offer:Mutex::new(None)} } }
 impl Backend {
@@ -66,7 +73,7 @@ impl Backend {
         Ok(job)
     }
     fn offer(&self,target:Confirmation)->Result<(),Failure> {
-        *self.offer.lock().map_err(|_|Failure::new("internal"))?=Some(Offer{target,at:Instant::now()});
+        *self.offer.lock().map_err(|_|Failure::new("internal"))?=Some(Offer{target,at:Instant::now(),wall:SystemTime::now()});
         Ok(())
     }
     fn consume_offer(&self,request:&Request)->Result<(),Failure> {
@@ -77,7 +84,7 @@ impl Backend {
             Some(Confirmation::Keypair(request.public_path.clone(),request.private_path.clone()))
         } else if request.overwrite {Some(Confirmation::Output(request.output.clone()))} else {None};
         if let Some(target)=target {
-            if !offer.is_some_and(|offer|offer.target==target && offer.at.elapsed()<Duration::from_secs(300)) {
+            if !offer.is_some_and(|offer|offer.target==target && offer.fresh()) {
                 return Err(Failure::new("invalid-request"));
             }
         }
@@ -363,7 +370,13 @@ mod tests {
         r.public_path="other.key".into();assert!(backend.consume_offer(&r).is_err());
         r.public_path="public.key".into();assert!(backend.consume_offer(&r).is_err());
         backend.offer(target()).unwrap();backend.consume_offer(&r).unwrap();assert!(backend.consume_offer(&r).is_err());
-        *backend.offer.lock().unwrap()=Some(Offer{target:target(),at:Instant::now()-Duration::from_secs(301)});
+        *backend.offer.lock().unwrap()=Some(Offer{target:target(),at:Instant::now()-Duration::from_secs(301),wall:SystemTime::now()});
+        assert!(backend.consume_offer(&r).is_err());
+        // A suspended machine: the monotonic clock barely moved, the wall clock did.
+        *backend.offer.lock().unwrap()=Some(Offer{target:target(),at:Instant::now(),wall:SystemTime::now()-Duration::from_secs(301)});
+        assert!(backend.consume_offer(&r).is_err());
+        // A wall clock set backwards does not extend an offer either.
+        *backend.offer.lock().unwrap()=Some(Offer{target:target(),at:Instant::now(),wall:SystemTime::now()+Duration::from_secs(60)});
         assert!(backend.consume_offer(&r).is_err());
         backend.offer(target()).unwrap();backend.consume_offer(&request(Kind::Fingerprint)).unwrap();assert!(backend.consume_offer(&r).is_err());
         backend.offer(target()).unwrap();let job=backend.reserve_internal().unwrap();backend.finish(&job);assert!(backend.consume_offer(&r).is_err());

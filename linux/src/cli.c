@@ -309,7 +309,22 @@ static char *create_paste_directory(void)
     char *fallback = NULL;
     char *directory = NULL;
     size_t capacity;
+#ifdef __APPLE__
+    char darwin[4096];
+#endif
     if (!private_temp_parent(parent)) {
+        parent = NULL;
+#ifdef __APPLE__
+        /* The per-user temporary directory: private, cleaned by the system
+         * and left out of Time Machine, unlike a folder in the home. */
+        capacity = confstr(_CS_DARWIN_USER_TEMP_DIR, darwin, sizeof(darwin));
+        if (capacity > 1U && capacity <= sizeof(darwin)) {
+            if (darwin[capacity - 2U] == '/') darwin[capacity - 2U] = '\0';
+            if (private_temp_parent(darwin)) parent = darwin;
+        }
+#endif
+    }
+    if (parent == NULL) {
         const char *home = getenv("HOME");
         struct stat status;
         if (home == NULL || home[0] != '/') {
