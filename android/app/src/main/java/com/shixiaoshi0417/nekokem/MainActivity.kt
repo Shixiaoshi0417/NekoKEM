@@ -251,8 +251,9 @@ private fun NekoKEMRoute(
     var progressCancelRequested by remember { mutableStateOf(false) }
     var completedOperation by remember { mutableStateOf<CompletedOperation?>(null) }
     var failedOperation by remember { mutableStateOf<FailedOperation?>(null) }
-    var recoveryBackupCount by remember { mutableStateOf(0) }
-    var recoveryWarningDismissed by remember { mutableStateOf(false) }
+    // Saved across recreation, so a dismissed warning returns only for new backups.
+    var recoveryBackupCount by rememberSaveable { mutableStateOf(0) }
+    var recoveryWarningDismissed by rememberSaveable { mutableStateOf(false) }
     val selectedInputUri = selectedInputState.uriString?.let(Uri::parse)
     val selectedInputName = selectedInputState.displayName
     val selectedDocument = if (
@@ -461,7 +462,8 @@ private fun NekoKEMRoute(
         progress: OperationProgressSnapshot,
         fileName: String,
     ) {
-        refreshState()
+        // The selection and the result dialog come first: the page may already
+        // be idle, and refreshing can wait on the key lock for a while.
         when (code) {
             NativeBridge.RESULT_SUCCESS -> clearFileSelection(
                 if (operationResource == R.string.operation_encrypt_file) {
@@ -495,6 +497,7 @@ private fun NekoKEMRoute(
 
             else -> reportFailure(operationResource, code)
         }
+        refreshState()
     }
 
     val selectFileLauncher = rememberLauncherForActivityResult(

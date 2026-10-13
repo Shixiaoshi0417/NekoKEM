@@ -778,11 +778,17 @@ class LocalKeyManager internal constructor(
             }
         }
 
-    /** Counted under the mutation lock, so an import's short-lived backup is never reported. */
+    /**
+     * Counted under the mutation lock, so an import's short-lived backup is never
+     * reported. Core keeps a previous key as `<key>.bak.*` when a replacement
+     * cannot roll back, and deleting that key later removes such a copy, so it
+     * is reported too. An empty backup holds nothing to recover.
+     */
     fun recoveryBackupCount(): Int = keyMutationLock.withLock {
         keysDirectory.listFiles().orEmpty().count { file ->
-            (file.name.startsWith(PUBLIC_BACKUP_PREFIX) || file.name.startsWith(PRIVATE_BACKUP_PREFIX)) &&
-                ownedRegularFile(file)
+            (file.name.startsWith(PUBLIC_BACKUP_PREFIX) || file.name.startsWith(PRIVATE_BACKUP_PREFIX) ||
+                file.name.startsWith("$PUBLIC_KEY_NAME.bak.") || file.name.startsWith("$PRIVATE_KEY_NAME.bak.")) &&
+                ownedRegularFile(file) && file.length() > 0L
         }
     }
 

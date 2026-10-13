@@ -1,7 +1,10 @@
 package com.shixiaoshi0417.nekokem.files
 
 import com.shixiaoshi0417.nekokem.R
+import java.io.File
+import javax.xml.parsers.DocumentBuilderFactory
 import org.junit.Assert.assertEquals
+import org.junit.Assert.fail
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
@@ -25,6 +28,7 @@ class BackupRulesTest {
                 if (parser.eventType != XmlPullParser.START_TAG) continue
                 when (parser.name) {
                     "cloud-backup", "device-transfer", "full-backup-content" -> section = parser.name
+                    "include" -> fail("Backup rules must not include any data")
                     "exclude" -> {
                         assertEquals(".", parser.getAttributeValue(null, "path"))
                         exclusions.getOrPut(section) { mutableSetOf() }
@@ -45,5 +49,16 @@ class BackupRulesTest {
 
     @Test fun olderAndroidBackupExcludesAllDataDomains() {
         assertEquals(mapOf("full-backup-content" to domains), excludedDomains(R.xml.backup_rules))
+    }
+
+    /** The rules above protect nothing unless the manifest points at them. */
+    @Test fun manifestDisablesBackupAndUsesBothRuleFiles() {
+        val application = DocumentBuilderFactory.newInstance().newDocumentBuilder()
+            .parse(File("src/main/AndroidManifest.xml"))
+            .getElementsByTagName("application").item(0)
+        val attribute = { name: String -> application.attributes.getNamedItem(name)?.nodeValue }
+        assertEquals("false", attribute("android:allowBackup"))
+        assertEquals("@xml/data_extraction_rules", attribute("android:dataExtractionRules"))
+        assertEquals("@xml/backup_rules", attribute("android:fullBackupContent"))
     }
 }
