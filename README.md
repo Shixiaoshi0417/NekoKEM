@@ -41,7 +41,8 @@ v4.1.0 之后发布的版本，每个附件还带有 GitHub 构建来源证明�
 
 ```sh
 gh attestation verify NekoKEM-linux-x86_64.tar.gz --repo Shixiaoshi0417/NekoKEM \
-  --signer-workflow Shixiaoshi0417/NekoKEM/.github/workflows/release.yml
+  --signer-workflow Shixiaoshi0417/NekoKEM/.github/workflows/release.yml \
+  --source-ref refs/heads/main --deny-self-hosted-runners
 ```
 
 Publish 按已知 release ID 上传和发布，分页检查现有版本；只有最高正式语义版本才设为 Latest。匹配的部分草稿可以续传，上传或校验失败会恢复草稿；恢复失败会明确报告 release ID 和未确认的状态。Publish 校验 Windows CLI/GUI 包内的版本、源码提交和构建运行记录。CI 检查应用、打包参数与 Android 签名校验中的版本一致性，不自动修改版本号。

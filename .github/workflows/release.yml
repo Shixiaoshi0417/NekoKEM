@@ -57,6 +57,8 @@ jobs:
     name: Build unsigned Android APK
     runs-on: ubuntu-24.04
     timeout-minutes: 60
+    outputs:
+      apk_sha256: ${{ steps.unsigned.outputs.sha256 }}
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
         with:
@@ -84,6 +86,13 @@ jobs:
       - name: Build unsigned release APK
         working-directory: android
         run: bash ./gradlew --no-daemon --stacktrace -PnekokemUnsignedRelease=true assembleRelease
+      # Any job of this run can replace a named artifact; signed-apk signs only these bytes.
+      - name: Record the unsigned APK digest
+        id: unsigned
+        run: |
+          set -Eeuo pipefail
+          digest=$(sha256sum android/app/build/outputs/apk/release/app-release-unsigned.apk | cut -d ' ' -f 1)
+          printf 'sha256=%s\n' "$digest" >> "$GITHUB_OUTPUT"
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: NekoKEM-android-unsigned
@@ -100,6 +109,9 @@ jobs:
     environment: NekoKEM
     runs-on: ubuntu-24.04
     timeout-minutes: 20
+    env:
+      # Signing and verification must agree; rotation is a deliberate edit here.
+      ROTATE_SIGNING: "false"
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
         with:
@@ -120,18 +132,27 @@ jobs:
         with:
           name: NekoKEM-android-unsigned
           path: ${{ runner.temp }}/unsigned
-      # The secrets exist only in this step: no GITHUB_ENV, no build tools.
-      - name: Sign, verify and describe the APK
+      - name: Check the unsigned APK is the one build-apk produced
         env:
-          ROTATE_SIGNING: "false"
+          EXPECTED_SHA256: ${{ needs.build-apk.outputs.apk_sha256 }}
+        run: |
+          set -Eeuo pipefail
+          [[ "$EXPECTED_SHA256" =~ ^[0-9a-f]{64}$ ]]
+          printf '%s  %s\n' "$EXPECTED_SHA256" "$RUNNER_TEMP/unsigned/app-release-unsigned.apk" | sha256sum -c -
+      # The secrets exist only in this step: no GITHUB_ENV, no build tools,
+      # and none of the tools that verify the result.
+      - name: Sign the APK
+        env:
           NEKOKEM_RELEASE_KEYSTORE_BASE64: ${{ secrets.NEKOKEM_RELEASE_KEYSTORE_BASE64 }}
           NEKOKEM_RELEASE_STORE_PASSWORD: ${{ secrets.NEKOKEM_RELEASE_STORE_PASSWORD }}
           NEKOKEM_RELEASE_KEY_ALIAS: ${{ secrets.NEKOKEM_RELEASE_KEY_ALIAS }}
           NEKOKEM_RELEASE_KEY_PASSWORD: ${{ secrets.NEKOKEM_RELEASE_KEY_PASSWORD }}
-        run: python3 .github/scripts/sign_android_release.py "$RUNNER_TEMP/unsigned/app-release-unsigned.apk" release-output
+        run: python3 .github/scripts/sign_android_release.py sign "$RUNNER_TEMP/unsigned/app-release-unsigned.apk" release-output
       - name: Remove plaintext signing material
         if: always()
         run: rm -rf -- "$RUNNER_TEMP/nekokem-release-signing"
+      - name: Verify and describe the signed APK
+        run: python3 .github/scripts/sign_android_release.py verify "$RUNNER_TEMP/unsigned/app-release-unsigned.apk" release-output
       - name: Preserve the signed APK and its metadata
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:

@@ -41,7 +41,8 @@ Releases after v4.1.0 also carry GitHub build provenance for every asset. With t
 
 ```sh
 gh attestation verify NekoKEM-linux-x86_64.tar.gz --repo Shixiaoshi0417/NekoKEM \
-  --signer-workflow Shixiaoshi0417/NekoKEM/.github/workflows/release.yml
+  --signer-workflow Shixiaoshi0417/NekoKEM/.github/workflows/release.yml \
+  --source-ref refs/heads/main --deny-self-hosted-runners
 ```
 
 Publish uploads and publishes using the known release ID and checks existing versions across all API pages. Only the highest stable semantic version becomes Latest. Matching partial drafts can resume; upload or verification failures restore draft status, and failed recovery explicitly reports the release ID and unconfirmed state. Publish verifies the version, source commit and build run inside Windows CLI/GUI packages. CI checks that application, packaging and Android signing-verification versions agree without changing version numbers.

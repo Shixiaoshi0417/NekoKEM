@@ -138,11 +138,17 @@ def android_tool(name):
     return str(tools[0])
 
 
+def tool_environment():
+    """The tools that parse the APK need no GitHub credential."""
+    return {key: value for key, value in os.environ.items()
+            if key not in ('GH_TOKEN', 'GITHUB_TOKEN')}
+
+
 def check_apk(apk, version, version_code):
     """The APK's own signature and identity, independent of its metadata."""
     certificates = subprocess.run(
         [android_tool('apksigner'), 'verify', '--verbose', '--print-certs', str(apk)],
-        check=True, capture_output=True, text=True).stdout
+        check=True, capture_output=True, text=True, env=tool_environment()).stdout
     signers = re.findall(r'^Signer #\d+ certificate SHA-256 digest: ([0-9a-fA-F]{64})$',
                          certificates, re.M)
     require([signer.lower() for signer in signers] == [SIGNER],
@@ -150,7 +156,8 @@ def check_apk(apk, version, version_code):
     require(re.search(r'^Verified using v2 scheme \(APK Signature Scheme v2\): true$',
                       certificates, re.M) is not None, 'The APK lacks a valid v2 signature')
     badging = subprocess.run([android_tool('aapt2'), 'dump', 'badging', str(apk)],
-                             check=True, capture_output=True, text=True).stdout
+                             check=True, capture_output=True, text=True,
+                             env=tool_environment()).stdout
     expected = (f"package: name='com.shixiaoshi0417.nekokem' versionCode='{version_code}' "
                 f"versionName='{version}'")
     require(badging.startswith(expected), 'The APK identity does not match its metadata')
