@@ -55,7 +55,12 @@
     <string name="delete_keypair_title">Delete keypair permanently?</string>
     <string name="delete_keypair_message">The local public key, encrypted NKPR private key and related temporary cache will be deleted.</string>
     <string name="replace_private_key_title">Replace existing private key?</string>
-    <string name="replace_private_key_message">The imported encrypted NKPR private key will replace the current local private key only after its format and password are verified.</string>
+    <string name="replace_private_key_message">The imported encrypted NKPR private key will replace the current local private key only after its format and password are verified and it is confirmed to belong to the current public key.</string>
+    <string name="replace_public_key_title">Replace this device\'s public key?</string>
+    <string name="replace_public_key_message">This replaces your own public key, the one others use to encrypt files for you. To keep someone else\'s key, add it under Public-key Contacts instead.</string>
+    <string name="replace_public_key_pair_note">This device stores a private key, so the new public key must belong to it. You will be asked for that private key\'s password to check.</string>
+    <string name="import_public_key_password_title">Confirm the key pair</string>
+    <string name="import_public_key_password_message">Enter the password of the private key on this device. The public key is replaced only if it belongs to that private key.</string>
     <string name="replace_keypair_title">Replace the existing key pair?</string>
     <string name="replace_keypair_message">Generating a new key pair replaces the current public and private key. Files encrypted for the current public key can then only be decrypted with the current private key, so export and back up the encrypted private key first.</string>
 
@@ -150,6 +155,7 @@
     <string name="error_reason_core">NekoKEM Core rejected the operation.</string>
     <string name="error_reason_unexpected">An unexpected Android operation error occurred.</string>
     <string name="error_reason_fingerprint_mismatch">The temporary key changed after confirmation or its fingerprint no longer matches.</string>
+    <string name="error_reason_key_pair_mismatch">This key does not belong to the other key stored on this device. To switch to another key pair, delete the current key pair first, then import both keys.</string>
     <string name="error_reason_public_key_copy">The SAF public-key transfer could not be copied completely.</string>
     <string name="error_reason_public_key_parse">Core could not parse or validate both Hybrid public-key components.</string>
     <string name="error_reason_public_key_normalize">Core parsed the key, but could not write its canonical public-key representation.</string>

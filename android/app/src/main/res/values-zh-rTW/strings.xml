@@ -49,7 +49,12 @@
     <string name="delete_keypair_title">永久刪除金鑰對？</string>
     <string name="delete_keypair_message">將刪除本機公鑰、加密 NKPR 私鑰及相關暫存快取。</string>
     <string name="replace_private_key_title">取代現有私鑰？</string>
-    <string name="replace_private_key_message">僅在加密 NKPR 私鑰的格式及密碼驗證成功後，才會取代目前本機私鑰。</string>
+    <string name="replace_private_key_message">僅在加密 NKPR 私鑰的格式及密碼驗證成功、且確認與目前公鑰配對後，才會取代目前本機私鑰。</string>
+    <string name="replace_public_key_title">取代本機公鑰？</string>
+    <string name="replace_public_key_message">這會取代你自己的公鑰，即他人為你加密檔案時使用的公鑰。若要保存他人的公鑰，請改為在公鑰通訊錄中新增。</string>
+    <string name="replace_public_key_pair_note">本機已有私鑰，新公鑰必須與之配對。接下來需要輸入該私鑰的密碼進行確認。</string>
+    <string name="import_public_key_password_title">確認金鑰對</string>
+    <string name="import_public_key_password_message">請輸入本機私鑰的密碼。僅當公鑰屬於該私鑰時才會取代。</string>
     <string name="replace_keypair_title">取代現有金鑰對？</string>
     <string name="replace_keypair_message">產生新的金鑰對會取代目前的公鑰和私鑰。之後，以目前公鑰加密的檔案只能用目前私鑰解密，請先匯出並備份加密私鑰。</string>
     <string name="action_generate_keypair">產生金鑰對</string>
@@ -134,6 +139,7 @@
     <string name="error_reason_core">NekoKEM Core 拒絕了此操作。</string>
     <string name="error_reason_unexpected">發生非預期的 Android 操作錯誤。</string>
     <string name="error_reason_fingerprint_mismatch">暫存金鑰在確認後發生變化，或其指紋已不匹配。</string>
+    <string name="error_reason_key_pair_mismatch">此金鑰與本機已儲存的另一把金鑰不配對。如需改用其他金鑰對，請先刪除目前金鑰對，再分別匯入兩把金鑰。</string>
     <string name="error_reason_public_key_copy">無法完整複製 SAF 公鑰資料。</string>
     <string name="error_reason_public_key_parse">Core 無法剖析或驗證混合公鑰的兩個組成部分。</string>
     <string name="error_reason_public_key_normalize">Core 已剖析公鑰，但無法寫出其正規化公鑰表示。</string>

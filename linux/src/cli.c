@@ -29,6 +29,206 @@ typedef struct {
     size_t capacity;
 } PasswordBuffer;
 
+/*
+ * An interrupted run must not leave echo off, a pasted key or a partial
+ * output behind. The pasted key's names live in fixed buffers, so the
+ * handlers below can remove them without allocating.
+ */
+#ifdef _WIN32
+/*
+ * The console handler runs on another thread; this lock orders it with the
+ * main thread, and the handler keeps it, since the process is ending.
+ */
+static SRWLOCK cli_paste_lock = SRWLOCK_INIT;
+static char cli_paste_file[4096];
+static char cli_paste_directory[4096];
+static int cli_paste_active;
+/* While the paste stream writes the file, nothing can open it to delete it;
+ * a DELETE-only duplicate of that handle can mark it for deletion instead. */
+static HANDLE cli_paste_handle;
+
+static void cli_paste_track(const char *file, const char *directory, FILE *stream)
+{
+    HANDLE handle = NULL;
+
+    if (strlen(file) >= sizeof(cli_paste_file) ||
+        strlen(directory) >= sizeof(cli_paste_directory)) {
+        return;
+    }
+    if (!DuplicateHandle(GetCurrentProcess(), (HANDLE)_get_osfhandle(_fileno(stream)),
+                         GetCurrentProcess(), &handle, DELETE, FALSE, 0)) {
+        handle = NULL;
+    }
+    AcquireSRWLockExclusive(&cli_paste_lock);
+    memcpy(cli_paste_file, file, strlen(file) + 1U);
+    memcpy(cli_paste_directory, directory, strlen(directory) + 1U);
+    cli_paste_handle = handle;
+    cli_paste_active = 1;
+    ReleaseSRWLockExclusive(&cli_paste_lock);
+}
+
+/* Once the paste stream is closed; deletion by name works from then on. */
+static void cli_paste_release_handle(void)
+{
+    AcquireSRWLockExclusive(&cli_paste_lock);
+    if (cli_paste_handle != NULL) {
+        CloseHandle(cli_paste_handle);
+        cli_paste_handle = NULL;
+    }
+    ReleaseSRWLockExclusive(&cli_paste_lock);
+}
+
+static void cli_paste_untrack(void)
+{
+    cli_paste_release_handle();
+    AcquireSRWLockExclusive(&cli_paste_lock);
+    cli_paste_active = 0;
+    ReleaseSRWLockExclusive(&cli_paste_lock);
+}
+
+/*
+ * Ctrl+C, Ctrl+Break and a closed console run this on another thread, then
+ * the process exits. Core's partial outputs are delete-pending until their
+ * commit, so Windows removes them with the process; Core first lets a
+ * publication in progress finish and blocks any later one.
+ */
+static BOOL WINAPI cli_console_interrupted(DWORD event)
+{
+    (void)event;
+    if (InterlockedCompareExchange(&cli_echo_hidden, 0, 0) != 0) {
+        (void)SetConsoleMode(GetStdHandle(STD_INPUT_HANDLE), cli_visible_mode);
+    }
+    AcquireSRWLockExclusive(&cli_paste_lock);
+    if (cli_paste_active != 0) {
+        FILE_DISPOSITION_INFO disposition = {TRUE};
+
+        if (cli_paste_handle != NULL) {
+            /* Removed when the process's handles close. */
+            (void)SetFileInformationByHandle(cli_paste_handle, FileDispositionInfo,
+                                             &disposition, sizeof(disposition));
+        } else {
+            (void)windows_delete_regular(cli_paste_file);
+            (void)windows_remove_directory(cli_paste_directory);
+        }
+    }
+    file_remove_temporary_outputs();
+    return FALSE;
+}
+
+void cli_install_interrupt_handlers(void)
+{
+    (void)SetConsoleCtrlHandler(cli_console_interrupted, TRUE);
+}
+#else
+static char cli_paste_file[64];
+static char cli_paste_directory[64];
+static volatile sig_atomic_t cli_paste_active;
+
+static void cli_paste_release_handle(void)
+{
+}
+
+static void cli_paste_track(const char *file, const char *directory)
+{
+    if (strlen(file) < sizeof(cli_paste_file) &&
+        strlen(directory) < sizeof(cli_paste_directory)) {
+        memcpy(cli_paste_file, file, strlen(file) + 1U);
+        memcpy(cli_paste_directory, directory, strlen(directory) + 1U);
+        atomic_signal_fence(memory_order_seq_cst);
+        cli_paste_active = 1;
+    }
+}
+
+static void cli_paste_untrack(void)
+{
+    cli_paste_active = 0;
+}
+
+/* SIGHUP, SIGINT, SIGQUIT, SIGPIPE, SIGTERM: clean up, then die of it. */
+static void cli_signal_terminate(int signal_number)
+{
+    if (cli_echo_hidden != 0) {
+        (void)tcsetattr(STDIN_FILENO, TCSANOW, &cli_visible_terminal);
+    }
+    if (cli_paste_active != 0) {
+        (void)unlink(cli_paste_file);
+        (void)rmdir(cli_paste_directory);
+    }
+    file_remove_temporary_outputs();
+    (void)signal(signal_number, SIG_DFL);
+    /* Blocked until this handler returns, then fatal with its usual status. */
+    (void)raise(signal_number);
+}
+
+/* Ctrl+Z: show input again while stopped; SIGCONT hides it again. */
+static void cli_signal_stop(int signal_number)
+{
+    int saved_errno = errno;
+    struct sigaction action;
+    sigset_t unblocked;
+
+    if (cli_echo_hidden != 0) {
+        (void)tcsetattr(STDIN_FILENO, TCSANOW, &cli_visible_terminal);
+    }
+    (void)sigaction(signal_number, NULL, &action);
+    (void)signal(signal_number, SIG_DFL);
+    (void)sigemptyset(&unblocked);
+    (void)sigaddset(&unblocked, signal_number);
+    (void)sigprocmask(SIG_UNBLOCK, &unblocked, NULL);
+    (void)raise(signal_number);
+    (void)sigaction(signal_number, &action, NULL);
+    errno = saved_errno;
+}
+
+static void cli_signal_continue(int signal_number)
+{
+    int saved_errno = errno;
+
+    (void)signal_number;
+    if (cli_echo_hidden != 0) {
+        (void)tcsetattr(STDIN_FILENO, TCSANOW, &cli_hidden_terminal);
+    }
+    errno = saved_errno;
+}
+
+static void cli_install_signal(int signal_number, void (*handler)(int),
+                               const sigset_t *mask, int flags)
+{
+    struct sigaction action;
+    struct sigaction previous;
+
+    /* Keep a signal ignored at start ignored, as nohup and shells expect. */
+    if (sigaction(signal_number, NULL, &previous) != 0 ||
+        previous.sa_handler == SIG_IGN) {
+        return;
+    }
+    memset(&action, 0, sizeof(action));
+    action.sa_handler = handler;
+    action.sa_mask = *mask;
+    action.sa_flags = flags;
+    (void)sigaction(signal_number, &action, NULL);
+}
+
+void cli_install_interrupt_handlers(void)
+{
+    static const int terminating[] = {SIGHUP, SIGINT, SIGQUIT, SIGPIPE, SIGTERM};
+    sigset_t mask;
+    size_t index;
+
+    (void)sigemptyset(&mask);
+    for (index = 0U; index < sizeof(terminating) / sizeof(terminating[0]); ++index) {
+        (void)sigaddset(&mask, terminating[index]);
+    }
+    cli_install_signal(SIGTSTP, cli_signal_stop, &mask, SA_RESTART);
+    cli_install_signal(SIGCONT, cli_signal_continue, &mask, SA_RESTART);
+    (void)sigaddset(&mask, SIGTSTP);
+    (void)sigaddset(&mask, SIGCONT);
+    for (index = 0U; index < sizeof(terminating) / sizeof(terminating[0]); ++index) {
+        cli_install_signal(terminating[index], cli_signal_terminate, &mask, 0);
+    }
+}
+#endif
+
 static void print_usage(FILE *output, const char *program)
 {
     fprintf(output,
@@ -452,6 +652,7 @@ static int collect_pasted_key(int private_key, char **temporary_path)
     char *last_separator = strrchr(directory, '/');
     if (last_separator == NULL) goto cleanup;
     *last_separator = '\0';
+    cli_paste_track(path, directory, output);
 #else
     directory = mkdtemp(directory_template);
     if (directory == NULL) {
@@ -477,6 +678,7 @@ static int collect_pasted_key(int private_key, char **temporary_path)
         fprintf(stderr, file_message("Cannot construct temporary key path\n"));
         goto cleanup;
     }
+    cli_paste_track(path, directory);
     descriptor = open(path, O_WRONLY | O_CREAT | O_EXCL |
                       O_NOFOLLOW | O_CLOEXEC, 0600);
     if (descriptor < 0) {
@@ -563,6 +765,7 @@ static int collect_pasted_key(int private_key, char **temporary_path)
         goto cleanup;
     }
     output = NULL;
+    cli_paste_release_handle();
 
     *temporary_path = strdup(path);
     if (*temporary_path == NULL) {
@@ -585,6 +788,7 @@ cleanup:
     } else if (descriptor >= 0) {
         (void)close(descriptor);
     }
+    cli_paste_release_handle();
     if (success == 0) {
         if (path != NULL) {
             (void)unlink(path);
@@ -595,6 +799,9 @@ cleanup:
     free(path);
     if (success == 0 && directory != NULL) {
         (void)rmdir(directory);
+    }
+    if (success == 0) {
+        cli_paste_untrack();
     }
 #ifdef _WIN32
     free(directory);
@@ -667,6 +874,7 @@ static void cleanup_key_input(char *key_path, int temporary)
             }
             free(directory);
         }
+        cli_paste_untrack();
     }
     free(key_path);
 }

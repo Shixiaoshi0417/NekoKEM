@@ -55,7 +55,12 @@
     <string name="delete_keypair_title">永久删除密钥对？</string>
     <string name="delete_keypair_message">将删除本地公钥、加密 NKPR 私钥和相关临时缓存。</string>
     <string name="replace_private_key_title">替换现有私钥？</string>
-    <string name="replace_private_key_message">仅在加密 NKPR 私钥的格式和密码验证成功后，才会替换当前本地私钥。</string>
+    <string name="replace_private_key_message">仅在加密 NKPR 私钥的格式和密码验证成功、且确认与当前公钥配对后，才会替换当前本地私钥。</string>
+    <string name="replace_public_key_title">替换本机公钥？</string>
+    <string name="replace_public_key_message">这会替换你自己的公钥，即他人为你加密文件时使用的公钥。若要保存他人的公钥，请改为在公钥通讯录中添加。</string>
+    <string name="replace_public_key_pair_note">本机已有私钥，新公钥必须与之配对。接下来需要输入该私钥的密码进行确认。</string>
+    <string name="import_public_key_password_title">确认密钥对</string>
+    <string name="import_public_key_password_message">请输入本机私钥的密码。仅当公钥属于该私钥时才会替换。</string>
     <string name="replace_keypair_title">替换现有密钥对？</string>
     <string name="replace_keypair_message">生成新的密钥对会替换当前的公钥和私钥。之后，用当前公钥加密的文件只能用当前私钥解密，请先导出并备份加密私钥。</string>
 
@@ -149,6 +154,7 @@
     <string name="error_reason_core">NekoKEM Core 拒绝了此操作。</string>
     <string name="error_reason_unexpected">发生了意外的 Android 操作错误。</string>
     <string name="error_reason_fingerprint_mismatch">临时密钥在确认后发生变化，或其指纹已不匹配。</string>
+    <string name="error_reason_key_pair_mismatch">该密钥与本机已存储的另一把密钥不配对。如需改用其他密钥对，请先删除当前密钥对，再分别导入两把密钥。</string>
     <string name="error_reason_public_key_copy">无法完整复制 SAF 公钥数据。</string>
     <string name="error_reason_public_key_parse">Core 无法解析或验证 Hybrid 公钥的两个组成部分。</string>
     <string name="error_reason_public_key_normalize">Core 已解析公钥，但无法写出其规范化公钥表示。</string>

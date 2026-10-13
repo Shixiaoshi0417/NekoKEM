@@ -260,7 +260,7 @@ test-progress test-progress-large: $(CORE_LIBRARY)
 
 test: $(TARGET) test-openssl analyze test-ubsan test-parser test-file-security test-gcm-limit test-aes-stream \
 	test-key-management test-version-rejection test-progress test-hybrid-kdf test-input-boundaries \
-	test-asan test-pem-interaction test-i18n test-multi-recipient test-key-safety
+	test-asan test-pem-interaction test-i18n test-multi-recipient test-key-safety test-interrupts
 	@set -eu; \
 	test_dir=$$(mktemp -d); \
 	cleanup() { \
@@ -527,6 +527,10 @@ clean:
 	rm -f ../core/fuzz/bin/fuzz_nkem ../core/fuzz/bin/fuzz_nkpr
 
 -include $(DEPS)
+
+.PHONY: test-interrupts
+test-interrupts: $(TARGET)
+	python3 tests/interrupt_tests.py ./$(TARGET)
 
 .PHONY: test-i18n
 test-i18n: $(TARGET)

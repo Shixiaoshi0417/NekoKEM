@@ -3,6 +3,12 @@
 
 #include <stddef.h>
 
+/*
+ * Termination signals (Ctrl+C on Windows) restore terminal echo and remove a
+ * pasted key and partial outputs before the process dies; Ctrl+Z shows input
+ * again while stopped. Call once at start, before any prompt.
+ */
+void cli_install_interrupt_handlers(void);
 void cli_print_help(const char *program);
 void cli_print_usage(const char *program);
 

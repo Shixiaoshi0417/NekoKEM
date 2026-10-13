@@ -120,6 +120,9 @@ jobs:
       - name: Test release signing configuration and identity persistence
         run: python3 .github/scripts/test_release_signing.py -v
 
+      - name: Test public release asset selection and checks
+        run: python3 .github/scripts/test_release_assets.py -v
+
       - name: Run parser and decryption fuzz smoke tests
         env:
           AFL_I_DONT_CARE_ABOUT_MISSING_CRASHES: "1"
@@ -208,6 +211,24 @@ jobs:
             testDebugUnitTest \
             assembleDebug \
             assembleDebugAndroidTest
+
+      # Release builds the APK unsigned and signs it in a separate job; run
+      # that same path here with a throwaway key that is never uploaded.
+      - name: Build the unsigned release APK and sign it with a throwaway key
+        env:
+          ROTATE_SIGNING: "true"
+        run: |
+          set -Eeuo pipefail
+          (cd android && bash ./gradlew --no-daemon --stacktrace \
+            -PnekokemUnsignedRelease=true assembleRelease)
+          python3 .github/scripts/sign_android_release.py sign \
+            android/app/build/outputs/apk/release/app-release-unsigned.apk \
+            "$RUNNER_TEMP/throwaway-signed"
+          test ! -e "$RUNNER_TEMP/nekokem-release-signing"
+          python3 .github/scripts/sign_android_release.py verify \
+            android/app/build/outputs/apk/release/app-release-unsigned.apk \
+            "$RUNNER_TEMP/throwaway-signed"
+          rm -rf -- "$RUNNER_TEMP/throwaway-signed"
 
       - name: Preserve executed JVM test reports
         if: always()
@@ -550,6 +571,10 @@ jobs:
         shell: pwsh
         run: |
           $bin = Join-Path $env:RUNNER_TEMP 'windows-cli'
+          # Publish compares this with the release tag.
+          $recorded = (Get-Content "$bin/build-metadata.json" -Raw | ConvertFrom-Json).version
+          $expected = (Get-Content desktop/src-tauri/tauri.conf.json -Raw | ConvertFrom-Json).version
+          if ($recorded -ne $expected) { throw "Windows CLI metadata records version '$recorded', not $expected" }
           Compress-Archive -Path "$bin/nekokem.exe","$bin/README.md","$bin/SECURITY-DESIGN.md","$bin/LICENSE","$bin/OPENSSL-LICENSE.txt","$bin/SHA256SUMS.txt","$bin/pe-headers.txt","$bin/benchmark.json","$bin/build-metadata.json" -DestinationPath "$env:RUNNER_TEMP/NekoKEM-windows-x86_64.zip"
           (Get-FileHash "$env:RUNNER_TEMP/NekoKEM-windows-x86_64.zip" -Algorithm SHA256).Hash.ToLower() + '  NekoKEM-windows-x86_64.zip' | Set-Content "$env:RUNNER_TEMP/windows-SHA256SUMS.txt" -Encoding ascii
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
@@ -753,7 +778,8 @@ jobs:
           $hash = (Get-FileHash "$root/nekokem-gui.exe" -Algorithm SHA256).Hash.ToLowerInvariant()
           $loaderHash = (Get-FileHash "$root/WebView2Loader.dll" -Algorithm SHA256).Hash.ToLowerInvariant()
           "$hash  nekokem-gui.exe","$loaderHash  WebView2Loader.dll" | Set-Content "$root/SHA256SUMS.txt"
-          @{ source_sha=$env:GITHUB_SHA; run_id=$env:GITHUB_RUN_ID; exe_sha256=$hash; platform='windows-x86_64'; openssl_version='4.0.3'; authenticode_signed=$false; apk_signing_material_used=$false } | ConvertTo-Json | Set-Content "$root/build-metadata.json"
+          $version = (Get-Content desktop/src-tauri/tauri.conf.json -Raw | ConvertFrom-Json).version
+          @{ source_sha=$env:GITHUB_SHA; run_id=$env:GITHUB_RUN_ID; version=$version; exe_sha256=$hash; platform='windows-x86_64'; openssl_version='4.0.3'; authenticode_signed=$false; apk_signing_material_used=$false } | ConvertTo-Json | Set-Content "$root/build-metadata.json"
           Compress-Archive -Path "$root/*" -DestinationPath "$env:RUNNER_TEMP/NekoKEM-Windows-GUI.zip"
           Remove-Item $env:TEMP -Recurse -Force
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4

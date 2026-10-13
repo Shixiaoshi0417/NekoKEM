@@ -14,6 +14,7 @@ int cli_main(int argc, char **argv)
 int main(int argc, char **argv)
 #endif
 {
+    cli_install_interrupt_handlers();
     if (!cli_language_init(&argc, argv)) return EXIT_FAILURE;
     if (argc == 2 && strcmp(argv[1], "--help") == 0) {
         cli_print_help(argv[0]);

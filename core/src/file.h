@@ -139,6 +139,17 @@ int atomic_file_commit_pair(AtomicFile *first, AtomicFile *second);
 /* Like atomic_file_commit_pair, but never replaces an existing file. */
 int atomic_file_commit_pair_new(AtomicFile *first, AtomicFile *second);
 void atomic_file_abort(AtomicFile *file);
+/*
+ * Removes the temporary file of every output not yet committed or aborted,
+ * for a single-threaded program about to die of a signal: another thread
+ * finishing an output meanwhile would free the path being read. Async-
+ * signal-safe. A pair commit holds those signals back until the pair is
+ * published or rolled back as a whole. On Windows an output stays
+ * delete-pending until its commit, so the system removes it with the
+ * process; this call (from a console control handler) waits for a
+ * publication in progress and blocks later ones, so none is left half-done.
+ */
+void file_remove_temporary_outputs(void);
 
 int nkem_gcm_data_size_is_valid(uint64_t data_size);
 void nkem_v3_header_encode(unsigned char output[NKEM_V3_HEADER_SIZE],

@@ -17,8 +17,14 @@ val missingReleaseSigningValues = releaseSigningEnvironment
     .filterValues { it.isNullOrBlank() }
     .keys
 val releaseSigningConfigured = missingReleaseSigningValues.isEmpty()
+// Release CI builds the APK without signing material and signs it in a
+// separate job (.github/scripts/sign_android_release.py).
+val unsignedRelease = providers.gradleProperty("nekokemUnsignedRelease").orNull == "true"
 
-if (releaseTaskRequested && !releaseSigningConfigured) {
+if (unsignedRelease && releaseSigningEnvironment.values.any { !it.isNullOrBlank() }) {
+    throw GradleException("Unsigned release builds must not receive signing credentials")
+}
+if (releaseTaskRequested && !releaseSigningConfigured && !unsignedRelease) {
     throw GradleException(
         "Release signing requires environment variables: " +
             "NEKOKEM_RELEASE_STORE_FILE, NEKOKEM_RELEASE_STORE_PASSWORD, " +

@@ -30,6 +30,41 @@ data class SelectedDocument(
     val displayName: String,
 )
 
+/**
+ * A provider-chosen display name as one plain line: dialogs print it next to
+ * key fingerprints, so it must not carry controls, line or paragraph breaks,
+ * or invisible format characters (bidirectional overrides among them) that
+ * could fake or reorder another line. The zero-width joiners stay: scripts
+ * and emoji sequences need them. The name also suggests output file names,
+ * so the cap leaves any real file name and its extension whole.
+ */
+internal fun displaySafeName(name: String?, fallback: String): String {
+    val raw = name.orEmpty()
+    val visible = buildString {
+        var index = 0
+        while (index < raw.length) {
+            val codePoint = raw.codePointAt(index)
+            if (isSafeNameCodePoint(codePoint)) appendCodePoint(codePoint)
+            index += Character.charCount(codePoint)
+        }
+    }.trim()
+    val end = if (visible.codePointCount(0, visible.length) > MAX_DISPLAY_NAME_LENGTH) {
+        visible.offsetByCodePoints(0, MAX_DISPLAY_NAME_LENGTH)
+    } else visible.length
+    return visible.substring(0, end).trimEnd().ifEmpty { fallback }
+}
+
+private fun isSafeNameCodePoint(codePoint: Int): Boolean = when (Character.getType(codePoint)) {
+    Character.CONTROL.toInt(), Character.LINE_SEPARATOR.toInt(),
+    Character.PARAGRAPH_SEPARATOR.toInt(), Character.SURROGATE.toInt() -> false
+    Character.FORMAT.toInt() -> codePoint == ZERO_WIDTH_NON_JOINER || codePoint == ZERO_WIDTH_JOINER
+    else -> true
+}
+
+private const val ZERO_WIDTH_NON_JOINER = 0x200C
+private const val ZERO_WIDTH_JOINER = 0x200D
+private const val MAX_DISPLAY_NAME_LENGTH = 255
+
 data class PreparedEncryptionResult(
     val code: Int,
     val prepared: PreparedEncryption?,
@@ -154,7 +189,7 @@ class SafFileWorkflow(
 
     fun describe(uri: Uri): SelectedDocument = SelectedDocument(
         uri = uri,
-        displayName = queryDisplayName(uri) ?: defaultSelectedFilename,
+        displayName = displaySafeName(queryDisplayName(uri), defaultSelectedFilename),
     )
 
     fun prepareEncryption(
@@ -635,9 +670,17 @@ class SafFileWorkflow(
             keyManager.exportEncryptedPrivateKey(output)
         }
 
-    fun importPublicKey(source: Uri): Int = importPublicKeyDetailed(source).code
+    /**
+     * Takes ownership of [privateKeyPassword], which proves the key belongs
+     * to the existing private key, and clears it before returning.
+     */
+    fun importPublicKey(source: Uri, privateKeyPassword: ByteArray? = null): Int =
+        importPublicKeyDetailed(source, privateKeyPassword).code
 
-    fun importPublicKeyDetailed(source: Uri): PublicKeyImportTrace {
+    fun importPublicKeyDetailed(
+        source: Uri,
+        privateKeyPassword: ByteArray? = null,
+    ): PublicKeyImportTrace {
         var stagedInput: File? = null
         var safCandidate: PublicKeyFileRecord? = null
         var normalizedCandidate: PublicKeyFileRecord? = null
@@ -666,7 +709,7 @@ class SafFileWorkflow(
                     result = LocalKeyManager.RESULT_PUBLIC_KEY_COPY_FAILED
                 } else {
                     safCandidate = keyManager.publicKeyFileRecord(stagedInput)
-                    val imported = keyManager.importPublicKeyDetailed(stagedInput)
+                    val imported = keyManager.importPublicKeyDetailed(stagedInput, privateKeyPassword)
                     result = imported.code
                     normalizedCandidate = imported.normalizedCandidate
                     coreParseResult = imported.coreParseResult
@@ -679,6 +722,7 @@ class SafFileWorkflow(
         } catch (_: Exception) {
             result = LocalKeyManager.RESULT_STORAGE_ERROR
         } finally {
+            privateKeyPassword?.fill(0)
             clearAndDelete(stagedInput)
             removeWorkspace(workspace)
         }

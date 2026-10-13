@@ -89,6 +89,7 @@ class TemporaryKeyInstrumentation : Instrumentation() {
             testUnreadableOutputRejection(workflow, context.cacheDir, plaintext)
             testTemporaryKeys(manager, workflow, context.cacheDir, plaintext)
             testInvalidKeys(manager, workflow, context.cacheDir)
+            testKeyPairMatching(manager, workflow, context.cacheDir)
             testCancellationCleanup(workflow, context.cacheDir, plaintext)
             runPublicKeyContactsTests(context, manager, workflow, plaintext, DEFAULT_PASSWORD)
             testKeyDeletion(manager)
@@ -238,8 +239,10 @@ class TemporaryKeyInstrumentation : Instrumentation() {
 
         // Re-import while the default key still exists. This is the exact
         // device regression: the old code pre-created Core's output path.
+        // The private key's password proves the public key belongs to it.
         val replaceTrace = workflow.importPublicKeyDetailed(
             Uri.fromFile(exportedPublicKey),
+            password(DEFAULT_PASSWORD),
         )
         assertSuccessfulPublicKeyImport(replaceTrace)
         check(manager.readState().fingerprint == originalFingerprint)
@@ -250,6 +253,7 @@ class TemporaryKeyInstrumentation : Instrumentation() {
         check(manager.readState().fingerprint == null)
         val importTrace = workflow.importPublicKeyDetailed(
             Uri.fromFile(exportedPublicKey),
+            password(DEFAULT_PASSWORD),
         )
         assertSuccessfulPublicKeyImport(importTrace)
         val safCandidate = checkNotNull(importTrace.safCandidate)
@@ -539,6 +543,45 @@ class TemporaryKeyInstrumentation : Instrumentation() {
         check(privateResult.key == null)
     }
 
+    /** The stored public and private key always belong to one pair. */
+    private fun testKeyPairMatching(
+        manager: LocalKeyManager,
+        workflow: SafFileWorkflow,
+        cache: File,
+    ) {
+        val pairDirectory = File(cache, OTHER_PAIR_DIRECTORY)
+        check(pairDirectory.mkdir())
+        Os.chmod(pairDirectory.absolutePath, PRIVATE_DIRECTORY_MODE)
+        val otherPublic = File(pairDirectory, TEMPORARY_PUBLIC_NAME)
+        val otherPrivate = File(pairDirectory, TEMPORARY_PRIVATE_NAME)
+        check(generateNativeKeypair(otherPublic, otherPrivate, TEMPORARY_PASSWORD) ==
+            NativeBridge.RESULT_SUCCESS)
+        val original = checkNotNull(manager.readState().fingerprint)
+        val other = Uri.fromFile(otherPublic)
+
+        check(workflow.importPublicKey(other) == NativeBridge.RESULT_INVALID_ARGUMENT)
+        check(workflow.importPublicKey(other, password(WRONG_PASSWORD)) ==
+            LocalKeyManager.RESULT_KEY_PAIR_PASSWORD_FAILED)
+        check(workflow.importPublicKey(other, password(DEFAULT_PASSWORD)) ==
+            LocalKeyManager.RESULT_KEY_PAIR_MISMATCH)
+        check(manager.readState().fingerprint == original)
+
+        check(workflow.importEncryptedPrivateKey(Uri.fromFile(otherPrivate), password(TEMPORARY_PASSWORD)) ==
+            LocalKeyManager.RESULT_KEY_PAIR_MISMATCH)
+        check(manager.checkPassword(password(DEFAULT_PASSWORD)) == NativeBridge.RESULT_SUCCESS)
+        check(workflow.importEncryptedPrivateKey(Uri.fromFile(otherPrivate), password(WRONG_PASSWORD)) !=
+            NativeBridge.RESULT_SUCCESS)
+
+        // The device's own private key re-imports because it matches.
+        val ownPrivate = File(pairDirectory, OWN_PRIVATE_EXPORT_NAME)
+        check(manager.exportEncryptedPrivateKey(ownPrivate) == NativeBridge.RESULT_SUCCESS)
+        check(workflow.importEncryptedPrivateKey(Uri.fromFile(ownPrivate), password(DEFAULT_PASSWORD)) ==
+            NativeBridge.RESULT_SUCCESS)
+        check(manager.checkPassword(password(DEFAULT_PASSWORD)) == NativeBridge.RESULT_SUCCESS)
+        check(manager.readState().fingerprint == original)
+        deleteTree(pairDirectory)
+    }
+
     private fun testCancellationCleanup(
         workflow: SafFileWorkflow,
         cache: File,
@@ -670,6 +713,8 @@ class TemporaryKeyInstrumentation : Instrumentation() {
             "round-trip-temporary.out"
         const val TEMPORARY_PAIR_DIRECTORY = "temporary-pair"
         const val CANCEL_PAIR_DIRECTORY = "cancel-pair"
+        const val OTHER_PAIR_DIRECTORY = "other-pair"
+        const val OWN_PRIVATE_EXPORT_NAME = "own-private.nkpr"
         const val TEMPORARY_PUBLIC_NAME = "public.key"
         const val TEMPORARY_PRIVATE_NAME = "private.nkpr"
         const val TEMPORARY_CIPHERTEXT_NAME = "temporary.nkem"

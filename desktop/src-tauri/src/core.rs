@@ -90,6 +90,8 @@ extern "C" {
     fn nekokem_encrypt_file_multi_with_progress(input:*const c_char,output:*const c_char,keys:*const *const c_char,count:usize,callback:Option<Progress>,data:*mut c_void)->c_int;
     fn nekokem_decrypt_file_with_progress(input:*const c_char,output:*const c_char,key:*const c_char,password:*const u8,length:usize,callback:Option<Progress>,data:*mut c_void)->c_int;
     fn nekokem_public_key_fingerprint(key:*const c_char,output:*mut c_char,size:usize)->c_int;
+    fn file_path_exists(path:*const c_char,exists:*mut c_int)->c_int;
+    fn file_paths_are_same_file(first:*const c_char,second:*const c_char,same:*mut c_int)->c_int;
     fn desktop_stage_key(bytes:*const u8,length:usize)->*mut c_char;
     fn desktop_stage_output()->*mut c_char;
     fn desktop_remove_staged_key(path:*mut c_char)->c_int;
@@ -101,6 +103,17 @@ extern "C" {
 pub fn path(value:&str)->Result<CString,Failure> {
     if value.is_empty() || value.len()>32767 {return Err(Failure::new("invalid-path"));}
     CString::new(value).map_err(|_|Failure::new("invalid-path"))
+}
+// Path checks go through Core, never std::fs: on Windows Core refuses UNC,
+// device and stream paths before opening anything, so a network path never
+// makes Windows authenticate to its server. None means the check failed.
+fn exists(path:&CStr)->Option<bool> {
+    let mut exists=0;
+    (unsafe{file_path_exists(path.as_ptr(),&mut exists)}==1).then_some(exists!=0)
+}
+fn same_file(first:&CStr,second:&CStr)->Option<bool> {
+    let mut same=0;
+    (unsafe{file_paths_are_same_file(first.as_ptr(),second.as_ptr(),&mut same)}==1).then_some(same!=0)
 }
 // Core parses and validates both hybrid public components before hashing them.
 pub fn fingerprint(key:&CStr)->Option<String> {
@@ -159,18 +172,18 @@ pub fn execute<F:Fn(u64,u64)>(request:Request,job:Arc<Job>,emit:F)->Result<Outco
         if request.password.as_str()!=request.confirmation.as_str(){return Err(Failure::new("password-mismatch"));}
         // Keys are replaced only after the user confirmed it; otherwise Core
         // refuses as well, and this names the reason.
-        if !request.replace && [&request.public_path,&request.private_path].iter().any(|target|std::fs::symlink_metadata(target.as_str()).is_ok()) {
+        let public=path(&request.public_path)?; let private=path(&request.private_path)?;
+        if !request.replace && [&public,&private].iter().any(|target|exists(target)==Some(true)) {
             return Err(Failure::new("key-exists"));
         }
-        let public=path(&request.public_path)?; let private=path(&request.private_path)?;
         let commit=if request.replace {nekokem_replace_keypair} else {nekokem_generate_keypair};
         let result=unsafe{commit(public.as_ptr(),private.as_ptr(),request.password.as_ptr(),request.password.len())};
         return if result==1 {Ok(Outcome{output:Some(request.private_path),fingerprint:None,recipients:Vec::new()})}else{Err(Failure::new("core-error"))};
     }
     // Core refuses an output that is the key in use; this names the reason.
     if matches!(request.kind,Kind::Encrypt|Kind::Decrypt) && !request.key_path.is_empty() && !request.paste {
-        if let (Ok(output),Ok(key))=(std::fs::canonicalize(&request.output),std::fs::canonicalize(&request.key_path)) {
-            if output==key {return Err(Failure::new("output-is-key"));}
+        if same_file(&path(&request.output)?,&path(&request.key_path)?)==Some(true) {
+            return Err(Failure::new("output-is-key"));
         }
     }
     // Saved contacts are re-read and re-validated by Core for every encryption.
@@ -220,6 +233,19 @@ mod tests {
         fn OpenSSL_version(kind:c_int)->*const c_char;
         fn protected_private_key_read(path:*const c_char,password:*const u8,length:usize,pem:*mut *mut u8,pem_length:*mut usize)->c_int;
         fn CRYPTO_clear_free(memory:*mut c_void,length:usize,file:*const c_char,line:c_int);
+    }
+    #[cfg(windows)]
+    #[test]
+    fn network_paths_are_refused_before_any_access() {
+        // TEST-NET-1 never answers, so opening it would stall for seconds and
+        // send this machine's credentials to whatever answers instead.
+        let started=Instant::now();
+        for spelling in [r"\\192.0.2.1\share\public.key",r"//192.0.2.1/share/public.key",r"\\?\UNC\192.0.2.1\share\public.key"] {
+            let unc=CString::new(spelling).unwrap();
+            assert_eq!(exists(&unc),None);
+            assert_eq!(same_file(&unc,&unc),None);
+        }
+        assert!(started.elapsed()<Duration::from_secs(2));
     }
     #[test]
     fn shutdown_waits_for_reservation_cleanup() {

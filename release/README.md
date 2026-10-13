@@ -1,6 +1,6 @@
 # Build workflows and Android signing
 
-GitHub Actions has two workflow definitions:
+GitHub Actions has three workflow definitions:
 
 - `ci.yml` (`CI`) builds and tests pull requests targeting `main`, pushes to
   `main`, and manual runs. It contains the Linux Core/analyzer/sanitizer/fuzz
@@ -10,12 +10,21 @@ GitHub Actions has two workflow definitions:
   arm64 CLI/Core/sanitizer/filesystem/interoperability and GUI/app/package checks,
   plus Linux x86_64/ARM64 GUI Rust/Core, private staging, ELF/package and actual
   WebKit window/normal-close checks.
-- `release.yml` (`Release`) builds artifacts on `v*` tags and manual runs. It
+- `release.yml` (`Release`) builds artifacts only when run by hand. It
   produces Linux x86_64/aarch64 archives, a signed Android arm64 APK, and Windows
   CLI/GUI packages, macOS arm64 CLI/GUI packages and Linux x86_64/ARM64 GUI
   `.deb`/`.rpm`/portable archives. Regression suites run in CI. Source checksums, dependency
   versions, compiler hardening, binary imports/protections, SDK loader signature,
   icons, APK identity/signature and package checksums remain build requirements.
+  Its final job selects the 14 public packages and their `SHA256SUMS.txt` with
+  `.github/scripts/release_assets.py` and attests each with GitHub build
+  provenance (`actions/attest-build-provenance`), binding it to this run, this
+  workflow and the built commit. Release never reads or writes an Actions
+  cache: OpenSSL, Rust, npm and Gradle dependencies are built or fetched from
+  scratch in every run, so nothing a CI run stored can reach a release package
+  or its attestation.
+- `publish.yml` (`Publish`) turns one successful Release run of `main` into a
+  GitHub Release. It runs only from `main` and only by hand.
 
 The shared Linux/Windows/macOS CLI build scripts default to `NEKOKEM_BUILD_TESTS=1`.
 Release sets it to `0`, which omits the Linux cryptographic smoke test and Windows
@@ -23,11 +32,41 @@ test executables and macOS regression suites while retaining the required depend
 CI verifies that both modes produce identical CLI binaries/packages.
 
 Run Release from the Actions page or with `gh workflow run release.yml --ref main`.
-Build artifacts are available on that run; this workflow only builds and uploads
-artifacts to Actions. Publishing is a separate maintainer operation after checking
-the same source's successful CI and artifact/signing provenance.
+Build artifacts are available on that run; this workflow only builds, attests and
+uploads artifacts to Actions. Publishing is a separate maintainer step:
 
-The Android job uses the GitHub Environment named `NekoKEM` and requires:
+1. Merge the version bump and `release/<tag>.md` (Chinese first, English below,
+   with the `<!-- RELEASE_ZH_METADATA -->` and `<!-- RELEASE_EN_METADATA -->`
+   placeholders) into `main`, then wait for that commit's CI run.
+2. Run Release on `main` for the same commit.
+3. Run Publish: `gh workflow run publish.yml --ref main -f tag=v4.2.0 -f ci_run=<CI run ID> -f release_run=<Release run ID>`.
+
+Publish checks that both runs succeeded on the same `main` commit, downloads the
+Release artifacts and verifies the internal checksums, every package's version,
+source commit and run, the APK's signer and identity, and that every public asset
+carries this Release run's attestation. It fills the build records into the notes
+from the built commit, creates a draft, checks every uploaded digest and only then
+publishes the release as Latest. A published release is never modified.
+
+Android is built in two jobs. `build-apk` runs Gradle with
+`-PnekokemUnsignedRelease=true` and no signing material, and its Gradle cache
+is disabled. `signed-apk` then signs that APK with `apksigner` (APK Signature
+Scheme v2, as every release since v3.2.0) in a job that runs no build code.
+It first checks that the downloaded APK has the SHA-256 `build-apk` recorded,
+since another job of the same run could replace a named artifact. Only the
+signing step receives the secrets, in its own environment and never through
+`GITHUB_ENV`; `.github/scripts/sign_android_release.py sign` keeps them in a
+private temporary directory removed before the step ends. A later step without
+any secret (`sign_android_release.py verify`) checks that signing changed no
+APK entry and verifies the signer, identity, ABI and 16 KB alignment, so the
+tools that parse the APK never run beside the key. CI runs the same path on
+every change with a throwaway key.
+
+Only `signed-apk` uses the GitHub Environment named `NekoKEM`, and only when
+Release runs on `main`. Set the Environment's deployment branches to `main`
+only (Settings → Environments → NekoKEM → Deployment branches and tags →
+Selected branches), so a workflow edited on any other branch cannot reach the
+secrets. The Environment requires:
 
 - `NEKOKEM_RELEASE_KEYSTORE_BASE64`: base64 of the PKCS12 signing keystore.
 - `NEKOKEM_RELEASE_STORE_PASSWORD`
@@ -40,11 +79,18 @@ fail the build. Key rotation requires a separate, explicitly authorized maintain
 operation and a migration warning because a new key cannot update existing APKs.
 The job retains the Environment's approval and branch protection rules.
 
-The Android artifact contains the signed APK, public build metadata and a CMS
-signing recovery envelope encrypted with AES-256-GCM and RSA-OAEP/SHA-256 to the
-pinned public recovery recipient. The recipient's private key stays outside the
-repository. Plaintext signing keys/passwords and the recovery private key must
-never be uploaded. Plaintext signing material is removed even when the job fails.
+The Android artifact contains the signed APK and its public build metadata.
+Normal releases sign with the existing key and produce no recovery envelope;
+keep your own offline backup of that keystore, because Environment secrets
+cannot be read back. Only an explicitly authorized rotation, which creates a
+new key inside the run, adds `signing-recovery.p7m`: a CMS envelope encrypted
+with AES-256-GCM and RSA-OAEP/SHA-256 to the pinned public recovery recipient.
+Actions artifacts of this public repository can be downloaded by anyone, so
+that envelope is public ciphertext whose secrecy rests on the recipient's
+RSA-4096 private key, which stays outside the repository; download and decrypt
+it promptly and let the artifact expire. Plaintext signing keys/passwords and
+the recovery private key must never be uploaded. Plaintext signing material is
+removed even when the job fails.
 
 The v4.1.0 public release contains 14 packages:
 
@@ -57,11 +103,13 @@ The v4.1.0 public release contains 14 packages:
 | Linux ARM64 | `NekoKEM-linux-aarch64.tar.gz`, `NekoKEM-linux-aarch64-GUI.deb`, `NekoKEM-linux-aarch64-GUI.rpm`, `NekoKEM-linux-aarch64-GUI.tar.gz` |
 
 Publish only packages from the successful Release run for the exact CI-validated
-v4.1.0 source. Generate the fifteenth asset, top-level `SHA256SUMS.txt`, from all
-14 packages. Record the source commit, CI/Release run links, Android signer and
-public asset hashes in the [Chinese-then-English v4.1.0 notes](v4.1.0.md).
-The encrypted signing recovery envelope remains a protected Actions artifact;
-**do not attach it to the public GitHub Release**. Windows application EXEs are
+source; the Publish workflow enforces this. The fifteenth asset, top-level
+`SHA256SUMS.txt`, lists all 14 packages. The notes record the source commit,
+CI/Release run links, Android signer and public asset hashes, as in the
+[Chinese-then-English v4.1.0 notes](v4.1.0.md). Releases after v4.1.0 also carry
+build provenance attestations; v4.1.0 and earlier do not.
+A rotation's encrypted signing recovery envelope is never selected for
+publication; **do not attach it to the public GitHub Release**. Windows application EXEs are
 unsigned; verification of the Microsoft SDK loader's signature is separate.
 
 Android v4.1.0 uses versionCode `10`, keeps the v3.2.0/v3.3.0 signing identity and

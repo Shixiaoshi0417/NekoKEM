@@ -26,6 +26,8 @@
 #include <sys/acl.h>
 #endif
 #ifndef _WIN32
+#include <signal.h>
+#include <stdatomic.h>
 #include <unistd.h>
 #endif
 
@@ -187,7 +189,8 @@ static int file_rename(const char *old_path, const char *new_path)
 /*
  * Volumes and policies without hard links make link() fail: FAT and some
  * network shares, and Android, whose SELinux policy denies apps link() in
- * their own data directories (EACCES).
+ * their own data directories (EACCES). linkat without AT_SYMLINK_FOLLOW
+ * links a symbolic link itself; Darwin's link() would link its target.
  */
 static int file_link(const char *existing_path, const char *new_path)
 {
@@ -197,7 +200,7 @@ static int file_link(const char *existing_path, const char *new_path)
         return -1;
     }
 #endif
-    return link(existing_path, new_path);
+    return linkat(AT_FDCWD, existing_path, AT_FDCWD, new_path, 0);
 }
 
 static int file_rename_new(const char *temporary_path, const char *final_path)
@@ -736,6 +739,73 @@ cleanup:
     return success;
 }
 
+/*
+ * Temporary outputs not yet committed or aborted, for a program about to die
+ * of a signal. A slot holds the AtomicFile's own path string; the lock-free
+ * slots let threads share them and a signal handler read them.
+ */
+#define TEMPORARY_OUTPUT_SLOTS 8U
+static _Atomic(char *) temporary_outputs[TEMPORARY_OUTPUT_SLOTS];
+
+static void temporary_output_track(char *path)
+{
+    size_t index;
+
+    for (index = 0U; index < TEMPORARY_OUTPUT_SLOTS; ++index) {
+        char *expected = NULL;
+
+        if (atomic_compare_exchange_strong(&temporary_outputs[index],
+                                           &expected, path)) {
+            return;
+        }
+    }
+    /* Beyond the slots an output only misses the cleanup on a signal. */
+}
+
+static void temporary_output_untrack(const char *path)
+{
+    size_t index;
+
+    for (index = 0U; index < TEMPORARY_OUTPUT_SLOTS; ++index) {
+        char *expected = (char *)path;
+
+        if (atomic_compare_exchange_strong(&temporary_outputs[index],
+                                           &expected, NULL)) {
+            return;
+        }
+    }
+}
+
+/*
+ * Holds back the signals a CLI handles by removing temporary outputs, so a
+ * pair is published or rolled back as a whole before the handler runs.
+ */
+static int file_defer_interrupts(sigset_t *previous)
+{
+    static const int interrupts[] = {SIGHUP, SIGINT, SIGQUIT, SIGPIPE, SIGTERM};
+    sigset_t deferred;
+    size_t index;
+
+    (void)sigemptyset(&deferred);
+    for (index = 0U; index < sizeof(interrupts) / sizeof(interrupts[0]); ++index) {
+        (void)sigaddset(&deferred, interrupts[index]);
+    }
+    return pthread_sigmask(SIG_BLOCK, &deferred, previous) == 0;
+}
+
+void file_remove_temporary_outputs(void)
+{
+    size_t index;
+
+    for (index = 0U; index < TEMPORARY_OUTPUT_SLOTS; ++index) {
+        char *path = atomic_load(&temporary_outputs[index]);
+
+        if (path != NULL) {
+            (void)unlink(path);
+        }
+    }
+}
+
 int atomic_file_open(AtomicFile *file, const char *final_path, mode_t mode)
 {
     static const char suffix[] = ".tmp.XXXXXX";
@@ -773,9 +843,11 @@ int atomic_file_open(AtomicFile *file, const char *final_path, mode_t mode)
     descriptor = mkstemp(file->temporary_path);
     if (descriptor < 0) {
         print_system_error("Cannot create temporary output file");
-        atomic_file_abort(file);
+        free(file->temporary_path);
+        file->temporary_path = NULL;
         return 0;
     }
+    temporary_output_track(file->temporary_path);
     flags = fcntl(descriptor, F_GETFD);
     if (flags < 0 || fcntl(descriptor, F_SETFD, flags | FD_CLOEXEC) < 0) {
         print_system_error("Cannot protect temporary output descriptor");
@@ -1184,7 +1256,16 @@ static char *create_backup_link(const char *final_path, int *existed)
     }
     created = 0;
     if (file_link(final_path, backup_path) == 0) {
-        return backup_path;
+        struct stat linked;
+
+        /* The backup must be the entry examined above, nothing it names. */
+        if (lstat(backup_path, &linked) == 0 &&
+            linked.st_dev == status.st_dev && linked.st_ino == status.st_ino) {
+            return backup_path;
+        }
+        created = 1;
+        errno = EBUSY;
+        goto cleanup;
     }
     if (errno == EEXIST) {
         /* Another process took the name; it is not ours to remove. */
@@ -1218,6 +1299,7 @@ cleanup:
 
 static void atomic_file_release(AtomicFile *file)
 {
+    temporary_output_untrack(file->temporary_path);
     free(file->temporary_path);
     file->temporary_path = NULL;
     file->final_path = NULL;
@@ -1304,6 +1386,8 @@ static int atomic_file_commit_pair_mode(AtomicFile *first,
     int preserve_backup[2] = {0, 0};
     size_t count = second == NULL ? 1U : 2U;
     size_t index;
+    sigset_t previous_signals;
+    int signals_deferred = 0;
     int saved_errno = 0;
     int success = 0;
     int same_target = 0;
@@ -1370,6 +1454,7 @@ static int atomic_file_commit_pair_mode(AtomicFile *first,
             goto rollback;
         }
     }
+    signals_deferred = file_defer_interrupts(&previous_signals);
     for (index = 0U; index < count; ++index) {
 #ifdef __APPLE__
         if (index != 0U) {
@@ -1484,6 +1569,9 @@ rollback:
             (void)close(lock_descriptors[index]);
         }
     }
+    if (signals_deferred != 0) {
+        (void)pthread_sigmask(SIG_SETMASK, &previous_signals, NULL);
+    }
     if (success == 0) {
         errno = saved_errno != 0 ? saved_errno : EIO;
         print_system_error("Cannot commit atomic output transaction");
@@ -1518,6 +1606,7 @@ void atomic_file_abort(AtomicFile *file)
     }
     if (file->temporary_path != NULL) {
         (void)unlink(file->temporary_path);
+        temporary_output_untrack(file->temporary_path);
         free(file->temporary_path);
         file->temporary_path = NULL;
     }
