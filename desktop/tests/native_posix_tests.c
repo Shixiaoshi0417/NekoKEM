@@ -34,12 +34,20 @@ static void check_private_staging(const char *path, const unsigned char *bytes, 
 
 int main(void)
 {
+    char home[] = "/tmp/nekokem-gui-home-XXXXXX";
+    char runtime[PATH_MAX];
+    assert(mkdtemp(home) != NULL);
+    assert(setenv("HOME", home, 1) == 0);
+    int size = snprintf(runtime, sizeof(runtime), "%s/runtime", home);
+    assert(size >= 0 && (size_t)size < sizeof(runtime));
+    assert(mkdir(runtime, 0700) == 0 && setenv("XDG_RUNTIME_DIR", runtime, 1) == 0);
     const unsigned char fixture[] = "public staging test\0fixture\n";
     assert(desktop_stage_key(NULL, 1) == NULL);
     assert(desktop_stage_key(fixture, 0) == NULL);
     assert(desktop_stage_key(fixture, 1048577U) == NULL);
     char *path = desktop_stage_key(fixture, sizeof(fixture));
     assert(path != NULL);
+    assert(strncmp(path, runtime, strlen(runtime)) == 0);
     check_private_staging(path, fixture, sizeof(fixture));
     char *saved = strdup(path);
     assert(saved != NULL && desktop_remove_staged_key(path) == 1);
@@ -54,7 +62,7 @@ int main(void)
     saved = strdup(path);
     assert(saved != NULL);
     char linked[PATH_MAX];
-    int size = snprintf(linked, sizeof(linked), "%s.link", saved);
+    size = snprintf(linked, sizeof(linked), "%s.link", saved);
     assert(size >= 0 && (size_t)size < sizeof(linked));
     assert(link(saved, linked) == 0);
     assert(desktop_remove_staged_key(path) == 0);
@@ -76,6 +84,26 @@ int main(void)
     *strrchr(saved, '/') = '\0';
     assert(rmdir(saved) == 0);
     free(saved);
+    /* Unsafe runtime directories are ignored in favor of the private user fallback. */
+    assert(chmod(runtime, 0755) == 0);
+    path = desktop_stage_key(fixture, sizeof(fixture));
+    assert(path != NULL);
+    char fallback[PATH_MAX];
+    size = snprintf(fallback, sizeof(fallback), "%s/.nekokem-tmp", home);
+    assert(size >= 0 && (size_t)size < sizeof(fallback));
+    assert(strncmp(path, fallback, strlen(fallback)) == 0);
+    check_private_staging(path, fixture, sizeof(fixture));
+    assert(desktop_remove_staged_key(path) == 1 && rmdir(fallback) == 0);
+    /* A runtime symlink is rejected even when its target is private. */
+    assert(chmod(runtime, 0700) == 0);
+    char alias[PATH_MAX];
+    size = snprintf(alias, sizeof(alias), "%s/runtime-link", home);
+    assert(size >= 0 && (size_t)size < sizeof(alias));
+    assert(symlink(runtime, alias) == 0 && setenv("XDG_RUNTIME_DIR", alias, 1) == 0);
+    path = desktop_stage_key(fixture, sizeof(fixture));
+    assert(path != NULL && strncmp(path, fallback, strlen(fallback)) == 0);
+    assert(desktop_remove_staged_key(path) == 1 && rmdir(fallback) == 0);
+    assert(unlink(alias) == 0 && rmdir(runtime) == 0 && rmdir(home) == 0);
     assert(desktop_remove_staged_key(NULL) == 1);
     puts("Real POSIX GUI staging: private modes, exact bytes, cleanup, links and bounds passed");
     return 0;

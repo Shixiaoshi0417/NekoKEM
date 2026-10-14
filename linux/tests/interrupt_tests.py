@@ -21,7 +21,6 @@ import unittest
 
 CLI = str(Path(sys.argv.pop(1)).resolve())
 PASSWORD = b'interrupt-test-password\n'
-PASTE_PATTERN = '/tmp/nekokem-paste.*'
 
 
 def echo_on(descriptor):
@@ -58,6 +57,10 @@ class InterruptTests(unittest.TestCase):
         cls.directory = tempfile.mkdtemp(prefix='nekokem-interrupt-tests-')
         cls.environment = dict(os.environ, LANG='C', LC_ALL='C')
         cls.environment.pop('LANGUAGE', None)
+        cls.runtime = os.path.join(cls.directory, 'runtime')
+        os.mkdir(cls.runtime, 0o700)
+        cls.environment['XDG_RUNTIME_DIR'] = cls.runtime
+        cls.paste_pattern = os.path.join(cls.runtime, 'nekokem-paste.*')
         cls.run_cli(['keygen'], PASSWORD * 2)
         with open(os.path.join(cls.directory, 'big.bin'), 'wb') as stream:
             stream.write(os.urandom(64 * 1024 * 1024))
@@ -98,7 +101,7 @@ class InterruptTests(unittest.TestCase):
         self.assertEqual(os.listdir(output), [])
 
     def test_interrupted_paste_removes_the_key_and_restores_echo(self):
-        before = set(glob.glob(PASTE_PATTERN))
+        before = set(glob.glob(self.paste_pattern))
         pid, master = pty.fork()
         if pid == 0:
             os.chdir(self.directory)
@@ -112,7 +115,7 @@ class InterruptTests(unittest.TestCase):
             os.write(master, b'-----BEGIN PRIVATE KEY-----\nMC4CAQAwBQYDK2VuBCIEIA==\n'
                              b'-----END PRIVATE KEY-----\n')
             drain(master, 0.5)
-            self.assertEqual(len(set(glob.glob(PASTE_PATTERN)) - before), 1)
+            self.assertEqual(len(set(glob.glob(self.paste_pattern)) - before), 1)
             self.assertFalse(echo_on(master))
             os.kill(pid, signal.SIGINT)
             _, status = os.waitpid(pid, 0)
@@ -120,7 +123,7 @@ class InterruptTests(unittest.TestCase):
             self.assertTrue(os.WIFSIGNALED(status))
             self.assertEqual(os.WTERMSIG(status), signal.SIGINT)
             self.assertTrue(echo_on(master))
-            self.assertEqual(set(glob.glob(PASTE_PATTERN)) - before, set())
+            self.assertEqual(set(glob.glob(self.paste_pattern)) - before, set())
         finally:
             if pid:
                 os.kill(pid, signal.SIGKILL)

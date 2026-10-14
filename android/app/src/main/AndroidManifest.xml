@@ -4,6 +4,8 @@
     <!-- Predictive back: Android 13+ dispatches back through OnBackInvokedCallback. -->
     <application
         android:allowBackup="false"
+        android:dataExtractionRules="@xml/data_extraction_rules"
+        android:fullBackupContent="@xml/backup_rules"
         android:enableOnBackInvokedCallback="true"
         android:localeConfig="@xml/locales_config"
         android:icon="@mipmap/ic_launcher"

@@ -117,32 +117,24 @@ cleanup:
 
 int nekokem_delete_private_key(const char *private_key_path)
 {
+    int success;
 #ifndef _WIN32
-    struct stat status;
+    int lock;
 #endif
 
     if (!managed_path_is_valid(private_key_path)) {
         fprintf(stderr, file_message("Invalid private-key deletion path\n"));
         return 0;
     }
-#ifdef _WIN32
-    return windows_delete_regular(private_key_path);
-#else
-    if (lstat(private_key_path, &status) != 0) {
-        if (errno == ENOENT) {
-            return 1;
-        }
-        print_system_error("Cannot inspect private key for deletion");
-        return 0;
+#ifndef _WIN32
+    lock = file_pair_lock_acquire(private_key_path);
+    if (lock < 0) {
+        return errno == ENOENT;
     }
-    if (!S_ISREG(status.st_mode)) {
-        fprintf(stderr, file_message("Private-key deletion target is not a regular file\n"));
-        return 0;
-    }
-    if (unlink(private_key_path) != 0) {
-        print_system_error("Cannot delete private key");
-        return 0;
-    }
-    return 1;
 #endif
+    success = file_delete_private_key_under_lock(private_key_path);
+#ifndef _WIN32
+    file_pair_lock_release(lock);
+#endif
+    return success;
 }

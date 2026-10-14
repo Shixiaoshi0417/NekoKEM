@@ -12,10 +12,10 @@ import json
 from pathlib import Path
 import sys
 config = json.loads(Path('src-tauri/tauri.linux.conf.json').read_text())
-if sys.argv[1] == 'aarch64':
-    # AArch64's ELF also lists its dynamic loader in DT_NEEDED. Keep this
-    # architecture-specific capability out of x86_64 RPMs.
-    config['bundle']['linux']['rpm']['depends'].append('ld-linux-aarch64.so.1()(64bit)')
+# Thread-local Core state can make the loader a direct DT_NEEDED dependency
+# on either target. Declare the native capability, never the other target's.
+loaders = {'x86_64': 'ld-linux-x86-64.so.2', 'aarch64': 'ld-linux-aarch64.so.1'}
+config['bundle']['linux']['rpm']['depends'].append(loaders[sys.argv[1]] + '()(64bit)')
 print(json.dumps(config))
 PY
 )

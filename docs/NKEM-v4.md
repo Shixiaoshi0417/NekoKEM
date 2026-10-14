@@ -71,7 +71,11 @@ Each recipient entry is exactly 1672 bytes:
 ```
 
 Entries carry no recipient identifier or fingerprint. A container reveals
-how many recipients it has, but not who they are.
+how many recipients it has. The absence of identifiers protects recipient
+identity and linking from non-recipients who do not hold the corresponding
+private key; a recipient can recognize their own entry and confirm their
+participation across different containers. This is not unlinkability from
+the recipients themselves.
 
 ## Key derivation
 
@@ -130,7 +134,10 @@ The payload is processed in 64 KiB chunks exactly as in v3 and keeps the
 ## Decryption
 
 1. Validate the version, algorithm ID, fixed lengths, recipient count,
-   reserved fields, total size and absence of trailing data.
+   reserved fields, total size and absence of trailing data. Every X448
+   ephemeral public key must be a canonical 56-byte little-endian encoding
+   of `u < p`, with `p = 2^448 - 2^224 - 1`; imported recipient public keys
+   use the same check.
 2. Unlock the private key. Loading rejects the one X448 private key whose
    public key is the all-zero point (the clamped scalar four times the
    prime subgroup order); see step 3. For every entry, decapsulate X448 and
@@ -138,13 +145,15 @@ The payload is processed in 64 KiB chunks exactly as in v3 and keeps the
    rejects implicitly, so another recipient's entry fails at the wrap tag.
    Every entry is tried, including after a match, and the first match is
    kept with a constant-time select. Nothing is reported per entry.
-3. If any entry's X448 ephemeral key is rejected, the whole container is
-   rejected as malformed, wherever that entry is. Only OpenSSL's rejection
-   of an all-zero shared secret counts as a rejection; any other OpenSSL
-   failure, such as an allocation, aborts decryption as an error. With the
-   degenerate private key refused in step 2, only a small-order ephemeral
-   key gives an all-zero secret, whatever the private key, and no correct
-   encryptor writes one, so this check depends on the container alone.
+3. If any entry's X448 ephemeral key is non-canonical or has a small-order
+   coordinate (`0`, `1`, or `p - 1`), the whole container is rejected as
+   malformed, wherever that entry is. These checks inspect the public bytes
+   before key agreement and do not depend on OpenSSL provider reason codes.
+   Other OpenSSL failures, such as an allocation, abort decryption as an
+   error. With the degenerate private key refused in step 2, only a
+   small-order ephemeral key gives an all-zero secret, whatever the private
+   key, and no correct encryptor writes one, so this check depends on the
+   container alone.
 4. Recompute the header MAC and compare it in constant time before reading
    any ciphertext. When no entry unwrapped, the MAC is still computed, over
    an all-zero file key, and the file is rejected.

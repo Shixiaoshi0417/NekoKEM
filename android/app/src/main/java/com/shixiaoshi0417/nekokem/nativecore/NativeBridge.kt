@@ -68,6 +68,14 @@ object NativeBridge {
 
     external fun nativeDeletePrivateKey(privateKeyPath: String): Int
 
+    /** A directory flock shared with Core commits; callers must release it. */
+    external fun nativeAcquirePairLock(keyPath: String): Int
+
+    external fun nativeReleasePairLock(descriptor: Int)
+
+    /** Caller must hold nativeAcquirePairLock for this key's directory. */
+    external fun nativeDeletePrivateKeyUnderPairLock(privateKeyPath: String): Int
+
     external fun nativeGetFingerprint(publicKeyPath: String): String?
 
     external fun nativeEncryptFile(

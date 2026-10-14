@@ -44,7 +44,7 @@ test.beforeEach(async({page})=>{
    transformCallback(callback:(value:unknown)=>void){const id=next++;callbacks[id]=callback;return id;},
    unregisterCallback(id:number){delete callbacks[id];},
    invoke(command:string,args:Record<string,unknown>){
-    if(command==='get_settings')return Promise.resolve({language:'zh-CN',selection:'system',version:'4.1.0'});
+    if(command==='get_settings')return Promise.resolve({language:'zh-CN',selection:'system',version:'4.2.0'});
     if(command==='set_language')return Promise.resolve(args.language==='system'?'zh-CN':args.language);
     if(command==='plugin:event|listen'){progressHandler=args.handler as number;return Promise.resolve(1);}
     if(command==='plugin:event|unlisten')return Promise.resolve(null);
@@ -108,6 +108,7 @@ test('minimum native window fits all five languages and pasted-key layouts',asyn
   await page.locator('.contact-actions.confirming .text-button').click();
   await page.locator('.operation-tab').nth(1).click();await page.getByRole('radio').nth(2).check();
   await page.locator('[name=contacts]').first().check();
+  await expect(page.locator('.recipient-option code').first()).toHaveText(Array(32).fill('A1').join(':'));
   await expect(page.locator('.contact-preview code')).toBeVisible();await noHorizontalOverflow(page);
   await page.locator('[name=contacts]').nth(1).check();
   await expect(page.locator('.multi-hint')).toBeVisible();await noHorizontalOverflow(page);

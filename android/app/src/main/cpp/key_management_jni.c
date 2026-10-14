@@ -1,6 +1,7 @@
 #include <jni.h>
 
 #include "nekokem.h"
+#include "file.h"
 
 #include <openssl/crypto.h>
 
@@ -150,4 +151,42 @@ cleanup:
     OPENSSL_cleanse(fingerprint, sizeof(fingerprint));
     managed_utf_path_release(env, &public_path);
     return result;
+}
+
+JNIEXPORT jint JNICALL
+Java_com_shixiaoshi0417_nekokem_nativecore_NativeBridge_nativeAcquirePairLock(
+    JNIEnv *env, jobject bridge, jstring key_path)
+{
+    ManagedUtfPath path = {0};
+    int descriptor = -1;
+    (void)bridge;
+    if (managed_utf_path_acquire(env, key_path, &path) == MANAGED_JNI_SUCCESS) {
+        descriptor = file_pair_lock_acquire(path.value);
+    }
+    managed_utf_path_release(env, &path);
+    return (jint)descriptor;
+}
+
+JNIEXPORT void JNICALL
+Java_com_shixiaoshi0417_nekokem_nativecore_NativeBridge_nativeReleasePairLock(
+    JNIEnv *env, jobject bridge, jint descriptor)
+{
+    (void)env;
+    (void)bridge;
+    if (descriptor >= 0) file_pair_lock_release((int)descriptor);
+}
+
+JNIEXPORT jint JNICALL
+Java_com_shixiaoshi0417_nekokem_nativecore_NativeBridge_nativeDeletePrivateKeyUnderPairLock(
+    JNIEnv *env, jobject bridge, jstring key_path)
+{
+    ManagedUtfPath path = {0};
+    int result = MANAGED_JNI_INVALID_ARGUMENT;
+    (void)bridge;
+    if (managed_utf_path_acquire(env, key_path, &path) == MANAGED_JNI_SUCCESS) {
+        result = file_delete_private_key_under_lock(path.value)
+                     ? MANAGED_JNI_SUCCESS : MANAGED_JNI_CORE_ERROR;
+    }
+    managed_utf_path_release(env, &path);
+    return (jint)result;
 }

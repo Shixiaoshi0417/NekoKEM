@@ -1,11 +1,11 @@
 # Windows x64 CLI / Windows x64 命令行
 
-v4.1.0 provides a native Windows 10/11 x64 EXE; no MSYS2 runtime or OpenSSL DLL
+v4.2.0 provides a native Windows 10/11 x64 EXE; no MSYS2 runtime or OpenSSL DLL
 is required to run it. Download `NekoKEM-windows-x86_64.zip` from the
-[v4.1.0 Release](https://github.com/Shixiaoshi0417/NekoKEM/releases/tag/v4.1.0) and verify
+[v4.2.0 Release](https://github.com/Shixiaoshi0417/NekoKEM/releases/tag/v4.2.0) and verify
 the archive against its top-level `SHA256SUMS.txt`. The companion
 [Windows GUI](../desktop/README.md) has a separate portable package. See the
-[bilingual release notes](../release/v4.1.0.md).
+[bilingual release notes](../release/v4.2.0.md).
 
 CLI/GUI EXE icons keep the square Android artwork with the outer white area made
 transparent; Android retains its existing square white background. Rounded README
@@ -26,9 +26,17 @@ Run in Windows Terminal with PowerShell or cmd, in a directory owned by your use
 ```
 
 Passwords are read from the console with echo disabled, or UTF-8 stdin for automation;
-never put a private-key password on the command line. Five languages share the Linux
+never put a private-key password on the command line. New passwords must be valid
+UTF-8; passwords for existing keys retain their original byte interpretation.
+Detected MSYS/mintty pseudoterminals that cannot reliably hide secret input are
+refused; use Windows Terminal or redirected stdin. Encrypted PKCS#8 PEM cannot be
+pasted; select an NKPR private-key file instead. Five languages share the Linux
 catalogs and the exact same argument parser and five-option menu. Double-clicking
 `nekokem.exe`, or running it without arguments, opens that interactive menu directly.
+Interactive decryption refuses an existing plaintext output, including a file
+created while a password is being entered. Exit option 5 and EOF return the most
+recent operation's result (success before any operation). Displayed paths replace
+terminal controls, bidi controls and zero-width characters with ?.
 Windows automatically uses the user's display language (rather than regional date/number
 format), with unsupported languages falling back to English. Language precedence is
 `--lang` > saved `--set-lang` preference > `LC_ALL` > `LC_MESSAGES` > `LANG` > Windows
@@ -83,13 +91,18 @@ The EXE is not Authenticode signed; Android signing keys are not used.
 
 ---
 
-v4.1.0 提供原生 Windows 10/11 x64 CLI，运行无需 MSYS2 或 OpenSSL DLL。公开包为
+v4.2.0 提供原生 Windows 10/11 x64 CLI，运行无需 MSYS2 或 OpenSSL DLL。公开包为
 `NekoKEM-windows-x86_64.zip`，下载后用 Release 顶层 `SHA256SUMS.txt` 校验。
 [Windows GUI](../desktop/README.md) 使用独立便携包，完整更新见
-[v4.1.0 中英双语发布说明](../release/v4.1.0.md)。Windows EXE 图标保留方形图案，
+[v4.2.0 中英双语发布说明](../release/v4.2.0.md)。Windows EXE 图标保留方形图案，
 将外部白色区域改为透明；Android 方形白底图案不变，README 圆角图仅用于展示。
 Windows 应用未进行 Authenticode 签名，不使用 Android 签名材料。使用现有
 五语言目录；密码从关闭回显的终端或 UTF-8 标准输入读取，不放入命令行参数。
+新口令必须是有效 UTF-8，解锁现有密钥仍按原字节解释。检测到无法可靠关闭回显的
+MSYS/mintty 伪终端时拒绝秘密输入，请改用 Windows Terminal 或重定向标准输入。
+加密 PKCS#8 PEM 不能粘贴，请选择 NKPR 私钥文件。交互解密拒绝已有明文输出，
+包括输入口令期间才出现的目标文件；菜单选 5 或 EOF 返回最近一次操作的结果，
+尚未操作视为成功。路径显示把控制字符、双向控制及零宽字符替换为 ?。
 首版只接受本地固定 NTFS 磁盘，拒绝网络/设备路径、重解析点及替代数据流。私钥、暂存明文
 和输出在创建时设置仅当前用户可访问的 ACL；所有文件路径都检查父目录的可信
 所有者与 ACL，输入目录若允许其他非可信账户修改，也会拒绝；私钥还检查所有者与硬链接数。

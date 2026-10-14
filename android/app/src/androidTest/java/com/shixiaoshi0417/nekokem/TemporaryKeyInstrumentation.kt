@@ -84,6 +84,7 @@ class TemporaryKeyInstrumentation : Instrumentation() {
                 context.cacheDir,
                 plaintext,
             )
+            testKeyMutationLocksAndStartupCleanup(manager, context)
             testEmptyPlaintextRoundTrip(workflow, context.cacheDir)
             testExistingOutputRollback(workflow, context.cacheDir, plaintext)
             testUnreadableOutputRejection(workflow, context.cacheDir, plaintext)
@@ -106,6 +107,44 @@ class TemporaryKeyInstrumentation : Instrumentation() {
             deleteTree(root)
         }
         return publicKeyTrace
+    }
+
+    private fun testKeyMutationLocksAndStartupCleanup(manager: LocalKeyManager, context: Context) {
+        val keys = File(context.filesDir, "keys")
+        val publicKey = File(keys, "public.key")
+        val privateKey = File(keys, "private.nkpr.enc")
+        val originalFingerprint = manager.readState().fingerprint
+        val descriptor = NativeBridge.nativeAcquirePairLock(privateKey.absolutePath)
+        check(descriptor >= 0)
+        val submittedPassword = password(DEFAULT_PASSWORD)
+        try {
+            // A separate flock descriptor models another process holding Core's lock.
+            check(manager.importPublicKey(publicKey, submittedPassword) == LocalKeyManager.RESULT_STORAGE_ERROR)
+            check(submittedPassword.all { it == 0.toByte() })
+            check(manager.generateKeypair(password(DEFAULT_PASSWORD), replace = true) != NativeBridge.RESULT_SUCCESS)
+            check(manager.readState().fingerprint == originalFingerprint)
+        } finally {
+            NativeBridge.nativeReleasePairLock(descriptor)
+        }
+        val now = System.currentTimeMillis()
+        val old = now - 25L * 60L * 60L * 1000L
+        val expired = File(keys, "nkem-prv-expired.tmp").apply { writeText("staged candidate"); setLastModified(old) }
+        val fresh = File(keys, "nkem-pub-fresh.tmp").apply { writeText("active candidate") }
+        val foreign = File(keys, "foreign.tmp").apply { writeText("unrelated"); setLastModified(old) }
+        val recovery = File(keys, "nkem-prv-backup-retained.tmp").apply { writeText("recovery copy"); setLastModified(old) }
+        val symlink = File(keys, "nkem-pub-linked.tmp")
+        Os.symlink(foreign.absolutePath, symlink.absolutePath)
+        try {
+            check(manager.cleanupExpiredCandidates(now) == 1)
+            check(!expired.exists())
+            check(fresh.readText() == "active candidate")
+            check(foreign.readText() == "unrelated")
+            check(recovery.readText() == "recovery copy")
+            check(android.system.OsConstants.S_ISLNK(Os.lstat(symlink.absolutePath).st_mode))
+            check(manager.readState().fingerprint == originalFingerprint)
+        } finally {
+            listOf(fresh, foreign, recovery, symlink).forEach { it.delete() }
+        }
     }
 
     private fun testBusyStateRestoration() = runBlocking {

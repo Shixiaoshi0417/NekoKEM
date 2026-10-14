@@ -3,6 +3,7 @@ package com.shixiaoshi0417.nekokem.files
 import android.content.Context
 import android.net.Uri
 import android.provider.OpenableColumns
+import androidx.annotation.WorkerThread
 import android.system.Os
 import android.system.OsConstants
 import com.shixiaoshi0417.nekokem.R
@@ -24,6 +25,7 @@ import java.io.FileOutputStream
 import java.io.IOException
 import java.io.RandomAccessFile
 import java.security.MessageDigest
+import java.util.concurrent.ConcurrentHashMap
 
 data class SelectedDocument(
     val uri: Uri,
@@ -34,35 +36,51 @@ data class SelectedDocument(
  * A provider-chosen display name as one plain line: dialogs print it next to
  * key fingerprints, so it must not carry controls, line or paragraph breaks,
  * or invisible format characters (bidirectional overrides among them) that
- * could fake or reorder another line. The zero-width joiners stay: scripts
- * and emoji sequences need them. The name also suggests output file names,
- * so the cap leaves any real file name and its extension whole.
+ * could fake or reorder another line. A zero-width joiner or non-joiner
+ * stays only between two non-ASCII characters, where scripts and emoji
+ * sequences need it; elsewhere it only hides something. The name also
+ * suggests output file names, so the cap leaves a real file name whole.
  */
 internal fun displaySafeName(name: String?, fallback: String): String {
-    val raw = name.orEmpty()
+    // Joiners are judged by their neighbours after everything else unsafe is
+    // gone, so a hidden character or a second joiner is never a neighbour.
+    val kept = name.orEmpty().codePoints()
+        .filter { isJoiner(it) || isSafeNameCodePoint(it) }
+        .toArray()
     val visible = buildString {
-        var index = 0
-        while (index < raw.length) {
-            val codePoint = raw.codePointAt(index)
-            if (isSafeNameCodePoint(codePoint)) appendCodePoint(codePoint)
-            index += Character.charCount(codePoint)
+        kept.forEachIndexed { index, codePoint ->
+            if (!isJoiner(codePoint) ||
+                (index > 0 && isJoinable(kept[index - 1]) &&
+                    index + 1 < kept.size && isJoinable(kept[index + 1]))
+            ) appendCodePoint(codePoint)
         }
     }.trim()
     val end = if (visible.codePointCount(0, visible.length) > MAX_DISPLAY_NAME_LENGTH) {
         visible.offsetByCodePoints(0, MAX_DISPLAY_NAME_LENGTH)
     } else visible.length
-    return visible.substring(0, end).trimEnd().ifEmpty { fallback }
+    var capped = visible.substring(0, end)
+    // The cap may have cut the character a joiner was joining.
+    if (capped.isNotEmpty() && isJoiner(capped.codePointBefore(capped.length))) capped = capped.dropLast(1)
+    return capped.trimEnd().ifEmpty { fallback }
 }
+
+private fun isJoiner(codePoint: Int): Boolean =
+    codePoint == ZERO_WIDTH_NON_JOINER || codePoint == ZERO_WIDTH_JOINER
+
+private fun isJoinable(codePoint: Int): Boolean =
+    codePoint > MAX_ASCII && !isJoiner(codePoint) &&
+        !Character.isWhitespace(codePoint) && !Character.isSpaceChar(codePoint)
 
 private fun isSafeNameCodePoint(codePoint: Int): Boolean = when (Character.getType(codePoint)) {
     Character.CONTROL.toInt(), Character.LINE_SEPARATOR.toInt(),
     Character.PARAGRAPH_SEPARATOR.toInt(), Character.SURROGATE.toInt() -> false
-    Character.FORMAT.toInt() -> codePoint == ZERO_WIDTH_NON_JOINER || codePoint == ZERO_WIDTH_JOINER
+    Character.FORMAT.toInt() -> false
     else -> true
 }
 
 private const val ZERO_WIDTH_NON_JOINER = 0x200C
 private const val ZERO_WIDTH_JOINER = 0x200D
+private const val MAX_ASCII = 0x7F
 private const val MAX_DISPLAY_NAME_LENGTH = 255
 
 data class PreparedEncryptionResult(
@@ -179,7 +197,16 @@ class SafFileWorkflow(
             val needsRestore = state != OutputState.UNMODIFIED
             state = OutputState.FINISHED
             if (needsRestore && saved != null && !restoreFileToUri(saved, destination)) {
-                // Keep the private backup if the provider cannot restore it.
+                // Recovery files survive startup cleanup until manually recovered.
+                val recovery = File(outputBackupDirectory, saved.name.removeSuffix(TEMPORARY_SUFFIX) + RECOVERY_SUFFIX)
+                try {
+                    Os.rename(saved.absolutePath, recovery.absolutePath)
+                    activeOutputBackups.remove(saved.absolutePath)
+                    backup = recovery
+                } catch (_: Exception) {
+                    // The original backup is also recognized as recovery material.
+                    activeOutputBackups.remove(saved.absolutePath)
+                }
                 return
             }
             clearAndDelete(saved)
@@ -187,6 +214,7 @@ class SafFileWorkflow(
         }
     }
 
+    @WorkerThread
     fun describe(uri: Uri): SelectedDocument = SelectedDocument(
         uri = uri,
         displayName = displaySafeName(queryDisplayName(uri), defaultSelectedFilename),
@@ -810,6 +838,45 @@ class SafFileWorkflow(
         }
     }
 
+    /** Old empty staging backups are disposable; every nonempty backup may need recovery. */
+    @WorkerThread
+    fun cleanupExpiredOutputBackups(now: Long = System.currentTimeMillis()): Int {
+        if (!ownedPrivateDirectory(outputBackupDirectory)) return 0
+        outputBackupDirectory.listFiles().orEmpty().forEach { file ->
+            if (isExpiredEmptyOutputBackup(file, now)) clearAndDelete(file)
+        }
+        return recoveryBackupCount()
+    }
+
+    @WorkerThread
+    fun recoveryBackupCount(): Int {
+        if (!ownedPrivateDirectory(outputBackupDirectory)) return 0
+        return outputBackupDirectory.listFiles().orEmpty().count { file ->
+            file.name.startsWith(OUTPUT_BACKUP_PREFIX) &&
+                !activeOutputBackups.contains(file.absolutePath) &&
+                (file.name.endsWith(RECOVERY_SUFFIX) ||
+                    (file.name.endsWith(TEMPORARY_SUFFIX) && file.length() > 0L)) &&
+                ownedSingleRegularFile(file)
+        }
+    }
+
+    private fun isExpiredEmptyOutputBackup(file: File, now: Long): Boolean =
+        file.name.startsWith(OUTPUT_BACKUP_PREFIX) && file.name.endsWith(TEMPORARY_SUFFIX) &&
+            !activeOutputBackups.contains(file.absolutePath) && ownedSingleRegularFile(file) && file.length() == 0L &&
+            file.lastModified() > 0L && now >= file.lastModified() &&
+            now - file.lastModified() >= TEMPORARY_MAX_AGE_MILLIS
+
+    private fun ownedSingleRegularFile(file: File): Boolean = try {
+        val status = Os.lstat(file.absolutePath)
+        OsConstants.S_ISREG(status.st_mode) && status.st_uid == Os.getuid() && status.st_nlink == 1L
+    } catch (_: Exception) { false }
+
+    private fun ownedPrivateDirectory(directory: File): Boolean = try {
+        val status = Os.lstat(directory.absolutePath)
+        OsConstants.S_ISDIR(status.st_mode) && status.st_uid == Os.getuid() &&
+            (status.st_mode and PERMISSION_MASK) == PRIVATE_DIRECTORY_MODE
+    } catch (_: Exception) { false }
+
     private fun queryDisplayName(uri: Uri): String? = try {
         contentResolver.query(
             uri,
@@ -987,6 +1054,7 @@ class SafFileWorkflow(
                     outputBackupDirectory,
                 )
                 backup = saved
+                activeOutputBackups.add(saved.absolutePath)
                 FileOutputStream(saved, false).use { backupStream ->
                     var total = 0L
                     while (true) {
@@ -1179,6 +1247,7 @@ class SafFileWorkflow(
             // Deletion is still attempted; no path or contents are logged.
         } finally {
             file.delete()
+            activeOutputBackups.remove(file.absolutePath)
         }
     }
 
@@ -1191,6 +1260,7 @@ class SafFileWorkflow(
     }
 
     private companion object {
+        val activeOutputBackups = ConcurrentHashMap.newKeySet<String>()
         const val COPY_BUFFER_SIZE = 64 * 1024
         // Plaintext and containers have separate limits, so every file that
         // can be encrypted can also be decrypted again: a container adds
@@ -1222,6 +1292,8 @@ class SafFileWorkflow(
         const val TEMPORARY_PUBLIC_CANONICAL_PREFIX = "nkem-selected-pub-"
         const val TEMPORARY_PRIVATE_PREFIX = "nkem-selected-prv-"
         const val TEMPORARY_SUFFIX = ".tmp"
+        const val RECOVERY_SUFFIX = ".recovery"
+        const val TEMPORARY_MAX_AGE_MILLIS = 24L * 60L * 60L * 1000L
         const val WRITE_TRUNCATE_MODE = "wt"
         const val READ_WRITE_MODE = "rw"
         const val SHA256_ALGORITHM = "SHA-256"

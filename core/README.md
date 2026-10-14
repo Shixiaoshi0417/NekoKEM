@@ -31,28 +31,61 @@ Core 使用 OpenSSL EVP、NKEM v3（单接收方）、NKEM v4（多接收方）�
   在创建输出前加载并校验全部公钥；空列表、超过上限、重复公钥或共用任一组件的公钥都会失败，
   不会跳过或替换任何接收方。
   进度、取消和原子提交与 v3 相同。
-- `nekokem_decrypt_file_with_progress()`：解密 v3 时按数据块报告进度。回调在调用线程同步执行，返回 `0` 请求取消。
+- `nekokem_decrypt_file_with_progress()`：解密 v3、v4 时均按文件数据块报告进度。回调在调用线程同步执行，返回 `0` 请求取消。
 - `nekokem_public_key_fingerprint()`：返回大写、冒号分隔的 SHA-256
   公钥指纹。调用者至少提供 `NEKOKEM_FINGERPRINT_STRING_SIZE` 字节。
 - `nekokem_private_key_exists()`：只接受权限为 `0600`、结构有效的 NKPR
   常规文件；仅解析容器结构，不运行 Argon2id 或 AES-GCM。
 - `nekokem_check_private_key_password()`：一次性解开并验证 NKPR 私钥，
-  随后立即释放 X448/ML-KEM `EVP_PKEY`；不建立解锁会话、不保存口令。
+  执行与解密相同的退化 X448 私钥检查，随后立即释放 X448/ML-KEM
+  `EVP_PKEY`；不建立解锁会话、不保存口令。
 - `nekokem_export_public_key()`：由 Core 验证 X448 与 ML-KEM-1024 公钥，
   再原子地重新序列化到目标文件。
-- `nekokem_delete_private_key()`：只删除指定的常规文件；目标不存在时也
-  视为成功，便于 UI 实现幂等删除。
+- `nekokem_delete_private_key()`：删除指定的常规私钥文件和可识别的自有
+  事务残留；目标不存在且没有未清理残留时也视为成功，便于 UI 实现幂等删除。
 - `nekokem_private_key_requires_password()`：供 UI 在调用解密 API 前决定
   是否显示口令输入框。
 
 进度 API 使用 `NEKOKEM_OPERATION_SUCCESS`、`NEKOKEM_OPERATION_ERROR` 和
-`NEKOKEM_OPERATION_CANCELLED`。v3 文件数据以 64 KiB 流式处理；错误或取消
+`NEKOKEM_OPERATION_CANCELLED`。v3、v4 文件数据均以 64 KiB 流式处理；错误或取消
 会中止并删除 Core 原子输出，不会提交部分密文或未认证明文。原有无回调 API
 继续保持 `1/0` 返回约定。
 
 Core 内部保留原子输出、GCM 认证后提交、共享秘密和 AES 密钥清零、
 NKPR 明文 PEM 仅驻留内存、以及统一资源清理路径。v3 的 32-byte salt、
 12-byte nonce、头部、X448 临时公钥和 ML-KEM 密文全部进入 GCM AAD。
+
+导入的 X448 公钥和 NKEM 临时公钥必须是规范的 56-byte little-endian
+编码（`u < 2^448 - 2^224 - 1`）。OpenSSL 会接受并约减的非规范编码在
+Core 解析、导入和密钥交换前被拒绝；本应用生成的既有正常密钥不受影响。
+v4 在密钥交换前直接识别小阶公钥，不使用 OpenSSL 提供方的错误原因码
+判断容器是否损坏。
+
+v4 的收件人不可关联性针对不持有相应私钥的非收件人。收件人可识别属于
+自己的记录，并在不同文件中确认自己的参与；收件人数和文件长度始终可见。
+它不提供发送者身份认证。
+
+NKPR 解码将错误口令、损坏的认证数据、损坏或不支持的容器结构统一报告为
+“私钥口令错误或 NKPR 数据损坏”，不附加 OpenSSL 的认证失败细节。
+Argon2id 参数和 NKPR 格式保持不变。AES-GCM 不具备密钥承诺性；成功解开
+一个容器不证明该容器只能由唯一口令或唯一保护密钥打开，也不保证不同
+保护密钥下的明文一致。该限制保留在 NKPR v1 中，以维持格式兼容性。
+
+## 密钥文件与中断恢复
+
+POSIX 上生成、替换和删除密钥使用所属目录的 `.nekokem-pair.lock`，每个
+目录锁的竞争最多重试约 1 秒；锁文件不安全或超时的错误会给出具体路径。
+替换前会检查多重硬链接
+和 `.tmp.*` / `.bak.*` 残留并发出警告。与当前密钥同 inode 的残留可能使
+私钥多链接检查失败，应先人工检查并清理或恢复配对密钥。
+
+替换尽可能在改名之前才创建备份。回滚中任何一侧恢复失败就停止回滚，
+尝试保留新的一对，并逐侧报告最终状态及旧备份位置，供人工恢复。
+删除私钥会检查硬链接和残留，只清理可验证属于该路径的常规临时文件与
+备份。符号链接、权限或类型不安全以及身份未知的残留会保留并提示人工
+处理；其他路径的硬链接副本不由删除操作处理。POSIX 删除后同步父目录。
+Windows 使用保留的文件句柄刷新数据并提交删除状态；Windows 没有受支持的
+目录 `fsync`，因此不声称与 POSIX 相同的断电后目录元数据持久性。
 
 ## Android JNI 接入
 

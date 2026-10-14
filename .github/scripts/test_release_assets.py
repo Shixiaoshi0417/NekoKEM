@@ -174,6 +174,23 @@ class ReleaseAssetTests(unittest.TestCase):
                 with self.assertRaises(assets.ReleaseError):
                     self.verify()
 
+    def test_each_windows_package_requires_matching_version_metadata(self):
+        for directory, filename in (('NekoKEM-windows-x86_64', 'NekoKEM-windows-x86_64.zip'),
+                                    ('NekoKEM-windows-gui-x86_64', 'NekoKEM-Windows-GUI.zip')):
+            for version in (None, '4.1.0'):
+                with self.subTest(package=filename, version=version):
+                    shutil.rmtree(self.artifacts, ignore_errors=True)
+                    build_release(self.artifacts)
+                    package = self.artifacts / directory / filename
+                    record = {'source_sha': SOURCE, 'run_id': RUN}
+                    if version is not None:
+                        record['version'] = version
+                    write_zip(package, {'build-metadata.json': json.dumps(record)})
+                    if directory == 'NekoKEM-windows-x86_64':
+                        write_sums(package.parent / 'windows-SHA256SUMS.txt', [package])
+                    with self.assertRaisesRegex(assets.ReleaseError, 'Windows.*not version'):
+                        self.verify()
+
     def test_notes_receive_build_records_once(self):
         hashes = {name: digest(name.encode()) for name in assets.PACKAGES}
         notes = f'# NekoKEM\n\n{assets.ZH_PLACEHOLDER}\n\n---\n\n{assets.EN_PLACEHOLDER}\n'
@@ -193,6 +210,19 @@ class ReleaseAssetTests(unittest.TestCase):
             with self.assertRaises(assets.ReleaseError):
                 assets.android_tool('apksigner')
 
+    def test_android_tools_use_only_pinned_build_tools(self):
+        for version in ('34.0.0', '35.0.0', '36.0.0'):
+            tool = self.root / 'sdk' / 'build-tools' / version / 'apksigner'
+            tool.parent.mkdir(parents=True)
+            tool.write_bytes(b'tool')
+        with mock.patch.dict('os.environ', {'ANDROID_SDK_ROOT': str(self.root / 'sdk'),
+                                            'ANDROID_HOME': ''}):
+            pinned = self.root / 'sdk/build-tools/35.0.0/apksigner'
+            self.assertEqual(assets.android_tool('apksigner'), str(pinned))
+            pinned.unlink()
+            with self.assertRaisesRegex(assets.ReleaseError, '35.0.0'):
+                assets.android_tool('apksigner')
+
 
 
 class DraftResumeTests(unittest.TestCase):
@@ -209,7 +239,7 @@ class DraftResumeTests(unittest.TestCase):
     def test_interrupted_upload_resumes(self):
         existing = [self.asset(1, 'a.zip', self.expected['a.zip']),
                     self.asset(2, 'b.zip', None, state='starter'),
-                    self.asset(3, 'SHA256SUMS.txt', 'sha256:' + 'd' * 64)]
+                    self.asset(3, 'SHA256SUMS.txt', 'sha256:' + 'd' * 64, state='starter')]
         self.assertEqual(publish_release.plan_upload(existing, self.expected),
                          ([2, 3], ['SHA256SUMS.txt', 'b.zip']))
 
@@ -221,6 +251,17 @@ class DraftResumeTests(unittest.TestCase):
     def test_foreign_asset_is_refused(self):
         with self.assertRaises(assets.ReleaseError):
             publish_release.plan_upload([self.asset(9, 'other.bin', None)], self.expected)
+
+    def test_complete_asset_with_a_different_digest_is_refused(self):
+        with self.assertRaisesRegex(assets.ReleaseError, 'Existing draft assets differ'):
+            publish_release.plan_upload([self.asset(9, 'a.zip', 'sha256:' + 'd' * 64)], self.expected)
+
+    def test_duplicate_names_and_unknown_states_are_refused(self):
+        for existing in ([self.asset(1, 'a.zip', self.expected['a.zip']),
+                          self.asset(2, 'a.zip', None, state='starter')],
+                         [self.asset(1, 'a.zip', None, state='unknown')]):
+            with self.subTest(existing=existing), self.assertRaises(assets.ReleaseError):
+                publish_release.plan_upload(existing, self.expected)
 
 
 if __name__ == '__main__':

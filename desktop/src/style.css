@@ -133,7 +133,7 @@ select[aria-invalid=true] { border-color: #bd6650; background: #fffaf8; }
 .recipient-option input, .contact-select input { width: 16px; height: 16px; margin: 0; flex: none; accent-color: var(--accent); }
 .recipient-option:has(input:disabled) { cursor: default; opacity: .55; }
 .recipient-label { flex: 1; min-width: 0; overflow-wrap: anywhere; white-space: pre-wrap; }
-.recipient-option code { flex: none; font-family: Consolas, monospace; font-size: 11px; color: var(--muted); }
+.recipient-option code { flex: 1; min-width: 0; overflow-wrap: anywhere; font-family: Consolas, monospace; font-size: 11px; color: var(--muted); }
 .recipient-option:has(input:focus-visible) { outline: 2px solid var(--focus); outline-offset: 1px; }
 .multi-hint { line-height: 1.75; }
 .failed-contact { font-size: 11px; }

@@ -94,11 +94,7 @@ private fun commonMimeType(extension: String): String? = when (extension) {
 }
 
 private fun safeDocumentName(inputName: String, defaultName: String): String {
-    val cleaned = inputName
-        .substringAfterLast('/')
-        .filter { character -> character.code >= 0x20 && character != '\u007f' }
-        .take(MAX_DOCUMENT_NAME_LENGTH)
-    return cleaned.ifEmpty { defaultName }
+    return displaySafeName(inputName.substringAfterLast('/'), defaultName)
 }
 
 internal const val BINARY_MIME_TYPE = "application/octet-stream"
@@ -113,4 +109,3 @@ private const val TEXT_EXTENSION = "txt"
 private const val JPEG_MIME_TYPE = "image/jpeg"
 private const val MP4_MIME_TYPE = "video/mp4"
 private const val TEXT_MIME_TYPE = "text/plain"
-private const val MAX_DOCUMENT_NAME_LENGTH = 200

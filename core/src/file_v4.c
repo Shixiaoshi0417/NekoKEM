@@ -1,4 +1,5 @@
 #include "file.h"
+#include "x448_encoding.h"
 
 #include <stdint.h>
 #include <stdio.h>
@@ -174,12 +175,23 @@ int nkem_v4_container_size_is_valid(const NkemV4Header *header,
 int nkem_v4_container_parse(const unsigned char *input, size_t input_len)
 {
     NkemV4Header header;
+    size_t index;
 
     if (input == NULL || input_len < NKEM_V4_HEADER_SIZE ||
         (uintmax_t)input_len > UINT64_MAX ||
         !nkem_v4_header_decode_internal(input, &header, 0)) {
         return 0;
     }
-    return nkem_v4_container_size_is_valid_internal(
-        &header, (uint64_t)input_len, 0);
+    if (!nkem_v4_container_size_is_valid_internal(
+            &header, (uint64_t)input_len, 0)) {
+        return 0;
+    }
+    for (index = 0U; index < header.recipient_count; ++index) {
+        if (!x448_public_is_canonical(
+                input + NKEM_V4_HEADER_SIZE + NKEM_V4_SALT_SIZE +
+                index * NKEM_V4_ENTRY_SIZE)) {
+            return 0;
+        }
+    }
+    return 1;
 }

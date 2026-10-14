@@ -7,6 +7,7 @@
 #include <aclapi.h>
 #include <sddl.h>
 #include <errno.h>
+#include <io.h>
 #include <openssl/crypto.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -61,6 +62,81 @@ static int no_artifacts(void)
     FindClose(search);
     return success;
 }
+static int restore_failure_retains_pair(unsigned int restore_call)
+{
+    AtomicFile first = {0}, second = {0};
+    CHECK(write_private("restore-first", "first-old", 9));
+    CHECK(write_private("restore-second", "second-old", 10));
+    CHECK(atomic_file_open(&first, "restore-first", 0600) &&
+          atomic_file_open(&second, "restore-second", 0600));
+    CHECK(file_write_all(first.stream, "first-new", 9) &&
+          file_write_all(second.stream, "second-new", 10));
+    file_test_fault_set(FILE_TEST_FAULT_FSYNC, 3);
+    file_test_set_restore_failure(restore_call);
+    CHECK(!atomic_file_commit_pair(&first, &second));
+    file_test_fault_reset();
+    CHECK(equals("restore-first", "first-new") && equals("restore-second", "second-new"));
+    WIN32_FIND_DATAW entry;
+    HANDLE search = FindFirstFileW(L"restore-*.bak.*", &entry);
+    CHECK(search != INVALID_HANDLE_VALUE);
+    unsigned int backups = 0;
+    do {
+        char name[512];
+        CHECK(WideCharToMultiByte(CP_UTF8, WC_ERR_INVALID_CHARS, entry.cFileName, -1,
+                                 name, sizeof(name), NULL, NULL) > 0);
+        CHECK(equals(name, "first-old") || equals(name, "second-old"));
+        CHECK(windows_delete_regular(name));
+        ++backups;
+    } while (FindNextFileW(search, &entry));
+    FindClose(search);
+    CHECK(backups == 2);
+    CHECK(windows_delete_regular("restore-first") && windows_delete_regular("restore-second"));
+    return EXIT_SUCCESS;
+}
+
+static unsigned int residue_warning_count;
+static const char *record_residue_warning(const char *message)
+{
+    if (strcmp(message, "Key transaction residue at %s; inspect it before cleanup or recovery\n") == 0)
+        ++residue_warning_count;
+    return message;
+}
+
+static int file_audit_regressions(void)
+{
+    FILE *input = file_open_regular("plain");
+    unsigned char prefix[2];
+    /* A bulk read avoids the CRT's internal single-character input slot. */
+    CHECK(input != NULL && fread(prefix, 1, sizeof(prefix), input) == sizeof(prefix) &&
+          memcmp(prefix, "bi", sizeof(prefix)) == 0 && _telli64(_fileno(input)) == 2);
+    CHECK(fclose(input) == 0);
+    AtomicFile output = {0};
+    CHECK(atomic_file_open(&output, "unbuffered-output", 0600));
+    CHECK(fputc('x', output.stream) != EOF && _filelengthi64(_fileno(output.stream)) == 1);
+    atomic_file_abort(&output);
+    int previous = file_set_output_no_replace(1);
+    CHECK(!write_private("plain", "replacement", 11));
+    CHECK(equals("plain", "binary\r\n\032"));
+    (void)file_set_output_no_replace(previous);
+    file_set_message_translator(record_residue_warning);
+    residue_warning_count = 0;
+    CHECK(write_private("plain", "binary\r\n\032", 9) && residue_warning_count == 0);
+    CHECK(write_private("plain.tmp.0123456789abcdef0123456789abcdef", "old-staging", 11));
+    CHECK(write_private("plain", "binary\r\n\032", 9) && residue_warning_count == 1);
+    file_set_message_translator(NULL);
+    CHECK(windows_delete_regular("plain.tmp.0123456789abcdef0123456789abcdef"));
+    CHECK(restore_failure_retains_pair(1) == EXIT_SUCCESS);
+    CHECK(restore_failure_retains_pair(2) == EXIT_SUCCESS);
+    CHECK(restore_failure_retains_pair(3) == EXIT_SUCCESS);
+    CHECK(restore_failure_retains_pair(4) == EXIT_SUCCESS);
+    CHECK(CreateHardLinkW(L"private.enc.bak.0123456789abcdef0123456789abcdef", L"private.enc", NULL));
+    CHECK(!nekokem_private_key_exists("private.enc"));
+    CHECK(nekokem_delete_private_key("private.enc"));
+    CHECK(GetFileAttributesW(L"private.enc.bak.0123456789abcdef0123456789abcdef") == INVALID_FILE_ATTRIBUTES);
+    CHECK(GetFileAttributesW(L"private.enc") == INVALID_FILE_ATTRIBUTES);
+    return EXIT_SUCCESS;
+}
+
 int main(int argc, char **argv)
 {
     if (argc == 4 && strcmp(argv[1],"secure-copy") == 0) {
@@ -159,6 +235,8 @@ int main(int argc, char **argv)
     CHECK(atomic_file_open(&first,"private/result",0600));
     CHECK(!MoveFileW(L"private",L"moved"));
     atomic_file_abort(&first);
+    CHECK(no_artifacts());
+    CHECK(file_audit_regressions() == EXIT_SUCCESS);
     CHECK(no_artifacts());
     CHECK(nekokem_delete_private_key("private.enc"));
     CHECK(nekokem_delete_private_key("private.enc"));

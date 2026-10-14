@@ -12,11 +12,15 @@
 #include <fcntl.h>
 #include <limits.h>
 #include <openssl/err.h>
+#include <openssl/rand.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
 #ifndef _WIN32
 #include <sys/file.h>
+#include <dirent.h>
+#include <strings.h>
+#include <time.h>
 #endif
 #ifdef __linux__
 #include <linux/fs.h>
@@ -44,11 +48,19 @@ typedef struct {
 
 static FileTestFaultState test_fault;
 static int test_links_unavailable;
+static unsigned int test_restore_fail_on_call;
+static unsigned int test_restore_call_count;
 static void (*test_before_noreplace_rename)(const char *);
 
 void file_test_set_before_noreplace_rename(void (*hook)(const char *))
 {
     test_before_noreplace_rename = hook;
+}
+
+void file_test_set_restore_failure(unsigned int fail_on_call)
+{
+    test_restore_fail_on_call = fail_on_call;
+    test_restore_call_count = 0U;
 }
 
 void file_test_set_links_unavailable(int unavailable)
@@ -69,6 +81,8 @@ void file_test_fault_reset(void)
     test_fault.fail_on_call = 0U;
     test_fault.call_count = 0U;
     test_before_noreplace_rename = NULL;
+    test_restore_fail_on_call = 0U;
+    test_restore_call_count = 0U;
 }
 
 static int test_fault_should_fail(FileTestFault fault)
@@ -80,6 +94,13 @@ static int test_fault_should_fail(FileTestFault fault)
     return test_fault.fail_on_call == 0U ||
            test_fault.call_count == test_fault.fail_on_call;
 }
+static int test_restore_should_fail(void)
+{
+    return (test_restore_fail_on_call != 0U &&
+            ++test_restore_call_count == test_restore_fail_on_call) ||
+           test_fault_should_fail(FILE_TEST_FAULT_RESTORE);
+}
+
 #endif
 
 #ifndef _WIN32
@@ -228,9 +249,27 @@ static int file_rename_new(const char *temporary_path, const char *final_path)
 #endif
 }
 
-/* Both publication paths atomically refuse an existing destination. */
-static int file_publish_new(const char *temporary_path, const char *final_path)
+static int publication_unsupported(int error)
 {
+    return error == EINVAL || error == ENOTSUP || error == ENOSYS
+#if defined(EOPNOTSUPP) && EOPNOTSUPP != ENOTSUP
+           || error == EOPNOTSUPP
+#endif
+        ;
+}
+
+/*
+ * Both publication paths atomically refuse an existing destination. Where a
+ * filesystem has neither hard links nor a no-replace rename (FAT and exFAT on
+ * macOS, some network and FUSE mounts), a single output may fall back to the
+ * existence check and rename used before create-only outputs; only a writer
+ * racing that check can then be replaced. Key pairs never take that path.
+ */
+static int file_publish_new(const char *temporary_path, const char *final_path,
+                            int checked_fallback)
+{
+    struct stat status;
+
 #ifdef NEKOKEM_TEST_FAULT_INJECTION
     if (test_fault_should_fail(FILE_TEST_FAULT_RENAME)) {
         errno = EIO;
@@ -252,13 +291,34 @@ static int file_publish_new(const char *temporary_path, const char *final_path)
     if (errno == EEXIST) {
         return -1;
     }
-    /* Never fall back to a check followed by an overwriting rename(). */
-    return file_rename_new(temporary_path, final_path);
+    if (file_rename_new(temporary_path, final_path) == 0) {
+        return 0;
+    }
+    if (checked_fallback == 0 || !publication_unsupported(errno)) {
+        return -1;
+    }
+    if (lstat(final_path, &status) == 0) {
+        errno = EEXIST;
+        return -1;
+    }
+    if (errno != ENOENT) {
+        return -1;
+    }
+    return file_rename(temporary_path, final_path);
 }
 
 #endif
 
 static const char *(*message_translator)(const char *);
+
+static _Thread_local int output_no_replace;
+
+int file_set_output_no_replace(int enabled)
+{
+    int previous = output_no_replace;
+    output_no_replace = enabled != 0;
+    return previous;
+}
 
 void file_set_message_translator(const char *(*translator)(const char *))
 {
@@ -288,6 +348,69 @@ void print_openssl_error(const char *context)
 void print_system_error(const char *context)
 {
     fprintf(stderr, "%s: %s\n", file_message(context), strerror(errno));
+}
+
+const char *file_display_safe_path(const char *path)
+{
+    static _Thread_local char buffers[4][4096];
+    static _Thread_local unsigned int next;
+    char *output = buffers[next++ % 4U];
+    size_t used = 0U;
+    const unsigned char *input = (const unsigned char *)(path != NULL ? path : "");
+
+    while (*input != 0U && used < sizeof(buffers[0]) - 1U) {
+        uint32_t character = *input;
+        size_t width = 1U;
+        size_t index;
+        int valid = 1;
+
+        if (character >= 0xc2U && character <= 0xdfU) {
+            width = 2U;
+            character &= 0x1fU;
+        } else if (character >= 0xe0U && character <= 0xefU) {
+            width = 3U;
+            character &= 0x0fU;
+        } else if (character >= 0xf0U && character <= 0xf4U) {
+            width = 4U;
+            character &= 0x07U;
+        } else if (character >= 0x80U) {
+            valid = 0;
+        }
+        for (index = 1U; index < width; ++index) {
+            if (input[index] == 0U || (input[index] & 0xc0U) != 0x80U) {
+                valid = 0;
+                break;
+            }
+            character = (character << 6U) | (input[index] & 0x3fU);
+        }
+        if (valid == 0 || (width == 2U && character < 0x80U) ||
+            (width == 3U && character < 0x800U) ||
+            (width == 4U && character < 0x10000U) ||
+            character > 0x10ffffU ||
+            (character >= 0xd800U && character <= 0xdfffU)) {
+            output[used++] = '?';
+            ++input;
+        } else if (character < 0x20U ||
+                   (character >= 0x7fU && character <= 0x9fU) ||
+                   character == 0xadU || character == 0x061cU ||
+                   character == 0x180eU ||
+                   (character >= 0x200bU && character <= 0x200fU) ||
+                   (character >= 0x2028U && character <= 0x202eU) ||
+                   (character >= 0x2060U && character <= 0x206fU) ||
+                   character == 0xfeffU) {
+            output[used++] = '?';
+            input += width;
+        } else {
+            if (width > sizeof(buffers[0]) - 1U - used) {
+                break;
+            }
+            memcpy(output + used, input, width);
+            used += width;
+            input += width;
+        }
+    }
+    output[used] = '\0';
+    return output;
 }
 
 int file_output_spares_keys(const char *output_path,
@@ -331,22 +454,22 @@ int ensure_directory(const char *path, mode_t mode)
         return 0;
     }
     if (!S_ISDIR(status.st_mode)) {
-        fprintf(stderr, file_message("%s exists but is not a directory\n"), path);
+        fprintf(stderr, file_message("%s exists but is not a directory\n"), file_display_safe_path(path));
         return 0;
     }
 #ifdef NEKOKEM_TEST_FAULT_INJECTION
     if (test_fault_should_fail(FILE_TEST_FAULT_FOREIGN_OWNER)) {
-        fprintf(stderr, file_message("%s is not owned by the current user\n"), path);
+        fprintf(stderr, file_message("%s is not owned by the current user\n"), file_display_safe_path(path));
         return 0;
     }
 #endif
     if (status.st_uid != geteuid()) {
-        fprintf(stderr, file_message("%s is not owned by the current user\n"), path);
+        fprintf(stderr, file_message("%s is not owned by the current user\n"), file_display_safe_path(path));
         return 0;
     }
     if ((status.st_mode & (mode_t)0777) != requested_mode) {
         fprintf(stderr, file_message("%s has unsafe permissions (expected %03o)\n"),
-                path, (unsigned int)requested_mode);
+                file_display_safe_path(path), (unsigned int)requested_mode);
         return 0;
     }
 #ifdef __APPLE__
@@ -406,6 +529,9 @@ FILE *file_open_regular(const char *path)
     if (stream == NULL) {
         print_system_error("Cannot open regular input stream");
         (void)close(descriptor);
+    } else if (!file_disable_buffering(stream)) {
+        (void)fclose(stream);
+        stream = NULL;
     }
     return stream;
 }
@@ -540,7 +666,7 @@ int file_read_regular(const char *path,
     }
     *buffer = NULL;
     *length = 0U;
-    descriptor = open(path, O_RDONLY | O_CLOEXEC | O_NONBLOCK);
+    descriptor = open(path, O_RDONLY | O_CLOEXEC | O_NOFOLLOW | O_NONBLOCK);
     if (descriptor < 0) {
         print_system_error("Cannot open regular input file");
         goto cleanup;
@@ -616,6 +742,9 @@ cleanup:
     return success;
 }
 
+static int inspect_key_artifacts(const char *path, const struct stat *key,
+                                  int remove_own, const char *ignored_path);
+
 int file_read_sensitive(const char *path,
                         size_t maximum_size,
                         unsigned char **buffer,
@@ -664,6 +793,7 @@ int file_read_sensitive(const char *path,
         fprintf(stderr, file_message("Sensitive input must have mode 0600\n"));
         goto cleanup;
     }
+    (void)inspect_key_artifacts(path, &status, 0, NULL);
     if (status.st_nlink != (nlink_t)1) {
         fprintf(stderr, file_message("Sensitive input must have exactly one hard link\n"));
         goto cleanup;
@@ -806,13 +936,48 @@ void file_remove_temporary_outputs(void)
     }
 }
 
+/* Darwin lacks mkostemp; exclusive open still installs CLOEXEC atomically. */
+static int file_mkostemp(char *pattern)
+{
+#if defined(__linux__)
+    return mkostemp(pattern, O_CLOEXEC);
+#else
+    static const char alphabet[] = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+    size_t length = strlen(pattern);
+    unsigned char random[6];
+    unsigned int attempt;
+
+    if (length < 6U || strcmp(pattern + length - 6U, "XXXXXX") != 0) {
+        errno = EINVAL;
+        return -1;
+    }
+    for (attempt = 0U; attempt < 128U; ++attempt) {
+        int descriptor;
+        size_t index;
+
+        if (RAND_bytes(random, (int)sizeof(random)) != 1) {
+            errno = EIO;
+            return -1;
+        }
+        for (index = 0U; index < sizeof(random); ++index) {
+            pattern[length - 6U + index] = alphabet[random[index] % 62U];
+        }
+        descriptor = open(pattern, O_RDWR | O_CREAT | O_EXCL | O_CLOEXEC, 0600);
+        if (descriptor >= 0 || errno != EEXIST) {
+            return descriptor;
+        }
+    }
+    errno = EEXIST;
+    return -1;
+#endif
+}
+
 int atomic_file_open(AtomicFile *file, const char *final_path, mode_t mode)
 {
     static const char suffix[] = ".tmp.XXXXXX";
     size_t path_length;
     size_t allocation_size;
     int descriptor = -1;
-    int flags;
     int result;
 
     if (file == NULL || final_path == NULL || final_path[0] == '\0') {
@@ -840,7 +1005,7 @@ int atomic_file_open(AtomicFile *file, const char *final_path, mode_t mode)
         return 0;
     }
 
-    descriptor = mkstemp(file->temporary_path);
+    descriptor = file_mkostemp(file->temporary_path);
     if (descriptor < 0) {
         print_system_error("Cannot create temporary output file");
         free(file->temporary_path);
@@ -848,13 +1013,6 @@ int atomic_file_open(AtomicFile *file, const char *final_path, mode_t mode)
         return 0;
     }
     temporary_output_track(file->temporary_path);
-    flags = fcntl(descriptor, F_GETFD);
-    if (flags < 0 || fcntl(descriptor, F_SETFD, flags | FD_CLOEXEC) < 0) {
-        print_system_error("Cannot protect temporary output descriptor");
-        (void)close(descriptor);
-        atomic_file_abort(file);
-        return 0;
-    }
     if (fchmod(descriptor, mode) != 0 ||
         !file_private_acl_is_safe(descriptor)) {
         print_system_error("Cannot set output file permissions");
@@ -991,10 +1149,64 @@ reject:
 
 cleanup:
     saved_errno = errno;
+    if (descriptor < 0 && lock_path != NULL) {
+        fprintf(stderr, file_message("Cannot acquire key directory lock %s: %s\n"),
+                file_display_safe_path(lock_path), strerror(saved_errno));
+    }
     free(lock_path);
     free(directory);
     errno = saved_errno;
     return descriptor;
+}
+
+static int wait_pair_lock(int descriptor, const char *key_path)
+{
+    const struct timespec delay = {0, 50000000L};
+    unsigned int attempt;
+
+    for (attempt = 0U; attempt < 20U; ++attempt) {
+        if (flock(descriptor, LOCK_EX | LOCK_NB) == 0) {
+            return 1;
+        }
+        if (errno != EWOULDBLOCK && errno != EAGAIN && errno != EINTR) {
+            break;
+        }
+        if (attempt + 1U < 20U) {
+            /* A signal may shorten this delay; it never extends the bound. */
+            (void)nanosleep(&delay, NULL);
+        }
+    }
+    {
+        char *directory = parent_directory_path(key_path);
+        int saved_errno = errno;
+
+        fprintf(stderr, file_message("Cannot acquire key directory lock %s/.nekokem-pair.lock: %s\n"),
+                file_display_safe_path(directory), strerror(saved_errno));
+        free(directory);
+        errno = saved_errno;
+    }
+    return 0;
+}
+
+int file_pair_lock_acquire(const char *key_path)
+{
+    struct stat identity;
+    int descriptor = open_pair_directory_lock(key_path, &identity);
+
+    if (descriptor >= 0 && !wait_pair_lock(descriptor, key_path)) {
+        int saved_errno = errno;
+        (void)close(descriptor);
+        errno = saved_errno;
+        return -1;
+    }
+    return descriptor;
+}
+
+void file_pair_lock_release(int descriptor)
+{
+    if (descriptor >= 0) {
+        (void)close(descriptor);
+    }
 }
 
 static int lock_pair_directories(const char *first_path,
@@ -1029,10 +1241,8 @@ static int lock_pair_directories(const char *first_path,
         if (descriptor < 0) {
             continue;
         }
-        while (flock(descriptor, LOCK_EX) != 0) {
-            if (errno != EINTR) {
-                return 0;
-            }
+        if (!wait_pair_lock(descriptor, order[index] == 0U ? first_path : second_path)) {
+            return 0;
         }
     }
     return 1;
@@ -1113,6 +1323,221 @@ cleanup:
     return result;
 }
 
+/* Only the application's reserved transaction names in this directory match. */
+static int artifact_name_matches(const char *name, const char *key_name)
+{
+    size_t length = strlen(key_name);
+    const char *suffix;
+    size_t index;
+
+    if (strncmp(name, key_name, length) != 0) {
+        return 0;
+    }
+    suffix = name + length;
+    do {
+        if (strncmp(suffix, ".bak.", 5U) != 0 &&
+            strncmp(suffix, ".tmp.", 5U) != 0) {
+            return 0;
+        }
+        suffix += 5U;
+        for (index = 0U; index < 6U; ++index) {
+            unsigned char character = (unsigned char)*suffix;
+
+            if (!((character >= 'a' && character <= 'z') ||
+                  (character >= 'A' && character <= 'Z') ||
+                  (character >= '0' && character <= '9'))) {
+                return 0;
+            }
+            ++suffix;
+        }
+    } while (*suffix != '\0');
+    return 1;
+}
+
+/* Ask the filesystem to resolve a residual's stem, including case folding
+ * and Unicode name normalization. Unknown missing-key aliases stay intact. */
+static size_t artifact_key_stem_length(const char *name, const char *key_name,
+                                       int directory, const struct stat *key,
+                                       int *confirmed)
+{
+    const char *suffix;
+
+    *confirmed = 1;
+    if (artifact_name_matches(name, key_name)) {
+        return strlen(key_name);
+    }
+    for (suffix = name + 1; *suffix != '\0'; ++suffix) {
+        char *stem;
+        struct stat status;
+        int same = 0;
+        size_t length;
+
+        if (*suffix != '.' || !artifact_name_matches(suffix, "")) continue;
+        length = (size_t)(suffix - name);
+        stem = strndup(name, length);
+        if (stem == NULL) continue;
+        if (key != NULL) {
+            same = fstatat(directory, stem, &status, AT_SYMLINK_NOFOLLOW) == 0 &&
+                status.st_dev == key->st_dev && status.st_ino == key->st_ino;
+        } else if (strcasecmp(stem, key_name) == 0) {
+            /* Spelling alone cannot establish ownership without a live key. */
+            same = 1;
+            *confirmed = 0;
+        }
+        free(stem);
+        if (same != 0) return length;
+    }
+    return 0U;
+}
+
+#define KEY_RESIDUE_STALE_SECONDS 600
+
+static int inspect_key_artifacts(const char *path, const struct stat *key,
+                                  int remove_own, const char *ignored_path)
+{
+    char *directory = parent_directory_path(path);
+    const char *key_name = strrchr(path, '/');
+    DIR *stream = NULL;
+    int descriptor;
+    int success = 1;
+    struct dirent *entry;
+
+    key_name = key_name == NULL ? path : key_name + 1;
+    if (directory == NULL) {
+        return 0;
+    }
+    if (key != NULL && key->st_nlink > (nlink_t)1) {
+        fprintf(stderr, file_message("Key %s has multiple hard links; other copies may remain\n"),
+                file_display_safe_path(path));
+    }
+    descriptor = open(directory, O_RDONLY | O_CLOEXEC | O_DIRECTORY);
+    if (descriptor < 0 || (stream = fdopendir(descriptor)) == NULL) {
+        if (descriptor >= 0) {
+            (void)close(descriptor);
+        }
+        free(directory);
+        return 0;
+    }
+    for (;;) {
+        struct stat status;
+        char *candidate;
+        size_t size;
+        int same;
+        int ours;
+        int confirmed;
+        int stale;
+        size_t stem_length;
+        unsigned char magic[27];
+
+        errno = 0;
+        entry = readdir(stream);
+        if (entry == NULL) {
+            if (errno != 0) {
+                success = 0;
+            }
+            break;
+        }
+        stem_length = artifact_key_stem_length(entry->d_name, key_name, dirfd(stream), key, &confirmed);
+        if (stem_length == 0U) {
+            continue;
+        }
+        size = strlen(directory) + strlen(entry->d_name) + 2U;
+        candidate = malloc(size);
+        if (candidate == NULL) {
+            success = 0;
+            break;
+        }
+        (void)snprintf(candidate, size, "%s/%s", directory, entry->d_name);
+        if (ignored_path != NULL &&
+            strcmp(entry->d_name, strrchr(ignored_path, '/') != NULL
+                ? strrchr(ignored_path, '/') + 1 : ignored_path) == 0) {
+            free(candidate);
+            continue;
+        }
+        if (fstatat(dirfd(stream), entry->d_name, &status, AT_SYMLINK_NOFOLLOW) != 0) {
+            free(candidate);
+            success = 0;
+            continue;
+        }
+        fprintf(stderr, file_message("Key transaction residue at %s; inspect it before cleanup or recovery\n"),
+                file_display_safe_path(candidate));
+        same = key != NULL && status.st_dev == key->st_dev && status.st_ino == key->st_ino;
+        /* A key generation stages its file before taking the pair lock, so a
+         * recent temporary file may still be written by another process. */
+        stale = time(NULL) - status.st_mtime > KEY_RESIDUE_STALE_SECONDS;
+        /* Same-inode residues belong to this key. An older backup must be
+         * an owner-only NKPR file; temporary files may be incomplete writes. */
+        ours = confirmed != 0 && S_ISREG(status.st_mode) && status.st_uid == geteuid() &&
+               (status.st_mode & (mode_t)0777) == (mode_t)0600 &&
+               (same != 0 ||
+                (status.st_nlink == (nlink_t)1 &&
+                 ((stale != 0 && strncmp(entry->d_name + stem_length, ".tmp.", 5U) == 0) ||
+                  ((file_peek_regular(candidate, magic, 4U) &&
+                    memcmp(magic, "NKPR", 4U) == 0) ||
+                   (file_peek_regular(candidate, magic, sizeof(magic)) &&
+                    memcmp(magic, "-----BEGIN PRIVATE KEY-----", sizeof(magic)) == 0)))));
+        if (remove_own != 0) {
+            struct stat current;
+
+            if (ours == 0) {
+                success = 0;
+            } else if (fstatat(dirfd(stream), entry->d_name, &current,
+                               AT_SYMLINK_NOFOLLOW) != 0 ||
+                       current.st_dev != status.st_dev || current.st_ino != status.st_ino ||
+                       unlinkat(dirfd(stream), entry->d_name, 0) != 0) {
+                success = 0;
+            }
+        }
+        free(candidate);
+    }
+    if (closedir(stream) != 0) {
+        success = 0;
+    }
+    free(directory);
+    return success;
+}
+
+int file_delete_private_key_under_lock(const char *path)
+{
+    struct stat status;
+    struct stat current;
+    int exists = 1;
+    int success;
+
+    if (path == NULL || path[0] == '\0') {
+        errno = EINVAL;
+        return 0;
+    }
+    if (lstat(path, &status) != 0) {
+        if (errno != ENOENT) {
+            print_system_error("Cannot inspect private key for deletion");
+            return 0;
+        }
+        exists = 0;
+    } else if (!S_ISREG(status.st_mode) || status.st_uid != geteuid()) {
+        fprintf(stderr, file_message("Private-key deletion target is not an owned regular file\n"));
+        return 0;
+    }
+    success = inspect_key_artifacts(path, exists != 0 ? &status : NULL, 1, NULL);
+    if (exists != 0) {
+        if (lstat(path, &current) != 0 || current.st_dev != status.st_dev ||
+            current.st_ino != status.st_ino || unlink(path) != 0) {
+            print_system_error("Cannot delete private key");
+            return 0;
+        }
+    }
+    if (!fsync_parent_directory(path, 1)) {
+        print_system_error("Cannot sync the private-key directory after deletion");
+        return 0;
+    }
+    /* The key itself is gone: a retained residue is reported, not a failure,
+     * so deleting a key pair can go on to the public key and be retried. */
+    if (success == 0) {
+        fprintf(stderr, file_message("Some key transaction residues were retained; inspect them before cleanup\n"));
+    }
+    return 1;
+}
+
 static int write_descriptor_all(int descriptor, const unsigned char *buffer,
                                 size_t length)
 {
@@ -1139,22 +1564,18 @@ static int write_descriptor_all(int descriptor, const unsigned char *buffer,
  * The final name is untouched until rename() replaces it, and a rollback
  * renames the copy back.
  */
-static int copy_backup(const char *final_path, const struct stat *expected,
+static int copy_backup_descriptor(int source, const struct stat *expected,
                        const char *backup_path, int *created)
 {
     unsigned char buffer[16384];
     struct stat status;
-    int source;
     int target = -1;
     int success = 0;
     int saved_errno;
+    off_t offset = 0;
 
     if (!S_ISREG(expected->st_mode)) {
         errno = ENOTSUP;
-        return 0;
-    }
-    source = open(final_path, O_RDONLY | O_CLOEXEC | O_NOFOLLOW | O_NONBLOCK);
-    if (source < 0) {
         return 0;
     }
     if (fstat(source, &status) != 0) {
@@ -1172,7 +1593,7 @@ static int copy_backup(const char *final_path, const struct stat *expected,
     }
     *created = 1;
     for (;;) {
-        ssize_t count = read(source, buffer, sizeof(buffer));
+        ssize_t count = pread(source, buffer, sizeof(buffer), offset);
 
         if (count < 0 && errno == EINTR) {
             continue;
@@ -1186,6 +1607,7 @@ static int copy_backup(const char *final_path, const struct stat *expected,
         if (!write_descriptor_all(target, buffer, (size_t)count)) {
             goto cleanup;
         }
+        offset += count;
     }
     if (fchmod(target, status.st_mode & 0777) != 0 ||
         file_sync_regular_fd(target) != 0) {
@@ -1200,9 +1622,26 @@ cleanup:
         saved_errno = errno;
         success = 0;
     }
-    (void)close(source);
     errno = saved_errno;
     return success;
+}
+
+static int copy_backup(const char *final_path, const struct stat *expected,
+                       const char *backup_path, int *created)
+{
+    int descriptor = open(final_path, O_RDONLY | O_CLOEXEC | O_NOFOLLOW | O_NONBLOCK);
+    int result;
+    int saved_errno;
+
+    if (descriptor < 0) return 0;
+    result = copy_backup_descriptor(descriptor, expected, backup_path, created);
+    saved_errno = errno;
+    if (close(descriptor) != 0 && result != 0) {
+        saved_errno = errno;
+        result = 0;
+    }
+    errno = saved_errno;
+    return result;
 }
 
 static char *create_backup_link(const char *final_path, int *existed)
@@ -1241,7 +1680,7 @@ static char *create_backup_link(const char *final_path, int *existed)
         errno = EOVERFLOW;
         goto cleanup;
     }
-    descriptor = mkstemp(backup_path);
+    descriptor = file_mkostemp(backup_path);
     if (descriptor < 0) {
         goto cleanup;
     }
@@ -1373,6 +1812,40 @@ int file_peek_regular(const char *path, unsigned char *prefix, size_t length)
     return success;
 }
 
+static int path_identifies_descriptor(const char *path, int descriptor)
+{
+    struct stat opened;
+    struct stat named;
+
+    return descriptor >= 0 && fstat(descriptor, &opened) == 0 &&
+        lstat(path, &named) == 0 && opened.st_dev == named.st_dev &&
+        opened.st_ino == named.st_ino;
+}
+
+static int file_restore(const char *source, const char *target, int inject)
+{
+#ifdef NEKOKEM_TEST_FAULT_INJECTION
+    if (inject != 0 && test_restore_should_fail()) {
+        errno = EIO;
+        return -1;
+    }
+#else
+    (void)inject;
+#endif
+    return rename(source, target);
+}
+
+static int file_remove_restored(const char *path)
+{
+#ifdef NEKOKEM_TEST_FAULT_INJECTION
+    if (test_restore_should_fail()) {
+        errno = EIO;
+        return -1;
+    }
+#endif
+    return unlink(path);
+}
+
 static int atomic_file_commit_pair_mode(AtomicFile *first,
                                         AtomicFile *second,
                                         int replace)
@@ -1380,10 +1853,13 @@ static int atomic_file_commit_pair_mode(AtomicFile *first,
     AtomicFile *files[2] = {first, second};
     char *backups[2] = {NULL, NULL};
     int existed[2] = {0, 0};
+    struct stat original_identity[2];
+    int original_present[2] = {0, 0};
     int published[2] = {0, 0};
     int published_descriptors[2] = {-1, -1};
     int lock_descriptors[2] = {-1, -1};
     int preserve_backup[2] = {0, 0};
+    int preserve_new_stage[2] = {0, 0};
     size_t count = second == NULL ? 1U : 2U;
     size_t index;
     sigset_t previous_signals;
@@ -1446,22 +1922,38 @@ static int atomic_file_commit_pair_mode(AtomicFile *first,
             }
             continue;
         }
-        backups[index] = create_backup_link(files[index]->final_path,
-                                             &existed[index]);
-        if (existed[index] < 0 ||
-            (existed[index] != 0 && backups[index] == NULL)) {
+        {
+            struct stat status;
+            int present = lstat(files[index]->final_path, &status) == 0;
+            original_present[index] = present;
+            if (present != 0) original_identity[index] = status;
+
+            if (!present && errno != ENOENT) {
+                saved_errno = errno;
+                goto rollback;
+            }
+            (void)inspect_key_artifacts(files[index]->final_path,
+                                         present ? &status : NULL, 0,
+                                         files[index]->temporary_path);
+        }
+    }
+    signals_deferred = file_defer_interrupts(&previous_signals);
+    /* Every backup exists before the first publication: a backup that fails
+     * (ENOSPC for a copy where links are unavailable) then publishes nothing,
+     * instead of leaving one new key beside an old one. */
+    for (index = 0U; index < count && replace != 0; ++index) {
+        backups[index] = create_backup_link(files[index]->final_path, &existed[index]);
+        if (existed[index] < 0 || (existed[index] != 0 && backups[index] == NULL)) {
             saved_errno = errno != 0 ? errno : EIO;
             goto rollback;
         }
     }
-    signals_deferred = file_defer_interrupts(&previous_signals);
     for (index = 0U; index < count; ++index) {
-#ifdef __APPLE__
         if (index != 0U) {
             struct stat first_status;
             struct stat next_status;
 
-            /* Let APFS/HFS+ resolve case folding and Unicode normalization. */
+            /* Let every POSIX filesystem resolve its own name aliases. */
             if (lstat(files[0]->final_path, &first_status) != 0) {
                 saved_errno = errno;
                 goto rollback;
@@ -1477,12 +1969,11 @@ static int atomic_file_commit_pair_mode(AtomicFile *first,
                 goto rollback;
             }
         }
-#endif
         if ((replace != 0
                  ? file_rename(files[index]->temporary_path,
                                files[index]->final_path)
                  : file_publish_new(files[index]->temporary_path,
-                                    files[index]->final_path)) != 0) {
+                                    files[index]->final_path, count == 1U)) != 0) {
             saved_errno = errno;
             goto rollback;
         }
@@ -1498,49 +1989,149 @@ static int atomic_file_commit_pair_mode(AtomicFile *first,
 
 rollback:
     if (success == 0) {
+        int rollback_failed = 0;
+        int ours[2] = {0, 0};
+        int restored[2] = {0, 0};
+        int new_staged[2] = {0, 0};
+        struct stat restored_identity[2];
         size_t reverse = count;
 
-        while (reverse > 0U) {
-            --reverse;
-            if (published[reverse] != 0) {
-                struct stat published_status;
-                struct stat current_status;
-                int still_ours = published_descriptors[reverse] >= 0 &&
-                    fstat(published_descriptors[reverse],
-                          &published_status) == 0 &&
-                    lstat(files[reverse]->final_path,
-                          &current_status) == 0 &&
-                    published_status.st_dev == current_status.st_dev &&
-                    published_status.st_ino == current_status.st_ino;
+        /* Keep each new inode of a pair available until the whole rollback
+         * succeeds: a failed second restore must not strand an old/new key
+         * mixture. A single output cannot mix, so it is never copied, however
+         * large a decrypted file is. */
+        for (index = 0U; index < count; ++index) {
+            struct stat status;
+            int created = 0;
 
-                if (existed[reverse] != 0 && backups[reverse] != NULL) {
-                    if (still_ours != 0 &&
-                        rename(backups[reverse],
-                               files[reverse]->final_path) == 0) {
-                        free(backups[reverse]);
-                        backups[reverse] = NULL;
-                    } else {
-                        preserve_backup[reverse] = 1;
-                        if (still_ours != 0) {
-                            print_system_error(
-                                "Cannot restore atomic output backup");
-                        }
-                        /* Another writer's file or a failed restore keeps
-                         * the old contents; say where they are. */
-                        fprintf(stderr,
-                                file_message("The previous contents of %s are kept as %s\n"),
-                                files[reverse]->final_path, backups[reverse]);
-                    }
-                } else if (still_ours != 0) {
-                    /* Only remove the inode this transaction published. The
-                     * locks keep other pair commits out of this interval. */
-                    (void)unlink(files[reverse]->final_path);
-                }
+            if (published[index] == 0) continue;
+            ours[index] = path_identifies_descriptor(files[index]->final_path,
+                                                       published_descriptors[index]);
+            if (count == 1U) continue;
+            if (published_descriptors[index] >= 0 &&
+                fstat(published_descriptors[index], &status) == 0 &&
+                copy_backup_descriptor(published_descriptors[index], &status,
+                                         files[index]->temporary_path, &created)) {
+                new_staged[index] = 1;
+            } else {
+                /* Do not begin a rollback without a recoverable copy of
+                 * every new file, including an unlinked retained inode. */
+                rollback_failed = 1;
             }
-            if (files[reverse] != NULL &&
-                files[reverse]->final_path != NULL) {
-                (void)fsync_parent_directory(
-                    files[reverse]->final_path, 0);
+        }
+        while (reverse > 0U && rollback_failed == 0) {
+            --reverse;
+            if (published[reverse] == 0) {
+                continue;
+            }
+            if (ours[reverse] == 0) {
+                preserve_backup[reverse] = backups[reverse] != NULL;
+                continue;
+            }
+            if (!path_identifies_descriptor(files[reverse]->final_path,
+                                               published_descriptors[reverse])) {
+                ours[reverse] = 0;
+                preserve_backup[reverse] = backups[reverse] != NULL;
+                continue;
+            }
+            if (existed[reverse] != 0 && backups[reverse] != NULL) {
+                int backup_exists = 0;
+                struct stat restore_identity;
+                char *restore = create_backup_link(backups[reverse], &backup_exists);
+                int ready = restore != NULL && lstat(restore, &restore_identity) == 0;
+                int recovered = ready &&
+                    path_identifies_descriptor(files[reverse]->final_path,
+                                                published_descriptors[reverse]) &&
+                    file_restore(restore, files[reverse]->final_path, 1) == 0;
+
+                if (restore != NULL) {
+                    (void)unlink(restore);
+                    free(restore);
+                }
+                if (recovered == 0) {
+                    rollback_failed = 1;
+                    print_system_error("Cannot restore atomic output backup");
+                    break;
+                }
+                if (lstat(files[reverse]->final_path, &restored_identity[reverse]) != 0 ||
+                    restored_identity[reverse].st_dev != restore_identity.st_dev ||
+                    restored_identity[reverse].st_ino != restore_identity.st_ino) {
+                    rollback_failed = 1;
+                    break;
+                }
+                restored[reverse] = 1;
+            } else if (file_remove_restored(files[reverse]->final_path) != 0) {
+                rollback_failed = 1;
+                break;
+            } else {
+                restored[reverse] = 1;
+            }
+        }
+        if (rollback_failed != 0) {
+            fprintf(stderr, file_message("Key-pair rollback stopped; retaining the new outputs where possible\n"));
+            for (index = 0U; index < count; ++index) {
+                struct stat expected;
+                struct stat current;
+                int named = lstat(files[index]->final_path, &current) == 0;
+                int can_replace = 0;
+                int kept = 0;
+
+                preserve_backup[index] = backups[index] != NULL;
+                /* Never overwrite a writer that ignores the directory lock. */
+                if (restored[index] != 0) {
+                    can_replace = existed[index] != 0
+                        ? named && current.st_dev == restored_identity[index].st_dev &&
+                            current.st_ino == restored_identity[index].st_ino
+                        : !named;
+                } else if (published[index] != 0) {
+                    can_replace = named && fstat(published_descriptors[index], &expected) == 0 &&
+                        current.st_dev == expected.st_dev && current.st_ino == expected.st_ino;
+                } else if (original_present[index] != 0) {
+                    can_replace = named && current.st_dev == original_identity[index].st_dev &&
+                        current.st_ino == original_identity[index].st_ino;
+                } else {
+                    can_replace = !named;
+                }
+                if (can_replace != 0 && published[index] == 0 &&
+                    original_present[index] != 0 && backups[index] == NULL) {
+                    int old_exists = 0;
+                    struct stat still_old;
+
+                    /* Completing the new pair must not destroy an old key
+                     * whose backup creation triggered the original failure. */
+                    backups[index] = create_backup_link(files[index]->final_path, &old_exists);
+                    preserve_backup[index] = backups[index] != NULL;
+                    can_replace = backups[index] != NULL && old_exists > 0 &&
+                        lstat(files[index]->final_path, &still_old) == 0 &&
+                        still_old.st_dev == original_identity[index].st_dev &&
+                        still_old.st_ino == original_identity[index].st_ino;
+                }
+                if (can_replace != 0 &&
+                    (new_staged[index] != 0 || published[index] == 0)) {
+                    kept = file_restore(files[index]->temporary_path,
+                                          files[index]->final_path, 0) == 0;
+                } else if (can_replace != 0 && published[index] != 0 && restored[index] == 0) {
+                    kept = 1;
+                }
+                if (kept == 0 && (new_staged[index] != 0 || published[index] == 0)) {
+                    preserve_new_stage[index] = 1;
+                    fprintf(stderr, file_message("New contents for %s are staged at %s\n"),
+                            file_display_safe_path(files[index]->final_path),
+                            file_display_safe_path(files[index]->temporary_path));
+                }
+                fprintf(stderr, file_message("New output at %s: %s\n"),
+                        file_display_safe_path(files[index]->final_path),
+                        file_message(kept != 0 ? "retained" : "recovery required"));
+            }
+        }
+        for (index = 0U; index < count; ++index) {
+            if (preserve_backup[index] != 0 && backups[index] != NULL) {
+                fprintf(stderr, file_message("The previous contents of %s are kept as %s\n"),
+                        file_display_safe_path(files[index]->final_path),
+                        file_display_safe_path(backups[index]));
+            }
+            if (files[index] != NULL && files[index]->final_path != NULL) {
+                (void)fsync_parent_directory(files[index]->final_path, 0);
             }
         }
     }
@@ -1558,7 +2149,7 @@ rollback:
                 (void)fsync_parent_directory(files[index]->final_path, 0);
             }
         }
-        if (success != 0) {
+        if (success != 0 || preserve_new_stage[index] != 0) {
             atomic_file_release(files[index]);
         } else {
             atomic_file_abort(files[index]);
@@ -1592,7 +2183,9 @@ int atomic_file_commit_pair_new(AtomicFile *first, AtomicFile *second)
 
 int atomic_file_commit(AtomicFile *file)
 {
-    return atomic_file_commit_pair(file, NULL);
+    return output_no_replace != 0
+        ? atomic_file_commit_pair_new(file, NULL)
+        : atomic_file_commit_pair(file, NULL);
 }
 
 void atomic_file_abort(AtomicFile *file)

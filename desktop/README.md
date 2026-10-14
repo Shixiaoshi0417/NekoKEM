@@ -1,13 +1,13 @@
 # NekoKEM Desktop GUI
 
-Rust + Tauri 2 + Vue 3 + TypeScript desktop frontend, released as v4.1.0 for
+Rust + Tauri 2 + Vue 3 + TypeScript desktop frontend, released as v4.2.0 for
 Windows 10/11 x64. It requires the Microsoft Edge WebView2 Runtime. Open
 `nekokem-gui.exe` to
 use the app; it opens a native window without a terminal. Keep the included
 Microsoft `WebView2Loader.dll` beside the EXE. The portable package
 contains no Android signing material and is not Authenticode signed.
 
-v4.1.0 also provides native Apple Silicon `aarch64-apple-darwin`
+v4.2.0 also provides native Apple Silicon `aarch64-apple-darwin`
 `NekoKEM.app` ZIP and DMG packages using macOS system WKWebView. macOS 11.0 is
 the deployment target; native CI runs on macOS 15. Intel Macs are not supported.
 本版 Release 提供 M 系列 Mac 原生应用 ZIP 与 DMG，部署目标为 macOS 11.0，
@@ -15,7 +15,7 @@ the deployment target; native CI runs on macOS 15. Intel Macs are not supported.
 
 Linux GUI targets native x86_64 and ARM64 with system GTK3, WebKitGTK 4.1 and
 glibc 2.39 or newer. Ubuntu 24.04 is the build/test baseline; native Fedora 44
-containers install and launch the RPM in CI. v4.1.0 provides `.deb`, `.rpm` and
+containers install and launch the RPM in CI. v4.2.0 provides `.deb`, `.rpm` and
 portable `.tar.gz` packages for each architecture. Linux 原生 GUI 提供两种架构
 的 DEB、RPM 和便携包；实际验证基线为 Ubuntu 24.04 与 Fedora 44 的 X11 会话。
 
@@ -57,7 +57,7 @@ characters, then save. Notes can be edited and entries deleted after an inline
 confirmation. On **Encrypt file**, choose **Saved contact** and explicitly select a
 recipient; a contact's **Use for encryption** action opens that page with it selected.
 Lists and the selection show the full SHA-256 fingerprint, the list also shows the source
-file name, and a completed encryption names the recipient and its fingerprint. Notes are labels only: verify fingerprints with recipients through a
+file name; the multi-select list also shows every full fingerprint and wraps it without truncating it. Source names drop control characters, Unicode line/paragraph separators and every Unicode format character (bidirectional and zero-width controls among them); a zero-width joiner or non-joiner stays only between two visible non-ASCII characters, as emoji and some scripts need. A completed encryption names the recipient and its fingerprint. Notes are labels only: verify fingerprints with recipients through a
 trusted channel. Decryption and fingerprints keep their file/paste key sources.
 
 Contacts live beside the shared language preference, in `LocalAppData/NekoKEM/contacts`
@@ -171,7 +171,7 @@ cd ..
 python3 desktop/scripts/package-macos-gui.py \
   --bundle-dir desktop/src-tauri/target/aarch64-apple-darwin/release/bundle \
   --output macos/dist \
-  --version 4.1.0 --source-sha "$(git rev-parse HEAD)"
+  --version 4.2.0 --source-sha "$(git rev-parse HEAD)"
 ```
 
 `NekoKEM-macos-arm64-GUI.zip` contains `NekoKEM.app`, documentation, licenses,
@@ -270,7 +270,11 @@ then runs actual X11 WebKit startup/normal-close checks as ordinary users on bot
 architectures with sandboxing retained. Rust/Core and private-file tests remain.
 Wayland and distributions other than this Ubuntu/Fedora baseline have not
 received equivalent native testing.
-The build wrapper adds AArch64's dynamic-loader capability only to ARM64 RPMs.
+The build wrapper declares the matching dynamic-loader capability in each native
+RPM: `ld-linux-x86-64.so.2` on x86_64 and `ld-linux-aarch64.so.1` on ARM64.
+Core's thread-local state can make this a direct ELF dependency; packaging still
+checks that every actual ELF dependency is declared.
+构建脚本为两种架构的 RPM 分别声明对应的动态加载器依赖，打包仍检查全部实际 ELF 依赖。
 See [Linux GUI security boundaries](LINUX-SECURITY.md).
 
 ## Security boundary / 安全边界
@@ -279,18 +283,32 @@ Key generation never replaces existing files on its own: if either chosen key
 path exists, the GUI reports “A key file already exists” and Core refuses as
 well. Back up the old keys, then choose new paths, or tick “Replace the existing
 key files” that the GUI then offers and generate again. The option covers one run
-and is withdrawn when either path changes; replacing deletes the old private key,
+and is withdrawn when either path changes. The backend accepts replacement only for the exact pair of paths from its preceding “key exists” response, in the same app session, within five minutes; the authorization is consumed by the next operation. Replacing deletes the old private key,
 so files encrypted for the old public key can no longer be decrypted. An encryption or decryption output that is
 the selected key file is refused (“The output file is the key file in use”);
-Core compares files by identity, so path aliases are refused too. A private key
+Core compares existing regular files by identity, including alternate spellings of the same file; symbolic-link/reparse-point key inputs are refused rather than followed. A private key
 is recognized as NKPR by its contents, so Android's `private.nkpr` export works
 without renaming.
 生成密钥不会自行替换已有文件：所选任一密钥路径已存在时，GUI 提示“所选路径已存在密钥文件”，
 Core 也会拒绝。请先备份旧密钥，再选择新的保存位置，或勾选 GUI 随后提供的“替换已有的密钥文件”
 并重新生成。该选项只对一次操作有效，修改任一路径即撤销；替换会删除旧私钥，之后无法再解密用旧公钥
 加密的文件。加解密输出若就是所选密钥文件会被拒绝；
-Core 按文件身份比较，路径别名同样会被拒绝。私钥按文件内容识别 NKPR，Android 导出的
+Core 按已有普通文件的身份比较（包括同一文件的不同路径写法），符号链接或 reparse point 密钥输入会直接拒绝，不会跟随。后端仅接受同一应用会话中上一次“密钥已存在”响应指明的完全相同路径，授权五分钟内有效且被下一次操作消耗。私钥按文件内容识别 NKPR，Android 导出的
 `private.nkpr` 无需改名即可使用。
+
+Encryption and decryption report an existing output before writing it. Choose another
+path, or tick “Replace the existing output file” and start again. This confirmation
+covers one run at the same output path and follows the same session/expiry rule as
+key replacement. Without confirmation, the final Core commit is atomically create-only:
+a file created by another writer during processing is preserved and reported too. On
+volumes with neither hard links nor a no-replace rename (FAT or exFAT on macOS, some
+network mounts), the commit instead checks the target immediately before an ordinary rename.
+For decryption, re-enter the password after the first attempt clears it.
+加解密会先提示已有输出文件；请选择新路径，或勾选“覆盖已有输出文件”后重新开始。
+确认仅适用于同一输出路径的一次操作，使用与密钥替换相同的会话与过期规则；
+未确认时 Core 最终提交以原子方式拒绝覆盖，处理过程中其他写入者新建的目标也会保留并提示；
+在既不支持硬链接也不支持不覆盖重命名的卷上（如 macOS 上的 FAT、exFAT 和部分网络挂载），改为在普通重命名前一刻检查目标。
+解密首次尝试清除口令后，需要重新输入。
 
 On Windows, the same local fixed-NTFS, owner/ACL, ancestor pinning, regular-file, hard-link,
 reparse-point, device/pipe/ADS and atomic-output checks apply. The frontend cannot
@@ -300,22 +318,21 @@ and 16384 UTF-8 bytes per line, matching the CLI, and remain subject to Core for
 
 On macOS, operations use Core's POSIX regular-file, ownership, private mode,
 link/output and atomic-commit checks. Private files/directories reject extended
-allow ACLs even when their mode is 0600/0700. Regular-file commits and pasted-key
-staging require successful fsync and F_FULLFSYNC; failure is reported. Pasted
-keys use a new 0700 directory, an exclusive 0600 no-follow file and descriptor-relative
-operations. Cleanup rejects symlinks, extra hard links and unsafe permissions.
+allow ACLs even when their mode is 0600/0700. Regular-file commits require successful fsync and F_FULLFSYNC; failure is reported. Pasted keys use an owner-only 0700 `$XDG_RUNTIME_DIR` when valid, then on macOS the per-user temporary directory (outside Time Machine), otherwise a private `$HOME/.nekokem-tmp` (the account home if HOME is unset), with a new 0700 random subdirectory, an exclusive 0600 no-follow file and descriptor-relative operations. Temporary pasted-key bytes use unbuffered stdio and are never fsynced. Cleanup rejects symlinks, extra hard links and unsafe permissions.
 See the [macOS filesystem design](../macos/SECURITY-DESIGN.md) for platform limits.
 
 On Linux, the same Core POSIX file checks and descriptor-relative pasted-key
 staging apply, requiring private `0700` directories, `0600` regular files, current
-ownership, one hard link, no symlinks and successful `fsync`. System WebKitGTK
+ownership, one hard link and no symlinks. Pasted-key staging uses the same runtime/private-home directory policy as macOS, unbuffered writes and no `fsync`; durable output commits retain Core sync checks. System WebKitGTK
 keeps its sandbox enabled and uses a temporary data store. See the
 [Linux GUI design](LINUX-SECURITY.md) for limits and the native test baseline.
 
 Only bundled local content runs with incognito enabled in the main WebView
 (Windows InPrivate/macOS nonpersistent WKWebView/Linux ephemeral WebKitGTK storage). CSP blocks remote scripts,
 frames and network requests. Only native open/save dialogs and the listed Rust
-commands are exposed. Developer tools are unavailable in the production release.
+commands are exposed. The capability list grants only event listen/unlisten and open/save dialogs, rather than `core:default`. Navigation permits only the platform local app origin (`tauri://localhost`, or Windows `http://tauri.localhost`); HTTPS and new windows are refused. Debug builds additionally allow the local Vite origin. Developer tools are unavailable in the production release.
+粘贴密钥优先暂存于符合当前所有者及 `0700` 要求的 `$XDG_RUNTIME_DIR`，macOS 上其次使用不进入 Time Machine 的用户临时目录，否则使用私有 `$HOME/.nekokem-tmp`；临时写入关闭 stdio 缓冲，不做持久化同步。权限仅包含事件监听/取消监听与打开/保存对话框；导航只允许对应平台的本地应用来源，拒绝 HTTPS 与新窗口。
+
 Passwords/key text are not stored in browser storage, configuration or logs. Both
 form references and live secret input values clear before native invocation,
 operation switches and unmounting. Switching away from pasted keys discards their
@@ -335,12 +352,12 @@ Windows power-loss equivalence to POSIX directory fsync is unverified. Pair comm
 are not cross-file crash atomic. Process death may leave protected plaintext/key
 staging files; deletion is not physical erasure. See the
 [Windows filesystem design](../windows/SECURITY-DESIGN.md) for the complete backend
-boundary. The v4.1.0 Windows application is not Authenticode signed. Verifying the bundled
+boundary. The v4.2.0 Windows application is not Authenticode signed. Verifying the bundled
 Microsoft SDK loader does not sign the application. This experimental project has
 not undergone an independent professional security audit and must not be used to
 protect important or sensitive data.
 
-Download `NekoKEM-Windows-GUI.zip` from the [v4.1.0 Release](https://github.com/Shixiaoshi0417/NekoKEM/releases/tag/v4.1.0)
+Download `NekoKEM-Windows-GUI.zip` from the [v4.2.0 Release](https://github.com/Shixiaoshi0417/NekoKEM/releases/tag/v4.2.0)
 and verify it against the release's top-level `SHA256SUMS.txt`. See the complete
-[bilingual release notes](../release/v4.1.0.md). v4.1.0 提供便携 GUI 压缩包；下载后先校验
+[bilingual release notes](../release/v4.2.0.md). v4.2.0 提供便携 GUI 压缩包；下载后先校验
 SHA-256，再解压并保留 EXE 旁的 Microsoft SDK loader。

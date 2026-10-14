@@ -8,6 +8,7 @@ import java.io.IOException
 import java.nio.file.Files
 import java.nio.file.LinkOption
 import java.nio.file.Paths
+import java.nio.file.StandardCopyOption
 import java.nio.file.attribute.FileTime
 import org.robolectric.annotation.Implementation
 import org.robolectric.annotation.Implements
@@ -29,6 +30,18 @@ class HostPosixShadow {
                 Files.setAttribute(Paths.get(path), "unix:mode", mode)
             } catch (error: IOException) {
                 throw ErrnoException("chmod", OsConstants.EIO, error)
+            }
+        }
+
+        @JvmStatic @Implementation
+        fun rename(oldPath: String, newPath: String) {
+            try {
+                Files.move(
+                    Paths.get(oldPath), Paths.get(newPath),
+                    StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE,
+                )
+            } catch (error: IOException) {
+                throw ErrnoException("rename", OsConstants.EIO, error)
             }
         }
 

@@ -1,6 +1,6 @@
 # macOS Apple Silicon CLI 与 GUI / macOS Apple Silicon CLI and GUI
 
-v4.1.0 面向 M 系列 Mac 的原生 `arm64` 架构，提供 CLI 和 Rust + Tauri 2 + Vue 3 + TypeScript GUI。不提供 Intel/Rosetta 构建。从 [v4.1.0 Release](https://github.com/Shixiaoshi0417/NekoKEM/releases/tag/v4.1.0) 下载 CLI、GUI ZIP 或 DMG，先用顶层 `SHA256SUMS.txt` 校验归档，再校验包内文件。
+v4.2.0 面向 M 系列 Mac 的原生 `arm64` 架构，提供 CLI 和 Rust + Tauri 2 + Vue 3 + TypeScript GUI。不提供 Intel/Rosetta 构建。从 [v4.2.0 Release](https://github.com/Shixiaoshi0417/NekoKEM/releases/tag/v4.2.0) 下载 CLI、GUI ZIP 或 DMG，先用顶层 `SHA256SUMS.txt` 校验归档，再校验包内文件。
 
 构建使用 macOS 11.0 deployment target；实际原生 CI 运行于 GitHub `macos-15` arm64 runner。deployment target 不等于 macOS 11.0 实机验证，也不承诺不同代 M 系列芯片具有相同性能。两种应用静态链接固定 OpenSSL 4.0.3，并保留其 arm64 汇编加速；运行不需要 Homebrew OpenSSL dylib，但仍依赖 macOS 系统库与框架。GUI 使用系统 WKWebView，不需要 WebView2 Runtime 或 `WebView2Loader.dll`。
 
@@ -29,9 +29,19 @@ shasum -a 256 -c SHA256SUMS
 
 包内校验文件用于检测文件损坏，不替代可信构建来源或发布者签名。CLI 与 Linux 共用全部参数和五项菜单；无参数运行进入菜单。`NekoKEM.command` 在 Terminal 中启动 CLI，并先将工作目录切换为解包目录，因此交互产生的 `keys/`、`encrypted/` 和 `plaintext/` 位于该目录。密码通过关闭回显的终端或 UTF-8 标准输入读取，不放在命令行参数里。
 
-GUI 构建说明见仓库的 [desktop/README.md](https://github.com/Shixiaoshi0417/NekoKEM/blob/main/desktop/README.md)。GUI 包为 `NekoKEM-macos-arm64-GUI.zip` 和 `NekoKEM-macos-arm64-GUI.dmg`；ZIP 中包含 `NekoKEM.app`、说明、许可、校验和构建元数据。Tauri 原始 DMG 名为 `NekoKEM_4.1.0_aarch64.dmg`，构建检查后导出为上述稳定包名。GUI 提供原生文件选择、进度、取消、五语言以及遵循减少动态效果偏好的界面动画。
+GUI 构建说明见仓库的 [desktop/README.md](https://github.com/Shixiaoshi0417/NekoKEM/blob/main/desktop/README.md)。GUI 包为 `NekoKEM-macos-arm64-GUI.zip` 和 `NekoKEM-macos-arm64-GUI.dmg`；ZIP 中包含 `NekoKEM.app`、说明、许可、校验和构建元数据。Tauri 原始 DMG 名为 `NekoKEM_4.2.0_aarch64.dmg`，构建检查后导出为上述稳定包名。GUI 提供原生文件选择、进度、取消、五语言以及遵循减少动态效果偏好的界面动画。
 
 ## 语言与文件安全
+
+
+新私钥口令必须是有效 UTF-8；解锁现有密钥保留原字节解释。交互解密拒绝已有
+`plaintext/<name>`，包括输入口令期间才创建的目标文件。菜单选 5 或 EOF 返回
+最近一次操作的结果，尚未操作视为成功。路径显示过滤控制字符、双向控制及零宽字符。
+CLI 启动禁用 core dump；粘贴密钥使用安全的 `XDG_RUNTIME_DIR`，其次使用不进入
+Time Machine 的用户临时目录（`/var/folders/.../T`），最后使用
+`~/.nekokem-tmp` 下的 `0700` 私有目录，不对临时明文执行 fsync，并保留信号清理。
+SIGKILL 等强制终止仍可能留下暂存文件，确认无进程使用后仅清理自己的
+`nekokem-paste.*`。加密 PKCS#8 PEM 粘贴会立即拒绝，请改选 NKPR 文件。
 
 支持简体中文、繁体中文、英语、日语、韩语。CLI 优先级为 `--lang` → 保存的 `--set-lang` 偏好 → `LC_ALL` → `LC_MESSAGES` → `LANG` → CoreFoundation 首选语言；不支持的语言回退英语。`--lang system` 绕过已保存语言，`--set-lang system` 恢复自动检测。POSIX 配置沿用 Linux：绝对 `$XDG_CONFIG_HOME/nekokem/language`，否则为 `$HOME/.config/nekokem/language`，文件权限 `0600`。未设置 Locale 环境变量的 macOS 原生启动按 UTF-8 处理；显式 ASCII 设置仍回退英语。
 
@@ -41,7 +51,7 @@ Core 4.0 新增 NKEM v4 多接收方容器；NKEM v3、NKPR v1、密码算法、
 
 ---
 
-v4.1.0 targets native `arm64` M-series Macs with a CLI and Rust + Tauri 2 + Vue 3 + TypeScript GUI. Intel/Rosetta builds are not provided. Download the CLI, GUI ZIP or DMG from the [v4.1.0 Release](https://github.com/Shixiaoshi0417/NekoKEM/releases/tag/v4.1.0), verify the archive against the top-level `SHA256SUMS.txt`, then check its internal files.
+v4.2.0 targets native `arm64` M-series Macs with a CLI and Rust + Tauri 2 + Vue 3 + TypeScript GUI. Intel/Rosetta builds are not provided. Download the CLI, GUI ZIP or DMG from the [v4.2.0 Release](https://github.com/Shixiaoshi0417/NekoKEM/releases/tag/v4.2.0), verify the archive against the top-level `SHA256SUMS.txt`, then check its internal files.
 
 Builds set a macOS 11.0 deployment target; actual native CI uses GitHub's `macos-15` arm64 runner. The deployment target does not establish physical macOS 11.0 compatibility or identical performance across M-series generations. Both applications statically link pinned OpenSSL 4.0.3 with arm64 assembly acceleration retained. They require no Homebrew OpenSSL dylib but still depend on macOS system libraries/frameworks. The GUI uses system WKWebView, with no WebView2 Runtime or `WebView2Loader.dll` requirement.
 
@@ -70,9 +80,22 @@ shasum -a 256 -c SHA256SUMS
 
 The internal checksums detect damaged files; they do not replace trusted build provenance or a publisher signature. The CLI shares every Linux argument and the five-option menu; running without arguments enters that menu. `NekoKEM.command` opens the CLI in Terminal after changing the working directory to the extracted package. Interactive `keys/`, `encrypted/` and `plaintext/` directories therefore live there. Passwords are read from a terminal with echo disabled, or UTF-8 stdin, and never belong in command-line arguments.
 
-See the repository's [desktop/README.md](https://github.com/Shixiaoshi0417/NekoKEM/blob/main/desktop/README.md) for GUI builds. GUI packages are `NekoKEM-macos-arm64-GUI.zip` and `NekoKEM-macos-arm64-GUI.dmg`. The ZIP contains `NekoKEM.app`, documentation, licenses, checksums and build metadata. Tauri's original `NekoKEM_4.1.0_aarch64.dmg` is checked before export under the stable package name. The GUI provides native file dialogs, progress, cancellation, five languages and animations that respect reduced-motion preferences.
+See the repository's [desktop/README.md](https://github.com/Shixiaoshi0417/NekoKEM/blob/main/desktop/README.md) for GUI builds. GUI packages are `NekoKEM-macos-arm64-GUI.zip` and `NekoKEM-macos-arm64-GUI.dmg`. The ZIP contains `NekoKEM.app`, documentation, licenses, checksums and build metadata. Tauri's original `NekoKEM_4.2.0_aarch64.dmg` is checked before export under the stable package name. The GUI provides native file dialogs, progress, cancellation, five languages and animations that respect reduced-motion preferences.
 
 ## Language and file security
+
+
+New private-key passwords require valid UTF-8; existing-key passwords retain their
+original byte interpretation. Interactive decryption refuses an existing
+`plaintext/<name>`, including a destination created while the password is entered.
+Exit option 5 and EOF return the most recent operation's result (success before any
+operation). Displayed paths filter terminal controls, bidi controls and zero-width
+characters. CLI startup disables core dumps. Pasted keys use a safe `XDG_RUNTIME_DIR`,
+then the per-user temporary directory (`/var/folders/.../T`, outside Time Machine),
+then a `0700` private directory under `~/.nekokem-tmp`, without fsync for temporary
+plaintext; signal cleanup remains. SIGKILL can leave residues: remove only your own
+`nekokem-paste.*` after ensuring no process uses them. Encrypted PKCS#8 PEM paste is
+rejected immediately; select an NKPR file instead.
 
 Simplified Chinese, Traditional Chinese, English, Japanese and Korean are supported. CLI precedence is `--lang` → saved `--set-lang` preference → `LC_ALL` → `LC_MESSAGES` → `LANG` → CoreFoundation preferred language; unsupported languages fall back to English. `--lang system` bypasses the saved language and `--set-lang system` restores automatic detection. POSIX preferences follow Linux: absolute `$XDG_CONFIG_HOME/nekokem/language`, otherwise `$HOME/.config/nekokem/language`, with mode `0600`. Native macOS launches without locale environment variables use UTF-8; explicit ASCII settings still fall back to English.
 

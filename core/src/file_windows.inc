@@ -26,6 +26,9 @@ typedef struct {
     HANDLE output;
 } WinAtomic;
 
+static int win_inspect_key_artifacts(const char *path, HANDLE key, int remove_own,
+                                      const char *ignored_path);
+
 static int win_error(void)
 {
     DWORD error = GetLastError();
@@ -282,6 +285,7 @@ static FILE *win_stream(HANDLE handle, int flags, const char *mode)
     }
     FILE *stream = _fdopen(descriptor, mode);
     if (stream == NULL) (void)_close(descriptor);
+    else if (!file_disable_buffering(stream)) { (void)fclose(stream); stream = NULL; }
     return stream;
 }
 
@@ -316,13 +320,14 @@ static int win_read(const char *path, size_t maximum, unsigned char **buffer,
     *buffer = NULL;
     *length = 0;
     const char *stage = "open";
+    if (sensitive && !quiet) (void)win_inspect_key_artifacts(path, INVALID_HANDLE_VALUE, 0, NULL);
     HANDLE handle = win_open(path, GENERIC_READ, FILE_SHARE_READ, sensitive);
     if (handle == INVALID_HANDLE_VALUE) goto cleanup;
     stage = "stream";
     stream = win_stream(handle, _O_RDONLY, "rb");
     if (stream == NULL) goto cleanup;
     /* Unbuffered, so no CRT buffer keeps a copy of a key after fclose. */
-    if (sensitive && setvbuf(stream, NULL, _IONBF, 0) != 0) goto cleanup;
+    if (sensitive && !file_disable_buffering(stream)) goto cleanup;
     stage = "size";
     if (!file_get_size(stream, &size)) goto cleanup;
     stage = "size limit";
@@ -507,7 +512,8 @@ static int win_rename(HANDLE handle, const wchar_t *destination, int replace, in
 #ifndef NEKOKEM_TEST_FAULT_INJECTION
     (void)inject;
 #else
-    if (inject && test_fault_should_fail(FILE_TEST_FAULT_RENAME)) return 0;
+    if ((inject == 1 && test_fault_should_fail(FILE_TEST_FAULT_RENAME)) ||
+        (inject == 2 && test_restore_should_fail())) { errno = EIO; return 0; }
 #endif
     size_t length = wcslen(destination) * sizeof(wchar_t);
     /* FileNameLength excludes the NUL, but FileName must be terminated for
@@ -550,6 +556,158 @@ static int win_same(HANDLE a, HANDLE b)
     return GetFileInformationByHandle(a, &first) && GetFileInformationByHandle(b, &second) &&
            first.dwVolumeSerialNumber == second.dwVolumeSerialNumber &&
            first.nFileIndexHigh == second.nFileIndexHigh && first.nFileIndexLow == second.nFileIndexLow;
+}
+
+static int win_artifact_suffix(const wchar_t *suffix)
+{
+    do {
+        if (wcsncmp(suffix, L".bak.", 5) != 0 && wcsncmp(suffix, L".tmp.", 5) != 0) return 0;
+        suffix += 5;
+        for (size_t i = 0; i < 32; ++i) {
+            if (!((*suffix >= L'0' && *suffix <= L'9') || (*suffix >= L'a' && *suffix <= L'f'))) return 0;
+            ++suffix;
+        }
+    } while (*suffix != L'\0');
+    return 1;
+}
+
+static char *win_utf8_display(const wchar_t *wide)
+{
+    int size = WideCharToMultiByte(CP_UTF8, WC_ERR_INVALID_CHARS, wide, -1, NULL, 0, NULL, NULL);
+    char *result = size > 0 ? malloc((size_t)size) : NULL;
+    if (result != NULL && WideCharToMultiByte(CP_UTF8, WC_ERR_INVALID_CHARS, wide, -1,
+                                             result, size, NULL, NULL) != size) {
+        free(result);
+        result = NULL;
+    }
+    return result;
+}
+
+static int win_inspect_key_artifacts(const char *path, HANDLE key, int remove_own,
+                                      const char *ignored_path)
+{
+    WinPath checked;
+    HANDLE opened = INVALID_HANDLE_VALUE;
+    HANDLE search = INVALID_HANDLE_VALUE;
+    wchar_t *pattern = NULL;
+    wchar_t *candidate = NULL;
+    wchar_t *ignored = NULL;
+    BY_HANDLE_FILE_INFORMATION key_info;
+    WIN32_FIND_DATAW entry;
+    int have_key = 0;
+    int success = 1;
+
+    if (!win_path_open(&checked, path, 1)) return 0;
+    if (ignored_path != NULL) ignored = windows_utf8_path(ignored_path);
+    if (key == INVALID_HANDLE_VALUE) {
+        opened = CreateFileW(checked.full, FILE_READ_ATTRIBUTES | READ_CONTROL,
+                FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, NULL, OPEN_EXISTING,
+                FILE_FLAG_OPEN_REPARSE_POINT, NULL);
+        key = opened;
+    }
+    if (key != INVALID_HANDLE_VALUE && GetFileInformationByHandle(key, &key_info)) {
+        have_key = 1;
+        if (key_info.nNumberOfLinks > 1) {
+            fprintf(stderr, file_message("Key %s has multiple hard links; other copies may remain\n"),
+                    file_display_safe_path(path));
+        }
+    }
+    struct { ULONG flags; } case_info = {1};
+    int case_sensitive = !GetFileInformationByHandleEx(checked.parents[checked.count - 1],
+            (FILE_INFO_BY_HANDLE_CLASS)23, &case_info, sizeof(case_info)) || (case_info.flags & 1) != 0;
+    size_t length = wcslen(checked.full);
+    const wchar_t *name = wcsrchr(checked.full, L'\\');
+    if (name == NULL) { success = 0; goto cleanup; }
+    ++name;
+    size_t parent_length = (size_t)(name - checked.full);
+    size_t name_length = wcslen(name);
+    pattern = malloc((length + 3) * sizeof(*pattern));
+    candidate = malloc(32768 * sizeof(*candidate));
+    if (pattern == NULL || candidate == NULL) { success = 0; goto cleanup; }
+    memcpy(pattern, checked.full, length * sizeof(*pattern));
+    memcpy(pattern + length, L".*", 3 * sizeof(*pattern));
+    search = FindFirstFileW(pattern, &entry);
+    if (search == INVALID_HANDLE_VALUE) {
+        if (GetLastError() != ERROR_FILE_NOT_FOUND) success = 0;
+        goto cleanup;
+    }
+    do {
+        const wchar_t *ignored_name = ignored != NULL ? wcsrchr(ignored, L'\\') : NULL;
+        if (ignored_name != NULL &&
+            (case_sensitive ? wcscmp(entry.cFileName, ignored_name + 1)
+                            : _wcsicmp(entry.cFileName, ignored_name + 1)) == 0) continue;
+        if ((case_sensitive ? wcsncmp(entry.cFileName, name, name_length)
+                            : _wcsnicmp(entry.cFileName, name, name_length)) != 0 ||
+            !win_artifact_suffix(entry.cFileName + name_length)) continue;
+        size_t candidate_length = wcslen(entry.cFileName);
+        if (parent_length + candidate_length >= 32768) { success = 0; continue; }
+        memcpy(candidate, checked.full, parent_length * sizeof(*candidate));
+        memcpy(candidate + parent_length, entry.cFileName, (candidate_length + 1) * sizeof(*candidate));
+        char *display = win_utf8_display(candidate);
+        fprintf(stderr, file_message("Key transaction residue at %s; inspect it before cleanup or recovery\n"),
+                file_display_safe_path(display));
+        free(display);
+        HANDLE residue = CreateFileW(candidate, GENERIC_READ | DELETE | READ_CONTROL,
+                FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, NULL, OPEN_EXISTING,
+                FILE_FLAG_OPEN_REPARSE_POINT, NULL);
+        BY_HANDLE_FILE_INFORMATION info = {0};
+        unsigned char magic[27];
+        DWORD count = 0;
+        int valid = residue != INVALID_HANDLE_VALUE && win_regular(residue, 0) &&
+                    win_acl(residue, 1) && GetFileInformationByHandle(residue, &info);
+        int same = valid && have_key && info.dwVolumeSerialNumber == key_info.dwVolumeSerialNumber &&
+                   info.nFileIndexHigh == key_info.nFileIndexHigh && info.nFileIndexLow == key_info.nFileIndexLow;
+        /* A key generation stages its file before taking the pair lock, so a
+         * recent temporary file may still belong to another process. */
+        FILETIME now;
+        GetSystemTimeAsFileTime(&now);
+        ULONGLONG written = ((ULONGLONG)info.ftLastWriteTime.dwHighDateTime << 32) | info.ftLastWriteTime.dwLowDateTime;
+        ULONGLONG current = ((ULONGLONG)now.dwHighDateTime << 32) | now.dwLowDateTime;
+        int stale = valid && current > written && current - written > 600ULL * 10000000ULL;
+        int ours = valid && (same || (info.nNumberOfLinks == 1 &&
+            ((stale && wcsncmp(entry.cFileName + name_length, L".tmp.", 5) == 0) ||
+             (ReadFile(residue, magic, sizeof(magic), &count, NULL) &&
+              ((count >= 4 && memcmp(magic, "NKPR", 4) == 0) ||
+               (count == sizeof(magic) && memcmp(magic, "-----BEGIN PRIVATE KEY-----", sizeof(magic)) == 0))))));
+        if (remove_own && (!ours || !win_dispose(residue))) success = 0;
+        if (residue != INVALID_HANDLE_VALUE) CloseHandle(residue);
+    } while (FindNextFileW(search, &entry));
+    if (GetLastError() != ERROR_NO_MORE_FILES) success = 0;
+cleanup:
+    if (search != INVALID_HANDLE_VALUE) FindClose(search);
+    if (opened != INVALID_HANDLE_VALUE) CloseHandle(opened);
+    free(pattern);
+    free(candidate);
+    free(ignored);
+    win_path_close(&checked);
+    return success;
+}
+
+int file_delete_private_key_under_lock(const char *path)
+{
+    WinPath checked;
+    if (!win_path_open(&checked, path, 1)) return errno == ENOENT;
+    HANDLE key = CreateFileW(checked.full, GENERIC_READ | GENERIC_WRITE | DELETE | READ_CONTROL,
+            FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, NULL, OPEN_EXISTING,
+            FILE_FLAG_OPEN_REPARSE_POINT | FILE_FLAG_WRITE_THROUGH, NULL);
+    DWORD error = GetLastError();
+    int success = 0;
+    if (key == INVALID_HANDLE_VALUE && error != ERROR_FILE_NOT_FOUND) goto cleanup;
+    if (key != INVALID_HANDLE_VALUE && (!win_regular(key, 0) || !win_acl(key, 1))) goto cleanup;
+    int retained = !win_inspect_key_artifacts(path, key, 1, NULL);
+    /* Windows has no supported directory fsync. Flush the retained file
+     * handle and submit its synchronous delete disposition before closing. */
+    if (key != INVALID_HANDLE_VALUE && (!win_flush(key) || !win_dispose(key))) {
+        print_system_error("Cannot sync the private-key directory after deletion");
+        goto cleanup;
+    }
+    /* The key itself is gone: a retained residue is reported, not a failure. */
+    success = 1;
+    if (retained) fprintf(stderr, file_message("Some key transaction residues were retained; inspect them before cleanup\n"));
+cleanup:
+    if (key != INVALID_HANDLE_VALUE) CloseHandle(key);
+    win_path_close(&checked);
+    return success;
 }
 
 static HANDLE win_open_identity(const char *utf8)
@@ -629,6 +787,8 @@ static int win_commit_pair(AtomicFile *first, AtomicFile *second, int replace)
     char *backups[2] = {NULL, NULL};
     int published[2] = {0, 0};
     int preserve[2] = {0, 0};
+    int keep_new[2] = {0, 0};
+    int restored[2] = {0, 0};
     size_t count = second == NULL ? 1 : 2;
     int publishing = 0;
     int success = 0;
@@ -656,7 +816,19 @@ static int win_commit_pair(AtomicFile *first, AtomicFile *second, int replace)
             goto cleanup;
         } else {
             /* Never overwrite a reparse point, hard-linked or broadly accessible output. */
+            (void)win_inspect_key_artifacts(files[i]->final_path, old[i], 0, files[i]->temporary_path);
             if (!win_regular(old[i], 1)) goto cleanup;
+
+        }
+    }
+    if (count == 2 && old[0] != INVALID_HANDLE_VALUE && old[1] != INVALID_HANDLE_VALUE &&
+        win_same(old[0], old[1])) goto cleanup;
+    /* Cover late backups, publication, rollback and all recovery cleanup. */
+    AcquireSRWLockExclusive(&win_publication);
+    publishing = 1;
+    for (size_t i = 0; i < count; ++i) {
+        WinAtomic *state = files[i]->platform_state;
+        if (old[i] != INVALID_HANDLE_VALUE) {
             backups[i] = win_random_path(files[i]->final_path, ".bak.");
             wchar_t *backup = backups[i] != NULL ? windows_utf8_path(backups[i]) : NULL;
             if (backup == NULL) goto cleanup;
@@ -674,14 +846,7 @@ static int win_commit_pair(AtomicFile *first, AtomicFile *second, int replace)
             }
             if (!linked) { free(backups[i]); backups[i] = NULL; goto cleanup; }
         }
-    }
-    if (count == 2 && old[0] != INVALID_HANDLE_VALUE && old[1] != INVALID_HANDLE_VALUE &&
-        win_same(old[0], old[1])) goto cleanup;
-    /* Held until every output is published or disposed of again below. */
-    AcquireSRWLockExclusive(&win_publication);
-    publishing = 1;
-    for (size_t i = 0; i < count; ++i) {
-        WinAtomic *state = files[i]->platform_state;
+
         if (!win_keep(state->output) ||
             !win_rename(state->output, state->path.full, old[i] != INVALID_HANDLE_VALUE, 1)) goto cleanup;
         published[i] = 1;
@@ -702,27 +867,104 @@ static int win_commit_pair(AtomicFile *first, AtomicFile *second, int replace)
     success = 1;
 cleanup:
     if (!success) {
+        int rollback_failed = 0;
+
         for (size_t i = count; i-- > 0;) {
             if (!published[i]) continue;
             WinAtomic *state = files[i]->platform_state;
+            HANDLE named = win_open_identity(files[i]->final_path);
+            int ours = named != INVALID_HANDLE_VALUE && win_same(state->output, named);
+            if (named != INVALID_HANDLE_VALUE) CloseHandle(named);
+            if (!ours) {
+                preserve[i] = backups[i] != NULL;
+                continue;
+            }
             if (old[i] != INVALID_HANDLE_VALUE) {
-                /* Classic NTFS rename cannot replace a name with a retained
-                 * open handle. Move the new file back to its private staging
-                 * name first, keeping its identity pinned, then restore the
-                 * backup into the vacant destination without replacement. */
                 wchar_t *staging = windows_utf8_path(files[i]->temporary_path);
-                int moved = staging != NULL && win_rename(state->output, staging, 0, 0);
+                int moved = staging != NULL && win_rename(state->output, staging, 0, 2);
                 free(staging);
-                if (!moved || !win_rename(old[i], state->path.full, 0, 0)) {
-                    preserve[i] = 1;
+                if (!moved || !win_rename(old[i], state->path.full, 0, 2)) {
+                    rollback_failed = 1;
                     print_system_error("Cannot restore atomic output backup");
-                    fprintf(stderr,
-                            file_message("The previous contents of %s are kept as %s\n"),
-                            files[i]->final_path,
-                            backups[i] != NULL ? backups[i] : "");
+                    break;
                 }
-            } else {
-                (void)win_dispose(state->output);
+                restored[i] = 1;
+            } else if (!win_dispose(state->output)) {
+                rollback_failed = 1;
+                break;
+            }
+        }
+        if (rollback_failed) {
+            fprintf(stderr, file_message("Key-pair rollback stopped; retaining the new outputs where possible\n"));
+            for (size_t i = 0; i < count; ++i) {
+                WinAtomic *state = files[i]->platform_state;
+                if (state == NULL || state->output == INVALID_HANDLE_VALUE) continue;
+                preserve[i] = backups[i] != NULL;
+                int available = win_keep(state->output);
+                HANDLE named = CreateFileW(state->path.full, DELETE | FILE_READ_ATTRIBUTES,
+                        FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, NULL, OPEN_EXISTING,
+                        FILE_FLAG_OPEN_REPARSE_POINT, NULL);
+                DWORD named_error = GetLastError();
+                int ours = named != INVALID_HANDLE_VALUE && win_same(state->output, named);
+                int previous = named != INVALID_HANDLE_VALUE && old[i] != INVALID_HANDLE_VALUE && win_same(old[i], named);
+                int vacant = named == INVALID_HANDLE_VALUE && win_missing(named_error);
+                int ready = ours || vacant;
+                if (previous) {
+                    if (backups[i] == NULL) {
+                        backups[i] = win_random_path(files[i]->final_path, ".bak.");
+                        wchar_t *backup = backups[i] != NULL ? windows_utf8_path(backups[i]) : NULL;
+                        int linked = backup != NULL && CreateHardLinkW(backup, state->path.full, NULL);
+                        HANDLE saved = linked ? CreateFileW(backup, GENERIC_READ | DELETE | READ_CONTROL,
+                                FILE_SHARE_READ | FILE_SHARE_DELETE, NULL, OPEN_EXISTING,
+                                FILE_FLAG_OPEN_REPARSE_POINT, NULL) : INVALID_HANDLE_VALUE;
+                        free(backup);
+                        if (saved != INVALID_HANDLE_VALUE && win_same(old[i], saved)) {
+                            CloseHandle(old[i]);
+                            old[i] = saved;
+                            preserve[i] = 1;
+                        } else {
+                            if (saved != INVALID_HANDLE_VALUE) CloseHandle(saved);
+                            previous = 0;
+                            ready = 0;
+                            if (!linked) { free(backups[i]); backups[i] = NULL; }
+                        }
+                    }
+                    if (previous && restored[i]) {
+                        wchar_t *backup = backups[i] != NULL ? windows_utf8_path(backups[i]) : NULL;
+                        ready = backup != NULL && win_rename(old[i], backup, 0, 0);
+                        free(backup);
+                    } else if (previous) {
+                        /* The old backup handle pins the other link, so
+                         * deleting this named old entry keeps its backup. */
+                        ready = win_dispose(named);
+                    }
+                }
+                if (named != INVALID_HANDLE_VALUE) CloseHandle(named);
+                int retained = available && ready &&
+                    (ours || win_rename(state->output, state->path.full, 0, 0));
+                /* The output handle also keeps a failed-recovery staging
+                 * file available. Never let abort delete that recovery copy. */
+                keep_new[i] = win_keep(state->output);
+                if (!retained) {
+                    wchar_t actual[32768];
+                    DWORD actual_length = GetFinalPathNameByHandleW(state->output, actual, 32768, FILE_NAME_NORMALIZED);
+                    char *location = actual_length > 0 && actual_length < 32768 ? win_utf8_display(actual) : NULL;
+                    fprintf(stderr, file_message("New contents for %s are staged at %s\n"),
+                            file_display_safe_path(files[i]->final_path),
+                            file_display_safe_path(location != NULL ? location : files[i]->temporary_path));
+                    free(location);
+                }
+                fprintf(stderr, file_message("New output at %s: %s\n"),
+                        file_display_safe_path(files[i]->final_path),
+                        file_message(retained ? "retained" : "recovery required"));
+                if (retained) (void)win_flush(state->output);
+            }
+        }
+        for (size_t i = 0; i < count; ++i) {
+            if (preserve[i] && backups[i] != NULL) {
+                fprintf(stderr, file_message("The previous contents of %s are kept as %s\n"),
+                        file_display_safe_path(files[i]->final_path),
+                        file_display_safe_path(backups[i]));
             }
         }
     }
@@ -732,7 +974,7 @@ cleanup:
             if (!preserve[i]) (void)windows_delete_regular(backups[i]);
             free(backups[i]);
         }
-        if (success) {
+        if (success || keep_new[i]) {
             WinAtomic *state = files[i]->platform_state;
             CloseHandle(state->output);
             win_path_close(&state->path);
@@ -758,7 +1000,9 @@ int atomic_file_commit_pair_new(AtomicFile *first, AtomicFile *second)
 
 int atomic_file_commit(AtomicFile *file)
 {
-    return atomic_file_commit_pair(file, NULL);
+    return output_no_replace != 0
+        ? atomic_file_commit_pair_new(file, NULL)
+        : atomic_file_commit_pair(file, NULL);
 }
 
 void file_remove_temporary_outputs(void)

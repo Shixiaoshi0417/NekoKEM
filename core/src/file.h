@@ -65,6 +65,7 @@ typedef enum {
     FILE_TEST_FAULT_FSYNC,
     FILE_TEST_FAULT_FULLFSYNC,
     FILE_TEST_FAULT_RENAME,
+    FILE_TEST_FAULT_RESTORE,
     FILE_TEST_FAULT_NOREPLACE_UNAVAILABLE,
     FILE_TEST_FAULT_FOREIGN_OWNER
 } FileTestFault;
@@ -73,6 +74,8 @@ void file_test_fault_set(FileTestFault fault, unsigned int fail_on_call);
 void file_test_fault_reset(void);
 /* POSIX: link() fails like on Android until reset with 0; combines with faults. */
 void file_test_set_links_unavailable(int unavailable);
+/* Combine a rollback-restore failure with a publication/durability fault. */
+void file_test_set_restore_failure(unsigned int fail_on_call);
 /* POSIX: schedule a competing writer immediately before each publishing rename. */
 void file_test_set_before_noreplace_rename(void (*hook)(const char *));
 #endif
@@ -87,6 +90,8 @@ const char *file_message(const char *message)
 
 void print_openssl_error(const char *context);
 void print_system_error(const char *context);
+/* A bounded, thread-local display string with terminal controls removed. */
+const char *file_display_safe_path(const char *path);
 
 int ensure_directory(const char *path, mode_t mode);
 FILE *file_open_regular(const char *path);
@@ -97,6 +102,9 @@ int file_disable_buffering(FILE *stream);
 #ifndef _WIN32
 /* fsync-style result. Darwin also requires F_FULLFSYNC for regular files. */
 int file_sync_regular_fd(int descriptor);
+/* Cooperating key mutations share the persistent directory lock. */
+int file_pair_lock_acquire(const char *key_path);
+void file_pair_lock_release(int descriptor);
 /* Darwin private files/directories must not have an ACL that grants access. */
 int file_private_acl_is_safe(int descriptor);
 #endif
@@ -114,6 +122,8 @@ int file_read_sensitive(const char *path,
  * are not followed. Returns 0 only when the check itself fails.
  */
 int file_path_exists(const char *path, int *exists);
+/* Caller holds the directory pair lock on POSIX. */
+int file_delete_private_key_under_lock(const char *path);
 /*
  * Whether both paths name the same existing file, compared by identity
  * (device and inode, or volume and file index) rather than by spelling, so
@@ -134,6 +144,8 @@ int file_peek_regular(const char *path, unsigned char *prefix, size_t length);
 
 int atomic_file_open(AtomicFile *file, const char *final_path, mode_t mode);
 int atomic_file_prepare(AtomicFile *file);
+/* Scoped per-thread policy for single output commits; returns previous value. */
+int file_set_output_no_replace(int enabled);
 int atomic_file_commit(AtomicFile *file);
 int atomic_file_commit_pair(AtomicFile *first, AtomicFile *second);
 /* Like atomic_file_commit_pair, but never replaces an existing file. */
