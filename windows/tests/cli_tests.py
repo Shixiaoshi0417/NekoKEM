@@ -109,7 +109,7 @@ class Tests(unittest.TestCase):
             kernel.CloseHandle(server)
 
     def test_version_help_languages_and_unicode_paths(self):
-        self.assertEqual(self.run_cli('--version').stdout,b'NekoKEM 4.1.0\n')
+        self.assertEqual(self.run_cli('--version').stdout,b'NekoKEM 4.2.0\n')
         for lang,text in [('en','Usage:'),('zh-CN','用法'),('zh-TW','用法'),('ja','使用方法'),('ko','사용법')]:
             p = self.run_cli('--lang',lang,'--help')
             self.assertIn(text,p.stdout.decode('utf-8'))

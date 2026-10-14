@@ -1,5 +1,14 @@
 # Changelog
 
+## 4.2.0
+
+- 全平台 4.2.0，Core 4.0，Android versionCode 11；沿用既有签名，可覆盖升级。
+- 改进密钥并发、私钥配对验证、文件恢复、显示过滤、后台名称查询与口令生命周期；禁止备份和设备迁移。
+- 发布构建与签名分离，并验证同提交 CI、包内元数据、签名和构建来源证明。
+- 格式与密码参数不变。完整双语说明见 [v4.2.0](../release/v4.2.0.md)。
+
+Android 4.2.0 / versionCode 11 retains the existing signer. Key concurrency, key-pair validation, file recovery, display filtering, background filename queries and password handling are improved; backups and device transfers are excluded. Release builds separate signing and verify CI, metadata, signatures and provenance. Core 4.0, formats and cryptographic parameters are unchanged. See the [bilingual notes](../release/v4.2.0.md).
+
 ## 4.1.0
 
 - 完整中文在上、英文在下的发布说明见 [v4.1.0](../release/v4.1.0.md)。

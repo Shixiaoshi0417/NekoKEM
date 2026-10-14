@@ -70,7 +70,7 @@ class VersionChecks(unittest.TestCase):
 
     def test_version_code_drift_is_detected(self):
         path = self.root / '.github/scripts/verify_android_release.py'
-        path.write_text(path.read_text().replace('VERSION_CODE = 10', 'VERSION_CODE = 11'))
+        path.write_text(path.read_text().replace('VERSION_CODE = ', 'VERSION_CODE = 9'))
         self.assertTrue(check_versions.check_versions(self.root)[1])
 
     def test_missing_signing_declaration_is_detected(self):

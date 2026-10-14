@@ -41,7 +41,7 @@ if [ -n "${NEKOKEM_TEST_RUNNER:-}" ]; then
         sha256sum -c SHA256SUMS
     ) >/dev/null
     test "$("$runner_path" "$original_package/nekokem" --version)" = \
-        "NekoKEM 4.1.0"
+        "NekoKEM 4.2.0"
 
     cross_binary="$test_root/nekokem-cross-binary"
     cp "$original_package/nekokem" "$cross_binary"
@@ -98,11 +98,11 @@ done
 printf '%s\n' "$url" >> "$NEKOKEM_TEST_DOWNLOADS"
 if [ "$url" = "https://github.com/Shixiaoshi0417/NekoKEM/releases/latest" ]; then
     [ "$write_out" = '%{url_effective}' ] || exit 1
-    printf '%s' "${NEKOKEM_TEST_LATEST:-https://github.com/Shixiaoshi0417/NekoKEM/releases/tag/v4.1.0}"
+    printf '%s' "${NEKOKEM_TEST_LATEST:-https://github.com/Shixiaoshi0417/NekoKEM/releases/tag/v4.2.0}"
     exit 0
 fi
-archive_url="https://github.com/Shixiaoshi0417/NekoKEM/releases/download/v4.1.0/NekoKEM-linux-${NEKOKEM_TEST_ARCH}.tar.gz"
-sums_url="https://github.com/Shixiaoshi0417/NekoKEM/releases/download/v4.1.0/SHA256SUMS.txt"
+archive_url="https://github.com/Shixiaoshi0417/NekoKEM/releases/download/v4.2.0/NekoKEM-linux-${NEKOKEM_TEST_ARCH}.tar.gz"
+sums_url="https://github.com/Shixiaoshi0417/NekoKEM/releases/download/v4.2.0/SHA256SUMS.txt"
 case "$url" in
     "$archive_url") cp "$NEKOKEM_TEST_ARCHIVE" "$output" ;;
     "$sums_url") cp "$NEKOKEM_TEST_SUMS" "$output" ;;
@@ -126,13 +126,13 @@ NEKOKEM_TEST_ARCHIVE="$archive_path" \
 NEKOKEM_TEST_SUMS="$release_sums_path" \
 NEKOKEM_INSTALL_DIR="$install_root" \
     sh "$repo_root/linux/install.sh" > "$test_root/success.log"
-test "$("$install_root/nekokem" --version)" = "NekoKEM 4.1.0"
-grep -F "Installed NekoKEM 4.1.0 to $install_root/nekokem" \
+test "$("$install_root/nekokem" --version)" = "NekoKEM 4.2.0"
+grep -F "Installed NekoKEM 4.2.0 to $install_root/nekokem" \
     "$test_root/success.log" >/dev/null
 printf '%s\n' \
     'https://github.com/Shixiaoshi0417/NekoKEM/releases/latest' \
-    "https://github.com/Shixiaoshi0417/NekoKEM/releases/download/v4.1.0/NekoKEM-linux-$release_arch.tar.gz" \
-    'https://github.com/Shixiaoshi0417/NekoKEM/releases/download/v4.1.0/SHA256SUMS.txt' \
+    "https://github.com/Shixiaoshi0417/NekoKEM/releases/download/v4.2.0/NekoKEM-linux-$release_arch.tar.gz" \
+    'https://github.com/Shixiaoshi0417/NekoKEM/releases/download/v4.2.0/SHA256SUMS.txt' \
     > "$test_root/expected-downloads.log"
 cmp "$test_root/expected-downloads.log" "$NEKOKEM_TEST_DOWNLOADS"
 
