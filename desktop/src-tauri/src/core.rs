@@ -652,15 +652,56 @@ mod tests {
         let mut stage=Staged::new("public test bytes").unwrap();
         assert!(std::path::Path::new(stage.path().unwrap().to_str().unwrap()).starts_with(&runtime));assert!(stage.close());
         fs::set_permissions(&runtime,fs::Permissions::from_mode(0o755)).unwrap();
+        // Darwin uses its per-user temporary directory before the home fallback.
+        // Query the OS independently; never chmod this shared per-user directory.
+        #[cfg(target_os="macos")]
+        let fallback={
+            let output=std::process::Command::new("/usr/bin/getconf")
+                .arg("DARWIN_USER_TEMP_DIR").output().unwrap();
+            assert!(output.status.success());
+            let directory=PathBuf::from(String::from_utf8(output.stdout).unwrap().trim_end());
+            assert!(directory.is_absolute() && directory.is_dir());
+            let name=path(directory.to_str().unwrap().trim_end_matches('/')).unwrap();
+            assert_eq!(unsafe{desktop_private_directory(name.as_ptr())},1);
+            directory
+        };
+        #[cfg(not(target_os="macos"))]
         let fallback=home.0.join(".nekokem-tmp");
+        let check_fallback=|stage:&Staged| {
+            let file=PathBuf::from(stage.path().unwrap().to_str().unwrap());
+            let directory=file.parent().unwrap();
+            // /var and /private/var can name the same macOS directory.
+            assert_eq!(directory.parent().unwrap().canonicalize().unwrap(),fallback.canonicalize().unwrap());
+            assert_eq!(fs::symlink_metadata(&file).unwrap().permissions().mode() & 0o777,0o600);
+            let name=path(directory.to_str().unwrap()).unwrap();
+            assert_eq!(unsafe{desktop_private_directory(name.as_ptr())},1);
+        };
         let mut stage=Staged::new("public test bytes").unwrap();
-        assert!(std::path::Path::new(stage.path().unwrap().to_str().unwrap()).starts_with(&fallback));assert!(stage.close());
+        check_fallback(&stage);assert!(stage.close());
         fs::set_permissions(&runtime,fs::Permissions::from_mode(0o700)).unwrap();
         let alias=home.0.join("runtime-link");symlink(&runtime,&alias).unwrap();std::env::set_var("XDG_RUNTIME_DIR",alias);
         let mut stage=Staged::new("public test bytes").unwrap();
-        assert!(std::path::Path::new(stage.path().unwrap().to_str().unwrap()).starts_with(&fallback));assert!(stage.close());
-        fs::set_permissions(fallback,fs::Permissions::from_mode(0o755)).unwrap();
-        assert!(Staged::new("public test bytes").is_err());
+        check_fallback(&stage);assert!(stage.close());
+        #[cfg(not(target_os="macos"))]
+        {
+            fs::set_permissions(&fallback,fs::Permissions::from_mode(0o755)).unwrap();
+            assert!(Staged::new("public test bytes").is_err());
+        }
+        #[cfg(target_os="macos")]
+        {
+            // 0700 does not override an allowing Darwin ACL. Only alter our fixture.
+            std::env::set_var("XDG_RUNTIME_DIR",&runtime);
+            assert!(std::process::Command::new("/bin/chmod")
+                .args(["+a","everyone allow read"]).arg(&runtime).status().unwrap().success());
+            assert_eq!(fs::metadata(&runtime).unwrap().permissions().mode() & 0o777,0o700);
+            let mut stage=Staged::new("public test bytes").unwrap();
+            check_fallback(&stage);assert!(stage.close());
+            assert!(std::process::Command::new("/bin/chmod")
+                .arg("-N").arg(&runtime).status().unwrap().success());
+            let mut stage=Staged::new("public test bytes").unwrap();
+            assert!(std::path::Path::new(stage.path().unwrap().to_str().unwrap()).starts_with(&runtime));
+            assert!(stage.close());
+        }
     }
 
     #[cfg(unix)]
