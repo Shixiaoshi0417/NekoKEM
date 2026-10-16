@@ -19,8 +19,9 @@ README 图标仅使用专用圆角展示图，Android launcher 继续使用现�
 
 ## 工具链
 
-- Kotlin、Jetpack Compose、Material 3 Expressive（`material3` 1.5.0-alpha18）、Gradle Kotlin DSL
-- Android SDK 35（`minSdk 26`、`targetSdk 35`）
+- Kotlin 2.4.21（AGP 内置 Kotlin）、Jetpack Compose 1.12、Material 3 Expressive（`material3` 1.5.0-beta01）
+- Android Gradle Plugin 9.4.1、Gradle 9.6.1（Kotlin DSL）、JDK 17
+- Android SDK Platform 37.0、Build Tools 36.0.0（`compileSdk 37`、`minSdk 26`、`targetSdk 35`）
 - Android NDK r28c（`28.2.13676358`）、CMake、C17
 - 仅 `arm64-v8a`
 - Android arm64 OpenSSL 4.0.3 静态 `libcrypto.a`
@@ -196,10 +197,9 @@ JNI 只做路径、字符串、字节数组、回调和返回值转换；不解�
 
 界面采用 Material 3 Expressive：表现力配色与弹簧动效、按下时圆角形变的按钮、
 加密与解密等成对操作的按钮组（标签放不下一行时改为整宽纵向排列）、
-删除操作使用错误色，进度对话框显示波浪进度条与加载指示器，抽屉切换页面时淡入并轻微放大。
-`material3` 1.5.0-alpha18 是仍支持 compileSdk 35 与 AGP 8.9 的最后一个版本；
-其中 `MaterialExpressiveTheme`、`expressiveLightColorScheme` 和波浪进度条仅标注为库内 API，
-1.5.0-beta01 起以相同签名公开，代码在调用处注明并抑制 lint 的 RestrictedApi 提示。
+删除操作使用错误色，进度对话框显示波浪进度条与加载指示器，切换页面时新页面淡入。
+`material3` 1.5.0-beta01 需要 `compileSdk 37` 与 AGP 9.1 以上；`targetSdk` 仍为 35，
+运行时行为不随编译 SDK 改变。
 
 ## 构建
 

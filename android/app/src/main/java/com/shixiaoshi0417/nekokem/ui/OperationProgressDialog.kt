@@ -1,6 +1,5 @@
 package com.shixiaoshi0417.nekokem.ui
 
-import android.annotation.SuppressLint
 import android.content.Context
 import androidx.annotation.StringRes
 import androidx.compose.foundation.rememberScrollState
@@ -9,6 +8,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.LinearWavyProgressIndicator
 import androidx.compose.material3.LoadingIndicator
 import androidx.compose.material3.Text
@@ -21,9 +21,7 @@ import com.shixiaoshi0417.nekokem.R
 import com.shixiaoshi0417.nekokem.progress.OperationProgressSnapshot
 import java.text.NumberFormat
 
-// LinearWavyProgressIndicator is marked for its library group only in
-// material3 1.5.0-alpha18 and public, unchanged, from 1.5.0-beta01.
-@SuppressLint("RestrictedApi")
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 fun OperationProgressDialog(
     @StringRes operationResource: Int,

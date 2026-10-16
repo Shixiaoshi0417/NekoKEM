@@ -728,6 +728,7 @@ private fun LanguageSetting(running: Boolean, value: String, onClick: () -> Unit
     }
 }
 
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 private fun AboutPage(state: NekoKEMUiState) {
     val unavailable = stringResource(R.string.not_available)

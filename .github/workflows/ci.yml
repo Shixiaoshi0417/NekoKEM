@@ -189,9 +189,11 @@ jobs:
             echo "sdkmanager not found under $sdk_root/cmdline-tools" >&2
             exit 1
           fi
+          # build-tools 35.0.0 is the pinned signer for the throwaway signing check.
           "$sdkmanager_path" \
             "platform-tools" \
-            "platforms;android-35" \
+            "platforms;android-37.0" \
+            "build-tools;36.0.0" \
             "build-tools;35.0.0" \
             "ndk;28.2.13676358" \
             "cmake;3.22.1"
@@ -274,8 +276,8 @@ jobs:
           fi
           "$sdkmanager_path" \
             "platform-tools" \
-            "platforms;android-35" \
-            "build-tools;35.0.0" \
+            "platforms;android-37.0" \
+            "build-tools;36.0.0" \
             "ndk;28.2.13676358" \
             "cmake;3.22.1"
           printf 'ANDROID_SDK_ROOT=%s\n' "$sdk_root" >> "$GITHUB_ENV"

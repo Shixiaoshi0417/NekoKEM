@@ -1,6 +1,5 @@
 plugins {
     id("com.android.application")
-    id("org.jetbrains.kotlin.android")
     id("org.jetbrains.kotlin.plugin.compose")
 }
 
@@ -40,7 +39,7 @@ if (emulatorTest && releaseTaskRequested) {
 
 android {
     namespace = "com.shixiaoshi0417.nekokem"
-    compileSdk = 35
+    compileSdk = 37
     ndkVersion = "28.2.13676358"
 
     defaultConfig {
@@ -139,12 +138,10 @@ dependencies {
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.robolectric:robolectric:4.14.1")
 
-    implementation(platform("androidx.compose:compose-bom:2025.04.01"))
+    implementation(platform("androidx.compose:compose-bom:2026.09.00"))
     implementation("androidx.activity:activity-compose:1.10.1")
-    // Material 3 Expressive components; this release raises Compose UI and
-    // foundation to 1.11.0-beta02 above the BOM. Newer 1.5 releases need
-    // compileSdk 37 and AGP 9.1; this one still builds with compileSdk 35 and AGP 8.9.
-    implementation("androidx.compose.material3:material3:1.5.0-alpha18")
+    // Material 3 Expressive components; the BOM still pins material3 1.4.
+    implementation("androidx.compose.material3:material3:1.5.0-beta01")
     implementation("androidx.compose.ui:ui")
     implementation("androidx.compose.ui:ui-tooling-preview")
 
