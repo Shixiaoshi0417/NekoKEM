@@ -18,7 +18,6 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -51,6 +50,7 @@ import com.shixiaoshi0417.nekokem.keys.TemporaryPublicKey
 import com.shixiaoshi0417.nekokem.nativecore.NativeBridge
 import com.shixiaoshi0417.nekokem.progress.OperationProgressSnapshot
 import com.shixiaoshi0417.nekokem.progress.OperationProgressTracker
+import com.shixiaoshi0417.nekokem.ui.DialogButton
 import com.shixiaoshi0417.nekokem.ui.GeneratePasswordDialog
 import com.shixiaoshi0417.nekokem.ui.FileInputState
 import com.shixiaoshi0417.nekokem.ui.InputSelectionEvent
@@ -1186,7 +1186,8 @@ private fun NekoKEMRoute(
                 )
             },
             confirmButton = {
-                TextButton(
+                DialogButton(
+                    text = stringResource(R.string.action_use_key),
                     onClick = {
                         publicKeyAwaitingConfirmation = null
                         val previous = temporaryPublicKey
@@ -1200,19 +1201,16 @@ private fun NekoKEMRoute(
                             R.string.snackbar_temporary_public_key_selected,
                         )
                     },
-                ) {
-                    Text(stringResource(R.string.action_use_key))
-                }
+                )
             },
             dismissButton = {
-                TextButton(
+                DialogButton(
+                    text = stringResource(R.string.action_cancel),
                     onClick = {
                         publicKeyAwaitingConfirmation = null
                         scope.launch { pageWork { fileWorkflow.discardTemporaryPublicKey(candidate) } }
                     },
-                ) {
-                    Text(stringResource(R.string.action_cancel))
-                }
+                )
             },
         )
     }
@@ -1295,7 +1293,8 @@ private fun NekoKEMRoute(
             title = { Text(stringResource(target.titleResource)) },
             text = { Text(stringResource(target.messageResource)) },
             confirmButton = {
-                TextButton(
+                DialogButton(
+                    text = stringResource(R.string.action_delete),
                     onClick = {
                         pendingDelete = null
                         val fileName = when (target) {
@@ -1331,14 +1330,10 @@ private fun NekoKEMRoute(
                             }
                         }
                     },
-                ) {
-                    Text(stringResource(R.string.action_delete))
-                }
+                )
             },
             dismissButton = {
-                TextButton(onClick = { pendingDelete = null }) {
-                    Text(stringResource(R.string.action_cancel))
-                }
+                DialogButton(stringResource(R.string.action_cancel), onClick = { pendingDelete = null })
             },
         )
     }
@@ -1350,20 +1345,17 @@ private fun NekoKEMRoute(
             title = { Text(stringResource(R.string.replace_keypair_title)) },
             text = { Text(stringResource(R.string.replace_keypair_message)) },
             confirmButton = {
-                TextButton(
+                DialogButton(
+                    text = stringResource(R.string.action_replace),
                     onClick = {
                         confirmKeypairReplacement = false
                         replaceKeypair = true
                         showGeneratePasswordDialog = true
                     },
-                ) {
-                    Text(stringResource(R.string.action_replace))
-                }
+                )
             },
             dismissButton = {
-                TextButton(onClick = { confirmKeypairReplacement = false }) {
-                    Text(stringResource(R.string.action_cancel))
-                }
+                DialogButton(stringResource(R.string.action_cancel), onClick = { confirmKeypairReplacement = false })
             },
         )
     }
@@ -1391,7 +1383,8 @@ private fun NekoKEMRoute(
                 }
             },
             confirmButton = {
-                TextButton(
+                DialogButton(
+                    text = stringResource(R.string.action_replace),
                     onClick = {
                         confirmPublicKeyReplacement = false
                         val uri = pendingPublicImportUri
@@ -1402,14 +1395,10 @@ private fun NekoKEMRoute(
                             importPublicKeyFrom(uri, null)
                         }
                     },
-                ) {
-                    Text(stringResource(R.string.action_replace))
-                }
+                )
             },
             dismissButton = {
-                TextButton(onClick = cancelPublicImport) {
-                    Text(stringResource(R.string.action_cancel))
-                }
+                DialogButton(stringResource(R.string.action_cancel), onClick = cancelPublicImport)
             },
         )
     }
@@ -1423,26 +1412,24 @@ private fun NekoKEMRoute(
             title = { Text(stringResource(R.string.replace_private_key_title)) },
             text = { Text(stringResource(R.string.replace_private_key_message)) },
             confirmButton = {
-                TextButton(
+                DialogButton(
+                    text = stringResource(R.string.action_replace),
                     onClick = {
                         confirmPrivateKeyReplacement = false
                         if (pendingPrivateImportUri != null) {
                             passwordPrompt = PasswordPrompt.IMPORT_PRIVATE_KEY
                         }
                     },
-                ) {
-                    Text(stringResource(R.string.action_replace))
-                }
+                )
             },
             dismissButton = {
-                TextButton(
+                DialogButton(
+                    text = stringResource(R.string.action_cancel),
                     onClick = {
                         confirmPrivateKeyReplacement = false
                         pendingPrivateImportUri = null
                     },
-                ) {
-                    Text(stringResource(R.string.action_cancel))
-                }
+                )
             },
         )
     }
@@ -1484,9 +1471,7 @@ private fun NekoKEMRoute(
             title = { Text(stringResource(R.string.recovery_backups_title)) },
             text = { Text(stringResource(R.string.recovery_backups_message, recoveryBackupCount)) },
             confirmButton = {
-                TextButton(onClick = { recoveryWarningDismissed = true }) {
-                    Text(stringResource(R.string.action_close))
-                }
+                DialogButton(stringResource(R.string.action_close), onClick = { recoveryWarningDismissed = true })
             },
         )
     }
