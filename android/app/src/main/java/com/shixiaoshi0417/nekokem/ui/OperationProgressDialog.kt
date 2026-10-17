@@ -8,9 +8,10 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
+import androidx.compose.material3.LinearWavyProgressIndicator
+import androidx.compose.material3.LoadingIndicator
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -20,6 +21,7 @@ import com.shixiaoshi0417.nekokem.R
 import com.shixiaoshi0417.nekokem.progress.OperationProgressSnapshot
 import java.text.NumberFormat
 
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 fun OperationProgressDialog(
     @StringRes operationResource: Int,
@@ -35,16 +37,17 @@ fun OperationProgressDialog(
 
     AlertDialog(
         onDismissRequest = {},
+        icon = { LoadingIndicator() },
         title = { Text(stringResource(R.string.progress_title, operation)) },
         text = {
             Column(Modifier.verticalScroll(rememberScrollState())) {
                 if (progress.totalBytes > 0L) {
-                    LinearProgressIndicator(
+                    LinearWavyProgressIndicator(
                         progress = { progress.fraction },
                         modifier = Modifier.fillMaxWidth(),
                     )
                 } else {
-                    LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+                    LinearWavyProgressIndicator(modifier = Modifier.fillMaxWidth())
                 }
                 Text(
                     modifier = Modifier.padding(top = 12.dp),
@@ -72,12 +75,11 @@ fun OperationProgressDialog(
             }
         },
         confirmButton = {
-            TextButton(
+            DialogButton(
+                text = stringResource(R.string.action_cancel),
                 enabled = !cancelRequested,
                 onClick = onCancel,
-            ) {
-                Text(stringResource(R.string.action_cancel))
-            }
+            )
         },
     )
 }

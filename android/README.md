@@ -1,4 +1,4 @@
-# NekoKEM Android v4.2.0
+# NekoKEM Android v4.3.0
 
 <p align="center">
   <img src="../docs/icon-rounded.png" alt="NekoKEM App icon" width="160">
@@ -9,18 +9,19 @@ JNI 不实现或解析 X448、ML-KEM-1024、HKDF、AES-GCM、NKEM 或 NKPR。
 Core 处理 NKEM v3 单接收方与 NKEM v4 多接收方文件容器；NKEM v1/v2 已不再支持。NKPR 是独立的
 私钥容器，仍由 Core 处理且格式不变。
 
-当前正式 App 版本为 `4.2.0`，Core 版本为 `4.0`，Android application ID
+当前正式 App 版本为 `4.3.0`，Core 版本为 `4.0`，Android application ID
 与 namespace 均为 `com.shixiaoshi0417.nekokem`。协议容器版本为
 **NKEM v3**（单接收方）和 **NKEM v4**（多接收方），与 App 版本号相互独立；NKPR 格式保持不变。
 
-v4.2.0 沿用 v3.2.0 发布签名，可直接覆盖升级。升级前建议导出公钥和加密 NKPR 私钥，验证备份并保存私钥密码。仅旧签名 v3.1.x 用户需要在完成备份后卸载重装；卸载会删除内部密钥。详见 [v4.2.0 中英双语更新日志](../release/v4.2.0.md)，历史签名迁移记录保留在 [v3.2.0](../release/v3.2.0.md)。
+v4.3.0 沿用 v3.2.0 发布签名，可直接覆盖升级。升级前建议导出公钥和加密 NKPR 私钥，验证备份并保存私钥密码。仅旧签名 v3.1.x 用户需要在完成备份后卸载重装；卸载会删除内部密钥。详见 [v4.3.0 中英双语更新日志](../release/v4.3.0.md)，历史签名迁移记录保留在 [v3.2.0](../release/v3.2.0.md)。
 
 README 图标仅使用专用圆角展示图，Android launcher 继续使用现有方形白底图案。应用是未经独立专业安全审计的实验性工具，不应用于保护重要或敏感数据。
 
 ## 工具链
 
-- Kotlin、Jetpack Compose、Material 3、Gradle Kotlin DSL
-- Android SDK 35（`minSdk 26`、`targetSdk 35`）
+- Kotlin 2.4.21（AGP 内置 Kotlin）、Jetpack Compose 1.12、Material 3 Expressive（`material3` 1.5.0-beta01）
+- Android Gradle Plugin 9.4.1、Gradle 9.6.1（Kotlin DSL）、JDK 17
+- Android SDK Platform 37.0、Build Tools 36.0.0（`compileSdk 37`、`minSdk 26`、`targetSdk 35`）
 - Android NDK r28c（`28.2.13676358`）、CMake、C17
 - 仅 `arm64-v8a`
 - Android arm64 OpenSSL 4.0.3 静态 `libcrypto.a`
@@ -193,6 +194,12 @@ JNI 只做路径、字符串、字节数组、回调和返回值转换；不解�
 密钥管理区提供生成、一次性口令检查、密钥导入导出和私钥删除。文件区提供
 选择、加密和解密。App 重启后，私钥状态和公钥指纹直接从 `filesDir` 与 Core
 重新读取，不依赖进程内缓存。
+
+界面采用 Material 3 Expressive：表现力配色与弹簧动效、按下时圆角形变的按钮、
+加密与解密等成对操作的按钮组（标签放不下一行时改为整宽纵向排列）、
+删除操作使用错误色，进度对话框显示波浪进度条与加载指示器，切换页面时新页面淡入。
+`material3` 1.5.0-beta01 需要 `compileSdk 37` 与 AGP 9.1 以上；`targetSdk` 仍为 35，
+运行时行为不随编译 SDK 改变。
 
 ## 构建
 

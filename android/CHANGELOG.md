@@ -1,5 +1,14 @@
 # Changelog
 
+## 4.3.0
+
+- 全平台 4.3.0，Core 4.0，Android versionCode 12；沿用既有签名，可覆盖升级。
+- Android 界面升级为 Material 3 Expressive：表现力配色与动效、圆角形变按钮、成对操作按钮组、删除错误色、波浪进度条与加载指示器；文案、流程与密钥/文件处理不变。
+- 构建升级为 material3 1.5.0-beta01、Compose 1.12.1、AGP 9.4.1、Gradle 9.6.1、Kotlin 2.4.21、compileSdk 37；targetSdk 35、minSdk 26 不变。
+- 格式与密码参数不变。完整双语说明见 [v4.3.0](../release/v4.3.0.md)。
+
+Android 4.3.0 / versionCode 12 retains the existing signer. The interface moves to Material 3 Expressive: expressive colors and motion, corner-morphing buttons, button groups for paired actions, error colors for deletions, and a wavy progress bar with a loading indicator; strings, flows and key/file handling are unchanged. The build moves to material3 1.5.0-beta01, Compose 1.12.1, AGP 9.4.1, Gradle 9.6.1, Kotlin 2.4.21 and compileSdk 37, with targetSdk 35 and minSdk 26 unchanged. Core 4.0, formats and cryptographic parameters are unchanged. See the [bilingual notes](../release/v4.3.0.md).
+
 ## 4.2.0
 
 - 全平台 4.2.0，Core 4.0，Android versionCode 11；沿用既有签名，可覆盖升级。

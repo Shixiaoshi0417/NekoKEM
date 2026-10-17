@@ -73,7 +73,7 @@ jobs:
           sdk_root="${ANDROID_SDK_ROOT:-${ANDROID_HOME:-/usr/local/lib/android/sdk}}"
           sdkmanager_path=$(find "$sdk_root/cmdline-tools" -maxdepth 3 -type f -name sdkmanager -print -quit)
           test -n "$sdkmanager_path"
-          "$sdkmanager_path" "platform-tools" "platforms;android-35" "build-tools;35.0.0" "ndk;28.2.13676358" "cmake;3.22.1"
+          "$sdkmanager_path" "platform-tools" "platforms;android-37.0" "build-tools;36.0.0" "ndk;28.2.13676358" "cmake;3.22.1"
           printf 'ANDROID_SDK_ROOT=%s\nANDROID_NDK_ROOT=%s/ndk/28.2.13676358\n' "$sdk_root" "$sdk_root" >> "$GITHUB_ENV"
       - uses: gradle/actions/setup-gradle@ed408507eac070d1f99cc633dbcf757c94c7933a # v4
         with:
@@ -320,7 +320,7 @@ jobs:
         run: |
           python3 desktop/scripts/package-macos-gui.py \
             --bundle-dir desktop/src-tauri/target/aarch64-apple-darwin/release/bundle \
-            --output "$RUNNER_TEMP/macos-gui" --version 4.2.0 --source-sha "$GITHUB_SHA"
+            --output "$RUNNER_TEMP/macos-gui" --version 4.3.0 --source-sha "$GITHUB_SHA"
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: NekoKEM-macos-arm64

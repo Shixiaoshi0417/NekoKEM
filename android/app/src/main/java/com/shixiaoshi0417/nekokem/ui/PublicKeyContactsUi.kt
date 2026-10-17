@@ -1,7 +1,10 @@
 package com.shixiaoshi0417.nekokem.ui
 
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -13,16 +16,16 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.selection.toggleable
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
 import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -55,21 +58,30 @@ fun PublicKeyContactsPage(
             Text(stringResource(R.string.contact_description), style = MaterialTheme.typography.bodyMedium)
         }
         item {
-            Button(
+            ExpressiveButton(
+                text = stringResource(R.string.action_import_contact),
                 onClick = actions.onImportContact,
                 enabled = state.nativeConnected && !state.running,
+                size = ActionSize.MEDIUM,
                 modifier = Modifier.fillMaxWidth(),
-            ) { Text(stringResource(R.string.action_import_contact)) }
+            )
         }
         item { ContactStorageStatus(state.contactsState) }
         if (selected.isNotEmpty()) {
             item(key = "selection") {
                 // Several recipients share one NKEM v4 file; nothing changes until this is pressed.
-                Card(Modifier.fillMaxWidth()) {
-                    Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Card(
+                    modifier = Modifier.fillMaxWidth().animateItem(),
+                    shape = MaterialTheme.shapes.extraLarge,
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.primaryContainer,
+                        contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                    ),
+                ) {
+                    Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         Text(
                             stringResource(R.string.contact_selection_count, selected.size),
-                            style = MaterialTheme.typography.titleMedium,
+                            style = MaterialTheme.typography.titleLargeEmphasized,
                         )
                         if (atLimit) {
                             Text(
@@ -78,14 +90,19 @@ fun PublicKeyContactsPage(
                             )
                         }
                         Text(stringResource(R.string.contact_recipients_hint), style = MaterialTheme.typography.bodySmall)
-                        Button(
+                        ExpressiveButton(
+                            text = stringResource(R.string.action_encrypt_for_selected),
                             onClick = onEncryptSelected,
                             enabled = state.nativeConnected && !state.running,
-                            modifier = Modifier.fillMaxWidth(),
-                        ) { Text(stringResource(R.string.action_encrypt_for_selected)) }
-                        TextButton(onClick = actions.onClearContactSelection, enabled = !state.running) {
-                            Text(stringResource(R.string.action_clear_selection))
-                        }
+                            size = ActionSize.MEDIUM,
+                            modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
+                        )
+                        ExpressiveButton(
+                            text = stringResource(R.string.action_clear_selection),
+                            onClick = actions.onClearContactSelection,
+                            enabled = !state.running,
+                            emphasis = ActionEmphasis.TEXT,
+                        )
                     }
                 }
             }
@@ -93,7 +110,20 @@ fun PublicKeyContactsPage(
         items(state.contactsState.contacts, key = { it.id }) { contact ->
             val checked = contact.id in selected
             val selectLabel = stringResource(R.string.contact_select_recipient)
-            Card(Modifier.fillMaxWidth()) {
+            // A chosen recipient's card rounds further and gains an outline.
+            val corner by animateDpAsState(
+                targetValue = if (checked) 28.dp else 16.dp,
+                animationSpec = MaterialTheme.motionScheme.defaultSpatialSpec(),
+                label = "contactCorner",
+            )
+            Card(
+                modifier = Modifier.fillMaxWidth().animateItem(),
+                shape = RoundedCornerShape(corner),
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+                ),
+                border = if (checked) BorderStroke(2.dp, MaterialTheme.colorScheme.primary) else null,
+            ) {
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Row(
                         Modifier.fillMaxWidth().toggleable(
@@ -105,17 +135,32 @@ fun PublicKeyContactsPage(
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         Checkbox(checked = checked, onCheckedChange = null, enabled = !state.running && (checked || !atLimit))
-                        Text(selectLabel, style = MaterialTheme.typography.labelLarge)
+                        Text(selectLabel, style = MaterialTheme.typography.labelLarge, modifier = Modifier.padding(start = 8.dp))
                     }
                     ContactIdentity(contact)
-                    TextButton(onClick = { onUse(contact) }, enabled = state.nativeConnected && !state.running) {
-                        Text(stringResource(R.string.action_use_contact))
-                    }
-                    TextButton(onClick = { actions.onEditContact(contact) }, enabled = !state.running) {
-                        Text(stringResource(R.string.action_edit_contact_note))
-                    }
-                    TextButton(onClick = { actions.onDeleteContact(contact) }, enabled = !state.running) {
-                        Text(stringResource(R.string.action_delete))
+                    FlowRow(
+                        modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        ExpressiveButton(
+                            text = stringResource(R.string.action_use_contact),
+                            onClick = { onUse(contact) },
+                            enabled = state.nativeConnected && !state.running,
+                            emphasis = ActionEmphasis.TONAL,
+                        )
+                        ExpressiveButton(
+                            text = stringResource(R.string.action_edit_contact_note),
+                            onClick = { actions.onEditContact(contact) },
+                            enabled = !state.running,
+                            emphasis = ActionEmphasis.OUTLINED,
+                        )
+                        ExpressiveButton(
+                            text = stringResource(R.string.action_delete),
+                            onClick = { actions.onDeleteContact(contact) },
+                            enabled = !state.running,
+                            emphasis = ActionEmphasis.DESTRUCTIVE,
+                        )
                     }
                 }
             }
@@ -136,7 +181,7 @@ private fun ContactStorageStatus(state: PublicKeyContactsState) {
 
 @Composable
 private fun ContactIdentity(contact: PublicKeyContact) {
-    Text(contact.label, style = MaterialTheme.typography.titleMedium)
+    Text(contact.label, style = MaterialTheme.typography.titleMediumEmphasized)
     Text(stringResource(R.string.key_file_line, contact.displayName), style = MaterialTheme.typography.bodyMedium)
     Text(stringResource(R.string.key_fingerprint_line, contact.fingerprint), style = MaterialTheme.typography.bodySmall)
 }
@@ -172,10 +217,10 @@ fun PublicKeyContactPicker(
             }
         },
         confirmButton = {
-            TextButton(onClick = onImport) { Text(stringResource(R.string.action_import_contact)) }
+            DialogButton(stringResource(R.string.action_import_contact), onClick = onImport)
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) { Text(stringResource(R.string.action_cancel)) }
+            DialogButton(stringResource(R.string.action_cancel), onClick = onDismiss)
         },
     )
 }
@@ -214,10 +259,10 @@ fun PublicKeyContactNoteDialog(
             }
         },
         confirmButton = {
-            TextButton(onClick = { onSave(note) }, enabled = valid) { Text(stringResource(R.string.action_save_contact)) }
+            DialogButton(stringResource(R.string.action_save_contact), onClick = { onSave(note) }, enabled = valid)
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) { Text(stringResource(R.string.action_cancel)) }
+            DialogButton(stringResource(R.string.action_cancel), onClick = onDismiss)
         },
     )
 }
@@ -233,7 +278,7 @@ fun DeletePublicKeyContactDialog(contact: PublicKeyContact, onConfirm: () -> Uni
                 Text(stringResource(R.string.key_fingerprint_line, contact.fingerprint))
             }
         },
-        confirmButton = { TextButton(onClick = onConfirm) { Text(stringResource(R.string.action_delete)) } },
-        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.action_cancel)) } },
+        confirmButton = { DialogButton(stringResource(R.string.action_delete), onClick = onConfirm) },
+        dismissButton = { DialogButton(stringResource(R.string.action_cancel), onClick = onDismiss) },
     )
 }

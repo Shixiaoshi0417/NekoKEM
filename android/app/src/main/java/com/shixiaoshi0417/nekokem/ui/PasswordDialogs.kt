@@ -14,7 +14,6 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
@@ -91,7 +90,8 @@ fun GeneratePasswordDialog(
             }
         },
         confirmButton = {
-            TextButton(
+            DialogButton(
+                text = stringResource(R.string.action_generate),
                 onClick = {
                     when {
                         password.isEmpty() -> {
@@ -112,12 +112,11 @@ fun GeneratePasswordDialog(
                         }
                     }
                 },
-            ) {
-                Text(stringResource(R.string.action_generate))
-            }
+            )
         },
         dismissButton = {
-            TextButton(
+            DialogButton(
+                text = stringResource(R.string.action_cancel),
                 onClick = {
                     password.fill(0)
                     confirmation.fill(0)
@@ -125,9 +124,7 @@ fun GeneratePasswordDialog(
                     confirmation = ByteArray(0)
                     onDismiss()
                 },
-            ) {
-                Text(stringResource(R.string.action_cancel))
-            }
+            )
         },
     )
 }
@@ -174,7 +171,8 @@ fun SinglePasswordDialog(
             }
         },
         confirmButton = {
-            TextButton(
+            DialogButton(
+                text = stringResource(R.string.action_continue),
                 onClick = {
                     if (password.isEmpty()) {
                         showEmptyError = true
@@ -185,20 +183,17 @@ fun SinglePasswordDialog(
                         onConfirm(submitted)
                     }
                 },
-            ) {
-                Text(stringResource(R.string.action_continue))
-            }
+            )
         },
         dismissButton = {
-            TextButton(
+            DialogButton(
+                text = stringResource(R.string.action_cancel),
                 onClick = {
                     password.fill(0)
                     password = ByteArray(0)
                     onDismiss()
                 },
-            ) {
-                Text(stringResource(R.string.action_cancel))
-            }
+            )
         },
     )
 }

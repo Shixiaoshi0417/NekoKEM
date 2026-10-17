@@ -1,6 +1,5 @@
 plugins {
     id("com.android.application")
-    id("org.jetbrains.kotlin.android")
     id("org.jetbrains.kotlin.plugin.compose")
 }
 
@@ -40,15 +39,15 @@ if (emulatorTest && releaseTaskRequested) {
 
 android {
     namespace = "com.shixiaoshi0417.nekokem"
-    compileSdk = 35
+    compileSdk = 37
     ndkVersion = "28.2.13676358"
 
     defaultConfig {
         applicationId = "com.shixiaoshi0417.nekokem"
         minSdk = 26
         targetSdk = 35
-        versionCode = 11
-        versionName = "4.2.0"
+        versionCode = 12
+        versionName = "4.3.0"
         testInstrumentationRunner =
             "com.shixiaoshi0417.nekokem.TemporaryKeyInstrumentation"
 
@@ -139,9 +138,10 @@ dependencies {
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.robolectric:robolectric:4.14.1")
 
-    implementation(platform("androidx.compose:compose-bom:2025.04.01"))
+    implementation(platform("androidx.compose:compose-bom:2026.09.00"))
     implementation("androidx.activity:activity-compose:1.10.1")
-    implementation("androidx.compose.material3:material3")
+    // Material 3 Expressive components; the BOM still pins material3 1.4.
+    implementation("androidx.compose.material3:material3:1.5.0-beta01")
     implementation("androidx.compose.ui:ui")
     implementation("androidx.compose.ui:ui-tooling-preview")
 
