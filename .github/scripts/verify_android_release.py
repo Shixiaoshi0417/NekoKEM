@@ -62,6 +62,8 @@ def verify(unsigned, apk, rotated, work):
         raise SystemExit('Unexpected application identity/version')
     if "sdkVersion:'26'" not in badging:
         raise SystemExit('Unexpected minimum SDK')
+    if "targetSdkVersion:'36'" not in badging:
+        raise SystemExit('Unexpected target SDK')
     with zipfile.ZipFile(apk) as archive:
         abis = {name.split('/')[1] for name in archive.namelist() if name.startswith('lib/')}
     if abis != {'arm64-v8a'}:

@@ -45,7 +45,7 @@ android {
     defaultConfig {
         applicationId = "com.shixiaoshi0417.nekokem"
         minSdk = 26
-        targetSdk = 35
+        targetSdk = 36
         versionCode = 12
         versionName = "4.3.0"
         testInstrumentationRunner =
