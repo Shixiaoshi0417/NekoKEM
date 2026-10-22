@@ -21,12 +21,20 @@ printf '%s' \
 dd if=/dev/zero bs=1 count=1684 status=none \
     >> "$nkem_dir/valid-v3"
 
-# Structurally valid NKEM v4 with one synthetic recipient entry and no file data.
-printf '%s' \
-    '4e4b454d0404002000010688000000000000000000000000200c104000000000' |
-    hex_to_binary > "$nkem_dir/valid-v4"
-dd if=/dev/zero bs=1 count=1796 status=none \
-    >> "$nkem_dir/valid-v4"
+# Structurally valid NKEM v4 with synthetic zero recipient entries: the
+# arguments are the seed name, the recipient count and the ciphertext length.
+v4_seed()
+{
+    printf '4e4b454d04040020%04x068800000000%016x200c104000000000' "$2" "$3" |
+        hex_to_binary > "$nkem_dir/$1"
+    dd if=/dev/zero bs=1 count=$((32 + $2 * 1672 + 64 + 12 + $3 + 16)) \
+        status=none >> "$nkem_dir/$1"
+}
+
+v4_seed valid-v4 1 0
+v4_seed valid-v4-two 2 0
+v4_seed valid-v4-data 2 1
+v4_seed valid-v4-max 64 0
 
 # Structurally valid NKPR with one synthetic ciphertext byte.
 printf '%s' \
@@ -41,6 +49,11 @@ dd if="$nkem_dir/valid-v3" of="$nkem_dir/truncated-header" \
     bs=1 count=12 status=none
 dd if="$nkem_dir/valid-v3" of="$nkem_dir/truncated-body" \
     bs=1 count=112 status=none
+# NKEM v4 cut inside the second recipient entry and inside the header MAC.
+dd if="$nkem_dir/valid-v4-two" of="$nkem_dir/truncated-v4-entry" \
+    bs=1 count=2000 status=none
+dd if="$nkem_dir/valid-v4-two" of="$nkem_dir/truncated-v4-mac" \
+    bs=1 count=3440 status=none
 
 dd if="$nkpr_dir/valid-nkpr" of="$nkpr_dir/truncated-magic" \
     bs=1 count=3 status=none
