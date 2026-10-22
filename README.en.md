@@ -83,7 +83,7 @@ secondary pages and the navigation drawer follow the back gesture; see
 [predictive back](android/README.md#预测性返回). These features are available from v3.3.2; v3.3.1 and earlier do not
 include them.
 
-Android serializes local-key mutations within the process and shares Core's directory lock. Startup only cleans app-owned temporary candidates and empty output backups older than 24 hours; possible recovery copies are retained with a warning. Password dialogs block screenshots and recording, and owned password arrays are cleared promptly; immutable copies produced by Compose and keyboards cannot be reliably erased. All cloud backup and device-transfer domains are explicitly excluded. Failed SAF saves attempt to restore prior content, but providers may retain empty destinations that need manual removal. R8 remains disabled until release-device regressions cover JNI and callbacks. See the [Android security boundaries](android/README.md).
+Android serializes local-key mutations within the process and shares Core's directory lock. Startup only cleans app-owned temporary candidates and empty output backups older than 24 hours; possible recovery copies are retained with a warning. Password dialogs block screenshots and recording, and owned password arrays are cleared promptly; immutable copies produced by Compose and keyboards cannot be reliably erased. All cloud backup and device-transfer domains are explicitly excluded. Failed SAF saves attempt to restore prior content, but providers may retain empty destinations that need manual removal. Release builds enable R8, and CI repeats the JNI and callback device tests on the minified build. See the [Android security boundaries](android/README.md).
 
 ## Desktop GUI public-key contacts
 
