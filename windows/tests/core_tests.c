@@ -169,6 +169,21 @@ int main(int argc, char **argv)
     CHECK(GetFileAttributesW(L"public.key") != INVALID_FILE_ATTRIBUTES);
     CHECK(GetFileAttributesW(L"private.enc") != INVALID_FILE_ATTRIBUTES);
     CHECK(nekokem_private_key_exists("private.enc"));
+    /* Another process holding the key directory lock blocks pair
+     * publication and deletion instead of interleaving with them. */
+    HANDLE held = CreateFileW(L".nekokem-pair.lock", GENERIC_READ,
+            FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, NULL, OPEN_EXISTING, 0, NULL);
+    OVERLAPPED whole = {0};
+    CHECK(held != INVALID_HANDLE_VALUE &&
+          LockFileEx(held, LOCKFILE_EXCLUSIVE_LOCK | LOCKFILE_FAIL_IMMEDIATELY, 0, 1, 0, &whole));
+    CHECK(!nekokem_generate_keypair("locked-public.key","locked-private.enc",password,sizeof(password)-1));
+    CHECK(GetFileAttributesW(L"locked-public.key") == INVALID_FILE_ATTRIBUTES &&
+          GetFileAttributesW(L"locked-private.enc") == INVALID_FILE_ATTRIBUTES);
+    CHECK(!nekokem_delete_private_key("private.enc"));
+    CHECK(nekokem_private_key_exists("private.enc"));
+    CHECK(UnlockFile(held, 0, 0, 1, 0));
+    CloseHandle(held);
+    CHECK(no_artifacts());
     CHECK(nekokem_check_private_key_password("private.enc",password,sizeof(password)-1));
     CHECK(!nekokem_check_private_key_password("private.enc",(const unsigned char *)"wrong",5));
     CHECK(write_private("plain","binary\r\n\032",9));
