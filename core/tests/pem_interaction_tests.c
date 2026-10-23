@@ -10,6 +10,65 @@
 
 static const unsigned char password[] = "pem-interaction-test-password";
 
+static int empty_password(char *buffer, int size, int writing, void *user_data)
+{
+    (void)buffer;
+    (void)size;
+    (void)writing;
+    (void)user_data;
+    return 0;
+}
+
+/* One component encrypted with an empty password, the other plaintext. */
+static int write_empty_password_fixture(const char *path, EVP_PKEY *x448,
+                                        EVP_PKEY *mlkem,
+                                        unsigned int encrypted_component)
+{
+    FILE *output = fopen(path, "wb");
+    int success = output != NULL &&
+        PEM_write_PKCS8PrivateKey(
+            output, x448, encrypted_component == 0U ? EVP_aes_256_cbc() : NULL,
+            NULL, 0, encrypted_component == 0U ? empty_password : NULL, NULL) == 1 &&
+        PEM_write_PKCS8PrivateKey(
+            output, mlkem, encrypted_component == 1U ? EVP_aes_256_cbc() : NULL,
+            NULL, 0, encrypted_component == 1U ? empty_password : NULL, NULL) == 1;
+
+    if (output != NULL && fclose(output) != 0) {
+        success = 0;
+    }
+    return success;
+}
+
+/* A public key carrying a legacy encryption header, in either component. */
+static int write_encrypted_header_public_fixture(const char *path,
+                                                 EVP_PKEY *x448,
+                                                 EVP_PKEY *mlkem,
+                                                 unsigned int encrypted_component)
+{
+    static const char header[] =
+        "Proc-Type: 4,ENCRYPTED\n"
+        "DEK-Info: AES-256-CBC,00112233445566778899AABBCCDDEEFF\n";
+    EVP_PKEY *components[2] = {x448, mlkem};
+    FILE *output = fopen(path, "wb");
+    int success = output != NULL;
+    unsigned int index;
+
+    for (index = 0U; success && index < 2U; ++index) {
+        unsigned char *der = NULL;
+        int length = i2d_PUBKEY(components[index], &der);
+
+        success = length > 0 &&
+            PEM_write(output, "PUBLIC KEY",
+                      index == encrypted_component ? header : "",
+                      der, length) > 0;
+        OPENSSL_free(der);
+    }
+    if (output != NULL && fclose(output) != 0) {
+        success = 0;
+    }
+    return success;
+}
+
 static int write_fixtures(const char *directory)
 {
     EVP_PKEY *x448 = NULL;
@@ -19,6 +78,8 @@ static int write_fixtures(const char *directory)
     FILE *output = NULL;
     char raw_path[512];
     char protected_path[512];
+    char empty_path[512];
+    char public_path[512];
     unsigned int encrypted_component;
     int success = 0;
 
@@ -34,9 +95,23 @@ static int write_fixtures(const char *directory)
         int protected_count = snprintf(protected_path, sizeof(protected_path),
                                        "%s/protected-%u.enc",
                                        directory, encrypted_component);
+        int empty_count = snprintf(empty_path, sizeof(empty_path),
+                                   "%s/empty-%u.pem", directory,
+                                   encrypted_component);
         if (raw_count < 0 || (size_t)raw_count >= sizeof(raw_path) ||
             protected_count < 0 ||
-            (size_t)protected_count >= sizeof(protected_path)) {
+            (size_t)protected_count >= sizeof(protected_path) ||
+            empty_count < 0 || (size_t)empty_count >= sizeof(empty_path) ||
+            !write_empty_password_fixture(empty_path, x448, mlkem,
+                                          encrypted_component)) {
+            goto cleanup;
+        }
+        int public_count = snprintf(public_path, sizeof(public_path),
+                                    "%s/public-%u.pem", directory,
+                                    encrypted_component);
+        if (public_count < 0 || (size_t)public_count >= sizeof(public_path) ||
+            !write_encrypted_header_public_fixture(public_path, x448, mlkem,
+                                                   encrypted_component)) {
             goto cleanup;
         }
         bio = BIO_new(BIO_s_mem());
@@ -97,8 +172,10 @@ int main(int argc, char **argv)
     if (strcmp(argv[1], "fixtures") == 0) {
         return write_fixtures(argv[2]) != 0 ? EXIT_SUCCESS : EXIT_FAILURE;
     }
-    if (strcmp(argv[1], "raw") == 0) {
+    if (strcmp(argv[1], "raw") == 0 || strcmp(argv[1], "empty") == 0) {
         result = hybrid_load_private_keys(argv[2], &keys);
+    } else if (strcmp(argv[1], "public") == 0) {
+        result = hybrid_load_public_keys(argv[2], &keys);
     } else if (strcmp(argv[1], "protected") == 0) {
         result = hybrid_load_protected_private_keys(
             argv[2], password, sizeof(password) - 1U, &keys);
