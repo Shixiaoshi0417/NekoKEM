@@ -18,7 +18,7 @@ isolated in PR #10 (fix/android-temporary-nkpr-suffix), dependent on #8. The i18
 PR targets #10 so its diff excludes this file-operation fix. Integration order
 is #8, #10, then #9; none is merged automatically.
 
-Android uses Compose with ComponentActivity, minSdk 26 and targetSdk 35.
+Android uses Compose with ComponentActivity, minSdk 26 and targetSdk 36.
 English and Simplified Chinese resources existed; language settings were static.
 There was no application locale API or language preference. Linux uses C17 and
 OpenSSL 3.5 EVP, with mixed Chinese/English prompts, no locale selection, and no

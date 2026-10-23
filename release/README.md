@@ -5,7 +5,7 @@ GitHub Actions has three workflow definitions:
 - `ci.yml` (`CI`) builds and tests pull requests targeting any branch, pushes to
   `main`, and manual runs. It contains the Linux Core/analyzer/sanitizer/fuzz
   suite, x86_64/aarch64 release-package and installer tests, Android JVM and
-  API 26/29/35 device tests, native Windows CLI security/interoperability/performance
+  API 26/29/35/36 device tests, native Windows CLI security/interoperability/performance
   checks, Windows GUI frontend/Rust/Core/EXE-launch checks, and native macOS
   arm64 CLI/Core/sanitizer/filesystem/interoperability and GUI/app/package checks,
   plus Linux x86_64/ARM64 GUI Rust/Core, private staging, ELF/package and actual
@@ -79,7 +79,7 @@ installed compiler version identifies the OpenSSL cache and is recorded in
 Windows CLI/GUI build metadata, and native CI checks validate the resulting
 packages. Runner system packages, JDK 17 security updates, platform-tools and
 SDK command-line tools likewise follow the supported runner/repository updates;
-the API 26/29/35 tests, native compiler checks and pinned NDK/CMake/build-tools
+the API 26/29/35/36 tests, native compiler checks and pinned NDK/CMake/build-tools
 validate these boundaries. These components are intentionally not claimed to
 form a fully reproducible toolchain snapshot.
 
