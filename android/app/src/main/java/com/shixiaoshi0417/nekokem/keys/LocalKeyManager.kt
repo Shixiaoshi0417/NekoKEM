@@ -718,10 +718,34 @@ class LocalKeyManager internal constructor(
     // remove them; deleting the key must not clean files another page uses.
     fun deletePrivateKey(): Int = keyMutationLock.withLock {
         try {
-            NativeBridge.nativeDeletePrivateKey(privateKey.absolutePath)
+            withPairDirectoryLock {
+                val copiesDeleted = deletePrivateKeyCopiesLocked()
+                val result = NativeBridge.nativeDeletePrivateKeyUnderPairLock(privateKey.absolutePath)
+                if (result == NativeBridge.RESULT_SUCCESS && !copiesDeleted) RESULT_STORAGE_ERROR else result
+            }
         } catch (_: Exception) {
             RESULT_STORAGE_ERROR
         }
+    }
+
+    /**
+     * Import candidates and backups are only written while the mutation lock
+     * is held, so any found here were left by an interrupted import. They are
+     * full copies of a private key, so an explicit deletion removes them too;
+     * a copy that cannot be removed safely is reported as a failed deletion.
+     */
+    private fun deletePrivateKeyCopiesLocked(): Boolean {
+        val files = keysDirectory.listFiles() ?: return !keysDirectory.exists()
+        var deleted = true
+        files.forEach { file ->
+            // The backup prefix extends the import prefix.
+            if (file.name.startsWith(PRIVATE_IMPORT_PREFIX) && file.name.endsWith(TEMPORARY_SUFFIX) &&
+                !deleteOwnedRegularFile(file)
+            ) {
+                deleted = false
+            }
+        }
+        return deleted
     }
 
     fun deletePublicKey(): Int = keyMutationLock.withLock {
@@ -738,8 +762,10 @@ class LocalKeyManager internal constructor(
     fun deleteKeypair(): Int = keyMutationLock.withLock {
         try {
             withPairDirectoryLock {
+                val copiesDeleted = deletePrivateKeyCopiesLocked()
                 val result = NativeBridge.nativeDeletePrivateKeyUnderPairLock(privateKey.absolutePath)
-                if (result == NativeBridge.RESULT_SUCCESS) deletePublicKeyLocked() else result
+                    .let { if (it == NativeBridge.RESULT_SUCCESS) deletePublicKeyLocked() else it }
+                if (result == NativeBridge.RESULT_SUCCESS && !copiesDeleted) RESULT_STORAGE_ERROR else result
             }
         } catch (_: Exception) {
             RESULT_STORAGE_ERROR
