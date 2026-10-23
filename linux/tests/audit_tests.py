@@ -80,6 +80,32 @@ class AuditTests(unittest.TestCase):
         result = self.cli('decrypt', 'hybrid', 'cipher.nkem', 'output', 'keys/private.key.enc', data=password + b'\n')
         self.assertEqual(result.returncode, 0, result.stderr)
 
+    def test_password_limit_is_the_same_for_lf_and_crlf(self):
+        password = b'p' * 1024
+        (self.root / 'input').write_bytes(b'payload')
+        for ending in [b'\n', b'\r\n']:
+            with self.subTest(ending=ending):
+                for path in ['keys/public.key', 'keys/private.key.enc', 'cipher.nkem', 'output']:
+                    (self.root / path).unlink(missing_ok=True)
+                result = self.cli('keygen', data=(password + ending) * 2)
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertEqual(self.cli('encrypt', 'hybrid', 'input', 'cipher.nkem',
+                                          'keys/public.key').returncode, 0)
+                for unlock in [b'\n', b'\r\n']:
+                    (self.root / 'output').unlink(missing_ok=True)
+                    result = self.cli('decrypt', 'hybrid', 'cipher.nkem', 'output',
+                                      'keys/private.key.enc', data=password + unlock)
+                    self.assertEqual(result.returncode, 0, result.stderr)
+                    self.assertEqual((self.root / 'output').read_bytes(), b'payload')
+        for ending in [b'\n', b'\r\n', b'x\r\n']:
+            with self.subTest(over=ending):
+                (self.root / 'output').unlink(missing_ok=True)
+                result = self.cli('decrypt', 'hybrid', 'cipher.nkem', 'output',
+                                  'keys/private.key.enc', data=password + b'p' + ending)
+                self.assertEqual(result.returncode, 1)
+                self.assertIn(b'Password exceeds 1024 bytes', result.stderr)
+                self.assertFalse((self.root / 'output').exists())
+
     def test_interactive_decryption_preserves_existing_plaintext(self):
         self.keys()
         (self.root / 'input').write_bytes(b'new plaintext')
