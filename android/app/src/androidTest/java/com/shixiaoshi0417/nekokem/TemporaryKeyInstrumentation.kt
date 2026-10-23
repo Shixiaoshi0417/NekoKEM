@@ -684,15 +684,17 @@ class TemporaryKeyInstrumentation : Instrumentation() {
         // Deleting the private key alone removes copies as well, and a copy
         // that cannot be removed safely is reported instead of ignored.
         val leftover = File(keys, "nkem-prv-leftover.tmp").apply { writeText("private copy") }
-        val linked = File(keys, "nkem-prv-linked.tmp").apply { writeText("linked copy") }
-        val alias = File(keys, "linked-alias")
-        Os.link(linked.absolutePath, alias.absolutePath)
+        // App SELinux policy forbids hard links, so a symlink stands in for a
+        // copy that is not an owned regular file.
+        val target = File(context.cacheDir, "linked-target").apply { writeText("linked copy") }
+        val linked = File(keys, "nkem-prv-linked.tmp")
+        Os.symlink(target.absolutePath, linked.absolutePath)
         try {
             check(manager.deletePrivateKey() == LocalKeyManager.RESULT_STORAGE_ERROR)
             check(!leftover.exists())
-            check(linked.readText() == "linked copy")
+            check(linked.exists() && target.readText() == "linked copy")
         } finally {
-            listOf(leftover, linked, alias).forEach { it.delete() }
+            listOf(leftover, linked, target).forEach { it.delete() }
         }
         check(manager.deletePrivateKey() == NativeBridge.RESULT_SUCCESS)
         check(manager.deleteKeypair() == NativeBridge.RESULT_SUCCESS)
