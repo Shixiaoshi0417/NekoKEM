@@ -848,8 +848,19 @@ static int win_pair_lock_wait(HANDLE lock, const char *key_path)
         if (GetLastError() != ERROR_LOCK_VIOLATION) break;
         if (attempt + 1U < 20U) Sleep(50);
     }
+    /* Name the directory that holds the lock, not the key file. */
+    const char *slash = strrchr(key_path, '/'), *back = strrchr(key_path, '\\');
+    if (back != NULL && (slash == NULL || back > slash)) slash = back;
+    size_t length = slash != NULL ? (size_t)(slash - key_path) : 0;
+    char *directory = malloc(length + 2);
+    if (directory != NULL) {
+        if (slash != NULL) memcpy(directory, key_path, length);
+        else directory[length++] = '.';
+        directory[length] = '\0';
+    }
     fprintf(stderr, file_message("Cannot acquire key directory lock %s/.nekokem-pair.lock: %s\n"),
-            file_display_safe_path(key_path), strerror(EAGAIN));
+            file_display_safe_path(directory != NULL ? directory : "."), strerror(EAGAIN));
+    free(directory);
     errno = EAGAIN;
     return 0;
 }
