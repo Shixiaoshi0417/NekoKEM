@@ -34,7 +34,7 @@ class PemInteractionTests(unittest.TestCase):
         cls.directory.cleanup()
 
     def assert_noninteractive_rejection(self, kind, component):
-        suffix = "pem" if kind == "raw" else "enc"
+        suffix = "enc" if kind == "protected" else "pem"
         path = Path(self.directory.name) / f"{kind}-{component}.{suffix}"
         master, slave = pty.openpty()
 
@@ -79,6 +79,22 @@ class PemInteractionTests(unittest.TestCase):
 
     def test_raw_second_component(self):
         self.assert_noninteractive_rejection("raw", 1)
+
+    # An empty password is still a password: encrypted PKCS#8 is rejected,
+    # not decrypted with "" (OpenSSL treats a callback result of 0 as "").
+    def test_empty_password_first_component(self):
+        self.assert_noninteractive_rejection("empty", 0)
+
+    def test_empty_password_second_component(self):
+        self.assert_noninteractive_rejection("empty", 1)
+
+    # Public keys are never encrypted; a legacy encryption header must not
+    # make OpenSSL prompt for a pass phrase on the terminal.
+    def test_public_key_encryption_header_first_component(self):
+        self.assert_noninteractive_rejection("public", 0)
+
+    def test_public_key_encryption_header_second_component(self):
+        self.assert_noninteractive_rejection("public", 1)
 
     def test_nkpr_first_component(self):
         self.assert_noninteractive_rejection("protected", 0)
