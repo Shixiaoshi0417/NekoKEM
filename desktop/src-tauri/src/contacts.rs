@@ -5,7 +5,9 @@
 use crate::core::{self, Failure, Staged};
 use serde::{Deserialize, Serialize};
 use std::ffi::{c_char, c_int, c_void, CStr, CString};
+use std::fs::{File, OpenOptions, TryLockError};
 use std::io::ErrorKind;
+use std::time::Duration;
 
 pub const MAX_CONTACTS: usize = 500;
 pub const MAX_NOTE_CHARS: usize = 512;
@@ -15,6 +17,9 @@ const MAX_RECORD_BYTES: usize = 64 * 1024;
 // Pasted-key staging limit shared with Core's PEM input checks.
 const MAX_LINE_BYTES: usize = 16384;
 const RECORD_VERSION: u32 = 1;
+// Held by every change, so separate app processes cannot pass the count limit
+// together or bring back a contact another process just deleted.
+const LOCK_NAME: &str = ".contacts.lock";
 const MISSING: &str = "contact-missing";
 const INVALID: &str = "contact-invalid";
 const STORAGE: &str = "contact-storage";
@@ -89,8 +94,11 @@ impl Store {
 
     pub fn list(&self) -> Result<Contacts, Failure> {
         let mut contacts = Vec::new();
-        let mut unreadable = 0;
-        for id in self.ids()? {
+        let (ids, overflow) = self.ids()?;
+        // Records past the limit are counted, so the list still opens and
+        // deleting shown contacts brings the rest into view.
+        let mut unreadable = overflow;
+        for id in ids {
             match self.read(&id) {
                 Ok(record) => contacts.push(record.contact(&id)),
                 Err(error) if error.code == MISSING => {}
@@ -118,6 +126,7 @@ impl Store {
 
     pub fn update_note(&self, id: &str, note: &str) -> Result<Contact, Failure> {
         let note = clean_note(note)?;
+        let _lock = self.lock()?;
         let mut record = self.read(checked(id)?)?;
         record.note = note;
         self.write(id, &record)?;
@@ -125,6 +134,7 @@ impl Store {
     }
 
     pub fn delete(&self, id: &str) -> Result<(), Failure> {
+        let _lock = self.lock()?;
         if !self.exists(checked(id)?)? { return Err(Failure::new(MISSING)); }
         let directory = CString::new(self.directory.as_str()).map_err(|_| Failure::new(STORAGE))?;
         let name = CString::new(format!("{id}.json")).map_err(|_| Failure::new(STORAGE))?;
@@ -149,13 +159,15 @@ impl Store {
     fn import(&self, input: &CStr, name: String, note: String) -> Result<Contact, Failure> {
         let fingerprint = core::fingerprint(input).ok_or_else(|| Failure::new("public-key-invalid"))?;
         let id = identity(&fingerprint).ok_or_else(|| Failure::new("public-key-invalid"))?;
+        let _lock = self.lock()?;
         // Only an entry that Core still verifies counts as already saved.
         match self.stage(&id) {
             Ok((mut stage, _)) => {
                 return Err(if stage.close() { Failure::existing(id) } else { Failure::new("cleanup-error") });
             }
             Err(error) if error.code == MISSING => {
-                if self.ids()?.len() >= MAX_CONTACTS { return Err(Failure::new("contact-limit")); }
+                let (ids, overflow) = self.ids()?;
+                if ids.len() + overflow >= MAX_CONTACTS { return Err(Failure::new("contact-limit")); }
             }
             // Explicitly re-importing the same key replaces a damaged or substituted record.
             Err(error) if error.code == INVALID || error.code == MISMATCH => {}
@@ -183,17 +195,45 @@ impl Store {
         result
     }
 
-    fn ids(&self) -> Result<Vec<String>, Failure> {
+    /// Returns at most `MAX_CONTACTS` ids and how many more record names exist.
+    fn ids(&self) -> Result<(Vec<String>, usize), Failure> {
         let mut ids = Vec::new();
+        let mut overflow = 0;
         for entry in std::fs::read_dir(&self.directory).map_err(|_| Failure::new(STORAGE))? {
             let name = entry.map_err(|_| Failure::new(STORAGE))?.file_name();
             // Core's atomic temporary/backup names and foreign files are ignored.
             if let Some(id) = name.to_str().and_then(|name| name.strip_suffix(".json")).filter(|id| valid_id(id)) {
-                if ids.len() == MAX_CONTACTS { return Err(Failure::new(STORAGE)); }
-                ids.push(id.to_owned());
+                if ids.len() == MAX_CONTACTS { overflow += 1; } else { ids.push(id.to_owned()); }
             }
         }
-        Ok(ids)
+        Ok((ids, overflow))
+    }
+
+    /// Takes the cross-process lock, waiting about a second like Core's key lock.
+    fn lock(&self) -> Result<File, Failure> {
+        let mut options = OpenOptions::new();
+        options.read(true).write(true).create(true).truncate(false);
+        // Lock the name itself, never a link target placed there.
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::OpenOptionsExt;
+            options.mode(0o600).custom_flags(libc::O_NOFOLLOW);
+        }
+        #[cfg(windows)]
+        {
+            use std::os::windows::fs::OpenOptionsExt;
+            const FILE_FLAG_OPEN_REPARSE_POINT: u32 = 0x0020_0000;
+            options.custom_flags(FILE_FLAG_OPEN_REPARSE_POINT);
+        }
+        let file = options.open(format!("{}/{LOCK_NAME}", self.directory)).map_err(|_| Failure::new(STORAGE))?;
+        for attempt in 0..20 {
+            match file.try_lock() {
+                Ok(()) => return Ok(file),
+                Err(TryLockError::WouldBlock) if attempt + 1 < 20 => std::thread::sleep(Duration::from_millis(50)),
+                Err(_) => break,
+            }
+        }
+        Err(Failure::new(STORAGE))
     }
 
     fn file(&self, id: &str) -> String { format!("{}/{id}.json", self.directory) }
@@ -357,7 +397,8 @@ pub mod tests {
     fn code<T>(result: Result<T, Failure>) -> &'static str { result.err().expect("operation must fail").code }
     fn record_names(directory: &Directory) -> Vec<String> {
         let mut names: Vec<String> = fs::read_dir(&directory.0).unwrap()
-            .map(|entry| entry.unwrap().file_name().into_string().unwrap()).collect();
+            .map(|entry| entry.unwrap().file_name().into_string().unwrap())
+            .filter(|name| name != LOCK_NAME).collect();
         names.sort();
         names
     }
@@ -629,5 +670,49 @@ pub mod tests {
         if !existed.0 { let _ = fs::remove_dir(&base); }
         assert_eq!(std::path::Path::new(&opened.unwrap()), expected.as_path());
         assert_eq!(listed.unwrap().unwrap(), 0);
+    }
+
+    #[test]
+    fn limit_counts_every_record_and_an_overfull_store_still_lists_and_deletes() {
+        let _core = core_lock();
+        let keys = Directory::new();
+        let contacts = keys.private("contacts");
+        let store = store(&contacts);
+        let (alice, _, _) = keypair(&keys, "alice", "public-test-alice");
+        let (bob, _, _) = keypair(&keys, "bob", "public-test-bob");
+        let filler = |index: usize| format!("{index:064x}");
+        for index in 0..MAX_CONTACTS - 1 { rewrite(&store, &filler(index), "{}"); }
+        let saved = store.save(Source::Path(&alice), "").unwrap();
+        assert_eq!(code(store.save(Source::Path(&bob), "")), "contact-limit");
+        // More records than the limit, as another app process or a copied
+        // folder could leave, are counted instead of failing the whole list.
+        rewrite(&store, &filler(MAX_CONTACTS), "{}");
+        let listed = store.list().unwrap();
+        assert_eq!(listed.contacts.len() + listed.unreadable, MAX_CONTACTS + 1);
+        store.delete(&filler(0)).unwrap();
+        store.delete(&filler(1)).unwrap();
+        let listed = store.list().unwrap();
+        assert_eq!(listed.contacts.iter().map(|c| c.id.as_str()).collect::<Vec<_>>(), vec![saved.id.as_str()]);
+        assert_eq!(listed.unreadable, MAX_CONTACTS - 2);
+    }
+
+    #[test]
+    fn changes_wait_for_another_holder_of_the_store_lock() {
+        let _core = core_lock();
+        let keys = Directory::new();
+        let contacts = keys.private("contacts");
+        let store = store(&contacts);
+        let (alice, _, _) = keypair(&keys, "alice", "public-test-alice");
+        let saved = store.save(Source::Path(&alice), "").unwrap();
+        // A separate open file, like another app process, holds the lock.
+        let held = store.lock().unwrap();
+        assert_eq!(code(store.update_note(&saved.id, "busy")), STORAGE);
+        assert_eq!(code(store.delete(&saved.id)), STORAGE);
+        assert_eq!(code(store.save(Source::Path(&alice), "")), STORAGE);
+        assert!(store.list().is_ok());
+        drop(held);
+        assert_eq!(store.update_note(&saved.id, "free").unwrap().note, "free");
+        store.delete(&saved.id).unwrap();
+        assert!(record_names(&contacts).is_empty());
     }
 }
