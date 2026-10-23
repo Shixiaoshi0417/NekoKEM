@@ -24,10 +24,11 @@ unwrapping and header MAC, streaming AES-GCM authentication and the atomic
 output transaction, which commits only authenticated plaintext and otherwise
 removes its temporary file. `make fuzz-build` runs `fuzz_decrypt_seeds`, which
 generates a throwaway plaintext-PEM key pair in `fuzz/bin/` and genuine
-containers for it in `fuzz/seeds/decrypt/` (v3, v3 with no data, and v4 with
-the key as the second of two recipients). Mutations of these seeds therefore
-reach trial decryption, MAC and payload authentication instead of stopping at
-the header parser. The key is created for every build, protects nothing and
+containers for it in `fuzz/seeds/decrypt/` (v3, v3 with no data, v4 with the
+key as the second of two recipients, v4 with no data and the key as the first
+of two, and v4 with the key as the last of the maximum 64 recipients).
+Mutations of these seeds therefore reach trial decryption, MAC and payload
+authentication instead of stopping at the header parser. The key is created for every build, protects nothing and
 is never committed; the generated seeds are ignored by Git.
 
 For the parser harnesses, inputs larger than 2 MiB are rejected before
@@ -36,7 +37,9 @@ points so malformed inputs do not generate high-volume logs.
 
 The parser seed files are synthetic structure-only containers. Their KEM bytes,
 nonce, tags, and NKPR ciphertext bytes are all zero and are not
-cryptographically valid. The v3 and v4 salts, the v4 recipient entry and
-header MAC are synthetic zero data. Seeds contain no
-password, private key, plaintext, or other sensitive material.
+cryptographically valid. The v3 and v4 salts, the v4 recipient entries and
+header MAC are synthetic zero data. The v4 parser seeds cover one, two and the
+maximum 64 recipients, two recipients with one ciphertext byte, and two
+recipients cut inside the second entry and inside the header MAC. Seeds
+contain no password, private key, plaintext, or other sensitive material.
 Run `sh core/fuzz/generate_seeds.sh` to regenerate them deterministically.

@@ -1,8 +1,10 @@
 /*
  * Writes the throwaway fuzzing key used by fuzz_decrypt and genuine
- * containers for it: NKEM v3, NKEM v3 with no data, and NKEM v4 with the
- * fuzzing key as the second of two recipients, so mutations reach the trial
- * decryption, header MAC, payload authentication and output commit paths.
+ * containers for it: NKEM v3, NKEM v3 with no data, NKEM v4 with the fuzzing
+ * key as the second of two recipients, NKEM v4 with no data and the key as
+ * the first of two, and NKEM v4 with the key as the last of the maximum 64
+ * recipients, so mutations reach the trial decryption, header MAC, payload
+ * authentication and output commit paths.
  * Usage: fuzz_decrypt_seeds <binary directory> <seed directory>
  */
 #include "../include/nekokem.h"
@@ -15,6 +17,8 @@
 #include <openssl/pem.h>
 #include <stdio.h>
 #include <stdlib.h>
+
+#define MAX_RECIPIENTS 64U
 
 static int write_file(const char *path, const void *bytes, size_t length)
 {
@@ -71,10 +75,31 @@ static int make_keypair(const char *public_path, const char *private_path)
     return success;
 }
 
+/* Writes MAX_RECIPIENTS - 1 other public keys and lists the fuzzing key last. */
+static int make_max_recipients(const char *directory, const char *public_key,
+                               char paths[MAX_RECIPIENTS][4096],
+                               const char *recipients[MAX_RECIPIENTS])
+{
+    char name[64];
+    unsigned int index;
+
+    for (index = 0U; index + 1U < MAX_RECIPIENTS; index++) {
+        (void)snprintf(name, sizeof(name), "decrypt-max-%02u.pub", index);
+        if (!join(paths[index], sizeof(paths[index]), directory, name) ||
+            !make_keypair(paths[index], NULL)) {
+            return 0;
+        }
+        recipients[index] = paths[index];
+    }
+    recipients[MAX_RECIPIENTS - 1U] = public_key;
+    return 1;
+}
+
 int main(int argc, char **argv)
 {
     static const char sample[] =
         "NekoKEM fuzzing plaintext: public, generated for every build.\n";
+    static char max_paths[MAX_RECIPIENTS][4096];
     char key[4096];
     char public_key[4096];
     char other_key[4096];
@@ -82,6 +107,8 @@ int main(int argc, char **argv)
     char empty[4096];
     char seed[4096];
     const char *recipients[2];
+    const char *first_recipients[2];
+    const char *max_recipients[MAX_RECIPIENTS];
     int success;
 
     if (argc != 3 || !ensure_directory(argv[2], 0700) ||
@@ -95,7 +122,11 @@ int main(int argc, char **argv)
     }
     recipients[0] = other_key;
     recipients[1] = public_key;
+    first_recipients[0] = public_key;
+    first_recipients[1] = other_key;
     success = make_keypair(public_key, key) && make_keypair(other_key, NULL) &&
+              make_max_recipients(argv[1], public_key, max_paths,
+                                  max_recipients) &&
               write_file(plain, sample, sizeof(sample) - 1U) &&
               write_file(empty, "", 0U) &&
               join(seed, sizeof(seed), argv[2], "valid-v3") &&
@@ -105,6 +136,14 @@ int main(int argc, char **argv)
               join(seed, sizeof(seed), argv[2], "valid-v4") &&
               nekokem_encrypt_file_multi_with_progress(
                   plain, seed, recipients, 2U, NULL, NULL) ==
+                  NEKOKEM_OPERATION_SUCCESS &&
+              join(seed, sizeof(seed), argv[2], "valid-v4-empty") &&
+              nekokem_encrypt_file_multi_with_progress(
+                  empty, seed, first_recipients, 2U, NULL, NULL) ==
+                  NEKOKEM_OPERATION_SUCCESS &&
+              join(seed, sizeof(seed), argv[2], "valid-v4-max") &&
+              nekokem_encrypt_file_multi_with_progress(
+                  plain, seed, max_recipients, MAX_RECIPIENTS, NULL, NULL) ==
                   NEKOKEM_OPERATION_SUCCESS;
     (void)remove(plain);
     (void)remove(empty);

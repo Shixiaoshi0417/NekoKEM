@@ -69,6 +69,7 @@ nekokem-keystore-password.enc
 /core/fuzz/queue/
 /core/fuzz/seeds/nkem/valid-v3
 /core/fuzz/seeds/nkem/valid-v4
+/core/fuzz/seeds/nkem/valid-v4-*
 **/crash-*
 **/id:*
 **/benchmark/
