@@ -1466,16 +1466,18 @@ static int inspect_key_artifacts(const char *path, const struct stat *key,
          * recent temporary file may still be written by another process. */
         stale = time(NULL) - status.st_mtime > KEY_RESIDUE_STALE_SECONDS;
         /* Same-inode residues belong to this key. An older backup must be
-         * an owner-only NKPR file; temporary files may be incomplete writes. */
+         * an owner-only NKPR file; temporary files may be incomplete writes,
+         * and a fresh one is kept even with a complete key header. */
         ours = confirmed != 0 && S_ISREG(status.st_mode) && status.st_uid == geteuid() &&
                (status.st_mode & (mode_t)0777) == (mode_t)0600 &&
                (same != 0 ||
                 (status.st_nlink == (nlink_t)1 &&
-                 ((stale != 0 && strncmp(entry->d_name + stem_length, ".tmp.", 5U) == 0) ||
-                  ((file_peek_regular(candidate, magic, 4U) &&
-                    memcmp(magic, "NKPR", 4U) == 0) ||
-                   (file_peek_regular(candidate, magic, sizeof(magic)) &&
-                    memcmp(magic, "-----BEGIN PRIVATE KEY-----", sizeof(magic)) == 0)))));
+                 (strncmp(entry->d_name + stem_length, ".tmp.", 5U) == 0
+                      ? stale != 0
+                      : ((file_peek_regular(candidate, magic, 4U) &&
+                          memcmp(magic, "NKPR", 4U) == 0) ||
+                         (file_peek_regular(candidate, magic, sizeof(magic)) &&
+                          memcmp(magic, "-----BEGIN PRIVATE KEY-----", sizeof(magic)) == 0)))));
         if (remove_own != 0) {
             struct stat current;
 
