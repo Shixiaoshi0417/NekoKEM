@@ -122,7 +122,7 @@ int file_read_sensitive(const char *path,
  * are not followed. Returns 0 only when the check itself fails.
  */
 int file_path_exists(const char *path, int *exists);
-/* Caller holds the directory pair lock on POSIX. */
+/* Caller holds the directory pair lock on POSIX; on Windows it is taken here. */
 int file_delete_private_key_under_lock(const char *path);
 /*
  * Whether both paths name the same existing file, compared by identity

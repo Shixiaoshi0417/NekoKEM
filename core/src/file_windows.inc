@@ -683,7 +683,23 @@ cleanup:
     return success;
 }
 
+static HANDLE win_pair_lock_open(const char *key_path);
+static int win_pair_lock_wait(HANDLE lock, const char *key_path);
+static void win_pair_lock_release(HANDLE lock);
+
+static int win_delete_private_key(const char *path);
+
+/* Windows has no caller-held lock: take the key directory lock here. */
 int file_delete_private_key_under_lock(const char *path)
+{
+    HANDLE lock = win_pair_lock_open(path);
+    if (lock == INVALID_HANDLE_VALUE) return errno == ENOENT;
+    int success = win_pair_lock_wait(lock, path) && win_delete_private_key(path);
+    win_pair_lock_release(lock);
+    return success;
+}
+
+static int win_delete_private_key(const char *path)
 {
     WinPath checked;
     if (!win_path_open(&checked, path, 1)) return errno == ENOENT;
@@ -780,6 +796,92 @@ int file_peek_regular(const char *path, unsigned char *prefix, size_t length)
     return success;
 }
 
+/* Cross-process counterpart of POSIX .nekokem-pair.lock: SRWLOCK only covers
+ * this process. The private lock file is kept, so every process locks the
+ * same file; closing the handle releases the lock. */
+static HANDLE win_pair_lock_open(const char *key_path)
+{
+    static const wchar_t name[] = L"\\.nekokem-pair.lock";
+    WinPath checked;
+    HANDLE handle = INVALID_HANDLE_VALUE;
+    wchar_t *lock = NULL;
+    if (!win_path_open(&checked, key_path, 1)) return INVALID_HANDLE_VALUE;
+    const wchar_t *separator = wcsrchr(checked.full, L'\\');
+    size_t parent = separator != NULL ? (size_t)(separator - checked.full) : 0;
+    lock = separator != NULL ? malloc((parent + sizeof(name) / sizeof(*name)) * sizeof(*lock)) : NULL;
+    if (lock == NULL) goto cleanup;
+    memcpy(lock, checked.full, parent * sizeof(*lock));
+    memcpy(lock + parent, name, sizeof(name));
+    handle = win_create(lock, 0);
+    if (handle != INVALID_HANDLE_VALUE) CloseHandle(handle);
+    else if (errno != EEXIST) goto cleanup;
+    handle = CreateFileW(lock, GENERIC_READ | READ_CONTROL,
+            FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, NULL, OPEN_EXISTING,
+            FILE_FLAG_OPEN_REPARSE_POINT, NULL);
+    if (handle != INVALID_HANDLE_VALUE && !win_regular(handle, 1)) {
+        CloseHandle(handle);
+        handle = INVALID_HANDLE_VALUE;
+        SetLastError(ERROR_ACCESS_DENIED);
+    }
+cleanup:
+    if (handle == INVALID_HANDLE_VALUE) {
+        (void)win_error();
+        int saved = errno;
+        char *display = lock != NULL ? win_utf8_display(lock) : NULL;
+        fprintf(stderr, file_message("Cannot acquire key directory lock %s: %s\n"),
+                file_display_safe_path(display != NULL ? display : key_path), strerror(saved));
+        free(display);
+        errno = saved;
+    }
+    free(lock);
+    win_path_close(&checked);
+    return handle;
+}
+
+/* Waits about one second, like the POSIX lock, instead of blocking forever. */
+static int win_pair_lock_wait(HANDLE lock, const char *key_path)
+{
+    for (unsigned int attempt = 0; attempt < 20U; ++attempt) {
+        OVERLAPPED whole = {0};
+        if (LockFileEx(lock, LOCKFILE_EXCLUSIVE_LOCK | LOCKFILE_FAIL_IMMEDIATELY, 0, 1, 0, &whole))
+            return 1;
+        if (GetLastError() != ERROR_LOCK_VIOLATION) break;
+        if (attempt + 1U < 20U) Sleep(50);
+    }
+    fprintf(stderr, file_message("Cannot acquire key directory lock %s/.nekokem-pair.lock: %s\n"),
+            file_display_safe_path(key_path), strerror(EAGAIN));
+    errno = EAGAIN;
+    return 0;
+}
+
+static void win_pair_lock_release(HANDLE lock)
+{
+    if (lock == INVALID_HANDLE_VALUE) return;
+    (void)UnlockFile(lock, 0, 0, 1, 0);
+    CloseHandle(lock);
+}
+
+/* Locks each distinct key directory once, in file-identity order. */
+static int win_lock_pair(const char *first, const char *second, HANDLE locks[2])
+{
+    BY_HANDLE_FILE_INFORMATION a, b;
+    locks[0] = win_pair_lock_open(first);
+    locks[1] = locks[0] != INVALID_HANDLE_VALUE ? win_pair_lock_open(second) : INVALID_HANDLE_VALUE;
+    if (locks[1] == INVALID_HANDLE_VALUE ||
+        !GetFileInformationByHandle(locks[0], &a) || !GetFileInformationByHandle(locks[1], &b)) return 0;
+    if (win_same(locks[0], locks[1])) {
+        win_pair_lock_release(locks[1]);
+        locks[1] = INVALID_HANDLE_VALUE;
+        return win_pair_lock_wait(locks[0], first);
+    }
+    ULONGLONG left = ((ULONGLONG)a.nFileIndexHigh << 32) | a.nFileIndexLow;
+    ULONGLONG right = ((ULONGLONG)b.nFileIndexHigh << 32) | b.nFileIndexLow;
+    int swap = b.dwVolumeSerialNumber < a.dwVolumeSerialNumber ||
+               (b.dwVolumeSerialNumber == a.dwVolumeSerialNumber && right < left);
+    return win_pair_lock_wait(locks[swap], swap ? second : first) &&
+           win_pair_lock_wait(locks[!swap], swap ? first : second);
+}
+
 static int win_commit_pair(AtomicFile *first, AtomicFile *second, int replace)
 {
     AtomicFile *files[2] = {first, second};
@@ -789,6 +891,7 @@ static int win_commit_pair(AtomicFile *first, AtomicFile *second, int replace)
     int preserve[2] = {0, 0};
     int keep_new[2] = {0, 0};
     int restored[2] = {0, 0};
+    HANDLE locks[2] = {INVALID_HANDLE_VALUE, INVALID_HANDLE_VALUE};
     size_t count = second == NULL ? 1 : 2;
     int publishing = 0;
     int success = 0;
@@ -799,6 +902,8 @@ static int win_commit_pair(AtomicFile *first, AtomicFile *second, int replace)
         if (_wcsicmp(a->path.full, b->path.full) == 0 ||
             (win_same(a->path.parents[a->path.count-1], b->path.parents[b->path.count-1]) &&
              _wcsicmp(wcsrchr(a->path.full,L'\\'),wcsrchr(b->path.full,L'\\')) == 0)) goto cleanup;
+        /* Held through publication, rollback and backup cleanup, as on POSIX. */
+        if (!win_lock_pair(first->final_path, second->final_path, locks)) goto cleanup;
     }
     for (size_t i = 0; i < count; ++i) {
         WinAtomic *state = files[i]->platform_state;
@@ -984,6 +1089,8 @@ cleanup:
         } else atomic_file_abort(files[i]);
     }
     if (publishing) ReleaseSRWLockExclusive(&win_publication);
+    win_pair_lock_release(locks[1]);
+    win_pair_lock_release(locks[0]);
     if (!success) print_system_error("Cannot commit atomic output transaction");
     return success;
 }
