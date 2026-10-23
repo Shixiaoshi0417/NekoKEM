@@ -1,22 +1,25 @@
-# NekoKEM v4.3.0
+# NekoKEM v4.3.1
 
 ## 简体中文
 
 ### 本版更新
 
-本版把 Android 界面升级为 Material 3 Expressive，并随之升级 Android 构建工具链。Android 与各平台 CLI/GUI 统一为 **4.3.0**，Core 仍为 **4.0**。Windows、macOS 和 Linux 的 CLI/GUI 功能与 v4.2.0 相同，仅更新版本号。NKEM v3/v4、NKPR v1、密码参数和公钥指纹算法不变。
+本版是安全与稳定性维护版本，修复 2026-10-22 外部审计报告中的问题，并完成 Android 发布构建与目标版本升级。Android 与各平台 CLI/GUI 统一为 **4.3.1**，Core 仍为 **4.0**。NKEM v3/v4、NKPR v1、密码参数和公钥指纹算法不变。
 
-- **Material 3 Expressive 界面**：表现力主题与弹簧动效；支持动态取色的设备沿用系统配色，其他设备使用表现力浅色配色。按钮按下时圆角形变；加密与解密、公私钥导入与导出、删除公钥与私钥组成按钮组，标签在长译文或大字体下放不下一行时自动改为整宽纵向排列。删除操作使用错误色，密钥卡片带有各自的操作，主卡片与标题使用更大的圆角和强调字体。
-- **进度与反馈**：加解密进度对话框显示加载指示器与波浪进度条；选中的通讯录接收方卡片圆角加大并加描边；切换页面时新页面淡入，离开的页面立即移除，预测性返回保持原有行为；关于页用表现力形状展示 App 图标。
-- **操作与数据不变**：文案、操作流程、密钥管理、SAF 文件处理、口令处理与 JNI/Core 调用均不变；无障碍文本与可点击元素保持一致。
-- **Android 工具链**：`material3` 1.5.0-beta01、Compose 1.12.1、Android Gradle Plugin 9.4.1、Gradle 9.6.1、Kotlin 2.4.21（AGP 内置 Kotlin）、`compileSdk 37` 与 Build Tools 36.0.0。`targetSdk` 仍为 35、`minSdk` 仍为 26，运行时行为不随编译 SDK 改变；NDK r28c、CMake 与 OpenSSL 4.0.3 不变。
-- **回归验证**：API 26/29/35 设备测试在深色模式与 1.5 倍字体下覆盖 JNI、SAF、语言切换、预测性返回和公钥通讯录界面；发布构建仍以固定的 Build Tools 35.0.0 校验 APK 签名与 16 KB 页对齐。
+- **Android 删除私钥一并删除中断副本**：永久删除私钥或密钥对时，同时删除导入中断留下的私钥候选与备份副本；无法安全删除的副本会报告为删除失败，不再静默保留。
+- **拒绝空口令加密的 PEM 私钥**：Core 现在拒绝用空口令加密的 PKCS#8 私钥组件；带旧式加密头的公钥文件也会被直接拒绝，不再在终端提示输入 PEM 口令并等待。
+- **不误删正在生成的密钥暂存文件**：删除私钥时只清理超过 10 分钟的 `.tmp.` 暂存文件，不再删除另一个进程刚写入完整 NKPR 头的暂存文件；Linux、macOS 与 Windows 行为一致。
+- **CLI 接受 CRLF 结尾的 1024 字节口令**：Linux/macOS CLI 从重定向输入读取口令时，先去掉行尾 CR 再检查 1024 字节上限，与 Windows 一致。
+- **跨进程加锁**：Windows 上成对发布与删除密钥现在与 POSIX 一样持有密钥目录中的 `.nekokem-pair.lock`（`LockFileEx`），多个进程同时生成或替换同一密钥对不再交错；桌面 GUI 通讯录的导入、修改备注与删除持有跨进程锁，多个应用进程同时导入不会超过 500 条，超出上限的记录计为无法读取，列表仍可打开并删除。
+- **Android 构建**：发布版启用 R8，CI 对压缩后的构建重复 JNI 与回调设备测试；`targetSdk` 升级为 36（Android 16），API 36 模拟器加入设备测试。
+- **构建与测试**：桌面前端 Vite 升级到 7.3.7（GHSA-9jrq-w75r-8gcw 等公告）；桌面 GUI 增量构建在 Core 头文件变化时重新编译；模糊测试种子覆盖 NKEM v4 的接收方数量、数据与截断情形。
 
 ### 兼容性与升级
 
-- Android **4.3.0 / versionCode 12**，最低 API 26、目标 API 35，仅 arm64-v8a。沿用 v3.2.0/v3.3.0 签名，可直接覆盖升级；建议先备份公钥、加密 NKPR 私钥并验证密码。仅旧签名 v3.1.x 安装需要验证备份后卸载重装，卸载会删除应用内部密钥。
+
+- Android **4.3.1 / versionCode 13**，最低 API 26、目标 API 36，仅 arm64-v8a。沿用 v3.2.0/v3.3.0 签名，可直接覆盖升级；建议先备份公钥、加密 NKPR 私钥并验证密码。仅旧签名 v3.1.x 安装需要验证备份后卸载重装，卸载会删除应用内部密钥。
 - NKEM v3/v4 与 NKPR v1 保持兼容；NKEM v4 需要 v4.0.0 或更新版本。NKEM v1/v2 不再支持。OpenSSL 固定为 4.0.3，Argon2id 保持 64 MiB、3 次迭代、并行度 4。
-- 默认不覆盖已有文件；密钥替换仍需明确确认。替换或删除旧私钥前请保留可用备份。POSIX 的 `.nekokem-pair.lock` 可保留，操作运行期间不要删除。
+- 默认不覆盖已有文件；密钥替换仍需明确确认。替换或删除旧私钥前请保留可用备份。密钥目录中的 `.nekokem-pair.lock`（POSIX 与 Windows）可保留，操作运行期间不要删除。
 - NKEM 不认证发送者；v4 的接收方可识别自己的记录并跨文件确认参与。AES-GCM 不提供密钥承诺性。成对文件提交不宣称跨文件断电原子性；外部并发修改、SAF 提供方行为及物理擦除仍有文档所述限制。
 
 ### 平台与验证边界
@@ -47,19 +50,22 @@
 
 ### What's new
 
-This release moves the Android interface to Material 3 Expressive and upgrades the Android build toolchain with it. Android and every CLI/GUI application are **4.3.0**; Core remains **4.0**. The Windows, macOS and Linux CLIs and GUIs behave as in v4.2.0; only their version changes. NKEM v3/v4, NKPR v1, cryptographic parameters and public-key fingerprint algorithms are unchanged.
+This is a security and stability maintenance release. It fixes the issues in the 2026-10-22 external audit report and completes the Android release-build and target-version upgrades. Android and every CLI/GUI application are **4.3.1**; Core remains **4.0**. NKEM v3/v4, NKPR v1, cryptographic parameters and public-key fingerprint algorithms are unchanged.
 
-- **Material 3 Expressive interface**: an expressive theme with spring motion, using the system's dynamic colors where supported and the expressive light scheme elsewhere. Buttons morph their corners when pressed. Encrypt and decrypt, public/private key import and export, and public/private key deletion form button groups that stack at full width when a label would not fit on one line, as with long translations or large font scales. Deletions use the error colors, key cards carry their own actions, and leading cards and titles use larger shapes and emphasized type.
-- **Progress and feedback**: the encryption and decryption progress dialog shows a loading indicator and a wavy progress bar. A chosen contact's card rounds further and gains an outline. A newly opened page fades in while the page being left is removed at once, so predictive back behaves as before. The About page frames the App icon in an expressive shape.
-- **Operations and data unchanged**: strings, flows, key management, SAF file handling, password handling and JNI/Core calls are unchanged, and so are the accessible labels and clickable elements.
-- **Android toolchain**: `material3` 1.5.0-beta01, Compose 1.12.1, Android Gradle Plugin 9.4.1, Gradle 9.6.1, Kotlin 2.4.21 (AGP's built-in Kotlin), `compileSdk 37` and Build Tools 36.0.0. `targetSdk` stays 35 and `minSdk` 26, so runtime behavior does not change with the compile SDK; NDK r28c, CMake and OpenSSL 4.0.3 are unchanged.
-- **Regression coverage**: API 26/29/35 device tests, run in dark mode at a 1.5× font scale, cover JNI, SAF, language switching, predictive back and the public-key contacts interface. Release builds still verify the APK signature and 16 KB page alignment with the pinned Build Tools 35.0.0.
+- **Android deletes interrupted copies with the private key**: permanently deleting the private key or key pair now also deletes the private-key candidates and backups an interrupted import left behind. A copy that cannot be removed safely is reported as a failed deletion instead of being kept silently.
+- **Empty-password PEM private keys are rejected**: Core now rejects PKCS#8 private-key components encrypted with an empty password. A public-key file with a legacy encryption header is rejected directly instead of prompting for a PEM pass phrase on the terminal and waiting.
+- **Key staging files being generated are kept**: deleting a private key only removes `.tmp.` staging files older than ten minutes and no longer deletes another process's staging file that already has a complete NKPR header. Linux, macOS and Windows behave the same.
+- **The CLI accepts a 1024-byte password ending in CRLF**: when reading a password from redirected input, the Linux/macOS CLI strips a trailing CR before applying the 1024-byte limit, as Windows does.
+- **Cross-process locking**: on Windows, pair publication and key deletion now hold `.nekokem-pair.lock` in the key directory (`LockFileEx`), as on POSIX, so processes generating or replacing the same pair no longer interleave. Desktop GUI contact imports, note edits and deletes hold a cross-process lock, so app processes importing at once cannot exceed 500 contacts; records past the limit count as unreadable and the list still opens for deletion.
+- **Android build**: release builds enable R8, and CI repeats the JNI and callback device tests on the minified build. `targetSdk` moves to 36 (Android 16), and an API 36 emulator joins the device tests.
+- **Build and tests**: the desktop frontend moves to Vite 7.3.7 (GHSA-9jrq-w75r-8gcw and related advisories). Incremental desktop GUI builds recompile when Core headers change. Fuzzing seeds cover NKEM v4 recipient counts, data and truncation.
 
 ### Compatibility and upgrading
 
-- Android **4.3.0 / versionCode 12**, minimum API 26, target API 35, arm64-v8a only. The v3.2.0/v3.3.0 signer is retained for in-place updates. Back up public and encrypted NKPR private keys and verify the password first. Only old-signer v3.1.x installations need verified backups followed by uninstall/reinstall; uninstalling deletes app-private keys.
+
+- Android **4.3.1 / versionCode 13**, minimum API 26, target API 36, arm64-v8a only. The v3.2.0/v3.3.0 signer is retained for in-place updates. Back up public and encrypted NKPR private keys and verify the password first. Only old-signer v3.1.x installations need verified backups followed by uninstall/reinstall; uninstalling deletes app-private keys.
 - NKEM v3/v4 and NKPR v1 remain compatible; NKEM v4 needs v4.0.0 or newer. NKEM v1/v2 are unsupported. OpenSSL stays pinned to 4.0.3 and Argon2id remains 64 MiB, three iterations, parallelism four.
-- Existing files are not overwritten by default; key replacement still needs explicit confirmation. Retain usable backups before replacing or deleting old keys. POSIX `.nekokem-pair.lock` files can remain; do not delete them during operations.
+- Existing files are not overwritten by default; key replacement still needs explicit confirmation. Retain usable backups before replacing or deleting old keys. `.nekokem-pair.lock` files in key directories (POSIX and Windows) can remain; do not delete them during operations.
 - NKEM does not authenticate senders. A v4 recipient can identify its own records and participation across files. AES-GCM provides no key commitment. Paired file commits do not promise cross-file power-loss atomicity; external concurrent mutation, SAF provider behavior and physical erasure retain their documented limits.
 
 ### Platform and validation boundaries
