@@ -1845,6 +1845,7 @@ name = "nekokem-gui"
 version = "4.3.0"
 dependencies = [
  "cc",
+ "libc",
  "serde",
  "serde_json",
  "tauri",
