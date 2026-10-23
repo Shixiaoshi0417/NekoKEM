@@ -8,8 +8,8 @@ import subprocess
 import tarfile
 import zipfile
 
-VERSION = '4.3.0'
-VERSION_CODE = 12
+VERSION = '4.3.1'
+VERSION_CODE = 13
 CORE_VERSION = '4.0'
 # The v3.2.0 release signer; normal releases must keep it.
 SIGNER = '5a091b86b1cb339f081c1afa2aa71b986c07597343ce336f22d866b05c39fb50'

@@ -1,5 +1,14 @@
 # Changelog
 
+## 4.3.1
+
+- 全平台 4.3.1，Core 4.0，Android versionCode 13；沿用既有签名，可覆盖升级。
+- 永久删除私钥或密钥对时一并删除导入中断留下的私钥候选与备份副本；无法安全删除时报告删除失败。
+- 发布版启用 R8，CI 对压缩后的构建重复设备测试；targetSdk 升级为 36（Android 16），minSdk 26 不变。
+- Core 拒绝空口令加密的 PKCS#8 私钥，删除私钥不再误删其他进程正在生成的暂存文件。格式与密码参数不变。完整双语说明见 [v4.3.1](../release/v4.3.1.md)。
+
+Android 4.3.1 / versionCode 13 retains the existing signer. Permanently deleting the private key or key pair also deletes the private-key candidates and backups an interrupted import left behind, and reports a failure when a copy cannot be removed safely. Release builds enable R8 and CI repeats the device tests on the minified build; targetSdk moves to 36 (Android 16) with minSdk 26 unchanged. Core rejects PKCS#8 private keys encrypted with an empty password and no longer deletes a staging file another process is generating. Formats and cryptographic parameters are unchanged. See the [bilingual notes](../release/v4.3.1.md).
+
 ## 4.3.0
 
 - 全平台 4.3.0，Core 4.0，Android versionCode 12；沿用既有签名，可覆盖升级。

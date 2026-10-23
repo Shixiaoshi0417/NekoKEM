@@ -39,7 +39,7 @@ uploads artifacts to Actions. Publishing is a separate maintainer step:
    with the `<!-- RELEASE_ZH_METADATA -->` and `<!-- RELEASE_EN_METADATA -->`
    placeholders) into `main`, then wait for that commit's CI run.
 2. Run Release on `main` for the same commit.
-3. Run Publish: `gh workflow run publish.yml --ref main -f tag=v4.3.0 -f ci_run=<CI run ID> -f release_run=<Release run ID>`.
+3. Run Publish: `gh workflow run publish.yml --ref main -f tag=v4.3.1 -f ci_run=<CI run ID> -f release_run=<Release run ID>`.
 
 Publish checks that both runs succeeded on the same `main` commit, downloads the
 Release artifacts and verifies the internal checksums, every package's version,
@@ -127,7 +127,7 @@ it promptly and let the artifact expire. Plaintext signing keys/passwords and
 the recovery private key must never be uploaded. Plaintext signing material is
 removed even when the job fails.
 
-The v4.3.0 public release contains 14 packages:
+The v4.3.1 public release contains 14 packages:
 
 | Platform | Public assets |
 |---|---|
@@ -141,13 +141,13 @@ Publish only packages from the successful Release run for the exact CI-validated
 source; the Publish workflow enforces this. The fifteenth asset, top-level
 `SHA256SUMS.txt`, lists all 14 packages. The notes record the source commit,
 CI/Release run links, Android signer and public asset hashes, as in the
-[Chinese-then-English v4.3.0 notes](v4.3.0.md). Releases after v4.1.0 also carry
+[Chinese-then-English v4.3.1 notes](v4.3.1.md). Releases after v4.1.0 also carry
 build provenance attestations; v4.1.0 and earlier do not.
 A rotation's encrypted signing recovery envelope is never selected for
 publication; **do not attach it to the public GitHub Release**. Windows application EXEs are
 unsigned; verification of the Microsoft SDK loader's signature is separate.
 
-Android v4.3.0 uses versionCode `12`, keeps the v3.2.0/v3.3.0 signing identity and
+Android v4.3.1 uses versionCode `13`, keeps the v3.2.0/v3.3.0 signing identity and
 supports an in-place update. Only old-signer v3.1.x installations need backup
 verification and uninstall/reinstall. Keep the existing square artwork for Android,
 use transparent outer white areas for Windows EXE icons, reuse those PNGs for
@@ -159,13 +159,13 @@ retired in favor of these two entry points.
 
 ## macOS Apple Silicon build artifacts
 
-v4.3.0 includes the following native macOS packages in CI and Release:
+v4.3.1 includes the following native macOS packages in CI and Release:
 
 - `NekoKEM-macos-arm64.tar.gz`: native CLI and Terminal menu launcher.
 - `NekoKEM-macos-arm64-GUI.zip`: `NekoKEM.app`, documentation, licenses,
   checksums and build metadata.
 - `NekoKEM-macos-arm64-GUI.dmg`: Tauri DMG checked and exported under a stable
-  package name; its initial Tauri filename is `NekoKEM_4.3.0_aarch64.dmg`.
+  package name; its initial Tauri filename is `NekoKEM_4.3.1_aarch64.dmg`.
 
 Builds use native Apple Silicon and set a macOS 11.0 deployment target. The actual
 native CI runner is `macos-15`; the target does not establish compatibility on
@@ -186,7 +186,7 @@ is included in top-level `SHA256SUMS.txt`; historical v3.3.0 assets remain uncha
 
 ## Linux GUI build artifacts
 
-Linux GUI v4.3.0 uses native Ubuntu 24.04 x86_64 and ARM64 build/test runners.
+Linux GUI v4.3.1 uses native Ubuntu 24.04 x86_64 and ARM64 build/test runners.
 CI and Release produce, for each `x86_64`/`aarch64` architecture:
 
 - `NekoKEM-linux-<architecture>-GUI.deb`: native application, desktop entry,
