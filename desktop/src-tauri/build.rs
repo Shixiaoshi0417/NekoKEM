@@ -62,13 +62,14 @@ fn main() {
             .flag("-ffunction-sections").flag("-fdata-sections");
     }
     for name in ["nekokem", "key_management", "nekokem_v3", "nekokem_v4", "kem", "hybrid", "aes", "file", "file_v3", "file_v4", "secure_mem", "private_key"] {
-        let path = root.join(format!("core/src/{name}.c"));
-        println!("cargo:rerun-if-changed={}", path.display()); build.file(path);
+        build.file(root.join(format!("core/src/{name}.c")));
     }
     build.file(root.join("linux/src/i18n.c")).file(root.join("desktop/native/bridge.c"));
     build.compile("nekokem_core");
     println!("cargo:rerun-if-env-changed=NEKOKEM_OPENSSL_PREFIX");
-    for path in ["core/src/file_windows.inc", "desktop/native/bridge.c", "linux/src/i18n.c", "linux/src/i18n.h"] {
+    // cc does not report included headers, so track whole source directories:
+    // Cargo rebuilds when any file in them, header or not, is added or changed.
+    for path in ["core/include", "core/src", "linux/src", "desktop/native"] {
         println!("cargo:rerun-if-changed={}", root.join(path).display());
     }
     println!("cargo:rustc-link-search=native={}", prefix.join("lib").display());
