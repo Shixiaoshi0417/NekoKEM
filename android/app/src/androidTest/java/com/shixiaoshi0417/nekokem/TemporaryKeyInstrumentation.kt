@@ -93,7 +93,7 @@ class TemporaryKeyInstrumentation : Instrumentation() {
             testKeyPairMatching(manager, workflow, context.cacheDir)
             testCancellationCleanup(workflow, context.cacheDir, plaintext)
             runPublicKeyContactsTests(context, manager, workflow, plaintext, DEFAULT_PASSWORD)
-            testKeyDeletion(manager)
+            testKeyDeletion(manager, context)
             val retainedContacts = com.shixiaoshi0417.nekokem.keys.PublicKeyContacts(context, manager)
             val retained = retainedContacts.readState().contacts.single()
             val selected = checkNotNull(retainedContacts.stageForEncryption(retained.id).key)
@@ -652,7 +652,9 @@ class TemporaryKeyInstrumentation : Instrumentation() {
         check(workflow.clearTemporaryKeyCache())
     }
 
-    private fun testKeyDeletion(manager: LocalKeyManager) {
+    private fun testKeyDeletion(manager: LocalKeyManager, context: Context) {
+        val keys = File(context.filesDir, "keys")
+        val privateKey = File(keys, "private.nkpr.enc")
         val initial = manager.readState()
         check(initial.privateKeyExists)
         check(initial.fingerprint != null)
@@ -660,10 +662,39 @@ class TemporaryKeyInstrumentation : Instrumentation() {
         val privateOnly = manager.readState()
         check(privateOnly.privateKeyExists)
         check(privateOnly.fingerprint == null)
-        check(manager.deleteKeypair() == NativeBridge.RESULT_SUCCESS)
+        // An import interrupted after staging leaves full copies of the private
+        // key, recent ones included; deleting the key pair removes them too.
+        val candidate = File(keys, "nkem-prv-interrupted.tmp")
+        val backup = File(keys, "nkem-prv-backup-interrupted.tmp")
+        val publicBackup = File(keys, "nkem-pub-backup-retained.tmp").apply { writeText("public copy") }
+        try {
+            listOf(candidate, backup).forEach {
+                privateKey.copyTo(it)
+                Os.chmod(it.absolutePath, PRIVATE_FILE_MODE)
+            }
+            check(manager.deleteKeypair() == NativeBridge.RESULT_SUCCESS)
+            check(!candidate.exists() && !backup.exists())
+            check(publicBackup.readText() == "public copy")
+        } finally {
+            listOf(candidate, backup, publicBackup).forEach { it.delete() }
+        }
         val empty = manager.readState()
         check(!empty.privateKeyExists)
         check(empty.fingerprint == null)
+        // Deleting the private key alone removes copies as well, and a copy
+        // that cannot be removed safely is reported instead of ignored.
+        val leftover = File(keys, "nkem-prv-leftover.tmp").apply { writeText("private copy") }
+        val linked = File(keys, "nkem-prv-linked.tmp").apply { writeText("linked copy") }
+        val alias = File(keys, "linked-alias")
+        Os.link(linked.absolutePath, alias.absolutePath)
+        try {
+            check(manager.deletePrivateKey() == LocalKeyManager.RESULT_STORAGE_ERROR)
+            check(!leftover.exists())
+            check(linked.readText() == "linked copy")
+        } finally {
+            listOf(leftover, linked, alias).forEach { it.delete() }
+        }
+        check(manager.deletePrivateKey() == NativeBridge.RESULT_SUCCESS)
         check(manager.deleteKeypair() == NativeBridge.RESULT_SUCCESS)
     }
 
