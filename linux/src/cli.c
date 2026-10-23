@@ -419,13 +419,10 @@ static int read_password_line(const char *prompt,
     CliTerminal original_terminal;
     unsigned char *buffer = NULL;
     size_t length = 0U;
-#ifdef _WIN32
-    /* Binary stdin retains CRLF; reserve a trailing CR without reducing the
+    /* CRLF input (Windows binary stdin, or a CRLF stream redirected on any
+     * platform) keeps a trailing CR; reserve it without reducing the
      * 1024-byte password limit or treating Ctrl-Z as EOF. */
     const size_t capacity = MAX_PASSWORD_SIZE + 2U;
-#else
-    const size_t capacity = MAX_PASSWORD_SIZE + 1U;
-#endif
     int character = EOF;
     int echo_disabled = 0;
     int too_long = 0;
@@ -455,11 +452,7 @@ static int read_password_line(const char *prompt,
         if (character == EOF || character == '\n') {
             break;
         }
-#ifdef _WIN32
         if (length <= MAX_PASSWORD_SIZE) {
-#else
-        if (length < MAX_PASSWORD_SIZE) {
-#endif
             buffer[length++] = (unsigned char)character;
         } else {
             too_long = 1;
@@ -469,9 +462,7 @@ static int read_password_line(const char *prompt,
         --length;
         buffer[length] = '\0';
     }
-#ifdef _WIN32
     if (length > MAX_PASSWORD_SIZE) too_long = 1;
-#endif
     if (character == EOF && cli_input_error() != 0) {
         print_system_error("Cannot read password");
         goto cleanup;
