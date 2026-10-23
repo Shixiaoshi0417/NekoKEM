@@ -233,8 +233,12 @@ SAF 输出失败或取消时会尽量恢复目标的原有内容。文档提供�
 Android 11 及以下的 `fullBackupContent` 也排除全部数据，保留 `allowBackup=false`。
 密钥和通讯录需要用户自行导出并验证备份。
 
-发布构建暂不启用 R8。JNI 按 `NativeBridge` 的完整类/方法名导出符号，并通过字符串查找
-`NativeProgressCallback.onProgress(JJ)Z`；压缩和混淆需要同时保留这些入口及回调实现。
-当前 API 26/29/35 设备矩阵验证 Debug APK，不能证明压缩后的 Release APK 的 JNI、回调、取消及语言 UI 全部正常。
-在增加相应 Release 设备验证之前保持 `isMinifyEnabled=false`，避免仅构建成功却在设备上找不到 JNI 符号；
+发布构建启用 R8（`isMinifyEnabled=true`）。JNI 按 `NativeBridge` 的完整类/方法名导出符号，并通过字符串查找
+`NativeProgressCallback.onProgress(JJ)Z`；[`proguard-rules.pro`](app/proguard-rules.pro) 保留 `NativeBridge`
+的类名和 native 方法名、该接口方法及所有实现（包括 R8 为 Kotlin lambda 生成的类）的 `onProgress`。
+CI 在 API 26/29/35 模拟器上先跑 Debug APK 的全部设备测试，再对 `minified` 构建重复
+JNI、进度回调、取消、SAF、通讯录和界面阶段。`minified` 仅在 `-PnekokemEmulatorTest=true -PnekokemMinifiedTest=true`
+时存在，沿用 Release 的 R8 配置和规则、不可调试、使用调试签名且只含 x86_64，从不发布。
+它额外通过 [`proguard-device-tests.pro`](app/proguard-device-tests.pro) 防止 R8 删除或合并只被测试调用的应用代码，
+但仍允许重命名，因此 JNI 与回调名称完全依赖发布用的规则。需要 `run-as` 或模拟器 root 的系统语言和截图阶段只在 Debug APK 上运行。
 不改变现有无缓存 Release、独立 APK 构建/签名流程。

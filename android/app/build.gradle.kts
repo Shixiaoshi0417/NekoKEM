@@ -36,6 +36,12 @@ val emulatorTest = providers.gradleProperty("nekokemEmulatorTest").orNull == "tr
 if (emulatorTest && releaseTaskRequested) {
     throw GradleException("Emulator test ABI cannot be used for release builds")
 }
+// Device tests against an R8-minified, non-debuggable build that uses the
+// release rules; it exists only for the emulator ABI and is never published.
+val minifiedTest = providers.gradleProperty("nekokemMinifiedTest").orNull == "true"
+if (minifiedTest && !emulatorTest) {
+    throw GradleException("Minified device tests require -PnekokemEmulatorTest=true")
+}
 
 android {
     namespace = "com.shixiaoshi0417.nekokem"
@@ -79,13 +85,23 @@ android {
             if (releaseSigningConfigured) {
                 signingConfig = signingConfigs.getByName("release")
             }
-            isMinifyEnabled = false
+            isMinifyEnabled = true
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro",
             )
         }
+        if (minifiedTest) {
+            create("minified") {
+                initWith(getByName("release"))
+                signingConfig = signingConfigs.getByName("debug")
+                proguardFiles("proguard-device-tests.pro")
+                matchingFallbacks += "release"
+            }
+        }
     }
+
+    if (minifiedTest) testBuildType = "minified"
 
     testOptions {
         unitTests.isIncludeAndroidResources = true
