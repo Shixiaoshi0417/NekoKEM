@@ -1465,9 +1465,10 @@ static int test_key_residue_deletion(const char *root)
         link(key, backup) != 0 ||
         !write_plain_file(old_backup, private_data, sizeof(private_data), 0600) ||
         !write_plain_file(temporary, (const unsigned char *)"partial", 7U, 0600) ||
-        !write_plain_file(fresh, (const unsigned char *)"staging", 7U, 0600)) goto cleanup;
+        !write_plain_file(fresh, private_data, sizeof(private_data), 0600)) goto cleanup;
     /* An hour-old temporary file is crash residue; a fresh one may be another
-     * process's staging, written before it takes the pair lock. */
+     * process's staging, written before it takes the pair lock, and is kept
+     * even once it holds a complete NKPR header. */
     stale_times[0].tv_sec = stale_times[1].tv_sec = time(NULL) - 3600;
     stale_times[0].tv_nsec = stale_times[1].tv_nsec = 0;
     if (utimensat(AT_FDCWD, temporary, stale_times, 0) != 0) goto cleanup;

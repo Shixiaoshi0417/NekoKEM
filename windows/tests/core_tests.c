@@ -129,11 +129,16 @@ static int file_audit_regressions(void)
     CHECK(restore_failure_retains_pair(2) == EXIT_SUCCESS);
     CHECK(restore_failure_retains_pair(3) == EXIT_SUCCESS);
     CHECK(restore_failure_retains_pair(4) == EXIT_SUCCESS);
+    /* A fresh temporary file may be another process's key staging; it is
+     * kept even once it holds a complete NKPR header. */
+    CHECK(write_private("private.enc.tmp.0123456789abcdef0123456789abcdef", "NKPRstaging", 11));
     CHECK(CreateHardLinkW(L"private.enc.bak.0123456789abcdef0123456789abcdef", L"private.enc", NULL));
     CHECK(!nekokem_private_key_exists("private.enc"));
     CHECK(nekokem_delete_private_key("private.enc"));
     CHECK(GetFileAttributesW(L"private.enc.bak.0123456789abcdef0123456789abcdef") == INVALID_FILE_ATTRIBUTES);
     CHECK(GetFileAttributesW(L"private.enc") == INVALID_FILE_ATTRIBUTES);
+    CHECK(GetFileAttributesW(L"private.enc.tmp.0123456789abcdef0123456789abcdef") != INVALID_FILE_ATTRIBUTES);
+    CHECK(windows_delete_regular("private.enc.tmp.0123456789abcdef0123456789abcdef"));
     return EXIT_SUCCESS;
 }
 

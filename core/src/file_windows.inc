@@ -664,8 +664,9 @@ static int win_inspect_key_artifacts(const char *path, HANDLE key, int remove_ow
         ULONGLONG written = ((ULONGLONG)info.ftLastWriteTime.dwHighDateTime << 32) | info.ftLastWriteTime.dwLowDateTime;
         ULONGLONG current = ((ULONGLONG)now.dwHighDateTime << 32) | now.dwLowDateTime;
         int stale = valid && current > written && current - written > 600ULL * 10000000ULL;
+        /* A fresh temporary file is kept even with a complete key header. */
         int ours = valid && (same || (info.nNumberOfLinks == 1 &&
-            ((stale && wcsncmp(entry.cFileName + name_length, L".tmp.", 5) == 0) ||
+            (wcsncmp(entry.cFileName + name_length, L".tmp.", 5) == 0 ? stale :
              (ReadFile(residue, magic, sizeof(magic), &count, NULL) &&
               ((count >= 4 && memcmp(magic, "NKPR", 4) == 0) ||
                (count == sizeof(magic) && memcmp(magic, "-----BEGIN PRIVATE KEY-----", sizeof(magic)) == 0))))));
