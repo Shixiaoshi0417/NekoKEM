@@ -426,6 +426,8 @@ on Linux/Windows. Speed depends on hardware, filesystems and cache state.
 make -C linux test
 ```
 
+The `make` target above is the same-machine regression. To encrypt on one machine, decrypt on another, and check plaintext SHA-256, see [Cross-platform encrypt/decrypt round trip](docs/cross-platform-roundtrip.en.md).
+
 The tests run in temporary directories:
 
 - GCC `-fanalyzer` first checks resource issues such as leaks, null pointers, uninitialized reads, and double frees.
