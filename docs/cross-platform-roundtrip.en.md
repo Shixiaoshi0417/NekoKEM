@@ -33,12 +33,17 @@ A failed decrypt does not create a new plaintext file. Every output path in this
 - On POSIX the private key must be a regular file owned by the current user, mode exactly `0600`, with one hard link. On Windows it must be owned by the current user, with an owner-only ACL and one hard link. A public key is a non-empty regular file. Reads use `O_NOFOLLOW`, so a symlink is rejected. Public keys have no `0600` requirement.
 - If Windows detects an MSYS or mintty pseudoterminal that cannot reliably hide secret input, the CLI refuses the password. Use Windows Terminal, or UTF-8 stdin as shown below.
 
-The `sh` blocks below are for a POSIX shell: Linux, macOS, or Git Bash. In PowerShell the arguments are the same, the directory must be on local fixed NTFS, and the executable is `.\nekokem.exe`. Run the encrypt line after `peer-public.key` is in place:
+The `sh` blocks below are for a POSIX shell: Linux, macOS, or Git Bash. In PowerShell the arguments are the same, the directory must be on local fixed NTFS, and the executable is `.\nekokem.exe`. The PowerShell sample targets Windows PowerShell 5.1 and later, including PowerShell 7. It pipes a here-string to `python -`: Windows PowerShell 5.1 strips double quotes from native arguments, so a `python -c` command with embedded quotes is not valid Python. Run the encrypt line after `peer-public.key` is in place. The here-string terminator `'@` must be the first characters on its line.
 
 ```powershell
 New-Item -ItemType Directory -Force "$env:USERPROFILE\nekokem-roundtrip" | Out-Null
 Set-Location "$env:USERPROFILE\nekokem-roundtrip"
-python -c 'from pathlib import Path; Path("plain-text.txt").write_bytes(b"nekokem-roundtrip\n"); Path("plain-empty").write_bytes(b""); Path("plain-binary").write_bytes(bytes(range(256)))'
+@'
+from pathlib import Path
+Path("plain-text.txt").write_bytes(b"nekokem-roundtrip\n")
+Path("plain-empty").write_bytes(b"")
+Path("plain-binary").write_bytes(bytes(range(256)))
+'@ | python -
 New-Item -ItemType Directory -Force out, in | Out-Null
 .\nekokem.exe --lang en encrypt hybrid plain-text.txt out\text.v3.nkem peer-public.key
 ```

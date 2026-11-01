@@ -33,12 +33,17 @@ Linux、macOS、Windows 的 CLI 共用 `linux/src/main.c` 的参数解析。Andr
 - POSIX 上私钥必须是当前用户拥有的普通文件、权限恰好 `0600`、硬链接数为 1。Windows 上必须是当前用户拥有、仅所有者可访问的 ACL、单一硬链接。公钥是普通非空文件；读取使用 `O_NOFOLLOW`，符号链接会被拒绝。公钥没有 `0600` 要求。
 - 检测到不能可靠关闭回显的 MSYS/mintty 时，Windows CLI 拒绝秘密输入。使用 Windows Terminal，或按本文用 UTF-8 标准输入。
 
-下文的 `sh` 代码块按 POSIX shell 书写，适用于 Linux、macOS 和 Git Bash。在 PowerShell 中参数相同，目录必须在本地固定 NTFS 上，可执行文件是 `.\nekokem.exe`。加密那一行要等 `peer-public.key` 复制到位后再执行：
+下文的 `sh` 代码块按 POSIX shell 书写，适用于 Linux、macOS 和 Git Bash。在 PowerShell 中参数相同，目录必须在本地固定 NTFS 上，可执行文件是 `.\nekokem.exe`。下面的 PowerShell 示例适用于 Windows PowerShell 5.1 及更高版本，包括 PowerShell 7。样本脚本用 here-string 经管道交给 `python -`：Windows PowerShell 5.1 在调用本机程序时会剥掉参数中的双引号，`python -c` 里再嵌双引号会变成非法 Python。加密那一行要等 `peer-public.key` 复制到位后再执行。here-string 的结束符 `'@` 必须写在行首。
 
 ```powershell
 New-Item -ItemType Directory -Force "$env:USERPROFILE\nekokem-roundtrip" | Out-Null
 Set-Location "$env:USERPROFILE\nekokem-roundtrip"
-python -c 'from pathlib import Path; Path("plain-text.txt").write_bytes(b"nekokem-roundtrip\n"); Path("plain-empty").write_bytes(b""); Path("plain-binary").write_bytes(bytes(range(256)))'
+@'
+from pathlib import Path
+Path("plain-text.txt").write_bytes(b"nekokem-roundtrip\n")
+Path("plain-empty").write_bytes(b"")
+Path("plain-binary").write_bytes(bytes(range(256)))
+'@ | python -
 New-Item -ItemType Directory -Force out, in | Out-Null
 .\nekokem.exe --lang en encrypt hybrid plain-text.txt out\text.v3.nkem peer-public.key
 ```
