@@ -155,7 +155,7 @@ dependencies {
     testImplementation("org.robolectric:robolectric:4.14.1")
 
     implementation(platform("androidx.compose:compose-bom:2026.09.00"))
-    implementation("androidx.activity:activity-compose:1.10.1")
+    implementation("androidx.activity:activity-compose:1.13.0")
     // Material 3 Expressive components; the BOM still pins material3 1.4.
     implementation("androidx.compose.material3:material3:1.5.0-beta01")
     implementation("androidx.compose.ui:ui")
