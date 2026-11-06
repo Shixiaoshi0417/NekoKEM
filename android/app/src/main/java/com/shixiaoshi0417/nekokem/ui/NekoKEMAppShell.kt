@@ -106,6 +106,7 @@ data class NekoKEMUiState(
     val publicKeyRecipientCount: Int = 0,
     // Checkbox selection on the contacts page, not yet applied to encryption.
     val contactSelection: List<String> = emptyList(),
+    val uiStyle: UiStyle = UiStyles.default,
 )
 
 data class NekoKEMActions(
@@ -134,14 +135,18 @@ data class NekoKEMActions(
     val onToggleContactSelection: (PublicKeyContact) -> Unit = {},
     val onClearContactSelection: () -> Unit = {},
     val onEncryptForSelectedContacts: () -> Unit = {},
+    val onUiStyleChange: (UiStyle) -> Unit = {},
 )
 
-private enum class AppDestination(@StringRes val titleResource: Int) {
-    FILES(R.string.navigation_files),
-    KEYS(R.string.navigation_keys),
-    CONTACTS(R.string.navigation_contacts),
-    SETTINGS(R.string.navigation_settings),
-    ABOUT(R.string.navigation_about),
+internal enum class AppDestination(
+    @StringRes val titleResource: Int,
+    @StringRes val tabResource: Int,
+) {
+    FILES(R.string.navigation_files, R.string.tab_files),
+    KEYS(R.string.navigation_keys, R.string.tab_keys),
+    CONTACTS(R.string.navigation_contacts, R.string.tab_contacts),
+    SETTINGS(R.string.navigation_settings, R.string.tab_settings),
+    ABOUT(R.string.navigation_about, R.string.tab_about),
 }
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterial3ExpressiveApi::class)
@@ -151,6 +156,10 @@ fun NekoKEMAppShell(
     actions: NekoKEMActions,
     snackbarHostState: SnackbarHostState,
 ) {
+    if (state.uiStyle == UiStyle.MIUIX) {
+        MiuixAppShell(state, actions, snackbarHostState)
+        return
+    }
     val drawerState = rememberDrawerState(DrawerValue.Closed)
     val scope = rememberCoroutineScope()
     var destination by rememberSaveable { mutableStateOf(AppDestination.FILES) }
@@ -297,7 +306,7 @@ fun NekoKEMAppShell(
                                         destination = AppDestination.FILES
                                     },
                                 )
-                                AppDestination.SETTINGS -> SettingsPage(state.running)
+                                AppDestination.SETTINGS -> SettingsPage(state.running, state.uiStyle, actions.onUiStyleChange)
                                 AppDestination.ABOUT -> AboutPage(state)
                             }
                         }
@@ -626,9 +635,42 @@ private fun KeyManagementPage(
 }
 
 @Composable
-private fun SettingsPage(running: Boolean) {
+private fun SettingsPage(running: Boolean, uiStyle: UiStyle, onUiStyleChange: (UiStyle) -> Unit) {
     val context = LocalContext.current
     var showLanguages by remember { mutableStateOf(false) }
+    var showUiStyles by remember { mutableStateOf(false) }
+    if (showUiStyles) {
+        AlertDialog(
+            onDismissRequest = { showUiStyles = false },
+            title = { Text(stringResource(R.string.settings_ui_style_title)) },
+            text = {
+                Column(Modifier.selectableGroup()) {
+                    UiStyle.entries.forEach { style ->
+                        Row(
+                            modifier = Modifier.fillMaxWidth().selectable(
+                                selected = uiStyle == style,
+                                role = Role.RadioButton,
+                                onClick = {
+                                    showUiStyles = false
+                                    onUiStyleChange(style)
+                                },
+                            ).padding(vertical = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            RadioButton(selected = uiStyle == style, onClick = null)
+                            Text(
+                                stringResource(style.labelResource),
+                                modifier = Modifier.padding(start = 12.dp).weight(1f),
+                            )
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                DialogButton(stringResource(R.string.action_close), onClick = { showUiStyles = false })
+            },
+        )
+    }
     var languageSaveFailed by remember { mutableStateOf(false) }
     val selection = AppLanguages.selection(context)
     if (languageSaveFailed) {
@@ -690,7 +732,14 @@ private fun SettingsPage(running: Boolean) {
                 titleResource = R.string.settings_dynamic_color_title,
                 valueResource = R.string.settings_dynamic_color_system,
             )
-            LanguageSetting(
+            ChoiceSetting(
+                title = stringResource(R.string.settings_ui_style_title),
+                running = running,
+                value = stringResource(uiStyle.labelResource),
+                onClick = { showUiStyles = true },
+            )
+            ChoiceSetting(
+                title = stringResource(R.string.settings_language_title),
                 running = running,
                 value = if (selection.isEmpty()) {
                     stringResource(R.string.settings_language_system)
@@ -707,10 +756,10 @@ private fun SettingsPage(running: Boolean) {
     }
 }
 
-/** Opens the language picker; its corners morph while pressed like the other buttons. */
+/** Opens a picker; its corners morph while pressed like the other buttons. */
 @OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
-private fun LanguageSetting(running: Boolean, value: String, onClick: () -> Unit) {
+private fun ChoiceSetting(title: String, running: Boolean, value: String, onClick: () -> Unit) {
     TextButton(
         onClick = onClick,
         shapes = ButtonDefaults.shapes(),
@@ -720,7 +769,7 @@ private fun LanguageSetting(running: Boolean, value: String, onClick: () -> Unit
     ) {
         Column(Modifier.fillMaxWidth()) {
             Text(
-                stringResource(R.string.settings_language_title),
+                title,
                 style = MaterialTheme.typography.titleMedium,
             )
             Text(value, style = MaterialTheme.typography.bodyMedium)

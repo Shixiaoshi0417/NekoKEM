@@ -160,6 +160,12 @@ dependencies {
     implementation("androidx.compose.material3:material3:1.5.0-beta01")
     implementation("androidx.compose.ui:ui")
     implementation("androidx.compose.ui:ui-tooling-preview")
+    // MIUIX interface style: components, icons, dropdown preferences, and the
+    // backdrop blur and lens shaders behind the floating liquid glass bar.
+    implementation("top.yukonga.miuix.kmp:miuix-ui-android:0.9.4")
+    implementation("top.yukonga.miuix.kmp:miuix-icons-android:0.9.4")
+    implementation("top.yukonga.miuix.kmp:miuix-preference-android:0.9.4")
+    implementation("top.yukonga.miuix.kmp:miuix-blur-android:0.9.4")
 
     debugImplementation("androidx.compose.ui:ui-tooling")
 }

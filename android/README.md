@@ -20,6 +20,7 @@ README 图标仅使用专用圆角展示图，Android launcher 继续使用现�
 ## 工具链
 
 - Kotlin 2.4.21（AGP 内置 Kotlin）、Jetpack Compose 1.12、Material 3 Expressive（`material3` 1.5.0-beta01）
+- MIUIX（`top.yukonga.miuix.kmp` 0.9.4：`miuix-ui`、`miuix-icons`、`miuix-preference`、`miuix-blur`）
 - Android Gradle Plugin 9.4.1、Gradle 9.6.1（Kotlin DSL）、JDK 17
 - Android SDK Platform 37.0、Build Tools 36.0.0（`compileSdk 37`、`minSdk 26`、`targetSdk 36`）
 - Android NDK r28c（`28.2.13676358`）、CMake、C17
@@ -201,6 +202,14 @@ JNI 只做路径、字符串、字节数组、回调和返回值转换；不解�
 加密与解密等成对操作的按钮组（标签放不下一行时改为整宽纵向排列）、
 删除操作使用错误色，进度对话框显示波浪进度条与加载指示器，切换页面时新页面淡入。
 `material3` 1.5.0-beta01 需要 `compileSdk 37` 与 AGP 9.1 以上。
+
+新安装默认使用 MIUIX 界面，可在「设置 → 界面风格」随时切回 Material 3 Expressive，选择立即生效并保存在本机。
+MIUIX 界面每页使用可折叠的大标题，页面在悬浮的液态玻璃底栏下滚动：底栏对背后内容做模糊和透镜折射，
+选中指示器可拖动并随手指形变，高光随设备倾斜移动。液态玻璃依赖 `RuntimeShader`，仅在 Android 13
+及以上启用；`miuix-blur` 声明 `minSdk 33`，清单以 `tools:overrideLibrary` 合并，App 在更早的系统上
+从不调用它，改为显示不透明的悬浮底栏。底栏组件取自 compose-miuix-ui v0.9.4 示例
+（Apache-2.0，源自 Kyant0/AndroidLiquidGlass），位于 `ui/miuix/liquid`，保留原版权声明。
+对话框两种风格共用，MIUIX 下按 MIUIX 配色显示。
 
 ## Android 16 目标版本
 

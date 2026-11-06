@@ -209,4 +209,13 @@
     <string name="contact_failed_recipient">使用できない受信者：%1$s</string>
     <string name="recovery_backups_title">復旧用バックアップを保持</string>
     <string name="recovery_backups_message">以前の鍵または文書の置換を安全に完了できなかったため、アプリ専用ストレージに %1$d 個の復旧用バックアップを保持しています。削除はしていません。現在の鍵とファイルをエクスポートして確認してから、手動で復旧または削除してください。詳しくは Android README を参照してください。</string>
+    <string name="tab_files">ファイル</string>
+    <string name="tab_keys">鍵</string>
+    <string name="tab_contacts">アドレス帳</string>
+    <string name="tab_settings">設定</string>
+    <string name="tab_about">情報</string>
+    <string name="settings_ui_style_title">インターフェースのスタイル</string>
+    <string name="settings_liquid_glass_unsupported">リキッドグラスには Android 13 以降が必要です。それより前のバージョンでは不透明なバーになります。</string>
+    <string name="miuix_keys_transfer_title">インポートとエクスポート</string>
+    <string name="miuix_keys_delete_title">鍵の削除</string>
 </resources>
