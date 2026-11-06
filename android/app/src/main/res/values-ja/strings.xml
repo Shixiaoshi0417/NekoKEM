@@ -218,4 +218,6 @@
     <string name="settings_liquid_glass_unsupported">リキッドグラスには Android 13 以降が必要です。それより前のバージョンでは不透明なバーになります。</string>
     <string name="miuix_keys_transfer_title">インポートとエクスポート</string>
     <string name="miuix_keys_delete_title">鍵の削除</string>
+    <string name="settings_ui_style_miuix">MIUIX</string>
+    <string name="settings_ui_style_material">Material 3 Expressive</string>
 </resources>

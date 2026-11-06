@@ -218,4 +218,6 @@
     <string name="settings_liquid_glass_unsupported">液態玻璃需要 Android 13 或更新版本，較舊的系統顯示不透明底欄。</string>
     <string name="miuix_keys_transfer_title">匯入與匯出</string>
     <string name="miuix_keys_delete_title">刪除金鑰</string>
+    <string name="settings_ui_style_miuix">MIUIX</string>
+    <string name="settings_ui_style_material">Material 3 Expressive</string>
 </resources>

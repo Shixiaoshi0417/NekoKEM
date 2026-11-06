@@ -218,4 +218,6 @@
     <string name="settings_liquid_glass_unsupported">리퀴드 글래스는 Android 13 이상이 필요하며, 이전 버전에서는 불투명한 바가 표시됩니다.</string>
     <string name="miuix_keys_transfer_title">가져오기 및 내보내기</string>
     <string name="miuix_keys_delete_title">키 삭제</string>
+    <string name="settings_ui_style_miuix">MIUIX</string>
+    <string name="settings_ui_style_material">Material 3 Expressive</string>
 </resources>
