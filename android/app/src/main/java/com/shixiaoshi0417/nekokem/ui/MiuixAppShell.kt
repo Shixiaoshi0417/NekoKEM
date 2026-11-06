@@ -138,6 +138,8 @@ internal fun MiuixAppShell(
                             onClick = { destination = AppDestination.entries[index] },
                             icon = item.icon,
                             label = item.label,
+                            // The floating bar draws icons only; name each tab for accessibility.
+                            modifier = Modifier.semantics { contentDescription = item.label },
                         )
                     }
                 }
