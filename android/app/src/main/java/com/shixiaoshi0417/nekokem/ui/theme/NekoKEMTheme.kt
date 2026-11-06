@@ -1,6 +1,8 @@
 package com.shixiaoshi0417.nekokem.ui.theme
 
 import android.os.Build
+import androidx.compose.foundation.LocalIndication
+import androidx.compose.foundation.LocalOverscrollFactory
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.MaterialExpressiveTheme
@@ -11,6 +13,7 @@ import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.material3.expressiveLightColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.remember
 import androidx.compose.ui.platform.LocalContext
 import com.shixiaoshi0417.nekokem.ui.UiStyle
@@ -21,6 +24,12 @@ import top.yukonga.miuix.kmp.theme.ThemeController
 
 private val DarkColors = darkColorScheme()
 
+/**
+ * Both interface styles run under the same theme tree, so switching style
+ * keeps the content at one place in composition and none of its state is lost.
+ * MIUIX colors come from the wallpaper when the system offers dynamic color;
+ * in the MIUIX style the shared Material dialogs take a scheme built from them.
+ */
 @Composable
 fun NekoKEMTheme(
     uiStyle: UiStyle = UiStyle.MATERIAL,
@@ -28,55 +37,37 @@ fun NekoKEMTheme(
     dynamicColor: Boolean = true,
     content: @Composable () -> Unit,
 ) {
-    if (uiStyle == UiStyle.MIUIX) {
-        MiuixStyleTheme(darkTheme, dynamicColor, content)
-        return
-    }
     val context = LocalContext.current
-    val colorScheme = when {
-        dynamicColor && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S -> {
-            if (darkTheme) {
-                dynamicDarkColorScheme(context)
-            } else {
-                dynamicLightColorScheme(context)
-            }
-        }
-
-        darkTheme -> DarkColors
-        else -> expressiveLightColorScheme()
-    }
-
-    MaterialExpressiveTheme(
-        colorScheme = colorScheme,
-        motionScheme = MotionScheme.expressive(),
-        content = content,
-    )
-}
-
-/**
- * MIUIX colors, from the wallpaper when the system offers dynamic color. The
- * dialogs shared with the Material style read a Material scheme built from the
- * same MIUIX colors, so both kinds of surface match.
- */
-@Composable
-private fun MiuixStyleTheme(
-    darkTheme: Boolean,
-    dynamicColor: Boolean,
-    content: @Composable () -> Unit,
-) {
-    val monet = dynamicColor && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
-    val controller = remember(darkTheme, monet) {
+    val dynamic = dynamicColor && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
+    val controller = remember(darkTheme, dynamic) {
         ThemeController(
-            colorSchemeMode = if (monet) ColorSchemeMode.MonetSystem else ColorSchemeMode.System,
+            colorSchemeMode = if (dynamic) ColorSchemeMode.MonetSystem else ColorSchemeMode.System,
             isDark = darkTheme,
         )
     }
+    val defaultOverscroll = LocalOverscrollFactory.current
     MiuixTheme(controller = controller) {
+        // MIUIX press feedback and bounce scrolling; the Material theme below
+        // would otherwise replace the former, and Material keeps its own glow.
+        val miuixIndication = LocalIndication.current
+        val miuixOverscroll = LocalOverscrollFactory.current
+        val colorScheme = when {
+            uiStyle == UiStyle.MIUIX -> MiuixTheme.colorScheme.toMaterial(darkTheme)
+            dynamic -> if (darkTheme) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
+            darkTheme -> DarkColors
+            else -> expressiveLightColorScheme()
+        }
         MaterialExpressiveTheme(
-            colorScheme = MiuixTheme.colorScheme.toMaterial(darkTheme),
+            colorScheme = colorScheme,
             motionScheme = MotionScheme.expressive(),
-            content = content,
-        )
+        ) {
+            val miuix = uiStyle == UiStyle.MIUIX
+            CompositionLocalProvider(
+                LocalIndication provides if (miuix) miuixIndication else LocalIndication.current,
+                LocalOverscrollFactory provides if (miuix) miuixOverscroll else defaultOverscroll,
+                content = content,
+            )
+        }
     }
 }
 
