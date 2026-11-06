@@ -16,14 +16,20 @@ internal fun clickNavigationTab(instrumentation: Instrumentation, label: String)
         for (index in 0 until root.childCount) find(root.getChild(index))?.let { return it }
         return null
     }
-    val deadline = SystemClock.uptimeMillis() + 10000
-    var target = find(instrumentation.uiAutomation.rootInActiveWindow)
-    while (target == null) {
-        check(SystemClock.uptimeMillis() < deadline) { "Missing navigation tab: $label" }
-        SystemClock.sleep(100)
-        target = find(instrumentation.uiAutomation.rootInActiveWindow)
+    // A tab can be found while its bar is still disabled, as during a running
+    // operation, so wait for an enabled clickable ancestor as well.
+    fun clickable(node: AccessibilityNodeInfo?): AccessibilityNodeInfo? {
+        var current = node
+        while (current != null && !(current.isClickable && current.isEnabled)) current = current.parent
+        return current
     }
-    while (!target!!.isClickable) target = checkNotNull(target.parent) { "Tab $label is not clickable" }
+    val deadline = SystemClock.uptimeMillis() + 10000
+    var target = clickable(find(instrumentation.uiAutomation.rootInActiveWindow))
+    while (target == null) {
+        check(SystemClock.uptimeMillis() < deadline) { "Missing enabled navigation tab: $label" }
+        SystemClock.sleep(100)
+        target = clickable(find(instrumentation.uiAutomation.rootInActiveWindow))
+    }
     check(target.performAction(AccessibilityNodeInfo.ACTION_CLICK))
     instrumentation.waitForIdleSync()
 }

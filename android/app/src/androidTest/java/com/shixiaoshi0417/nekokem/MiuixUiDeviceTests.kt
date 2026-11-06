@@ -1,5 +1,6 @@
 package com.shixiaoshi0417.nekokem
 
+import android.accessibilityservice.AccessibilityServiceInfo
 import android.app.Activity
 import android.app.Instrumentation
 import android.content.Context
@@ -26,6 +27,11 @@ internal fun useMaterialStyle(context: Context) {
 internal fun runMiuixUiTests(instrumentation: Instrumentation, screenshotPrefix: String) {
     val context = instrumentation.targetContext
     val priorLanguage = AppLanguages.selection(context)
+    val automation = instrumentation.uiAutomation
+    val priorServiceInfo = automation.serviceInfo
+    automation.serviceInfo = automation.serviceInfo.apply {
+        flags = flags or AccessibilityServiceInfo.FLAG_RETRIEVE_INTERACTIVE_WINDOWS
+    }
     // No stored choice, as after installation.
     check(context.getSharedPreferences("interface_style", Context.MODE_PRIVATE).edit().clear().commit())
     check(UiStyles.selection(context) == UiStyle.MIUIX) { "MIUIX is not the default interface style" }
@@ -37,25 +43,16 @@ internal fun runMiuixUiTests(instrumentation: Instrumentation, screenshotPrefix:
         for (index in 0 until root.childCount) find(root.getChild(index), predicate)?.let { return it }
         return null
     }
-    fun exact(value: String): AccessibilityNodeInfo? = find(instrumentation.uiAutomation.rootInActiveWindow) {
-        it.text?.toString() == value || it.contentDescription?.toString() == value
-    }
-    fun await(description: String, condition: () -> Boolean) {
-        val deadline = SystemClock.uptimeMillis() + 10000
-        while (!condition()) {
-            check(SystemClock.uptimeMillis() < deadline) { "MIUIX: $description" }
-            instrumentation.waitForIdleSync()
-            SystemClock.sleep(100)
+    fun exact(value: String): AccessibilityNodeInfo? {
+        // Android 8 can keep reporting a closed dialog as the active window, so
+        // every window on screen is searched, not only the active one.
+        val roots = listOfNotNull(automation.rootInActiveWindow) +
+            runCatching { automation.windows.mapNotNull { it.root } }.getOrDefault(emptyList())
+        return roots.firstNotNullOfOrNull { root ->
+            find(root) { it.text?.toString() == value || it.contentDescription?.toString() == value }
         }
     }
     fun string(resource: Int) = checkNotNull(activity).getString(resource)
-    fun click(value: String) {
-        await("missing $value") { exact(value) != null }
-        var target = checkNotNull(exact(value))
-        while (!target.isClickable) target = checkNotNull(target.parent) { "$value is not clickable" }
-        check(target.performAction(AccessibilityNodeInfo.ACTION_CLICK))
-        instrumentation.waitForIdleSync()
-    }
     fun capture(name: String) {
         // Let the bar's spring and the page fade settle before the frame is taken.
         SystemClock.sleep(800)
@@ -70,6 +67,25 @@ internal fun runMiuixUiTests(instrumentation: Instrumentation, screenshotPrefix:
                 check(screenshot.compress(Bitmap.CompressFormat.PNG, 100, it))
             }
         } finally { screenshot.recycle() }
+    }
+    fun await(description: String, condition: () -> Boolean) {
+        val deadline = SystemClock.uptimeMillis() + 10000
+        while (!condition()) {
+            if (SystemClock.uptimeMillis() >= deadline) {
+                // Keep what the screen showed, since the accessibility tree may disagree with it.
+                runCatching { capture("timeout") }
+                error("MIUIX: $description")
+            }
+            instrumentation.waitForIdleSync()
+            SystemClock.sleep(100)
+        }
+    }
+    fun click(value: String) {
+        await("missing $value") { exact(value) != null }
+        var target = checkNotNull(exact(value))
+        while (!target.isClickable) target = checkNotNull(target.parent) { "$value is not clickable" }
+        check(target.performAction(AccessibilityNodeInfo.ACTION_CLICK))
+        instrumentation.waitForIdleSync()
     }
     try {
         activity = instrumentation.startActivitySync(
@@ -113,6 +129,7 @@ internal fun runMiuixUiTests(instrumentation: Instrumentation, screenshotPrefix:
             activity?.finish()
             AppLanguages.setSelection(context, priorLanguage)
         }
+        automation.serviceInfo = priorServiceInfo
         useMaterialStyle(context)
     }
     // Below Android 13 the language is stored by the App; it must not leak into later phases.
