@@ -159,6 +159,8 @@ dependencies {
     // Material 3 Expressive components; the BOM still pins material3 1.4.
     implementation("androidx.compose.material3:material3:1.5.0-beta01")
     implementation("androidx.compose.ui:ui")
+    // Filled and outlined tab icons for the Material navigation bar.
+    implementation("androidx.compose.material:material-icons-core")
     implementation("androidx.compose.ui:ui-tooling-preview")
     // MIUIX interface style: components, icons, dropdown preferences, and the
     // backdrop blur and lens shaders behind the floating liquid glass bar.

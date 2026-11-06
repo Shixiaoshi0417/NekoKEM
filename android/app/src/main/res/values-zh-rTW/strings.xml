@@ -6,7 +6,6 @@
     <string name="navigation_keys">金鑰管理</string>
     <string name="navigation_settings">設定</string>
     <string name="navigation_about">關於</string>
-    <string name="navigation_open_menu">開啟導覽選單</string>
     <string name="native_core_connected">原生核心已連接</string>
     <string name="native_core_unavailable">原生核心無法使用</string>
     <string name="openssl_version">OpenSSL 版本：%1$s</string>

@@ -38,7 +38,7 @@ class TemporaryKeyInstrumentation : Instrumentation() {
     override fun onStart() {
         val results = Bundle()
         val status = try {
-            // The drawer-driven tests below use the Material style; MIUIX has its own phase.
+            // The tests below use the Material style; MIUIX has its own phase.
             useMaterialStyle(targetContext)
             runContactProcessRestartTests(this, languagePhase)
             val publicKeyTrace = if (languagePhase == null) runTemporaryKeyTests(targetContext) else "language-only"

@@ -41,25 +41,34 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.DrawerValue
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.HorizontalDivider
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialShapes
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalDrawerSheet
-import androidx.compose.material3.ModalNavigationDrawer
-import androidx.compose.material3.NavigationDrawerItem
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.rememberDrawerState
+import androidx.compose.material3.Icon
+import androidx.compose.material3.ShortNavigationBar
+import androidx.compose.material3.ShortNavigationBarItem
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.outlined.Home
+import androidx.compose.material.icons.outlined.Info
+import androidx.compose.material.icons.outlined.Lock
+import androidx.compose.material.icons.outlined.Person
+import androidx.compose.material.icons.outlined.Settings
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.material3.toShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -149,6 +158,24 @@ internal enum class AppDestination(
     ABOUT(R.string.navigation_about, R.string.tab_about),
 }
 
+private val AppDestination.selectedIcon: ImageVector
+    get() = when (this) {
+        AppDestination.FILES -> Icons.Filled.Home
+        AppDestination.KEYS -> Icons.Filled.Lock
+        AppDestination.CONTACTS -> Icons.Filled.Person
+        AppDestination.SETTINGS -> Icons.Filled.Settings
+        AppDestination.ABOUT -> Icons.Filled.Info
+    }
+
+private val AppDestination.unselectedIcon: ImageVector
+    get() = when (this) {
+        AppDestination.FILES -> Icons.Outlined.Home
+        AppDestination.KEYS -> Icons.Outlined.Lock
+        AppDestination.CONTACTS -> Icons.Outlined.Person
+        AppDestination.SETTINGS -> Icons.Outlined.Settings
+        AppDestination.ABOUT -> Icons.Outlined.Info
+    }
+
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 fun NekoKEMAppShell(
@@ -160,23 +187,19 @@ fun NekoKEMAppShell(
         MiuixAppShell(state, actions, snackbarHostState)
         return
     }
-    val drawerState = rememberDrawerState(DrawerValue.Closed)
     val scope = rememberCoroutineScope()
     var destination by rememberSaveable { mutableStateOf(AppDestination.FILES) }
     var animateNavigation by remember { mutableStateOf(true) }
     val motion = MaterialTheme.motionScheme
     val fontScale = LocalDensity.current.fontScale.coerceAtLeast(1f)
-    val menuDescription = stringResource(R.string.navigation_open_menu)
     // Predictive back: a secondary page follows the system back gesture and
     // reveals Files beneath it. Files itself leaves back to the system, which
-    // shows its back-to-home animation; the open drawer handles its own gesture.
+    // shows its back-to-home animation.
     val backProgress = remember { Animatable(0f) }
     var backEdge by remember { mutableIntStateOf(BackEventCompat.EDGE_LEFT) }
     val previewingFiles by remember { derivedStateOf { backProgress.value > 0f } }
-    val drawerClosed = drawerState.currentValue == DrawerValue.Closed &&
-        drawerState.targetValue == DrawerValue.Closed
     PredictiveBackHandler(
-        enabled = destination != AppDestination.FILES && drawerClosed && !state.running,
+        enabled = destination != AppDestination.FILES && !state.running,
     ) { events ->
         try {
             events.collect { event ->
@@ -194,121 +217,107 @@ fun NekoKEMAppShell(
         }
     }
 
-    ModalNavigationDrawer(
-        drawerState = drawerState,
-        gesturesEnabled = !state.running,
-        drawerContent = {
-            // Passing the state enables Material's predictive back for the drawer.
-            ModalDrawerSheet(drawerState = drawerState) {
-                Text(
-                    modifier = Modifier.padding(24.dp),
-                    text = stringResource(R.string.app_name),
-                    style = MaterialTheme.typography.headlineSmallEmphasized,
-                )
-                Column(
-                    modifier = Modifier
-                        .padding(horizontal = 12.dp)
-                        .verticalScroll(rememberScrollState())
-                        .selectableGroup(),
-                ) {
-                    AppDestination.entries.forEach { item ->
-                        NavigationDrawerItem(
-                            modifier = Modifier.heightIn(min = (56f * fontScale).dp),
-                            label = { Text(stringResource(item.titleResource)) },
-                            selected = destination == item,
-                            onClick = {
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                expandedHeight = (64f * fontScale).dp,
+                title = {
+                    Text(
+                        text = stringResource(destination.titleResource),
+                        style = MaterialTheme.typography.titleLargeEmphasized,
+                    )
+                },
+            )
+        },
+        // Material 3 Expressive short navigation bar, as in LunexSU: the
+        // selected tab's icon fills and sits in a pill indicator.
+        bottomBar = {
+            ShortNavigationBar(containerColor = MaterialTheme.colorScheme.surfaceContainer) {
+                AppDestination.entries.forEach { item ->
+                    val selected = destination == item
+                    ShortNavigationBarItem(
+                        selected = selected,
+                        enabled = !state.running,
+                        onClick = {
+                            if (!selected) {
                                 animateNavigation = true
                                 destination = item
-                                scope.launch { drawerState.close() }
-                            },
-                        )
-                    }
+                            }
+                        },
+                        icon = {
+                            Icon(
+                                imageVector = if (selected) item.selectedIcon else item.unselectedIcon,
+                                contentDescription = null,
+                            )
+                        },
+                        label = {
+                            Text(
+                                stringResource(item.tabResource),
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                        },
+                    )
                 }
             }
         },
-    ) {
-        Scaffold(
-            topBar = {
-                TopAppBar(
-                    expandedHeight = (64f * fontScale).dp,
-                    title = {
-                        Text(
-                            text = stringResource(destination.titleResource),
-                            style = MaterialTheme.typography.titleLargeEmphasized,
-                        )
-                    },
-                    actions = {
-                        IconButton(
-                            onClick = { scope.launch { drawerState.open() } },
-                            shapes = IconButtonDefaults.shapes(),
-                            modifier = Modifier.semantics {
-                                contentDescription = menuDescription
-                            },
-                            enabled = !state.running,
-                        ) {
-                            MenuGlyph()
-                        }
-                    },
-                )
-            },
-            snackbarHost = { SnackbarHost(snackbarHostState) },
-        ) { padding ->
+        snackbarHost = { SnackbarHost(snackbarHostState) },
+    ) { padding ->
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(padding),
+        ) {
+            if (previewingFiles && destination != AppDestination.FILES) {
+                // Visual preview only; the page being left keeps the semantics.
+                Box(modifier = Modifier.fillMaxSize().clearAndSetSemantics {}) {
+                    FileOperationsPage(state, actions)
+                }
+            }
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(padding),
-            ) {
-                if (previewingFiles && destination != AppDestination.FILES) {
-                    // Visual preview only; the page being left keeps the semantics.
-                    Box(modifier = Modifier.fillMaxSize().clearAndSetSemantics {}) {
-                        FileOperationsPage(state, actions)
+                    .graphicsLayer {
+                        // Material predictive back: shrink to 90%, shift away from the
+                        // swipe edge and round the corners as the finger moves.
+                        val progress = backProgress.value
+                        val scale = 1f - 0.1f * progress
+                        scaleX = scale
+                        scaleY = scale
+                        val direction = if (backEdge == BackEventCompat.EDGE_RIGHT) -1f else 1f
+                        translationX = direction * progress *
+                            (size.width / 20f - 8.dp.toPx()).coerceAtLeast(0f)
+                        shape = RoundedCornerShape(28.dp * progress)
+                        clip = progress > 0f
+                        shadowElevation = 6.dp.toPx() * progress
                     }
-                }
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .graphicsLayer {
-                            // Material predictive back: shrink to 90%, shift away from the
-                            // swipe edge and round the corners as the finger moves.
-                            val progress = backProgress.value
-                            val scale = 1f - 0.1f * progress
-                            scaleX = scale
-                            scaleY = scale
-                            val direction = if (backEdge == BackEventCompat.EDGE_RIGHT) -1f else 1f
-                            translationX = direction * progress *
-                                (size.width / 20f - 8.dp.toPx()).coerceAtLeast(0f)
-                            shape = RoundedCornerShape(28.dp * progress)
-                            clip = progress > 0f
-                            shadowElevation = 6.dp.toPx() * progress
-                        }
-                        .background(MaterialTheme.colorScheme.background),
-                ) {
-                    // A newly opened page fades in with the expressive motion scheme. The
-                    // page being left goes at once, so its semantics never linger.
-                    key(destination) {
-                        val pageAlpha = remember { Animatable(if (animateNavigation) 0f else 1f) }
-                        LaunchedEffect(Unit) { pageAlpha.animateTo(1f, motion.defaultEffectsSpec()) }
-                        Box(modifier = Modifier.fillMaxSize().graphicsLayer { alpha = pageAlpha.value }) {
-                            when (destination) {
-                                AppDestination.FILES -> FileOperationsPage(state, actions)
-                                AppDestination.KEYS -> KeyManagementPage(state, actions)
-                                AppDestination.CONTACTS -> PublicKeyContactsPage(
-                                    state,
-                                    actions,
-                                    onUse = { contact ->
-                                        actions.onSelectContact(contact)
-                                        animateNavigation = true
-                                        destination = AppDestination.FILES
-                                    },
-                                    onEncryptSelected = {
-                                        actions.onEncryptForSelectedContacts()
-                                        animateNavigation = true
-                                        destination = AppDestination.FILES
-                                    },
-                                )
-                                AppDestination.SETTINGS -> SettingsPage(state.running, state.uiStyle, actions.onUiStyleChange)
-                                AppDestination.ABOUT -> AboutPage(state)
-                            }
+                    .background(MaterialTheme.colorScheme.background),
+            ) {
+                // A newly opened page fades in with the expressive motion scheme. The
+                // page being left goes at once, so its semantics never linger.
+                key(destination) {
+                    val pageAlpha = remember { Animatable(if (animateNavigation) 0f else 1f) }
+                    LaunchedEffect(Unit) { pageAlpha.animateTo(1f, motion.defaultEffectsSpec()) }
+                    Box(modifier = Modifier.fillMaxSize().graphicsLayer { alpha = pageAlpha.value }) {
+                        when (destination) {
+                            AppDestination.FILES -> FileOperationsPage(state, actions)
+                            AppDestination.KEYS -> KeyManagementPage(state, actions)
+                            AppDestination.CONTACTS -> PublicKeyContactsPage(
+                                state,
+                                actions,
+                                onUse = { contact ->
+                                    actions.onSelectContact(contact)
+                                    animateNavigation = true
+                                    destination = AppDestination.FILES
+                                },
+                                onEncryptSelected = {
+                                    actions.onEncryptForSelectedContacts()
+                                    animateNavigation = true
+                                    destination = AppDestination.FILES
+                                },
+                            )
+                            AppDestination.SETTINGS -> SettingsPage(state.running, state.uiStyle, actions.onUiStyleChange)
+                            AppDestination.ABOUT -> AboutPage(state)
                         }
                     }
                 }
@@ -943,21 +952,4 @@ private fun CardAction(
         enabled = enabled,
         emphasis = emphasis,
     )
-}
-
-@Composable
-private fun MenuGlyph() {
-    Column(
-        modifier = Modifier
-            .size(24.dp)
-            .padding(vertical = 5.dp),
-        verticalArrangement = Arrangement.SpaceBetween,
-    ) {
-        repeat(3) {
-            HorizontalDivider(
-                thickness = 2.dp,
-                color = MaterialTheme.colorScheme.onSurface,
-            )
-        }
-    }
 }

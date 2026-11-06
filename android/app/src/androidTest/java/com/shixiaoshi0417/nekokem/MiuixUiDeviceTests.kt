@@ -13,7 +13,7 @@ import com.shixiaoshi0417.nekokem.ui.UiStyle
 import com.shixiaoshi0417.nekokem.ui.UiStyles
 import java.io.File
 
-/** Pins the Material style so the drawer-driven device tests see the interface they expect. */
+/** Pins the Material style so the earlier device tests see the interface they expect. */
 internal fun useMaterialStyle(context: Context) {
     check(UiStyles.setSelection(context, UiStyle.MATERIAL))
 }
@@ -76,9 +76,7 @@ internal fun runMiuixUiTests(instrumentation: Instrumentation, screenshotPrefix:
             Intent(context, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
         )
         instrumentation.waitForIdleSync()
-        // MIUIX has no navigation drawer: the menu button belongs to the Material style.
         await("Files page") { exact(string(R.string.navigation_files)) != null }
-        check(exact(string(R.string.navigation_open_menu)) == null) { "Material drawer shown in MIUIX" }
         capture("files")
         val pages = listOf(
             R.string.tab_keys to R.string.navigation_keys,
@@ -87,7 +85,7 @@ internal fun runMiuixUiTests(instrumentation: Instrumentation, screenshotPrefix:
             R.string.tab_about to R.string.navigation_about,
         )
         for ((tab, title) in pages) {
-            click(string(tab))
+            clickNavigationTab(instrumentation, string(tab))
             await("page ${string(title)}") { exact(string(title)) != null }
             capture(string(tab).lowercase())
         }
@@ -98,19 +96,18 @@ internal fun runMiuixUiTests(instrumentation: Instrumentation, screenshotPrefix:
         await("back to Files") { exact(string(R.string.navigation_files)) != null }
 
         // MIUIX settings: the dropdown switches to Material at once.
-        click(string(R.string.tab_settings))
+        clickNavigationTab(instrumentation, string(R.string.tab_settings))
         click(string(R.string.settings_ui_style_title))
         click(string(R.string.settings_ui_style_material))
         await("Material style stored") { UiStyles.selection(context) == UiStyle.MATERIAL }
-        await("Material drawer button") { exact(string(R.string.navigation_open_menu)) != null }
-        // Material settings: the picker switches back to MIUIX.
-        click(string(R.string.navigation_open_menu))
-        click(string(R.string.navigation_settings))
+        // The Material shell opens on Files; its settings picker switches back to MIUIX.
+        await("Material Files page") { exact(string(R.string.navigation_files)) != null }
+        capture("material-files")
+        clickNavigationTab(instrumentation, string(R.string.tab_settings))
         click(string(R.string.settings_ui_style_title))
         click(string(R.string.settings_ui_style_miuix))
         await("MIUIX style stored") { UiStyles.selection(context) == UiStyle.MIUIX }
-        await("MIUIX tab bar") { exact(string(R.string.tab_files)) != null }
-        check(exact(string(R.string.navigation_open_menu)) == null)
+        await("MIUIX Files page") { exact(string(R.string.navigation_files)) != null }
     } finally {
         instrumentation.runOnMainSync {
             activity?.finish()

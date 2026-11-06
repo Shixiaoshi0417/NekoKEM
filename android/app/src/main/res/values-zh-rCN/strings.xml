@@ -7,7 +7,6 @@
     <string name="navigation_keys">密钥管理</string>
     <string name="navigation_settings">设置</string>
     <string name="navigation_about">关于</string>
-    <string name="navigation_open_menu">打开导航菜单</string>
 
     <string name="native_core_connected">原生核心已连接</string>
     <string name="native_core_unavailable">原生核心不可用</string>

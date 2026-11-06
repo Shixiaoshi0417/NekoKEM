@@ -6,7 +6,6 @@
     <string name="navigation_keys">鍵の管理</string>
     <string name="navigation_settings">設定</string>
     <string name="navigation_about">このアプリについて</string>
-    <string name="navigation_open_menu">ナビゲーションメニューを開く</string>
     <string name="native_core_connected">ネイティブコアに接続済み</string>
     <string name="native_core_unavailable">ネイティブコアを利用できません</string>
     <string name="openssl_version">OpenSSL バージョン：%1$s</string>

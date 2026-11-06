@@ -60,10 +60,9 @@ internal fun runPredictiveBackUiTests(instrumentation: Instrumentation) {
         if (!node.refresh()) null else Rect().also(node::getBoundsInScreen)
     }
     fun onPage(title: Int, content: Int): Boolean = exact(string(title)) != null && exact(string(content)) != null
-    // Drawer selection closes the drawer; let any close animation settle before gestures.
-    fun navigate(item: Int) {
-        click(string(R.string.navigation_open_menu))
-        click(string(item))
+    // Let the page fade settle before gestures.
+    fun navigate(tab: Int) {
+        clickNavigationTab(instrumentation, string(tab))
         SystemClock.sleep(500)
         instrumentation.waitForIdleSync()
     }
@@ -91,14 +90,7 @@ internal fun runPredictiveBackUiTests(instrumentation: Instrumentation) {
         // Files leaves back to the system, which shows its back-to-home animation.
         check(!handlesBack()) { "Files must not intercept system back" }
 
-        // On Files only the open drawer can handle back: it closes instead of leaving the App.
-        click(string(R.string.navigation_open_menu))
-        await("open drawer did not handle back") { handlesBack() }
-        back { it.onBackPressedDispatcher.onBackPressed() }
-        await("drawer did not close on back") { !handlesBack() }
-        check(onPage(files, selectFile) && !checkNotNull(activity).isFinishing)
-
-        navigate(R.string.navigation_contacts)
+        navigate(R.string.tab_contacts)
         val contactsPage = string(R.string.action_import_contact)
         await("Contacts page did not open") { onPage(R.string.navigation_contacts, R.string.action_import_contact) && handlesBack() }
         val resting = checkNotNull(bounds(contactsPage))
@@ -133,7 +125,7 @@ internal fun runPredictiveBackUiTests(instrumentation: Instrumentation) {
         check(exact(contactsPage) == null && !checkNotNull(activity).isFinishing)
 
         // Releases before Android 14 send only the committed back without progress.
-        navigate(R.string.navigation_settings)
+        navigate(R.string.tab_settings)
         await("Settings page did not open") { exact(string(R.string.settings_language_title)) != null && handlesBack() }
         back { it.onBackPressedDispatcher.onBackPressed() }
         await("back without progress did not return to Files") { onPage(files, selectFile) && !handlesBack() }

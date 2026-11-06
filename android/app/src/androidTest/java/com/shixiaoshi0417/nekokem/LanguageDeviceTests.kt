@@ -196,19 +196,7 @@ internal fun runLanguageDeviceTests(
             check(target.performAction(AccessibilityNodeInfo.ACTION_CLICK))
             instrumentation.waitForIdleSync()
         }
-        // Navigation control uses a content description rather than visible text.
-        val description = activity.getString(R.string.navigation_open_menu)
-        fun described(root: AccessibilityNodeInfo?): AccessibilityNodeInfo? {
-            if (root == null) return null
-            if (root.contentDescription?.toString() == description) return root
-            for (i in 0 until root.childCount) described(root.getChild(i))?.let { return it }
-            return null
-        }
-        var menu = checkNotNull(described(instrumentation.uiAutomation.rootInActiveWindow))
-        while (!menu.isClickable) menu = checkNotNull(menu.parent)
-        check(menu.performAction(AccessibilityNodeInfo.ACTION_CLICK))
-        instrumentation.waitForIdleSync()
-        click(activity.getString(R.string.navigation_settings))
+        clickNavigationTab(instrumentation, activity.getString(R.string.tab_settings))
         check(awaitNode(activity.getString(R.string.settings_language_title)) != null)
         capture("settings")
         click(activity.getString(R.string.settings_language_title))

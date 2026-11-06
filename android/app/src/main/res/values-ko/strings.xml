@@ -6,7 +6,6 @@
     <string name="navigation_keys">키 관리</string>
     <string name="navigation_settings">설정</string>
     <string name="navigation_about">정보</string>
-    <string name="navigation_open_menu">탐색 메뉴 열기</string>
     <string name="native_core_connected">네이티브 코어 연결됨</string>
     <string name="native_core_unavailable">네이티브 코어를 사용할 수 없습니다</string>
     <string name="openssl_version">OpenSSL 버전: %1$s</string>
