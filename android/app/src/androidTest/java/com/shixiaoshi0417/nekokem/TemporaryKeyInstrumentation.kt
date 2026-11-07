@@ -701,6 +701,37 @@ class TemporaryKeyInstrumentation : Instrumentation() {
         }
         check(manager.deletePrivateKey() == NativeBridge.RESULT_SUCCESS)
         check(manager.deleteKeypair() == NativeBridge.RESULT_SUCCESS)
+        testInterruptedStageDeletion(manager, keys)
+    }
+
+    /**
+     * A key replacement killed after staging its new private key leaves a
+     * fresh Core stage. It is reported as a recovery residue, kept by both
+     * deletions because another operation may still own it, and neither
+     * deletion is reported as complete while it remains.
+     */
+    private fun testInterruptedStageDeletion(manager: LocalKeyManager, keys: File) {
+        val publicKey = File(keys, "public.key")
+        val privateKey = File(keys, "private.nkpr.enc")
+        val stage = File(keys, "private.nkpr.enc.tmp.Ab12Cd")
+        try {
+            check(generateNativeKeypair(publicKey, privateKey, STAGE_PASSWORD) == NativeBridge.RESULT_SUCCESS)
+            val residuesBefore = manager.recoveryBackupCount()
+            privateKey.copyTo(stage)
+            Os.chmod(stage.absolutePath, PRIVATE_FILE_MODE)
+            check(manager.recoveryBackupCount() == residuesBefore + 1)
+            check(manager.deleteKeypair() == LocalKeyManager.RESULT_DELETED_RESIDUE_RETAINED)
+            check(!privateKey.exists() && !publicKey.exists() && stage.exists())
+            check(manager.recoveryBackupCount() == residuesBefore + 1)
+            check(generateNativeKeypair(publicKey, privateKey, STAGE_PASSWORD) == NativeBridge.RESULT_SUCCESS)
+            check(manager.deletePrivateKey() == LocalKeyManager.RESULT_DELETED_RESIDUE_RETAINED)
+            check(!privateKey.exists() && publicKey.exists() && stage.exists())
+            check(stage.delete())
+            check(manager.deleteKeypair() == NativeBridge.RESULT_SUCCESS)
+            check(manager.recoveryBackupCount() == residuesBefore)
+        } finally {
+            listOf(stage, privateKey, publicKey).forEach { it.delete() }
+        }
     }
 
     private fun password(value: String): ByteArray =
@@ -806,6 +837,7 @@ class TemporaryKeyInstrumentation : Instrumentation() {
                 "00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00"
         const val PRIVATE_DIRECTORY_MODE = 0x1C0
         const val PRIVATE_FILE_MODE = 0x180
+        const val STAGE_PASSWORD = "interrupted-stage-password"
 
         val TEST_PLAINTEXT = ByteArray(256 * 1024) { index ->
             (index and 0xFF).toByte()

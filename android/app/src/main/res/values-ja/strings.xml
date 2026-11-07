@@ -135,6 +135,7 @@
     <string name="error_reason_key_generation">鍵ペアを生成できないか、安全に保存できませんでした。</string>
     <string name="error_reason_export">選択した鍵を検証またはエクスポートできませんでした。</string>
     <string name="error_reason_delete">ローカルの鍵ファイルまたは関連する一時ファイルを安全に削除できませんでした。</string>
+    <string name="error_reason_delete_residue">秘密鍵は削除しましたが、中断された鍵の生成または置き換えが残した秘密鍵の一時コピーは、別の操作が書き込み中の可能性があるため残しました。このコピーは対応するパスワードで解除できる場合があります。復旧用バックアップで確認し、Android README を参照してから対処してください。</string>
     <string name="error_reason_core">NekoKEM Core が操作を拒否しました。</string>
     <string name="error_reason_unexpected">Android の操作中に予期しないエラーが発生しました。</string>
     <string name="error_reason_fingerprint_mismatch">確認後に一時的な鍵が変更されたか、フィンガープリントが一致しなくなりました。</string>

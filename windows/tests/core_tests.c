@@ -134,7 +134,8 @@ static int file_audit_regressions(void)
     CHECK(write_private("private.enc.tmp.0123456789abcdef0123456789abcdef", "NKPRstaging", 11));
     CHECK(CreateHardLinkW(L"private.enc.bak.0123456789abcdef0123456789abcdef", L"private.enc", NULL));
     CHECK(!nekokem_private_key_exists("private.enc"));
-    CHECK(nekokem_delete_private_key("private.enc"));
+    /* The key is gone but the stage is kept, so the deletion says so. */
+    CHECK(nekokem_delete_private_key("private.enc") == NEKOKEM_DELETE_RESIDUE_RETAINED);
     CHECK(GetFileAttributesW(L"private.enc.bak.0123456789abcdef0123456789abcdef") == INVALID_FILE_ATTRIBUTES);
     CHECK(GetFileAttributesW(L"private.enc") == INVALID_FILE_ATTRIBUTES);
     CHECK(GetFileAttributesW(L"private.enc.tmp.0123456789abcdef0123456789abcdef") != INVALID_FILE_ATTRIBUTES);
@@ -258,9 +259,9 @@ int main(int argc, char **argv)
     CHECK(no_artifacts());
     CHECK(file_audit_regressions() == EXIT_SUCCESS);
     CHECK(no_artifacts());
-    CHECK(nekokem_delete_private_key("private.enc"));
-    CHECK(nekokem_delete_private_key("private.enc"));
-    CHECK(nekokem_delete_private_key("absent-directory/private.enc"));
+    CHECK(nekokem_delete_private_key("private.enc") == 1);
+    CHECK(nekokem_delete_private_key("private.enc") == 1);
+    CHECK(nekokem_delete_private_key("absent-directory/private.enc") == 1);
     puts("Windows native crypto, ACL/owner/link, paths, cancellation, rollback and flush tests passed");
     return EXIT_SUCCESS;
 }

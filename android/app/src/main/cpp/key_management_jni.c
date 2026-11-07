@@ -10,6 +10,8 @@
 enum ManagedJniResult {
     MANAGED_JNI_CORE_ERROR = 0,
     MANAGED_JNI_SUCCESS = 1,
+    /* The key is deleted, but Core kept a residue that may hold a key. */
+    MANAGED_JNI_RESIDUE_RETAINED = 2,
     MANAGED_JNI_INVALID_ARGUMENT = -1,
     MANAGED_JNI_ALLOCATION_ERROR = -2,
     MANAGED_JNI_JAVA_EXCEPTION = -3
@@ -102,6 +104,14 @@ cleanup:
     return (jint)result;
 }
 
+/* Keeps a partial deletion distinct from both success and failure. */
+static int deletion_result(int core_result)
+{
+    if (core_result == FILE_KEY_DELETED) return MANAGED_JNI_SUCCESS;
+    if (core_result == FILE_KEY_DELETED_RESIDUE_RETAINED) return MANAGED_JNI_RESIDUE_RETAINED;
+    return MANAGED_JNI_CORE_ERROR;
+}
+
 JNIEXPORT jint JNICALL
 Java_com_shixiaoshi0417_nekokem_nativecore_NativeBridge_nativeDeletePrivateKey(
     JNIEnv *env,
@@ -117,9 +127,7 @@ Java_com_shixiaoshi0417_nekokem_nativecore_NativeBridge_nativeDeletePrivateKey(
     if (result != MANAGED_JNI_SUCCESS) {
         goto cleanup;
     }
-    result = nekokem_delete_private_key(private_path.value) == 1
-                 ? MANAGED_JNI_SUCCESS
-                 : MANAGED_JNI_CORE_ERROR;
+    result = deletion_result(nekokem_delete_private_key(private_path.value));
 
 cleanup:
     managed_utf_path_release(env, &private_path);
@@ -184,8 +192,7 @@ Java_com_shixiaoshi0417_nekokem_nativecore_NativeBridge_nativeDeletePrivateKeyUn
     int result = MANAGED_JNI_INVALID_ARGUMENT;
     (void)bridge;
     if (managed_utf_path_acquire(env, key_path, &path) == MANAGED_JNI_SUCCESS) {
-        result = file_delete_private_key_under_lock(path.value)
-                     ? MANAGED_JNI_SUCCESS : MANAGED_JNI_CORE_ERROR;
+        result = deletion_result(file_delete_private_key_under_lock(path.value));
     }
     managed_utf_path_release(env, &path);
     return (jint)result;

@@ -1685,6 +1685,7 @@ private fun resultReason(
             R.string.operation_delete_keypair -> R.string.error_reason_delete
             else -> R.string.error_reason_storage
         }
+        LocalKeyManager.RESULT_DELETED_RESIDUE_RETAINED -> R.string.error_reason_delete_residue
         LocalKeyManager.RESULT_FINGERPRINT_MISMATCH ->
             R.string.error_reason_fingerprint_mismatch
         LocalKeyManager.RESULT_KEY_PAIR_MISMATCH -> R.string.error_reason_key_pair_mismatch

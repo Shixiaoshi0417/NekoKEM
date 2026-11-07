@@ -79,11 +79,15 @@ def peel_tag(repo, tag):
     return target['sha']
 
 
-def checked_run(repo, run_id, name, path):
+def checked_run(repo, run_id, name, path, events):
     run = api(f'repos/{repo}/actions/runs/{run_id}')
     # The API may append @<ref> to the workflow path.
     release_assets.require(run['name'] == name and run['path'].split('@', 1)[0] == path,
                            f'Run {run_id} is not the {name} workflow')
+    # A pull_request run tests a merge tree, not the head commit it reports,
+    # even when that head is main; only runs of main itself qualify.
+    release_assets.require(run.get('event') in events,
+                           f"Run {run_id} was triggered by {run.get('event')}, not {' or '.join(sorted(events))}")
     release_assets.require(run['head_branch'] == 'main' and
                            run['head_repository']['full_name'] == repo,
                            f'Run {run_id} did not build main of {repo}')
@@ -147,8 +151,9 @@ def main():
                            'Run IDs must be numeric')
     version = match.group(1)
 
-    source = checked_run(repo, release_run, 'Release', RELEASE_WORKFLOW)
-    release_assets.require(checked_run(repo, ci_run, 'CI', CI_WORKFLOW) == source,
+    source = checked_run(repo, release_run, 'Release', RELEASE_WORKFLOW, {'workflow_dispatch'})
+    release_assets.require(checked_run(repo, ci_run, 'CI', CI_WORKFLOW,
+                                       {'push', 'workflow_dispatch'}) == source,
                            'CI and Release built different commits')
 
     work = Path(tempfile.mkdtemp(prefix='nekokem-publish-', dir=os.environ.get('RUNNER_TEMP')))

@@ -135,6 +135,7 @@
     <string name="error_reason_key_generation">키 쌍을 생성하거나 안전하게 저장할 수 없습니다.</string>
     <string name="error_reason_export">선택한 키를 검증하거나 내보낼 수 없습니다.</string>
     <string name="error_reason_delete">로컬 키 파일 또는 관련 임시 파일을 안전하게 삭제할 수 없습니다.</string>
+    <string name="error_reason_delete_residue">개인 키는 삭제했지만, 중단된 키 생성 또는 교체가 남긴 개인 키 임시 사본은 다른 작업이 아직 쓰는 중일 수 있어 보존했습니다. 이 사본은 해당 비밀번호로 잠금 해제될 수 있습니다. 복구 백업에서 확인하고 Android README를 참고한 뒤 처리하세요.</string>
     <string name="error_reason_core">NekoKEM Core가 작업을 거부했습니다.</string>
     <string name="error_reason_unexpected">예기치 않은 Android 작업 오류가 발생했습니다.</string>
     <string name="error_reason_fingerprint_mismatch">확인 후 임시 키가 변경되었거나 지문이 더 이상 일치하지 않습니다.</string>

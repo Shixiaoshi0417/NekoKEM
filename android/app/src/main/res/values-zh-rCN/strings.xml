@@ -150,6 +150,7 @@
     <string name="error_reason_key_generation">无法生成密钥对或安全保存密钥。</string>
     <string name="error_reason_export">无法验证或导出所选密钥。</string>
     <string name="error_reason_delete">无法安全删除一个或多个本地密钥文件或相关临时文件。</string>
+    <string name="error_reason_delete_residue">私钥已删除，但保留了一份由中断的密钥生成或替换留下的私钥暂存副本，因为它可能仍在被其他操作写入。这份副本仍可能用对应的口令解锁。请在恢复备份中查看，并参阅 Android README 后再处理。</string>
     <string name="error_reason_core">NekoKEM Core 拒绝了此操作。</string>
     <string name="error_reason_unexpected">发生了意外的 Android 操作错误。</string>
     <string name="error_reason_fingerprint_mismatch">临时密钥在确认后发生变化，或其指纹已不匹配。</string>

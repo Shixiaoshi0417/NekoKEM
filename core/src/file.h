@@ -122,7 +122,15 @@ int file_read_sensitive(const char *path,
  * are not followed. Returns 0 only when the check itself fails.
  */
 int file_path_exists(const char *path, int *exists);
-/* Caller holds the directory pair lock on POSIX; on Windows it is taken here. */
+/*
+ * Caller holds the directory pair lock on POSIX; on Windows it is taken here.
+ * Returns 0 on failure, FILE_KEY_DELETED when the key and every residue of
+ * its transactions are gone, and FILE_KEY_DELETED_RESIDUE_RETAINED when the
+ * key is gone but a residue was kept (a fresh staging file may belong to an
+ * operation still running) or could not be inspected.
+ */
+#define FILE_KEY_DELETED 1
+#define FILE_KEY_DELETED_RESIDUE_RETAINED 2
 int file_delete_private_key_under_lock(const char *path);
 /*
  * Whether both paths name the same existing file, compared by identity

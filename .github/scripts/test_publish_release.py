@@ -39,6 +39,7 @@ class FakeGh:
         self.corrupt_published = False
         self.latest = None
         self.next_asset_id = 100
+        self.events = {RUN: 'workflow_dispatch', CI_RUN: 'push'}
 
     def run(self, command, **kwargs):
         self.calls.append(command)
@@ -64,7 +65,8 @@ class FakeGh:
             name = 'Release' if run_id == RUN else 'CI'
             result = {'name': name, 'path': f'.github/workflows/{name.lower()}.yml',
                       'head_branch': 'main', 'head_repository': {'full_name': REPO},
-                      'status': 'completed', 'conclusion': 'success', 'head_sha': SOURCE}
+                      'status': 'completed', 'conclusion': 'success', 'head_sha': SOURCE,
+                      'event': self.events[run_id]}
         elif endpoint.startswith(f'{prefix}/contents/'):
             return subprocess.CompletedProcess(command, 0, self.notes, '')
         elif endpoint.startswith(f'{prefix}/git/ref/tags/'):
@@ -230,6 +232,24 @@ class PublishTests(unittest.TestCase):
             self.run_publish()
         self.assertIn(f'Release ID {RELEASE_ID}: draft recovery failed', self.stderr.getvalue())
         self.assertIn('publication state is unconfirmed', self.stderr.getvalue())
+
+    def test_ci_run_of_a_pull_request_is_refused_before_download(self):
+        # A pull request from main to another branch reports main's head commit
+        # but tests the merge tree.
+        for run_id, event in ((CI_RUN, 'pull_request'), (CI_RUN, 'pull_request_target'),
+                              (CI_RUN, None), (RUN, 'push'), (RUN, 'pull_request')):
+            with self.subTest(run=run_id, event=event):
+                self.fake = FakeGh(self.artifacts, self.notes)
+                self.fake.events[run_id] = event
+                with self.assertRaises(assets.ReleaseError):
+                    self.run_publish()
+                self.assertFalse(any(command[1:3] == ['run', 'download'] for command in self.fake.calls))
+                self.assertIsNone(self.fake.release)
+
+    def test_manually_run_ci_of_main_is_accepted(self):
+        self.fake.events[CI_RUN] = 'workflow_dispatch'
+        self.run_publish()
+        self.assertFalse(self.fake.release['draft'])
 
     def test_unicode_digits_are_refused_before_subprocess_work(self):
         for environment in ({'TAG': 'v４.2.0'}, {'CI_RUN': '١٢٣'}, {'RELEASE_RUN': '１２３'}):

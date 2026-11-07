@@ -41,7 +41,9 @@ uploads artifacts to Actions. Publishing is a separate maintainer step:
 2. Run Release on `main` for the same commit.
 3. Run Publish: `gh workflow run publish.yml --ref main -f tag=v4.3.1 -f ci_run=<CI run ID> -f release_run=<Release run ID>`.
 
-Publish checks that both runs succeeded on the same `main` commit, downloads the
+Publish checks that both runs succeeded on the same `main` commit, that the CI
+run came from a push to `main` or a manual run and the Release run from a manual
+run (a pull-request run tests a merge tree, not the commit it reports), downloads the
 Release artifacts and verifies the internal checksums, every package's version,
 source commit and run, the APK's signer and identity, and that every public asset
 carries this Release run's attestation. It fills the build records into the notes

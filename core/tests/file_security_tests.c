@@ -1419,11 +1419,11 @@ static int test_residue_stem_identity_alias(const char *root)
         link(key, alias) != 0 ||
         !write_plain_file(backup, previous, sizeof(previous), 0600)) goto cleanup;
     lock = file_pair_lock_acquire(key);
-    if (lock < 0 || !file_delete_private_key_under_lock(key) ||
+    if (lock < 0 || file_delete_private_key_under_lock(key) != FILE_KEY_DELETED ||
         access(backup, F_OK) == 0 || !file_equals(alias, current, sizeof(current))) goto cleanup;
-    /* An unknown residue is reported and kept; the deletion itself succeeds. */
+    /* An unknown residue is kept, and the deletion says so. */
     if (!write_plain_file(unknown, previous, sizeof(previous), 0600) ||
-        !file_delete_private_key_under_lock(missing) ||
+        file_delete_private_key_under_lock(missing) != FILE_KEY_DELETED_RESIDUE_RETAINED ||
         !file_equals(unknown, previous, sizeof(previous))) goto cleanup;
     success = 1;
 cleanup:
@@ -1488,17 +1488,23 @@ static int test_key_residue_deletion(const char *root)
     (void)close(stderr_copy);
     stderr_copy = -1;
     lock = file_pair_lock_acquire(key);
-    if (lock < 0 || !file_delete_private_key_under_lock(key) ||
+    /* The fresh staging file is kept, so the deletion is not complete. */
+    if (lock < 0 || file_delete_private_key_under_lock(key) != FILE_KEY_DELETED_RESIDUE_RETAINED ||
         access(key, F_OK) == 0 || access(backup, F_OK) == 0 ||
         access(old_backup, F_OK) == 0 || access(temporary, F_OK) == 0 ||
         access(fresh, F_OK) != 0) goto cleanup;
     (void)unlink(fresh);
+    /* With nothing left behind the deletion is complete. */
+    if (!write_plain_file(key, private_data, sizeof(private_data), 0600) ||
+        file_delete_private_key_under_lock(key) != FILE_KEY_DELETED ||
+        access(key, F_OK) == 0) goto cleanup;
     /* A foreign-looking backup and a symlink are retained rather than
      * treating a reserved prefix alone as proof of ownership. */
     if (!write_plain_file(key, private_data, sizeof(private_data), 0600) ||
         !write_plain_file(foreign, (const unsigned char *)"unrelated", 9U, 0600) ||
         symlink(foreign, symbolic) != 0 ||
-        !file_delete_private_key_under_lock(key) || access(key, F_OK) == 0 ||
+        file_delete_private_key_under_lock(key) != FILE_KEY_DELETED_RESIDUE_RETAINED ||
+        access(key, F_OK) == 0 ||
         access(foreign, F_OK) != 0 || access(symbolic, F_OK) != 0) goto cleanup;
     (void)unlink(symbolic);
     (void)unlink(foreign);
