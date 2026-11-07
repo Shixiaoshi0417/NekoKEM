@@ -695,7 +695,8 @@ int file_delete_private_key_under_lock(const char *path)
 {
     HANDLE lock = win_pair_lock_open(path);
     if (lock == INVALID_HANDLE_VALUE) return errno == ENOENT;
-    int success = win_pair_lock_wait(lock, path) && win_delete_private_key(path);
+    /* Keep a partial deletion distinct; && would fold it into 1. */
+    int success = win_pair_lock_wait(lock, path) ? win_delete_private_key(path) : 0;
     win_pair_lock_release(lock);
     return success;
 }
