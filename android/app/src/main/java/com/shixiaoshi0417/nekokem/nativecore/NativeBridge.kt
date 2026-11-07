@@ -8,6 +8,12 @@ fun interface NativeProgressCallback {
 object NativeBridge {
     const val RESULT_CORE_ERROR = 0
     const val RESULT_SUCCESS = 1
+
+    /**
+     * A deletion removed the key, but Core kept a residue that may hold a
+     * private key: a fresh staging file may still belong to another operation.
+     */
+    const val RESULT_RESIDUE_RETAINED = 2
     const val RESULT_INVALID_ARGUMENT = -1
     const val RESULT_ALLOCATION_ERROR = -2
     const val RESULT_JAVA_EXCEPTION = -3

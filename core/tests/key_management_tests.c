@@ -224,9 +224,9 @@ int main(void)
         fprintf(stderr, "Trailing private-key data was accepted\n");
         goto cleanup;
     }
-    if (!nekokem_delete_private_key(private_path) ||
+    if (nekokem_delete_private_key(private_path) != 1 ||
         nekokem_private_key_exists(private_path) ||
-        !nekokem_delete_private_key(private_path)) {
+        nekokem_delete_private_key(private_path) != 1) {
         fprintf(stderr, "Managed private-key deletion failed\n");
         goto cleanup;
     }

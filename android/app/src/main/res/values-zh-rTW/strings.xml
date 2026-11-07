@@ -135,6 +135,7 @@
     <string name="error_reason_key_generation">無法產生金鑰對或安全儲存金鑰。</string>
     <string name="error_reason_export">無法驗證或匯出所選金鑰。</string>
     <string name="error_reason_delete">無法安全刪除一個或多個本機金鑰檔案或相關暫存檔案。</string>
+    <string name="error_reason_delete_residue">私鑰已刪除，但保留了一份由中斷的金鑰產生或替換留下的私鑰暫存副本，因為它可能仍在被其他操作寫入。這份副本仍可能用對應的密碼解鎖。請在復原備份中查看，並參閱 Android README 後再處理。</string>
     <string name="error_reason_core">NekoKEM Core 拒絕了此操作。</string>
     <string name="error_reason_unexpected">發生非預期的 Android 操作錯誤。</string>
     <string name="error_reason_fingerprint_mismatch">暫存金鑰在確認後發生變化，或其指紋已不匹配。</string>

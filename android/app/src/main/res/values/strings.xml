@@ -151,6 +151,7 @@
     <string name="error_reason_key_generation">The keypair could not be generated or stored securely.</string>
     <string name="error_reason_export">The selected key could not be validated or exported.</string>
     <string name="error_reason_delete">One or more local key files or related temporary files could not be deleted safely.</string>
+    <string name="error_reason_delete_residue">The private key was deleted, but a staged private-key copy left by an interrupted key generation or replacement was kept, since another operation may still be writing it. It may still unlock with that key\'s password. Check it under recovery backups and see the Android README before removing it.</string>
     <string name="error_reason_core">NekoKEM Core rejected the operation.</string>
     <string name="error_reason_unexpected">An unexpected Android operation error occurred.</string>
     <string name="error_reason_fingerprint_mismatch">The temporary key changed after confirmation or its fingerprint no longer matches.</string>

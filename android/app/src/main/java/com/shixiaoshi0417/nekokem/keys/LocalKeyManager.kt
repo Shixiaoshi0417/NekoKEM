@@ -720,12 +720,27 @@ class LocalKeyManager internal constructor(
         try {
             withPairDirectoryLock {
                 val copiesDeleted = deletePrivateKeyCopiesLocked()
-                val result = NativeBridge.nativeDeletePrivateKeyUnderPairLock(privateKey.absolutePath)
-                if (result == NativeBridge.RESULT_SUCCESS && !copiesDeleted) RESULT_STORAGE_ERROR else result
+                deletionResult(
+                    NativeBridge.nativeDeletePrivateKeyUnderPairLock(privateKey.absolutePath),
+                    copiesDeleted,
+                )
             }
         } catch (_: Exception) {
             RESULT_STORAGE_ERROR
         }
+    }
+
+    /**
+     * A private key Core deleted beside a residue it kept, such as the fresh
+     * stage of an interrupted replacement, is reported as a partial deletion,
+     * never as complete; a copy the App could not remove is a failure.
+     */
+    private fun deletionResult(nativeResult: Int, copiesDeleted: Boolean): Int = when {
+        nativeResult != NativeBridge.RESULT_SUCCESS && nativeResult != NativeBridge.RESULT_RESIDUE_RETAINED ->
+            nativeResult
+        !copiesDeleted -> RESULT_STORAGE_ERROR
+        nativeResult == NativeBridge.RESULT_RESIDUE_RETAINED -> RESULT_DELETED_RESIDUE_RETAINED
+        else -> NativeBridge.RESULT_SUCCESS
     }
 
     /**
@@ -763,9 +778,17 @@ class LocalKeyManager internal constructor(
         try {
             withPairDirectoryLock {
                 val copiesDeleted = deletePrivateKeyCopiesLocked()
-                val result = NativeBridge.nativeDeletePrivateKeyUnderPairLock(privateKey.absolutePath)
-                    .let { if (it == NativeBridge.RESULT_SUCCESS) deletePublicKeyLocked() else it }
-                if (result == NativeBridge.RESULT_SUCCESS && !copiesDeleted) RESULT_STORAGE_ERROR else result
+                val privateResult = NativeBridge.nativeDeletePrivateKeyUnderPairLock(privateKey.absolutePath)
+                // The private key itself is gone even when a residue was kept,
+                // so the public key is deleted too and the residue still reported.
+                if (privateResult != NativeBridge.RESULT_SUCCESS &&
+                    privateResult != NativeBridge.RESULT_RESIDUE_RETAINED
+                ) {
+                    return@withPairDirectoryLock privateResult
+                }
+                val publicResult = deletePublicKeyLocked()
+                if (publicResult != NativeBridge.RESULT_SUCCESS) publicResult
+                else deletionResult(privateResult, copiesDeleted)
             }
         } catch (_: Exception) {
             RESULT_STORAGE_ERROR
@@ -808,15 +831,21 @@ class LocalKeyManager internal constructor(
      * Counted under the mutation lock, so an import's short-lived backup is never
      * reported. Core keeps a previous key as `<key>.bak.*` when a replacement
      * cannot roll back, and deleting that key later removes such a copy, so it
-     * is reported too. An empty backup holds nothing to recover.
+     * is reported too. Core stages a new private key as `<key>.tmp.*`; every
+     * key operation of the App holds the mutation lock, so one found here was
+     * left by an interrupted generation or replacement and may hold a usable
+     * key. It is never removed automatically. An empty file holds nothing.
      */
     fun recoveryBackupCount(): Int = keyMutationLock.withLock {
         keysDirectory.listFiles().orEmpty().count { file ->
-            (file.name.startsWith(PUBLIC_BACKUP_PREFIX) || file.name.startsWith(PRIVATE_BACKUP_PREFIX) ||
-                file.name.startsWith("$PUBLIC_KEY_NAME.bak.") || file.name.startsWith("$PRIVATE_KEY_NAME.bak.")) &&
-                ownedRegularFile(file) && file.length() > 0L
+            isRecoveryResidueName(file.name) && ownedRegularFile(file) && file.length() > 0L
         }
     }
+
+    internal fun isRecoveryResidueName(name: String): Boolean =
+        name.startsWith(PUBLIC_BACKUP_PREFIX) || name.startsWith(PRIVATE_BACKUP_PREFIX) ||
+            name.startsWith("$PUBLIC_KEY_NAME.bak.") || name.startsWith("$PRIVATE_KEY_NAME.bak.") ||
+            name.startsWith("$PRIVATE_KEY_NAME.tmp.")
 
     private fun ownedRegularFile(file: File): Boolean = try {
         val status = Os.lstat(file.absolutePath)
@@ -991,6 +1020,9 @@ class LocalKeyManager internal constructor(
         const val RESULT_PUBLIC_KEY_INTEGRITY_FAILED = -15
         const val RESULT_KEY_PAIR_MISMATCH = -16
         const val RESULT_KEY_PAIR_PASSWORD_FAILED = -17
+
+        /** The key is deleted, but a residue that may hold a private key remains. */
+        const val RESULT_DELETED_RESIDUE_RETAINED = -18
         private const val CACHE_CLEAR_BUFFER_SIZE = 64 * 1024
         private const val KEY_COPY_BUFFER_SIZE = 64 * 1024
         private const val MAX_KEY_FILE_BYTES = 16L * 1024L * 1024L

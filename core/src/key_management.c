@@ -115,6 +115,9 @@ cleanup:
     return success;
 }
 
+_Static_assert(FILE_KEY_DELETED_RESIDUE_RETAINED == NEKOKEM_DELETE_RESIDUE_RETAINED,
+               "Core deletion results are passed through unchanged");
+
 int nekokem_delete_private_key(const char *private_key_path)
 {
     int success;

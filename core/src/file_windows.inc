@@ -718,9 +718,12 @@ static int win_delete_private_key(const char *path)
         print_system_error("Cannot sync the private-key directory after deletion");
         goto cleanup;
     }
-    /* The key itself is gone: a retained residue is reported, not a failure. */
-    success = 1;
-    if (retained) fprintf(stderr, file_message("Some key transaction residues were retained; inspect them before cleanup\n"));
+    /* The key itself is gone; a retained residue is a distinct result. */
+    success = FILE_KEY_DELETED;
+    if (retained) {
+        fprintf(stderr, file_message("Some key transaction residues were retained; inspect them before cleanup\n"));
+        success = FILE_KEY_DELETED_RESIDUE_RETAINED;
+    }
 cleanup:
     if (key != INVALID_HANDLE_VALUE) CloseHandle(key);
     win_path_close(&checked);

@@ -1532,12 +1532,13 @@ int file_delete_private_key_under_lock(const char *path)
         print_system_error("Cannot sync the private-key directory after deletion");
         return 0;
     }
-    /* The key itself is gone: a retained residue is reported, not a failure,
-     * so deleting a key pair can go on to the public key and be retried. */
+    /* The key itself is gone, so deleting a key pair can go on to the public
+     * key; the retained residue is a distinct result the caller must report. */
     if (success == 0) {
         fprintf(stderr, file_message("Some key transaction residues were retained; inspect them before cleanup\n"));
+        return FILE_KEY_DELETED_RESIDUE_RETAINED;
     }
-    return 1;
+    return FILE_KEY_DELETED;
 }
 
 static int write_descriptor_all(int descriptor, const unsigned char *buffer,

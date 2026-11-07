@@ -42,7 +42,9 @@ Core 使用 OpenSSL EVP、NKEM v3（单接收方）、NKEM v4（多接收方）�
 - `nekokem_export_public_key()`：由 Core 验证 X448 与 ML-KEM-1024 公钥，
   再原子地重新序列化到目标文件。
 - `nekokem_delete_private_key()`：删除指定的常规私钥文件和可识别的自有
-  事务残留；目标不存在且没有未清理残留时也视为成功，便于 UI 实现幂等删除。
+  事务残留；目标不存在且没有未清理残留时也视为成功（返回 1），便于 UI 实现幂等删除。
+  私钥已删除但保留了残留（例如可能仍属于其他操作的新鲜暂存）时返回
+  `NEKOKEM_DELETE_RESIDUE_RETAINED`，调用方必须把它报告为未完整删除；失败返回 0。
 - `nekokem_private_key_requires_password()`：供 UI 在调用解密 API 前决定
   是否显示口令输入框。
 

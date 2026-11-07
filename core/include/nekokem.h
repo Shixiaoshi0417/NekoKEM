@@ -138,6 +138,15 @@ NEKOKEM_API int nekokem_export_public_key(
     const char *public_key_path,
     const char *output_path);
 
+/*
+ * Returns 1 when the key and every residue of its interrupted transactions
+ * are gone (or there was no key), NEKOKEM_DELETE_RESIDUE_RETAINED when the
+ * key is gone but a residue file that may still hold a private key was kept
+ * and reported on stderr, and 0 when the key could not be deleted. A fresh
+ * staging file is kept because another operation may still be writing it.
+ */
+#define NEKOKEM_DELETE_RESIDUE_RETAINED 2
+
 NEKOKEM_API int nekokem_delete_private_key(
     const char *private_key_path);
 

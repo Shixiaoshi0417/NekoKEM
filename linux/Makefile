@@ -238,6 +238,7 @@ test-key-safety:
 	trap cleanup_safety EXIT INT TERM; \
 	$(CC) $(CPPFLAGS) $(CFLAGS) -O1 -g -fno-omit-frame-pointer \
 		-fsanitize=address,undefined -fno-sanitize-recover=undefined \
+		-DNEKOKEM_TEST_FAULT_INJECTION \
 		$(LDFLAGS) ../core/tests/key_safety_tests.c $(CORE_SOURCES) \
 		$(LDLIBS) -fsanitize=address,undefined -o "$$safety_binary"; \
 	ASAN_OPTIONS=detect_leaks=1:halt_on_error=1 \

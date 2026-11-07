@@ -15,6 +15,9 @@
 #include <stdlib.h>
 #include <string.h>
 #ifndef _WIN32
+#include <dirent.h>
+#include <sys/stat.h>
+#include <sys/wait.h>
 #include <unistd.h>
 #endif
 
@@ -277,6 +280,105 @@ cleanup:
 }
 
 #ifndef _WIN32
+#ifdef NEKOKEM_TEST_FAULT_INJECTION
+static void stop_before_private_rename(const char *target)
+{
+    static const char name[] = "interrupted/private.key.enc";
+    size_t length = strlen(target);
+
+    /* The process ends as if killed: no cleanup runs. */
+    if (length >= sizeof(name) - 1U &&
+        strcmp(target + length - (sizeof(name) - 1U), name) == 0) {
+        _exit(0);
+    }
+}
+
+static int interrupted_stage(char *path, size_t size)
+{
+    DIR *stream = opendir("interrupted");
+    struct dirent *entry;
+    int found = 0;
+
+    if (stream == NULL) return 0;
+    while ((entry = readdir(stream)) != NULL) {
+        if (strncmp(entry->d_name, "private.key.enc.tmp.", 20U) == 0) {
+            (void)snprintf(path, size, "interrupted/%s", entry->d_name);
+            found = 1;
+        }
+    }
+    (void)closedir(stream);
+    return found;
+}
+
+static void remove_interrupted(void)
+{
+    DIR *stream = opendir("interrupted");
+    struct dirent *entry;
+    char path[512];
+
+    if (stream == NULL) return;
+    while ((entry = readdir(stream)) != NULL) {
+        if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0) continue;
+        (void)snprintf(path, sizeof(path), "interrupted/%s", entry->d_name);
+        (void)remove(path);
+    }
+    (void)closedir(stream);
+    (void)rmdir("interrupted");
+}
+
+/*
+ * A replacement killed after staging its new private key and publishing the
+ * new public key leaves that fresh stage behind. Deleting the key keeps the
+ * stage, since another operation may still own it, and must say so rather
+ * than report a complete deletion.
+ */
+static int test_interrupted_replacement_deletion(void)
+{
+    static const unsigned char new_password[] = "public-test-replacement";
+    char stage[512];
+    pid_t child;
+    int status = 0;
+    int success = 0;
+
+    if (mkdir("interrupted", 0700) != 0 ||
+        !nekokem_generate_keypair("interrupted/public.key", "interrupted/private.key.enc",
+                                  password, sizeof(password) - 1U)) {
+        fprintf(stderr, "Cannot create the key pair to replace\n");
+        goto cleanup;
+    }
+    child = fork();
+    if (child < 0) goto cleanup;
+    if (child == 0) {
+        file_test_set_before_noreplace_rename(stop_before_private_rename);
+        (void)nekokem_replace_keypair("interrupted/public.key", "interrupted/private.key.enc",
+                                      new_password, sizeof(new_password) - 1U);
+        _exit(1);
+    }
+    if (waitpid(child, &status, 0) != child || !WIFEXITED(status) || WEXITSTATUS(status) != 0 ||
+        !interrupted_stage(stage, sizeof(stage)) ||
+        nekokem_check_private_key_password(stage, new_password, sizeof(new_password) - 1U) != 1) {
+        fprintf(stderr, "The replacement was not interrupted after staging its new key\n");
+        goto cleanup;
+    }
+    if (nekokem_delete_private_key("interrupted/private.key.enc") != NEKOKEM_DELETE_RESIDUE_RETAINED ||
+        !missing("interrupted/private.key.enc") || missing(stage)) {
+        fprintf(stderr, "Deleting the key reported a complete deletion beside a fresh stage\n");
+        goto cleanup;
+    }
+    /* With the stage gone, deletion is complete again. */
+    if (remove(stage) != 0 ||
+        nekokem_delete_private_key("interrupted/private.key.enc") != 1) {
+        fprintf(stderr, "Deletion without residue was not complete\n");
+        goto cleanup;
+    }
+    success = 1;
+
+cleanup:
+    remove_interrupted();
+    return success;
+}
+#endif
+
 static void remove_fixtures(void)
 {
     static const char *const names[] = {
@@ -306,6 +408,9 @@ int main(void)
     int success = test_keygen_never_replaces() &&
                   test_output_never_replaces_a_key() &&
                   test_nkpr_detected_by_contents();
+#if !defined(_WIN32) && defined(NEKOKEM_TEST_FAULT_INJECTION)
+    success = success && test_interrupted_replacement_deletion();
+#endif
 
 #ifndef _WIN32
     remove_fixtures();
