@@ -145,6 +145,8 @@ internal fun DialogButton(
             onClick = onClick,
             modifier = Modifier.fillMaxWidth(),
             enabled = enabled,
+            // Long labels wrap; keep every line centered in the button.
+            textStyle = top.yukonga.miuix.kmp.theme.MiuixTheme.textStyles.button.copy(textAlign = TextAlign.Center),
             colors = if (miuixSlot.primary) {
                 top.yukonga.miuix.kmp.basic.ButtonDefaults.textButtonColorsPrimary()
             } else {
