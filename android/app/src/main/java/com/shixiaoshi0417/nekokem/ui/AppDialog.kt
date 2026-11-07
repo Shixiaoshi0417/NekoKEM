@@ -105,7 +105,9 @@ internal fun AppAlertDialog(
                     LocalContentColor provides summaryColor,
                     LocalTextStyle provides TextStyle(fontSize = MiuixTheme.textStyles.body1.fontSize),
                 ) {
-                    Box(Modifier.fillMaxWidth().padding(bottom = 12.dp)) { it() }
+                    // Weighted without filling: a body taller than the window
+                    // scrolls in what is left, and the actions keep their height.
+                    Box(Modifier.fillMaxWidth().weight(1f, fill = false).padding(bottom = 12.dp)) { it() }
                 }
             }
             Row(
