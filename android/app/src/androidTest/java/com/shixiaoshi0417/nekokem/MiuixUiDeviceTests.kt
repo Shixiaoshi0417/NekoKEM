@@ -139,12 +139,12 @@ internal fun runMiuixUiTests(instrumentation: Instrumentation, screenshotPrefix:
             await("page ${string(title)}") { exact(string(title)) != null }
             capture(string(tab).lowercase())
         }
-        // The password dialog is a MIUIX dialog whose window stays secure.
+        // The password dialog is a MIUIX dialog, and it and the screen behind it are secure.
         clickNavigationTab(instrumentation, string(R.string.tab_keys))
         click(string(R.string.action_generate_keypair))
         await("password dialog") { exact(string(R.string.generate_password_title)) != null }
+        // Secure windows cannot be captured (Android 10 returns no screenshot at all).
         check(secureWindowShown()) { "MIUIX password dialog window is not secure" }
-        capture("password-dialog")
         click(string(R.string.action_cancel))
         await("password dialog closed") { exact(string(R.string.generate_password_title)) == null }
         // Back from another tab returns to Files.
