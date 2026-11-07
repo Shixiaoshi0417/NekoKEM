@@ -101,7 +101,18 @@ internal fun runMiuixUiTests(instrumentation: Instrumentation, screenshotPrefix:
         val dump = automation.executeShellCommand("dumpsys window windows").let { descriptor ->
             android.os.ParcelFileDescriptor.AutoCloseInputStream(descriptor).bufferedReader().use { it.readText() }
         }
-        return dump.split("Window #").any { it.contains(context.packageName) && it.contains("SECURE") }
+        File(File(context.cacheDir, "i18n-screens").apply { mkdirs() }, "$screenshotPrefix-miuix-windows.txt").writeText(dump)
+        // Newer releases name the flags (fl=... SECURE ...); Android 8 prints them in hex.
+        val hexFlags = Regex("""\bfl=#([0-9a-fA-F]+)""")
+        val secureName = Regex("""\bSECURE\b""")
+        return dump.split("Window #").any { window ->
+            window.contains(context.packageName) && (
+                secureName.containsMatchIn(window) ||
+                    hexFlags.findAll(window).any {
+                        it.groupValues[1].toLong(16) and android.view.WindowManager.LayoutParams.FLAG_SECURE.toLong() != 0L
+                    }
+                )
+        }
     }
     try {
         activity = instrumentation.startActivitySync(
