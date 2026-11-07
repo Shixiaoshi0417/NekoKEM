@@ -87,6 +87,22 @@ internal fun runMiuixUiTests(instrumentation: Instrumentation, screenshotPrefix:
         check(target.performAction(AccessibilityNodeInfo.ACTION_CLICK))
         instrumentation.waitForIdleSync()
     }
+    fun reveal(value: String) {
+        // On small screens the row can sit below the fold or under the floating bar.
+        repeat(6) {
+            if (exact(value) != null) return
+            val scrollable = find(automation.rootInActiveWindow) { it.isScrollable } ?: return
+            scrollable.performAction(AccessibilityNodeInfo.ACTION_SCROLL_FORWARD)
+            instrumentation.waitForIdleSync()
+            SystemClock.sleep(300)
+        }
+    }
+    fun secureWindowShown(): Boolean {
+        val dump = automation.executeShellCommand("dumpsys window windows").let { descriptor ->
+            android.os.ParcelFileDescriptor.AutoCloseInputStream(descriptor).bufferedReader().use { it.readText() }
+        }
+        return dump.split("Window #").any { it.contains(context.packageName) && it.contains("SECURE") }
+    }
     try {
         activity = instrumentation.startActivitySync(
             Intent(context, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
@@ -95,6 +111,7 @@ internal fun runMiuixUiTests(instrumentation: Instrumentation, screenshotPrefix:
         await("Files page") { exact(string(R.string.navigation_files)) != null }
         capture("files")
         // Dialogs follow the style: the saved-key picker is a MIUIX dialog.
+        reveal(string(R.string.action_choose_contact))
         click(string(R.string.action_choose_contact))
         await("contact picker") { exact(string(R.string.action_cancel)) != null }
         capture("dialog")
@@ -115,6 +132,7 @@ internal fun runMiuixUiTests(instrumentation: Instrumentation, screenshotPrefix:
         clickNavigationTab(instrumentation, string(R.string.tab_keys))
         click(string(R.string.action_generate_keypair))
         await("password dialog") { exact(string(R.string.generate_password_title)) != null }
+        check(secureWindowShown()) { "MIUIX password dialog window is not secure" }
         capture("password-dialog")
         click(string(R.string.action_cancel))
         await("password dialog closed") { exact(string(R.string.generate_password_title)) == null }
