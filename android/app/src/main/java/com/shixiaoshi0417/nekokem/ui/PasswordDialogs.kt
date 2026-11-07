@@ -10,7 +10,6 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
@@ -51,7 +50,7 @@ fun GeneratePasswordDialog(
         }
     }
 
-    AlertDialog(
+    AppAlertDialog(
         properties = DialogProperties(securePolicy = SecureFlagPolicy.SecureOn),
         onDismissRequest = {
             password.fill(0)
@@ -144,7 +143,7 @@ fun SinglePasswordDialog(
         onDispose { password.fill(0) }
     }
 
-    AlertDialog(
+    AppAlertDialog(
         properties = DialogProperties(securePolicy = SecureFlagPolicy.SecureOn),
         onDismissRequest = {
             password.fill(0)
@@ -206,6 +205,24 @@ private fun TemporaryPasswordField(
     isError: Boolean,
 ) {
     PasswordKeyboard {
+        if (isMiuixStyle()) {
+            // MIUIX fields have no error state; the message below the fields says what is wrong.
+            top.yukonga.miuix.kmp.basic.TextField(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 12.dp),
+                value = value.decodeToString(),
+                onValueChange = { onValueChanged(it.encodeToByteArray()) },
+                singleLine = true,
+                label = stringResource(labelResource),
+                visualTransformation = PasswordVisualTransformation(),
+                keyboardOptions = KeyboardOptions(
+                    keyboardType = KeyboardType.Password,
+                    autoCorrectEnabled = false,
+                ),
+            )
+            return@PasswordKeyboard
+        }
         OutlinedTextField(
             modifier = Modifier
                 .fillMaxWidth()

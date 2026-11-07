@@ -6,7 +6,7 @@
 
 本版为 Android 带来全新的 MIUIX 界面，并修复 2026-11-07 源码审计中确认的问题。Android 与各平台 CLI/GUI 统一为 **4.4.0**，Core 仍为 **4.0**。NKEM v3/v4、NKPR v1、密码参数和公钥指纹算法不变。
 
-- **Android MIUIX 界面**：新安装默认使用 MIUIX 风格，采用 MIUIX 原生浅色/深色配色（不随壁纸取色），每页带可折叠大标题，底部为悬浮的液态玻璃标签栏，带模糊与透镜折射，选中指示器可拖动；Android 8–12 显示不透明的悬浮底栏。「设置 → 界面风格」可随时切回 Material 3 Expressive，立即生效，已选文件、密钥和收件人不会丢失。
+- **Android MIUIX 界面**：新安装默认使用 MIUIX 风格，采用 MIUIX 原生浅色/深色配色（不随壁纸取色），对话框也是 MIUIX 对话框（手机上从底部弹出），每页带可折叠大标题，底部为悬浮的液态玻璃标签栏，带模糊与透镜折射，选中指示器可拖动；Android 8–12 显示不透明的悬浮底栏。「设置 → 界面风格」可随时切回 Material 3 Expressive，立即生效，已选文件、密钥和收件人不会丢失。
 - **Material 3 Expressive 底部导航**：去掉侧边抽屉和菜单按钮，改为底部导航栏，选中标签为实心图标加胶囊指示器；预测性返回的页面预览保留。
 - **删除私钥如实报告残留**：密钥生成或替换中断时，可能留下新私钥的暂存文件 `.tmp.*`。未满 10 分钟的暂存可能仍属于其他进程中的操作，删除时会保留；以前删除仍报告成功，现在 Core 返回 `NEKOKEM_DELETE_RESIDUE_RETAINED`（POSIX 与 Windows 一致）。Android 的「删除私钥」和「删除密钥对」会报告“私钥已删除，但保留了暂存副本”，不再显示为完整删除；这类暂存会计入“已保留恢复备份”提示，不会被自动删除。
 - **发布门禁**：Publish 只接受 `main` 上由 push 或手动触发的 CI 运行，以及手动触发的 Release 运行；PR 触发的运行测试的是临时合并树，不再被接受。
@@ -51,7 +51,7 @@
 
 This release brings a new MIUIX interface to Android and fixes the issues confirmed by the 2026-11-07 source audit. Android and every CLI/GUI application are **4.4.0**; Core remains **4.0**. NKEM v3/v4, NKPR v1, cryptographic parameters and public-key fingerprint algorithms are unchanged.
 
-- **Android MIUIX interface**: new installations open in the MIUIX style, drawn in its own light or dark palette rather than wallpaper colors, with a collapsible large title on every page and a floating liquid glass tab bar that blurs and refracts the page behind it; its selection indicator can be dragged. Android 8–12 shows an opaque floating bar. Settings → Interface style switches back to Material 3 Expressive at once, keeping the selected file, keys and recipients.
+- **Android MIUIX interface**: new installations open in the MIUIX style, drawn in its own light or dark palette rather than wallpaper colors and with MIUIX dialogs (rising from the bottom on phones), with a collapsible large title on every page and a floating liquid glass tab bar that blurs and refracts the page behind it; its selection indicator can be dragged. Android 8–12 shows an opaque floating bar. Settings → Interface style switches back to Material 3 Expressive at once, keeping the selected file, keys and recipients.
 - **Material 3 Expressive bottom navigation**: the navigation drawer and menu button give way to a bottom navigation bar whose selected tab shows a filled icon in a pill indicator. Predictive back page previews remain.
 - **Private-key deletion reports what it keeps**: an interrupted key generation or replacement can leave a staged new private key as `.tmp.*`. A stage younger than ten minutes may still belong to another process's operation and is kept, yet deletion used to report success. Core now returns `NEKOKEM_DELETE_RESIDUE_RETAINED` (on POSIX and Windows alike). Android's Delete private key and Delete key pair report that the key was deleted but a staged copy was kept, instead of a complete deletion; such stages count towards the recovery backups notice and are never removed automatically.
 - **Publication gate**: Publish accepts only CI runs of `main` triggered by a push or by hand, and Release runs triggered by hand. A pull-request run tests a merge tree and is no longer accepted.

@@ -3,10 +3,10 @@
 ## 4.4.0
 
 - 全平台 4.4.0，Core 4.0，Android versionCode 14；沿用既有签名，可覆盖升级。
-- 新增 MIUIX 界面并设为新安装默认，使用 MIUIX 原生配色：悬浮液态玻璃底栏（Android 13+ 模糊与折射，Android 8–12 为不透明悬浮底栏）；设置里可切回 Material 3 Expressive，后者改用底部导航栏。
+- 新增 MIUIX 界面并设为新安装默认，使用 MIUIX 原生配色和 MIUIX 对话框：悬浮液态玻璃底栏（Android 13+ 模糊与折射，Android 8–12 为不透明悬浮底栏）；设置里可切回 Material 3 Expressive，后者改用底部导航栏。
 - 删除私钥或密钥对时若保留了中断操作留下的私钥暂存，报告为未完整删除，并计入恢复备份提示。完整双语说明见 [v4.4.0](../release/v4.4.0.md)。
 
-Android 4.4.0 / versionCode 14 retains the existing signer. New installations open in the MIUIX style, in its own palette, with a floating liquid glass tab bar (blur and refraction on Android 13+, an opaque floating bar on Android 8–12); Settings switches back to Material 3 Expressive, which now navigates from a bottom bar. Deleting the private key or key pair while a staged key from an interrupted operation is kept is reported as an incomplete deletion and counted as a recovery backup. See the [bilingual notes](../release/v4.4.0.md).
+Android 4.4.0 / versionCode 14 retains the existing signer. New installations open in the MIUIX style, in its own palette and with MIUIX dialogs, with a floating liquid glass tab bar (blur and refraction on Android 13+, an opaque floating bar on Android 8–12); Settings switches back to Material 3 Expressive, which now navigates from a bottom bar. Deleting the private key or key pair while a staged key from an interrupted operation is kept is reported as an incomplete deletion and counted as a recovery backup. See the [bilingual notes](../release/v4.4.0.md).
 
 ## 4.3.1
 

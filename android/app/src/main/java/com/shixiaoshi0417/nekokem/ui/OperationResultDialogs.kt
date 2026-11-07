@@ -5,7 +5,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
@@ -29,7 +28,7 @@ fun OperationCompletedDialog(
 ) {
     val context = LocalContext.current
 
-    AlertDialog(
+    AppAlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(stringResource(R.string.completion_title)) },
         text = {
@@ -80,7 +79,7 @@ fun OperationErrorDialog(
     reason: String,
     onDismiss: () -> Unit,
 ) {
-    AlertDialog(
+    AppAlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(stringResource(R.string.error_dialog_title)) },
         text = {

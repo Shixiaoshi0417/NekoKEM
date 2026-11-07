@@ -21,8 +21,8 @@ internal fun useMaterialStyle(context: Context) {
 
 /**
  * A fresh install opens in MIUIX: every tab of the floating bar is reachable
- * and captured, and the interface style switches to Material and back from
- * either style's settings page.
+ * and captured, dialogs open and close as MIUIX dialogs, and the interface
+ * style switches to Material and back from either style's settings page.
  */
 internal fun runMiuixUiTests(instrumentation: Instrumentation, screenshotPrefix: String) {
     val context = instrumentation.targetContext
@@ -87,6 +87,33 @@ internal fun runMiuixUiTests(instrumentation: Instrumentation, screenshotPrefix:
         check(target.performAction(AccessibilityNodeInfo.ACTION_CLICK))
         instrumentation.waitForIdleSync()
     }
+    fun reveal(value: String) {
+        // On small screens the row can sit below the fold or under the floating bar.
+        repeat(6) {
+            if (exact(value) != null) return
+            val scrollable = find(automation.rootInActiveWindow) { it.isScrollable } ?: return
+            scrollable.performAction(AccessibilityNodeInfo.ACTION_SCROLL_FORWARD)
+            instrumentation.waitForIdleSync()
+            SystemClock.sleep(300)
+        }
+    }
+    fun secureWindowShown(): Boolean {
+        val dump = automation.executeShellCommand("dumpsys window windows").let { descriptor ->
+            android.os.ParcelFileDescriptor.AutoCloseInputStream(descriptor).bufferedReader().use { it.readText() }
+        }
+        // Newer releases name the flags (fl=... SECURE ...); Android 8 prints them in hex.
+        val hexFlags = Regex("""\bfl=#([0-9a-fA-F]+)""")
+        val secureName = Regex("""\bSECURE\b""")
+        // Both the dialog and the screen behind it must be secure.
+        return dump.split("Window #").count { window ->
+            window.contains(context.packageName) && (
+                secureName.containsMatchIn(window) ||
+                    hexFlags.findAll(window).any {
+                        it.groupValues[1].toLong(16) and android.view.WindowManager.LayoutParams.FLAG_SECURE.toLong() != 0L
+                    }
+                )
+        } >= 2
+    }
     try {
         activity = instrumentation.startActivitySync(
             Intent(context, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
@@ -94,6 +121,13 @@ internal fun runMiuixUiTests(instrumentation: Instrumentation, screenshotPrefix:
         instrumentation.waitForIdleSync()
         await("Files page") { exact(string(R.string.navigation_files)) != null }
         capture("files")
+        // Dialogs follow the style: the saved-key picker is a MIUIX dialog.
+        reveal(string(R.string.action_choose_contact))
+        click(string(R.string.action_choose_contact))
+        await("contact picker") { exact(string(R.string.action_cancel)) != null }
+        capture("dialog")
+        click(string(R.string.action_cancel))
+        await("contact picker closed") { exact(string(R.string.action_cancel)) == null }
         val pages = listOf(
             R.string.tab_keys to R.string.navigation_keys,
             R.string.tab_contacts to R.string.navigation_contacts,
@@ -105,6 +139,14 @@ internal fun runMiuixUiTests(instrumentation: Instrumentation, screenshotPrefix:
             await("page ${string(title)}") { exact(string(title)) != null }
             capture(string(tab).lowercase())
         }
+        // The password dialog is a MIUIX dialog, and it and the screen behind it are secure.
+        clickNavigationTab(instrumentation, string(R.string.tab_keys))
+        click(string(R.string.action_generate_keypair))
+        await("password dialog") { exact(string(R.string.generate_password_title)) != null }
+        // Secure windows cannot be captured (Android 10 returns no screenshot at all).
+        check(secureWindowShown()) { "MIUIX password dialog window is not secure" }
+        click(string(R.string.action_cancel))
+        await("password dialog closed") { exact(string(R.string.generate_password_title)) == null }
         // Back from another tab returns to Files.
         instrumentation.runOnMainSync {
             (checkNotNull(activity) as androidx.activity.ComponentActivity).onBackPressedDispatcher.onBackPressed()

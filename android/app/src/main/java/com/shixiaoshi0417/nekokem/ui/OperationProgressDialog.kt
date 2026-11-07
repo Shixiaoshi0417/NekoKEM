@@ -7,7 +7,6 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.LinearWavyProgressIndicator
 import androidx.compose.material3.LoadingIndicator
@@ -35,13 +34,26 @@ fun OperationProgressDialog(
     val total = formatByteCount(context, progress.totalBytes)
     val speed = formatByteCount(context, progress.bytesPerSecond.toLong())
 
-    AlertDialog(
+    AppAlertDialog(
         onDismissRequest = {},
-        icon = { LoadingIndicator() },
+        icon = {
+            if (isMiuixStyle()) {
+                top.yukonga.miuix.kmp.basic.InfiniteProgressIndicator(
+                    color = top.yukonga.miuix.kmp.theme.MiuixTheme.colorScheme.primary,
+                )
+            } else {
+                LoadingIndicator()
+            }
+        },
         title = { Text(stringResource(R.string.progress_title, operation)) },
         text = {
             Column(Modifier.verticalScroll(rememberScrollState())) {
-                if (progress.totalBytes > 0L) {
+                if (isMiuixStyle()) {
+                    top.yukonga.miuix.kmp.basic.LinearProgressIndicator(
+                        modifier = Modifier.fillMaxWidth(),
+                        progress = if (progress.totalBytes > 0L) progress.fraction else null,
+                    )
+                } else if (progress.totalBytes > 0L) {
                     LinearWavyProgressIndicator(
                         progress = { progress.fraction },
                         modifier = Modifier.fillMaxWidth(),

@@ -23,7 +23,6 @@ import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.AlertDialog
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
@@ -511,7 +510,7 @@ private fun MiuixSettingsPage(
     val context = LocalContext.current
     var languageSaveFailed by remember { mutableStateOf(false) }
     if (languageSaveFailed) {
-        AlertDialog(
+        AppAlertDialog(
             onDismissRequest = { languageSaveFailed = false },
             title = { androidx.compose.material3.Text(stringResource(R.string.error_dialog_title)) },
             text = { androidx.compose.material3.Text(stringResource(R.string.error_language_save)) },

@@ -126,7 +126,11 @@ internal fun ExpressiveButton(
     }
 }
 
-/** A dialog action: a text button whose corners morph while pressed. */
+/**
+ * A dialog action. In a MIUIX [AppAlertDialog] it is a full-width MIUIX text
+ * button, the confirm action tinted; otherwise a Material text button whose
+ * corners morph while pressed.
+ */
 @OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 internal fun DialogButton(
@@ -134,6 +138,23 @@ internal fun DialogButton(
     onClick: () -> Unit,
     enabled: Boolean = true,
 ) {
+    val miuixSlot = LocalMiuixDialogSlot.current
+    if (miuixSlot != null) {
+        top.yukonga.miuix.kmp.basic.TextButton(
+            text = text,
+            onClick = onClick,
+            modifier = Modifier.fillMaxWidth(),
+            enabled = enabled,
+            // Long labels wrap; keep every line centered in the button.
+            textStyle = top.yukonga.miuix.kmp.theme.MiuixTheme.textStyles.button.copy(textAlign = TextAlign.Center),
+            colors = if (miuixSlot.primary) {
+                top.yukonga.miuix.kmp.basic.ButtonDefaults.textButtonColorsPrimary()
+            } else {
+                top.yukonga.miuix.kmp.basic.ButtonDefaults.textButtonColors()
+            },
+        )
+        return
+    }
     TextButton(onClick = onClick, shapes = ButtonDefaults.shapes(), enabled = enabled) {
         Text(text)
     }
