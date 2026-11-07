@@ -126,8 +126,7 @@ internal fun runPublicKeyContactsUiTests(instrumentation: Instrumentation) {
         } finally { instrumentation.removeMonitor(monitor) }
     }
     fun openContacts() {
-        click(checkNotNull(activity).getString(R.string.navigation_open_menu))
-        click(checkNotNull(activity).getString(R.string.navigation_contacts))
+        clickNavigationTab(instrumentation, checkNotNull(activity).getString(R.string.tab_contacts))
     }
     fun capture(name: String) {
         val directory = File(context.cacheDir, "i18n-screens").apply { check(isDirectory || mkdir()) }
@@ -220,8 +219,7 @@ internal fun runPublicKeyContactsUiTests(instrumentation: Instrumentation) {
         click(checkNotNull(activity).getString(R.string.action_delete))
         awaitText(checkNotNull(activity).getString(R.string.contact_empty))
         check(contacts.stageForEncryption(contact.id).key == null)
-        click(checkNotNull(activity).getString(R.string.navigation_open_menu))
-        click(checkNotNull(activity).getString(R.string.navigation_files))
+        clickNavigationTab(instrumentation, checkNotNull(activity).getString(R.string.tab_files))
         awaitText(checkNotNull(activity).getString(R.string.contact_unavailable))
         click(checkNotNull(activity).getString(R.string.action_restore_default_public_key))
         awaitText(checkNotNull(activity).getString(R.string.key_source_app_default))

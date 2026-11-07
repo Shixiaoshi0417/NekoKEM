@@ -56,6 +56,8 @@ import com.shixiaoshi0417.nekokem.ui.FileInputState
 import com.shixiaoshi0417.nekokem.ui.InputSelectionEvent
 import com.shixiaoshi0417.nekokem.ui.NekoKEMActions
 import com.shixiaoshi0417.nekokem.ui.NekoKEMAppShell
+import com.shixiaoshi0417.nekokem.ui.UiStyle
+import com.shixiaoshi0417.nekokem.ui.UiStyles
 import com.shixiaoshi0417.nekokem.ui.NekoKEMUiState
 import com.shixiaoshi0417.nekokem.ui.OperationCompletedDialog
 import com.shixiaoshi0417.nekokem.ui.OperationErrorDialog
@@ -89,9 +91,14 @@ class MainActivity : ComponentActivity() {
         val publicKeyContacts = PublicKeyContacts(applicationContext, keyManager, page.directory)
 
         setContent {
-            NekoKEMTheme {
+            var uiStyle by remember { mutableStateOf(UiStyles.selection(this)) }
+            NekoKEMTheme(uiStyle = uiStyle) {
                 val nativeStatus = remember { readNativeStatus() }
                 NekoKEMRoute(
+                    uiStyle = uiStyle,
+                    onUiStyleChange = { style ->
+                        if (UiStyles.setSelection(this, style)) uiStyle = style
+                    },
                     nativeConnected = nativeStatus.connected,
                     nativeVersion = nativeStatus.version,
                     page = page,
@@ -178,6 +185,8 @@ private fun readNativeStatus(): NativeStatus = try {
 
 @Composable
 private fun NekoKEMRoute(
+    uiStyle: UiStyle,
+    onUiStyleChange: (UiStyle) -> Unit,
     nativeConnected: Boolean,
     nativeVersion: String?,
     page: PageCache,
@@ -1502,6 +1511,7 @@ private fun NekoKEMRoute(
             publicKeyRecipients = selectedContacts,
             publicKeyRecipientCount = selectedContactIds.size,
             contactSelection = contactSelection,
+            uiStyle = uiStyle,
         ),
         actions = NekoKEMActions(
             onGenerate = {
@@ -1642,6 +1652,7 @@ private fun NekoKEMRoute(
                     showSnackbar(if (ids.size > 1) R.string.contact_recipients_selected else R.string.contact_selected)
                 }
             },
+            onUiStyleChange = onUiStyleChange,
         ),
         snackbarHostState = snackbarHostState,
     )

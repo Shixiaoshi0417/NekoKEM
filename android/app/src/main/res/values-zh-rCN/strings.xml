@@ -7,7 +7,6 @@
     <string name="navigation_keys">密钥管理</string>
     <string name="navigation_settings">设置</string>
     <string name="navigation_about">关于</string>
-    <string name="navigation_open_menu">打开导航菜单</string>
 
     <string name="native_core_connected">原生核心已连接</string>
     <string name="native_core_unavailable">原生核心不可用</string>
@@ -223,4 +222,15 @@
     <string name="contact_failed_recipient">无法使用的接收方：%1$s</string>
     <string name="recovery_backups_title">已保留恢复备份</string>
     <string name="recovery_backups_message">应用私有存储中保留了 %1$d 个恢复备份，因为此前的密钥或文档替换未能安全完成。这些备份没有被删除。请先导出并检查当前密钥和文件，再手动恢复或清理备份；详见 Android README。</string>
+    <string name="tab_files">文件</string>
+    <string name="tab_keys">密钥</string>
+    <string name="tab_contacts">通讯录</string>
+    <string name="tab_settings">设置</string>
+    <string name="tab_about">关于</string>
+    <string name="settings_ui_style_title">界面风格</string>
+    <string name="settings_liquid_glass_unsupported">液态玻璃需要 Android 13 或更新版本，较旧的系统显示不透明底栏。</string>
+    <string name="miuix_keys_transfer_title">导入与导出</string>
+    <string name="miuix_keys_delete_title">删除密钥</string>
+    <string name="settings_ui_style_miuix">MIUIX</string>
+    <string name="settings_ui_style_material">Material 3 Expressive</string>
 </resources>

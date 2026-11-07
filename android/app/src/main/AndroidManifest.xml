@@ -1,6 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
+    <!-- miuix-blur needs Android 13 (RuntimeShader). The App calls it only on
+         Android 13 and newer and shows a solid floating bar before that. -->
+    <uses-sdk tools:overrideLibrary="top.yukonga.miuix.kmp.blur" />
     <!-- Predictive back: Android 13+ dispatches back through OnBackInvokedCallback. -->
     <application
         android:allowBackup="false"
