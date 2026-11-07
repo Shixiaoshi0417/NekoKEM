@@ -556,10 +556,7 @@ private fun MiuixSettingsPage(
                 title = stringResource(R.string.settings_theme_title),
                 summary = stringResource(R.string.settings_theme_system),
             )
-            BasicComponent(
-                title = stringResource(R.string.settings_dynamic_color_title),
-                summary = stringResource(R.string.settings_dynamic_color_system),
-            )
+            // MIUIX keeps its own palette; wallpaper color is a Material setting.
         }
         section(key = "version") {
             BasicComponent(
