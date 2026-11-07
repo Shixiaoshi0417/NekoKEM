@@ -16,6 +16,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.remember
 import androidx.compose.ui.platform.LocalContext
+import com.shixiaoshi0417.nekokem.ui.LocalUiStyle
 import com.shixiaoshi0417.nekokem.ui.UiStyle
 import top.yukonga.miuix.kmp.theme.ColorSchemeMode
 import top.yukonga.miuix.kmp.theme.Colors
@@ -28,8 +29,9 @@ private val DarkColors = darkColorScheme()
  * Both interface styles run under the same theme tree, so switching style
  * keeps the content at one place in composition and none of its state is lost.
  * MIUIX always uses its own light or dark palette, as HyperOS apps do; only
- * the Material style follows wallpaper color. In the MIUIX style the shared
- * Material dialogs take a scheme built from the MIUIX palette.
+ * the Material style follows wallpaper color. In the MIUIX style dialogs are
+ * MIUIX dialogs, and the Material parts they still hold take a scheme built
+ * from the MIUIX palette.
  */
 @Composable
 fun NekoKEMTheme(
@@ -66,6 +68,7 @@ fun NekoKEMTheme(
             CompositionLocalProvider(
                 LocalIndication provides if (miuix) miuixIndication else LocalIndication.current,
                 LocalOverscrollFactory provides if (miuix) miuixOverscroll else defaultOverscroll,
+                LocalUiStyle provides uiStyle,
                 content = content,
             )
         }

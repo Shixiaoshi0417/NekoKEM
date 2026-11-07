@@ -21,8 +21,8 @@ internal fun useMaterialStyle(context: Context) {
 
 /**
  * A fresh install opens in MIUIX: every tab of the floating bar is reachable
- * and captured, and the interface style switches to Material and back from
- * either style's settings page.
+ * and captured, dialogs open and close as MIUIX dialogs, and the interface
+ * style switches to Material and back from either style's settings page.
  */
 internal fun runMiuixUiTests(instrumentation: Instrumentation, screenshotPrefix: String) {
     val context = instrumentation.targetContext
@@ -94,6 +94,12 @@ internal fun runMiuixUiTests(instrumentation: Instrumentation, screenshotPrefix:
         instrumentation.waitForIdleSync()
         await("Files page") { exact(string(R.string.navigation_files)) != null }
         capture("files")
+        // Dialogs follow the style: the saved-key picker is a MIUIX dialog.
+        click(string(R.string.action_choose_contact))
+        await("contact picker") { exact(string(R.string.action_cancel)) != null }
+        capture("dialog")
+        click(string(R.string.action_cancel))
+        await("contact picker closed") { exact(string(R.string.action_cancel)) == null }
         val pages = listOf(
             R.string.tab_keys to R.string.navigation_keys,
             R.string.tab_contacts to R.string.navigation_contacts,
@@ -105,6 +111,13 @@ internal fun runMiuixUiTests(instrumentation: Instrumentation, screenshotPrefix:
             await("page ${string(title)}") { exact(string(title)) != null }
             capture(string(tab).lowercase())
         }
+        // The password dialog is a MIUIX dialog whose window stays secure.
+        clickNavigationTab(instrumentation, string(R.string.tab_keys))
+        click(string(R.string.action_generate_keypair))
+        await("password dialog") { exact(string(R.string.generate_password_title)) != null }
+        capture("password-dialog")
+        click(string(R.string.action_cancel))
+        await("password dialog closed") { exact(string(R.string.generate_password_title)) == null }
         // Back from another tab returns to Files.
         instrumentation.runOnMainSync {
             (checkNotNull(activity) as androidx.activity.ComponentActivity).onBackPressedDispatcher.onBackPressed()

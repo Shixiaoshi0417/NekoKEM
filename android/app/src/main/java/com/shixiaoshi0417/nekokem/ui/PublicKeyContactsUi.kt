@@ -18,10 +18,10 @@ import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Checkbox
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
@@ -194,7 +194,7 @@ fun PublicKeyContactPicker(
     onImport: () -> Unit,
     onDismiss: () -> Unit,
 ) {
-    AlertDialog(
+    AppAlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(stringResource(R.string.contact_picker_title)) },
         text = {
@@ -209,7 +209,15 @@ fun PublicKeyContactPicker(
                                 onClick = { onSelect(contact) },
                             ).padding(vertical = 12.dp),
                         ) {
-                            RadioButton(selected = selectedId == contact.id, onClick = null)
+                            if (isMiuixStyle()) {
+                                top.yukonga.miuix.kmp.basic.RadioButton(
+                                    selected = selectedId == contact.id,
+                                    onClick = null,
+                                    modifier = Modifier.padding(end = 12.dp),
+                                )
+                            } else {
+                                RadioButton(selected = selectedId == contact.id, onClick = null)
+                            }
                             Column(Modifier.weight(1f)) { ContactIdentity(contact) }
                         }
                     }
@@ -237,7 +245,7 @@ fun PublicKeyContactNoteDialog(
 ) {
     var note by remember(fingerprint) { mutableStateOf(initialNote) }
     val valid = PublicKeyContacts.validNote(note)
-    AlertDialog(
+    AppAlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(stringResource(if (editing) R.string.contact_edit_title else R.string.contact_save_title)) },
         text = {
@@ -245,17 +253,33 @@ fun PublicKeyContactNoteDialog(
                 Text(stringResource(R.string.key_file_line, displayName))
                 Text(stringResource(R.string.key_fingerprint_line, fingerprint), style = MaterialTheme.typography.bodySmall)
                 if (duplicate) Text(stringResource(R.string.contact_duplicate))
-                OutlinedTextField(
-                    value = note,
-                    onValueChange = { note = it },
-                    modifier = Modifier.fillMaxWidth(),
-                    label = { Text(stringResource(R.string.contact_note_label)) },
-                    placeholder = { Text(stringResource(R.string.contact_note_hint)) },
-                    supportingText = { Text(stringResource(R.string.contact_note_limit, PublicKeyContacts.MAX_NOTE_LENGTH)) },
-                    isError = !valid,
-                    minLines = 2,
-                    maxLines = 4,
-                )
+                if (isMiuixStyle()) {
+                    top.yukonga.miuix.kmp.basic.TextField(
+                        value = note,
+                        onValueChange = { note = it },
+                        modifier = Modifier.fillMaxWidth(),
+                        label = stringResource(R.string.contact_note_label),
+                        minLines = 2,
+                        maxLines = 4,
+                    )
+                    Text(
+                        stringResource(R.string.contact_note_limit, PublicKeyContacts.MAX_NOTE_LENGTH),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = if (valid) LocalContentColor.current else MaterialTheme.colorScheme.error,
+                    )
+                } else {
+                    OutlinedTextField(
+                        value = note,
+                        onValueChange = { note = it },
+                        modifier = Modifier.fillMaxWidth(),
+                        label = { Text(stringResource(R.string.contact_note_label)) },
+                        placeholder = { Text(stringResource(R.string.contact_note_hint)) },
+                        supportingText = { Text(stringResource(R.string.contact_note_limit, PublicKeyContacts.MAX_NOTE_LENGTH)) },
+                        isError = !valid,
+                        minLines = 2,
+                        maxLines = 4,
+                    )
+                }
             }
         },
         confirmButton = {
@@ -269,7 +293,7 @@ fun PublicKeyContactNoteDialog(
 
 @Composable
 fun DeletePublicKeyContactDialog(contact: PublicKeyContact, onConfirm: () -> Unit, onDismiss: () -> Unit) {
-    AlertDialog(
+    AppAlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(stringResource(R.string.contact_delete_title)) },
         text = {

@@ -14,7 +14,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.ui.Modifier
 import androidx.annotation.StringRes
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
@@ -50,6 +49,7 @@ import com.shixiaoshi0417.nekokem.keys.TemporaryPublicKey
 import com.shixiaoshi0417.nekokem.nativecore.NativeBridge
 import com.shixiaoshi0417.nekokem.progress.OperationProgressSnapshot
 import com.shixiaoshi0417.nekokem.progress.OperationProgressTracker
+import com.shixiaoshi0417.nekokem.ui.AppAlertDialog
 import com.shixiaoshi0417.nekokem.ui.DialogButton
 import com.shixiaoshi0417.nekokem.ui.GeneratePasswordDialog
 import com.shixiaoshi0417.nekokem.ui.FileInputState
@@ -1176,7 +1176,7 @@ private fun NekoKEMRoute(
     }
 
     publicKeyAwaitingConfirmation?.let { candidate ->
-        AlertDialog(
+        AppAlertDialog(
             onDismissRequest = {
                 publicKeyAwaitingConfirmation = null
                 scope.launch { pageWork { fileWorkflow.discardTemporaryPublicKey(candidate) } }
@@ -1297,7 +1297,7 @@ private fun NekoKEMRoute(
     }
 
     pendingDelete?.let { target ->
-        AlertDialog(
+        AppAlertDialog(
             onDismissRequest = { pendingDelete = null },
             title = { Text(stringResource(target.titleResource)) },
             text = { Text(stringResource(target.messageResource)) },
@@ -1349,7 +1349,7 @@ private fun NekoKEMRoute(
 
     // Generation never replaces keys silently; replacing needs this confirmation.
     if (confirmKeypairReplacement) {
-        AlertDialog(
+        AppAlertDialog(
             onDismissRequest = { confirmKeypairReplacement = false },
             title = { Text(stringResource(R.string.replace_keypair_title)) },
             text = { Text(stringResource(R.string.replace_keypair_message)) },
@@ -1374,7 +1374,7 @@ private fun NekoKEMRoute(
             confirmPublicKeyReplacement = false
             pendingPublicImportUri = null
         }
-        AlertDialog(
+        AppAlertDialog(
             onDismissRequest = cancelPublicImport,
             title = { Text(stringResource(R.string.replace_public_key_title)) },
             text = {
@@ -1413,7 +1413,7 @@ private fun NekoKEMRoute(
     }
 
     if (confirmPrivateKeyReplacement) {
-        AlertDialog(
+        AppAlertDialog(
             onDismissRequest = {
                 confirmPrivateKeyReplacement = false
                 pendingPrivateImportUri = null
@@ -1475,7 +1475,7 @@ private fun NekoKEMRoute(
     }
 
     if (recoveryBackupCount > 0 && !recoveryWarningDismissed && !running) {
-        AlertDialog(
+        AppAlertDialog(
             onDismissRequest = { recoveryWarningDismissed = true },
             title = { Text(stringResource(R.string.recovery_backups_title)) },
             text = { Text(stringResource(R.string.recovery_backups_message, recoveryBackupCount)) },
