@@ -27,8 +27,9 @@ private val DarkColors = darkColorScheme()
 /**
  * Both interface styles run under the same theme tree, so switching style
  * keeps the content at one place in composition and none of its state is lost.
- * MIUIX colors come from the wallpaper when the system offers dynamic color;
- * in the MIUIX style the shared Material dialogs take a scheme built from them.
+ * MIUIX always uses its own light or dark palette, as HyperOS apps do; only
+ * the Material style follows wallpaper color. In the MIUIX style the shared
+ * Material dialogs take a scheme built from the MIUIX palette.
  */
 @Composable
 fun NekoKEMTheme(
@@ -39,9 +40,9 @@ fun NekoKEMTheme(
 ) {
     val context = LocalContext.current
     val dynamic = dynamicColor && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
-    val controller = remember(darkTheme, dynamic) {
+    val controller = remember(darkTheme) {
         ThemeController(
-            colorSchemeMode = if (dynamic) ColorSchemeMode.MonetSystem else ColorSchemeMode.System,
+            colorSchemeMode = if (darkTheme) ColorSchemeMode.Dark else ColorSchemeMode.Light,
             isDark = darkTheme,
         )
     }
