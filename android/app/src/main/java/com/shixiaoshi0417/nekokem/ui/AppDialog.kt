@@ -1,5 +1,8 @@
 package com.shixiaoshi0417.nekokem.ui
 
+import android.app.Activity
+import android.content.Context
+import android.content.ContextWrapper
 import android.view.WindowManager
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -23,7 +26,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.DialogProperties
-import androidx.compose.ui.window.DialogWindowProvider
 import androidx.compose.ui.window.SecureFlagPolicy
 import top.yukonga.miuix.kmp.layout.DialogDefaults
 import top.yukonga.miuix.kmp.theme.MiuixTheme
@@ -48,8 +50,8 @@ internal val LocalMiuixDialogSlot = compositionLocalOf<MiuixDialogSlot?> { null 
  * with a centered title and its actions side by side at equal width.
  *
  * The parameters match [AlertDialog]. In the MIUIX style [properties] keeps
- * its secure policy: a dialog with [SecureFlagPolicy.SecureOn] sets
- * FLAG_SECURE on its own window, as the Material dialog does.
+ * its secure policy: a dialog with [SecureFlagPolicy.SecureOn] opens with
+ * FLAG_SECURE, as the Material dialog does.
  */
 @Composable
 internal fun AppAlertDialog(
@@ -76,12 +78,15 @@ internal fun AppAlertDialog(
         return
     }
     val dismissible = properties.dismissOnBackPress || properties.dismissOnClickOutside
+    // WindowDialog's window inherits the secure flag from the screen and resets
+    // it on every update, so the screen itself is secured first, before the
+    // dialog window is created.
+    if (properties.securePolicy == SecureFlagPolicy.SecureOn) SecureHostWindow()
     WindowDialog(
         show = true,
         modifier = modifier,
         onDismissRequest = if (dismissible) onDismissRequest else null,
     ) {
-        if (properties.securePolicy == SecureFlagPolicy.SecureOn) SecureDialogWindow()
         val titleColor = DialogDefaults.titleColor()
         val summaryColor = DialogDefaults.summaryColor()
         Column(Modifier.fillMaxWidth()) {
@@ -127,12 +132,24 @@ internal fun AppAlertDialog(
     }
 }
 
-/** Keeps the dialog's own window out of screenshots and the recents preview. */
+/**
+ * Sets FLAG_SECURE on the screen's window while composed, and clears it again
+ * when it set it: a WindowDialog with the default inherit policy then opens
+ * secure, and the screen behind the password stays out of screenshots too.
+ */
 @Composable
-private fun SecureDialogWindow() {
-    val window = (LocalView.current.parent as? DialogWindowProvider)?.window
+private fun SecureHostWindow() {
+    val window = LocalView.current.context.findActivity()?.window
     DisposableEffect(window) {
-        window?.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
-        onDispose { }
+        val secure = WindowManager.LayoutParams.FLAG_SECURE
+        val added = window != null && window.attributes.flags and secure == 0
+        if (added) window?.addFlags(secure)
+        onDispose { if (added) window?.clearFlags(secure) }
     }
+}
+
+private tailrec fun Context.findActivity(): Activity? = when (this) {
+    is Activity -> this
+    is ContextWrapper -> baseContext.findActivity()
+    else -> null
 }
