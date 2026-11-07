@@ -22,7 +22,7 @@ A failed decrypt does not create a new plaintext file. Every output path in this
 
 ## Prerequisites
 
-- Both sides need a build that reads and writes NKEM v3, NKEM v4, and NKPR v1. In this repository's v4.3.1 CLI, `nekokem --version` (on Windows, `nekokem.exe --version`) prints `NekoKEM 4.3.1`. When reporting a failure, include both version strings. NekoKEM 3.3.2 and earlier cannot open a v4 file.
+- Both sides need a build that reads and writes NKEM v3, NKEM v4, and NKPR v1. In this repository's v4.4.0 CLI, `nekokem --version` (on Windows, `nekokem.exe --version`) prints `NekoKEM 4.4.0`. When reporting a failure, include both version strings. NekoKEM 3.3.2 and earlier cannot open a v4 file.
 - Release archives: Linux `NekoKEM-linux-x86_64.tar.gz` or `NekoKEM-linux-aarch64.tar.gz`, macOS Apple Silicon `NekoKEM-macos-arm64.tar.gz` (no Intel build), and `nekokem.exe` from Windows `NekoKEM-windows-x86_64.zip`. A binary built from the same commit is also fine.
 - `nekokem` in the commands below means that executable. Put it on `PATH`, or substitute an absolute path. On Windows, pass the same arguments to `nekokem.exe`. Place `--lang` before the subcommand.
 - Work in a directory you own. The Windows CLI accepts local fixed NTFS only. Network paths, FAT/exFAT, device paths, and reparse points are rejected before any cryptography. Copy the files onto a local NTFS directory first.
