@@ -61,6 +61,8 @@ test.beforeEach(async({page})=>{
      return new Promise((resolve,reject)=>{finish=resolve;fail=reject;});
     }
     if(command==='cancel_operation')return Promise.resolve(true);
+    if(command==='check_update')return Promise.resolve((window as unknown as {updateStatus?:unknown}).updateStatus??{status:'current'});
+    if(command==='open_release_page'){Object.assign(window,{openedRelease:args.version});return Promise.resolve(null);}
     if(command==='list_contacts')return Promise.resolve({contacts:contacts.map(contact=>({...contact})),unreadable:0});
     if(command==='save_contact'){
      const value=args.contact as {keyPath:string;note:string};
@@ -360,3 +362,27 @@ test('signing settings warn in red and decryption reports the signer',async({pag
  await expect(page.locator('.contact-kind').first()).toContainText('身份密钥');
  await page.screenshot({path:'test-results/desktop-contacts-identity.png',fullPage:true,animations:'disabled'});
 });
+
+test('update check offers a newer release in all five languages and fits the minimum window',async({page})=>{
+ await page.setViewportSize({width:760,height:620});
+ await page.evaluate(()=>Object.assign(window,{updateStatus:{status:'available',version:'5.1.0'}}));
+ for(const tag of ['zh-CN','zh-TW','en','ja','ko'] as Language[]){
+  await page.locator('header select').selectOption(tag);
+  await page.locator('.operation-tab').nth(5).click();
+  await expect(page.locator('[name=autoUpdate]')).toBeChecked();
+  await page.locator('.check-update').click();
+  const dialog=page.getByRole('dialog');
+  await expect(dialog).toContainText(translate('updateAvailableTitle',tag).replace('{version}','5.1.0'));
+  await expect(page.locator('.later-update')).toBeFocused();
+  await noHorizontalOverflow(page);
+  await page.screenshot({path:`test-results/desktop-update-${tag}.png`,fullPage:true,animations:'disabled'});
+  await page.keyboard.press('Escape');await expect(dialog).toHaveCount(0);
+ }
+ await page.locator('.check-update').click();await page.locator('.open-release').click();
+ expect(await page.evaluate(()=>(window as unknown as {openedRelease?:string}).openedRelease)).toBe('5.1.0');
+ await page.evaluate(()=>Object.assign(window,{updateStatus:{status:'current'}}));
+ await page.locator('.check-update').click();
+ await expect(page.locator('.update-notice')).toHaveText(translate('upToDate','ko'));
+ await page.screenshot({path:'test-results/desktop-update-settings.png',fullPage:true,animations:'disabled'});
+});
+

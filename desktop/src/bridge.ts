@@ -17,6 +17,10 @@ export const setLanguage=(language:string)=>invoke<string>('set_language',{langu
 export const runOperation=(request:Request)=>invoke<Outcome>('run_operation',{request});
 export const cancelOperation=(id:string)=>invoke<boolean>('cancel_operation',{id});
 export const closeApp=()=>invoke<void>('close_app');
+// The backend contacts only GitHub's fixed release address; it never downloads or installs.
+export type UpdateStatus={status:'available';version:string}|{status:'current'}|{status:'failed'};
+export const checkUpdate=()=>invoke<UpdateStatus>('check_update');
+export const openReleasePage=(version:string)=>invoke<void>('open_release_page',{version});
 export const listContacts=()=>invoke<ContactList>('list_contacts');
 export const saveContact=(contact:ContactImport)=>invoke<Contact>('save_contact',{contact});
 export const updateContactNote=(id:string,note:string)=>invoke<Contact>('update_contact_note',{id,note});

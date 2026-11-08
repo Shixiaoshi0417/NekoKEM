@@ -3,9 +3,9 @@ import { afterEach,beforeEach,describe,expect,it,vi } from 'vitest';
 import App from '../src/App.vue';
 import * as bridge from '../src/bridge';
 import { catalog, translate } from '../src/i18n';
-vi.mock('../src/bridge',()=>({getSettings:vi.fn(),setLanguage:vi.fn(),runOperation:vi.fn(),cancelOperation:vi.fn(),closeApp:vi.fn(),onProgress:vi.fn(),chooseOpen:vi.fn(),chooseSave:vi.fn(),listContacts:vi.fn(),saveContact:vi.fn(),updateContactNote:vi.fn(),deleteContact:vi.fn(),MAX_RECIPIENTS:64}));
+vi.mock('../src/bridge',()=>({checkUpdate:vi.fn(),openReleasePage:vi.fn(),getSettings:vi.fn(),setLanguage:vi.fn(),runOperation:vi.fn(),cancelOperation:vi.fn(),closeApp:vi.fn(),onProgress:vi.fn(),chooseOpen:vi.fn(),chooseSave:vi.fn(),listContacts:vi.fn(),saveContact:vi.fn(),updateContactNote:vi.fn(),deleteContact:vi.fn(),MAX_RECIPIENTS:64}));
 enableAutoUnmount(afterEach);
-beforeEach(()=>{localStorage.clear();vi.clearAllMocks();vi.mocked(bridge.getSettings).mockResolvedValue({language:'en',selection:'system',version:'5.0.0'});vi.mocked(bridge.onProgress).mockResolvedValue(()=>{});vi.mocked(bridge.runOperation).mockResolvedValue({output:'output.nkem',fingerprint:null,recipients:[]});vi.mocked(bridge.chooseOpen).mockResolvedValue(null);vi.mocked(bridge.chooseSave).mockResolvedValue(null);vi.mocked(bridge.cancelOperation).mockResolvedValue(true);vi.mocked(bridge.listContacts).mockResolvedValue({contacts:[],unreadable:0});});
+beforeEach(()=>{localStorage.clear();vi.clearAllMocks();vi.mocked(bridge.checkUpdate).mockResolvedValue({status:'current'});vi.mocked(bridge.openReleasePage).mockResolvedValue();vi.mocked(bridge.getSettings).mockResolvedValue({language:'en',selection:'system',version:'5.0.0'});vi.mocked(bridge.onProgress).mockResolvedValue(()=>{});vi.mocked(bridge.runOperation).mockResolvedValue({output:'output.nkem',fingerprint:null,recipients:[]});vi.mocked(bridge.chooseOpen).mockResolvedValue(null);vi.mocked(bridge.chooseSave).mockResolvedValue(null);vi.mocked(bridge.cancelOperation).mockResolvedValue(true);vi.mocked(bridge.listContacts).mockResolvedValue({contacts:[],unreadable:0});});
 async function ready(){const app=mount(App,{attachTo:document.body});await flushPromises();return app;}
 // Encryption signs by default: the sender's identity key and its password.
 async function signWith(app:Awaited<ReturnType<typeof ready>>){await app.get('[name=signKeyPath]').setValue('private.key.enc');await app.get('[name=password]').setValue('public-test-password');}
@@ -543,3 +543,57 @@ describe('Desktop signatures',()=>{
   expect(app.findAll('.contact-kind').map(item=>item.text())).toEqual(['Identity key · verifies signatures','Legacy key · cannot verify signatures']);
  });
 });
+describe('Update checks',()=>{
+ const settingsTab=async(app:Awaited<ReturnType<typeof ready>>)=>{await app.findAll('nav button')[5]!.trigger('click');};
+ it('checks once a day by default and offers a newer release without downloading it',async()=>{
+  vi.mocked(bridge.checkUpdate).mockResolvedValue({status:'available',version:'5.1.0'});
+  const app=await ready();
+  expect(bridge.checkUpdate).toHaveBeenCalledTimes(1);
+  const dialog=app.get('[role=dialog]');
+  expect(dialog.text()).toContain('NekoKEM 5.1.0 is available');
+  expect(dialog.text()).toContain('You have 5.0.0');
+  expect(document.activeElement?.classList.contains('later-update')).toBe(true);
+  await app.get('.open-release').trigger('click');await flushPromises();
+  expect(bridge.openReleasePage).toHaveBeenCalledWith('5.1.0');
+  expect(app.find('[role=dialog]').exists()).toBe(false);
+  expect(JSON.parse(localStorage.getItem('nekokem.update')!).lastCheck).toBeGreaterThan(0);
+  app.unmount();
+  // Within a day no automatic check runs again.
+  await ready();
+  expect(bridge.checkUpdate).toHaveBeenCalledTimes(1);
+ });
+ it('a skipped version stays quiet automatically but a manual check still shows it',async()=>{
+  localStorage.setItem('nekokem.update',JSON.stringify({auto:true,lastCheck:0,ignored:'5.1.0'}));
+  vi.mocked(bridge.checkUpdate).mockResolvedValue({status:'available',version:'5.1.0'});
+  const app=await ready();
+  expect(bridge.checkUpdate).toHaveBeenCalledTimes(1);
+  expect(app.find('[role=dialog]').exists()).toBe(false);
+  await settingsTab(app);await app.get('.check-update').trigger('click');await flushPromises();
+  expect(app.get('[role=dialog]').text()).toContain('5.1.0');
+  await app.get('.ignore-update').trigger('click');
+  expect(app.find('[role=dialog]').exists()).toBe(false);
+  expect(JSON.parse(localStorage.getItem('nekokem.update')!).ignored).toBe('5.1.0');
+ });
+ it('turning automatic checks off stops them; manual checks report every outcome',async()=>{
+  localStorage.setItem('nekokem.update',JSON.stringify({auto:false,lastCheck:0,ignored:''}));
+  const app=await ready();
+  expect(bridge.checkUpdate).not.toHaveBeenCalled();
+  await settingsTab(app);
+  expect(app.get<HTMLInputElement>('[name=autoUpdate]').element.checked).toBe(false);
+  await app.get('.check-update').trigger('click');await flushPromises();
+  expect(app.get('.update-notice').text()).toBe('NekoKEM is up to date.');
+  vi.mocked(bridge.checkUpdate).mockResolvedValue({status:'failed'});
+  await app.get('.check-update').trigger('click');await flushPromises();
+  expect(app.get('.update-notice').text()).toContain('Could not check');
+  await app.get('[name=autoUpdate]').setValue(true);await flushPromises();
+  expect(JSON.parse(localStorage.getItem('nekokem.update')!).auto).toBe(true);
+ });
+ it('a failed automatic check stays silent and is retried next launch',async()=>{
+  vi.mocked(bridge.checkUpdate).mockResolvedValue({status:'failed'});
+  const app=await ready();
+  expect(app.find('[role=dialog]').exists()).toBe(false);
+  expect(app.find('.update-notice').exists()).toBe(false);
+  expect(localStorage.getItem('nekokem.update')).toBeNull();
+ });
+});
+

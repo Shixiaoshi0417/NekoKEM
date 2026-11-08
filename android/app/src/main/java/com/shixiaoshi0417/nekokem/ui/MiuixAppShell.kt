@@ -169,7 +169,7 @@ internal fun MiuixAppShell(
                         )
                     }
                     AppDestination.SETTINGS -> MiuixSettingsPage(title, bottom, state, actions)
-                    AppDestination.ABOUT -> MiuixPage(title, bottom) { aboutPage(state) }
+                    AppDestination.ABOUT -> MiuixPage(title, bottom) { aboutPage(state, actions) }
                 }
             }
         }
@@ -609,6 +609,14 @@ private fun MiuixSettingsPage(
                 enabled = !state.running,
             )
         }
+        section(R.string.settings_updates_title, key = "updates") {
+            SwitchPreference(
+                checked = state.autoUpdateCheck,
+                onCheckedChange = actions.onAutoUpdateChange,
+                title = stringResource(R.string.settings_auto_update_title),
+                summary = stringResource(R.string.settings_auto_update_summary),
+            )
+        }
         section(key = "version") {
             BasicComponent(
                 title = stringResource(R.string.settings_version_title),
@@ -618,7 +626,7 @@ private fun MiuixSettingsPage(
     }
 }
 
-private fun LazyListScope.aboutPage(state: NekoKEMUiState) {
+private fun LazyListScope.aboutPage(state: NekoKEMUiState, actions: NekoKEMActions) {
     item(key = "header") {
         Column(
             modifier = Modifier.fillMaxWidth().padding(vertical = 24.dp),
@@ -651,6 +659,14 @@ private fun LazyListScope.aboutPage(state: NekoKEMUiState) {
                 R.string.openssl_version,
                 state.nativeVersion ?: stringResource(R.string.not_available),
             ),
+        )
+    }
+    section(key = "update") {
+        ArrowPreference(
+            title = stringResource(R.string.action_check_update),
+            summary = if (state.updateChecking) stringResource(R.string.update_checking) else null,
+            enabled = !state.updateChecking,
+            onClick = actions.onCheckUpdate,
         )
     }
 }

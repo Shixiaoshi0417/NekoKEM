@@ -73,7 +73,7 @@ current owner, one hard link, no symbolic link/reparse point, private mode/ACL, 
 Importing a fingerprint whose entry Core still verifies points to that entry instead of
 replacing its note; explicitly importing the same key again replaces a damaged entry or one
 whose stored key no longer matches its fingerprint. Up to 500 entries are
-kept. No private keys, passwords, permissions, network access or browser storage are added.
+kept. No private keys, passwords, permissions, network access or browser storage are added (the only network request is the update check below).
 
 Every encryption re-reads the selected record and writes an operation-specific private
 snapshot using the pasted-key staging. Core parses that snapshot and must reproduce the
@@ -330,8 +330,12 @@ keeps its sandbox enabled and uses a temporary data store. See the
 Only bundled local content runs with incognito enabled in the main WebView
 (Windows InPrivate/macOS nonpersistent WKWebView/Linux ephemeral WebKitGTK storage). CSP blocks remote scripts,
 frames and network requests. Only native open/save dialogs and the listed Rust
-commands are exposed. The capability list grants only event listen/unlisten and open/save dialogs, rather than `core:default`. Navigation permits only the platform local app origin (`tauri://localhost`, or Windows `http://tauri.localhost`); HTTPS and new windows are refused. Debug builds additionally allow the local Vite origin. Developer tools are unavailable in the production release.
-粘贴密钥优先暂存于符合当前所有者及 `0700` 要求的 `$XDG_RUNTIME_DIR`，macOS 上其次使用不进入 Time Machine 的用户临时目录，否则使用私有 `$HOME/.nekokem-tmp`；临时写入关闭 stdio 缓冲，不做持久化同步。权限仅包含事件监听/取消监听与打开/保存对话框；导航只允许对应平台的本地应用来源，拒绝 HTTPS 与新窗口。
+commands are exposed. The update check is a backend command: it runs the system curl
+(`System32\curl.exe` on Windows, `/usr/bin/curl` elsewhere; the Linux packages depend on curl)
+with `--disable --proto =https`, a 15-second limit and a 1 MiB response limit against the fixed
+GitHub latest-release address, and the release page opens through the system URL handler with an
+address built from the version number. The frontend cannot choose either address. The capability list grants only event listen/unlisten and open/save dialogs, rather than `core:default`. Navigation permits only the platform local app origin (`tauri://localhost`, or Windows `http://tauri.localhost`); HTTPS and new windows are refused. Debug builds additionally allow the local Vite origin. Developer tools are unavailable in the production release.
+粘贴密钥优先暂存于符合当前所有者及 `0700` 要求的 `$XDG_RUNTIME_DIR`，macOS 上其次使用不进入 Time Machine 的用户临时目录，否则使用私有 `$HOME/.nekokem-tmp`；临时写入关闭 stdio 缓冲，不做持久化同步。权限仅包含事件监听/取消监听与打开/保存对话框；导航只允许对应平台的本地应用来源，拒绝 HTTPS 与新窗口。检查更新由后端调用系统 curl（Windows `System32\curl.exe`，其他平台 `/usr/bin/curl`，Linux 包依赖 curl），以 `--disable --proto =https`、15 秒超时和 1 MiB 上限请求固定的 GitHub 最新版本地址；发布页由系统 URL 处理程序打开，地址按版本号拼出，前端无法指定任何地址。
 
 Passwords/key text are not stored in browser storage, configuration or logs. Both
 form references and live secret input values clear before native invocation,

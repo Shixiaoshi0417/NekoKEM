@@ -58,6 +58,45 @@ function confirmUnsigned(enable: boolean) {
   confirmingUnsigned.value = false;
 }
 const signing = computed(() => operation.value === 'encrypt' && !settings.unsigned);
+// Update checks are on by default, at most daily; they only name a newer version.
+const UPDATE_KEY = 'nekokem.update';
+const DAY = 24 * 60 * 60 * 1000;
+function loadUpdate(): { auto: boolean; lastCheck: number; ignored: string } {
+  try {
+    const value = JSON.parse(localStorage.getItem(UPDATE_KEY) ?? '{}');
+    return { auto: value.auto !== false, lastCheck: Number.isFinite(value.lastCheck) ? value.lastCheck : 0, ignored: typeof value.ignored === 'string' ? value.ignored : '' };
+  } catch { return { auto: true, lastCheck: 0, ignored: '' }; }
+}
+const update = reactive(loadUpdate());
+watch(() => [update.auto, update.lastCheck, update.ignored], () => {
+  try { localStorage.setItem(UPDATE_KEY, JSON.stringify(update)); } catch { /* checked again next launch */ }
+});
+const checkingUpdate = ref(false);
+const updateNotice = ref<Message | null>(null);
+const availableVersion = ref('');
+const updateLater = ref<HTMLButtonElement | null>(null);
+async function checkForUpdate(manual: boolean) {
+  if (checkingUpdate.value) return;
+  checkingUpdate.value = true;
+  if (manual) updateNotice.value = null;
+  let status: bridge.UpdateStatus = { status: 'failed' };
+  try { status = await bridge.checkUpdate(); } catch { /* reported as failed */ }
+  checkingUpdate.value = false;
+  if (status.status !== 'failed') update.lastCheck = Date.now();
+  if (status.status === 'available' && (manual || status.version !== update.ignored)) {
+    availableVersion.value = status.version;
+    await nextTick();
+    updateLater.value?.focus();
+  } else if (manual) updateNotice.value = status.status === 'current' ? 'upToDate' : 'updateFailed';
+}
+async function openRelease() {
+  const target = availableVersion.value;
+  availableVersion.value = '';
+  try { await bridge.openReleasePage(target); } catch (error) { updateNotice.value = errorCode(error); }
+}
+function ignoreRelease() { update.ignored = availableVersion.value; availableVersion.value = ''; }
+const updateTitle = computed(() => t('updateAvailableTitle').replace('{version}', availableVersion.value));
+const updateText = computed(() => t('updateAvailableText').replace('{current}', version.value));
 // The last decryption's signature report and the save-signer action beside it.
 const signerSaved = ref(false);
 // Replacing keys is offered only after Core reported existing keys at the
@@ -499,6 +538,8 @@ onMounted(async () => {
     loaded.value = true;
     document.documentElement.lang = language.value;
   } catch (error) { failure.value = errorCode(error); return; }
+  const now = Date.now();
+  if (update.auto && (now - update.lastCheck >= DAY || now < update.lastCheck)) void checkForUpdate(false);
   await refreshContacts();
 });
 onBeforeUnmount(clearSecrets);
@@ -531,6 +572,11 @@ onUnmounted(() => unlisten?.());
         </div>
         <div class="setting">
           <label class="setting-row"><input v-model="settings.requireSignature" type="checkbox" name="requireSignature" aria-describedby="require-hint"><span><strong>{{ t('requireSignature') }}</strong><span id="require-hint" class="hint">{{ t('requireSignatureHint') }}</span></span></label>
+        </div>
+        <div class="setting update-setting">
+          <label class="setting-row"><input v-model="update.auto" type="checkbox" name="autoUpdate" aria-describedby="update-hint"><span><strong>{{ t('autoUpdate') }}</strong><span id="update-hint" class="hint">{{ t('autoUpdateHint') }}</span></span></label>
+          <div class="contact-actions"><button type="button" class="secondary check-update" :disabled="checkingUpdate" @click="checkForUpdate(true)">{{ checkingUpdate ? t('checkingUpdate') : t('checkUpdate') }}</button></div>
+          <p v-if="updateNotice" class="hint update-notice" role="status">{{ t(updateNotice) }}</p>
         </div>
       </section>
       <form v-else ref="operationForm" class="card" :class="{ 'is-busy': busy }" novalidate @submit.prevent="start" @input="editField">
@@ -651,6 +697,13 @@ onUnmounted(() => unlisten?.());
         </ul>
       </section>
       <section class="storage-note"><AppIcon name="shield" /><div><strong>{{ t('storage') }}</strong><p>{{ t('storageHint') }}</p></div></section>
+      <div v-if="availableVersion" class="update-backdrop">
+        <div class="card update-dialog enter-feedback" role="dialog" aria-modal="true" aria-labelledby="update-title" aria-describedby="update-text" @keydown.esc.prevent="availableVersion = ''">
+          <strong id="update-title">{{ updateTitle }}</strong>
+          <p id="update-text">{{ updateText }}</p>
+          <div class="contact-actions"><button type="button" class="link-button ignore-update" @click="ignoreRelease">{{ t('ignoreVersion') }}</button><span class="spacer"></span><button ref="updateLater" type="button" class="secondary later-update" @click="availableVersion = ''">{{ t('later') }}</button><button type="button" class="primary open-release" @click="openRelease">{{ t('openRelease') }}</button></div>
+        </div>
+      </div>
     </main>
   </div>
 </template>

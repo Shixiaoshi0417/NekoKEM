@@ -11,6 +11,8 @@ import android.os.SystemClock
 import android.view.accessibility.AccessibilityNodeInfo
 import com.shixiaoshi0417.nekokem.i18n.AppLanguages
 import com.shixiaoshi0417.nekokem.ui.SignatureSettingsStore
+import com.shixiaoshi0417.nekokem.update.Releases
+import com.shixiaoshi0417.nekokem.update.UpdateSettingsStore
 import com.shixiaoshi0417.nekokem.ui.UiStyle
 import com.shixiaoshi0417.nekokem.ui.UiStyles
 import java.io.File
@@ -39,6 +41,10 @@ internal fun runMiuixUiTests(instrumentation: Instrumentation, screenshotPrefix:
     // Signing is on after installation.
     check(context.getSharedPreferences("signature_settings", Context.MODE_PRIVATE).edit().clear().commit())
     check(!SignatureSettingsStore.read(context).unsignedEncryption) { "Unsigned encryption is on by default" }
+    // Automatic update checks are on after installation; a local stub announces a newer release.
+    check(context.getSharedPreferences("update_settings", Context.MODE_PRIVATE).edit().clear().commit())
+    check(UpdateSettingsStore.read(context).autoCheck) { "Automatic update checks are off by default" }
+    Releases.source = releaseStub("99.0.0")
     instrumentation.runOnMainSync { check(AppLanguages.setSelection(context, "en")) }
     var activity: Activity? = null
     fun find(root: AccessibilityNodeInfo?, predicate: (AccessibilityNodeInfo) -> Boolean): AccessibilityNodeInfo? {
@@ -128,6 +134,13 @@ internal fun runMiuixUiTests(instrumentation: Instrumentation, screenshotPrefix:
             Intent(context, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
         )
         instrumentation.waitForIdleSync()
+        // The automatic check runs at launch and offers the newer release.
+        val updateTitle = string(R.string.update_available_title).replace("%1\$s", "99.0.0")
+        await("automatic update prompt") { exact(updateTitle) != null }
+        capture("update-available")
+        click(string(R.string.action_later))
+        await("update prompt closed") { exact(updateTitle) == null }
+        check(UpdateSettingsStore.read(context).lastCheckMillis > 0L) { "The automatic check was not recorded" }
         await("Files page") { exact(string(R.string.navigation_files)) != null }
         capture("files")
         // Dialogs follow the style: the saved-key picker is a MIUIX dialog.
@@ -148,6 +161,12 @@ internal fun runMiuixUiTests(instrumentation: Instrumentation, screenshotPrefix:
             await("page ${string(title)}") { exact(string(title)) != null }
             capture(string(tab).lowercase())
         }
+        // About checks on demand; skipping the version is remembered.
+        click(string(R.string.action_check_update))
+        await("manual update prompt") { exact(updateTitle) != null }
+        click(string(R.string.action_ignore_version))
+        await("update prompt skipped") { exact(updateTitle) == null }
+        await("skipped version stored") { UpdateSettingsStore.read(context).ignoredVersion == "99.0.0" }
         // The password dialog is a MIUIX dialog, and it and the screen behind it are secure.
         clickNavigationTab(instrumentation, string(R.string.tab_keys))
         click(string(R.string.action_generate_keypair))
@@ -187,6 +206,14 @@ internal fun runMiuixUiTests(instrumentation: Instrumentation, screenshotPrefix:
         await("Material style stored") { UiStyles.selection(context) == UiStyle.MATERIAL }
         // The Material shell opens on Files; its settings picker switches back to MIUIX.
         await("Material Files page") { exact(string(R.string.navigation_files)) != null }
+        // Material About checks on demand too.
+        clickNavigationTab(instrumentation, string(R.string.tab_about))
+        click(string(R.string.action_check_update))
+        await("Material update prompt") { exact(updateTitle) != null }
+        capture("material-update-available")
+        click(string(R.string.action_later))
+        await("Material update prompt closed") { exact(updateTitle) == null }
+        clickNavigationTab(instrumentation, string(R.string.tab_files))
         await("Material Files red warning") { reveal(string(R.string.unsigned_warning)); exact(string(R.string.unsigned_warning)) != null }
         capture("material-files")
         clickNavigationTab(instrumentation, string(R.string.tab_settings))
@@ -225,6 +252,7 @@ internal fun runMiuixUiTests(instrumentation: Instrumentation, screenshotPrefix:
         automation.serviceInfo = priorServiceInfo
         useMaterialStyle(context)
         context.getSharedPreferences("signature_settings", Context.MODE_PRIVATE).edit().clear().commit()
+        quietUpdateChecks(context)
     }
     // Below Android 13 the language is stored by the App; it must not leak into later phases.
     if (Build.VERSION.SDK_INT < 33) check(AppLanguages.selection(context) == priorLanguage)

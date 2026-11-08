@@ -275,4 +275,17 @@
     <string name="contact_verifies">身份密钥 · 可验证签名</string>
     <string name="contact_legacy">旧版密钥 · 无法验证签名</string>
     <string name="error_settings_save">无法保存设置，之前的设置仍然有效。</string>
+    <string name="settings_updates_title">更新</string>
+    <string name="settings_auto_update_title">自动检查更新</string>
+    <string name="settings_auto_update_summary">每天最多一次，只向 GitHub 查询最新版本号，不发送任何密钥或文件信息。</string>
+    <string name="action_check_update">检查更新</string>
+    <string name="update_checking">正在检查更新…</string>
+    <string name="update_up_to_date">已是最新版本</string>
+    <string name="update_failed">检查更新失败，请稍后重试</string>
+    <string name="update_available_title">发现新版本 NekoKEM %1$s</string>
+    <string name="update_available_message">当前版本为 %1$s。请从 GitHub Release 页面下载新版本，并按发布说明校验后再安装。</string>
+    <string name="action_open_release">前往下载</string>
+    <string name="action_later">稍后</string>
+    <string name="action_ignore_version">忽略此版本</string>
+    <string name="error_open_release">没有可打开发布页面的应用</string>
 </resources>
