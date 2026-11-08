@@ -97,9 +97,10 @@ elif phase == 'windows':
         run('encrypt','hybrid','--unsigned',name,name+'.windows.nkem','linux-public.key','windows-legacy.key')
         assert (root/(name+'.windows.nkem')).read_bytes()[4] == 4
     # Upgrading the historical key keeps its encryption keys and legacy fingerprint.
-    shutil.copyfile(root/'linux-public.key',root/'upgraded-public.key')
-    subprocess.run([harness,'secure-copy',str(root/'linux-private.enc'),str(root/'upgraded.enc')],
-                   cwd=root, check=True, timeout=30)
+    # Core replaces only privately owned key files, as keygen leaves them.
+    for source, target in [('linux-public.key','upgraded-public.key'),('linux-private.enc','upgraded.enc')]:
+        subprocess.run([harness,'secure-copy',str(root/source),str(root/target)],
+                       cwd=root, check=True, timeout=30)
     run('upgrade-key','upgraded-public.key','upgraded.enc',password=PASSWORD)
     upgraded, upgraded_legacy = fingerprints('upgraded-public.key')
     assert upgraded_legacy == legacy and upgraded != legacy
