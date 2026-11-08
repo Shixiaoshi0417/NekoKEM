@@ -524,7 +524,7 @@ jobs:
             $ancestor = $ancestor.Parent
           }
           try {
-            foreach ($name in @('openssl_version', 'hybrid_kdf', 'gcm_limit', 'aes_stream', 'parser', 'multi_recipient', 'signature', 'key_safety', 'windows_core', 'console')) {
+            foreach ($name in @('openssl_version', 'hybrid_kdf', 'gcm_limit', 'aes_stream', 'parser', 'multi_recipient', 'signature', 'payload_hash', 'key_safety', 'windows_core', 'console')) {
               $testDirectory = Join-Path $work $name
               New-Item -ItemType Directory -Path $testDirectory | Out-Null
               Push-Location $testDirectory

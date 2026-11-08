@@ -154,6 +154,7 @@ sources=(
     core/src/kem.c
     core/src/hybrid.c
     core/src/aes.c
+    core/src/payload_hash.c
     core/src/file.c
     core/src/file_v3.c
     core/src/file_v4.c

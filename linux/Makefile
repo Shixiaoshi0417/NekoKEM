@@ -5,7 +5,7 @@ CPPFLAGS = -D_POSIX_C_SOURCE=200809L -D_FORTIFY_SOURCE=3 \
 CFLAGS = -std=c17 -O2 -Wall -Wextra -Wpedantic -Wconversion -Wshadow \
 	-Wformat=2 -Wstrict-prototypes -Werror -fstack-protector-strong -fPIE
 LDFLAGS = -pie
-LDLIBS = -lcrypto
+LDLIBS = -lcrypto -pthread
 AFL_CC ?= afl-clang-fast
 FUZZ_CPPFLAGS = -D_POSIX_C_SOURCE=200809L -D_FORTIFY_SOURCE=3
 FUZZ_CFLAGS = -std=c17 -O1 -g -Wall -Wextra -Wpedantic -Wconversion \
@@ -20,8 +20,8 @@ CORE_SOURCES = ../core/src/nekokem.c \
 	../core/src/key_management.c \
 	../core/src/nekokem_v3.c ../core/src/nekokem_v4.c ../core/src/nekokem_v5.c \
 	../core/src/identity.c ../core/src/kem.c ../core/src/hybrid.c \
-	../core/src/aes.c ../core/src/file.c ../core/src/file_v3.c ../core/src/file_v4.c \
-	../core/src/secure_mem.c ../core/src/private_key.c
+	../core/src/aes.c ../core/src/payload_hash.c ../core/src/file.c ../core/src/file_v3.c \
+	../core/src/file_v4.c ../core/src/secure_mem.c ../core/src/private_key.c
 CLI_SOURCES = src/main.c src/cli.c src/i18n.c
 SOURCES = $(CLI_SOURCES) $(CORE_SOURCES)
 CORE_OBJECTS = $(CORE_SOURCES:.c=.o)
@@ -33,7 +33,7 @@ DEPS = $(OBJECTS:.o=.d)
 	fuzz-build test-key-management test-progress test-progress-large \
 	test-file-security test-version-rejection test-gcm-limit test-aes-stream \
 	test-hybrid-kdf test-asan test-input-boundaries test-pem-interaction test-openssl \
-	test-multi-recipient test-signature test-key-safety
+	test-multi-recipient test-signature test-key-safety test-payload-hash
 
 all: $(TARGET)
 
@@ -249,6 +249,26 @@ test-signature:
 	ASAN_OPTIONS=detect_leaks=1:halt_on_error=1 \
 		UBSAN_OPTIONS=halt_on_error=1:print_stacktrace=1 "$$signature_binary"
 
+test-payload-hash:
+	@set -eu; \
+	hash_binary=$$(mktemp /tmp/nekokem-payload-hash-tests.XXXXXX); \
+	cleanup_hash() { rm -f "$$hash_binary"; }; \
+	trap cleanup_hash EXIT INT TERM; \
+	$(CC) $(CPPFLAGS) $(CFLAGS) -O1 -g -fno-omit-frame-pointer \
+		-fsanitize=address,undefined -fno-sanitize-recover=undefined \
+		-DNEKOKEM_TEST_FAULT_INJECTION \
+		$(LDFLAGS) ../core/tests/payload_hash_tests.c ../core/src/payload_hash.c \
+		../core/src/file.c ../core/src/file_v3.c ../core/src/secure_mem.c \
+		$(LDLIBS) -fsanitize=address,undefined -o "$$hash_binary"; \
+	ASAN_OPTIONS=detect_leaks=1:halt_on_error=1 \
+		UBSAN_OPTIONS=halt_on_error=1:print_stacktrace=1 "$$hash_binary"; \
+	$(CC) $(CPPFLAGS) $(CFLAGS) -O1 -g -fno-omit-frame-pointer -fsanitize=thread \
+		-DNEKOKEM_TEST_FAULT_INJECTION \
+		$(LDFLAGS) ../core/tests/payload_hash_tests.c ../core/src/payload_hash.c \
+		../core/src/file.c ../core/src/file_v3.c ../core/src/secure_mem.c \
+		$(LDLIBS) -fsanitize=thread -o "$$hash_binary"; \
+	TSAN_OPTIONS=halt_on_error=1 "$$hash_binary"
+
 test-key-safety:
 	@set -eu; \
 	safety_binary=$$(mktemp /tmp/nekokem-key-safety-tests.XXXXXX); \
@@ -279,7 +299,7 @@ test-progress test-progress-large: $(CORE_LIBRARY)
 
 test: $(TARGET) test-openssl analyze test-ubsan test-parser test-file-security test-gcm-limit test-aes-stream \
 	test-key-management test-version-rejection test-progress test-hybrid-kdf test-input-boundaries \
-	test-asan test-pem-interaction test-i18n test-multi-recipient test-signature test-key-safety test-interrupts \
+	test-asan test-pem-interaction test-i18n test-multi-recipient test-signature test-key-safety test-payload-hash test-interrupts \
 	test-cli-audit test-crypto-audit
 	@set -eu; \
 	test_dir=$$(mktemp -d); \

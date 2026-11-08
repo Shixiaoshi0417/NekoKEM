@@ -55,6 +55,7 @@ static const char *const fixtures[] = {
     "v5.nkem", "v5-multi.nkem", "v5-empty.nkem", "v3.nkem", "v4.nkem",
     "old-v4.nkem", "bad.nkem", "out.bin", "upgraded.nkem", "legacy-to.nkem",
     "b-key.copy", "c-pub.copy", "b-hard.key", "b-link.key", "here",
+    "big.bin", "big.nkem",
 };
 
 static int write_bytes(const char *path, const void *bytes, size_t length)
@@ -65,6 +66,51 @@ static int write_bytes(const char *path, const void *bytes, size_t length)
                   atomic_file_commit(&output);
 
     atomic_file_abort(&output);
+    return success;
+}
+
+/* The payload digest of docs/NKEM-v5.md, written out independently of Core. */
+static int payload_digest(const unsigned char *ciphertext, size_t length,
+                          const unsigned char tag[NKEM_TAG_SIZE],
+                          unsigned char digest[64])
+{
+    static const char leaf_label[] = "NekoKEM v5 payload leaf";
+    static const char root_label[] = "NekoKEM v5 payload root";
+    const size_t leaf_size = 1048576U;
+    EVP_MD_CTX *root = EVP_MD_CTX_new();
+    EVP_MD_CTX *leaf = EVP_MD_CTX_new();
+    unsigned char encoded[8];
+    unsigned char leaf_digest[64];
+    unsigned int digest_len = 0U;
+    uint64_t index = 0U;
+    size_t offset;
+    size_t shift;
+    int success = root != NULL && leaf != NULL;
+
+    for (shift = 0U; shift < 8U; ++shift) {
+        encoded[7U - shift] = (unsigned char)((uint64_t)length >> (8U * shift));
+    }
+    success = success && EVP_DigestInit_ex(root, EVP_sha512(), NULL) == 1 &&
+              EVP_DigestUpdate(root, root_label, sizeof(root_label) - 1U) == 1 &&
+              EVP_DigestUpdate(root, encoded, sizeof(encoded)) == 1;
+    for (offset = 0U; success && offset < length; offset += leaf_size, ++index) {
+        size_t chunk = length - offset < leaf_size ? length - offset : leaf_size;
+
+        for (shift = 0U; shift < 8U; ++shift) {
+            encoded[7U - shift] = (unsigned char)(index >> (8U * shift));
+        }
+        success = EVP_DigestInit_ex(leaf, EVP_sha512(), NULL) == 1 &&
+                  EVP_DigestUpdate(leaf, leaf_label, sizeof(leaf_label) - 1U) == 1 &&
+                  EVP_DigestUpdate(leaf, encoded, sizeof(encoded)) == 1 &&
+                  EVP_DigestUpdate(leaf, ciphertext + offset, chunk) == 1 &&
+                  EVP_DigestFinal_ex(leaf, leaf_digest, &digest_len) == 1 &&
+                  EVP_DigestUpdate(root, leaf_digest, sizeof(leaf_digest)) == 1;
+    }
+    success = success && EVP_DigestUpdate(root, tag, NKEM_TAG_SIZE) == 1 &&
+              EVP_DigestFinal_ex(root, digest, &digest_len) == 1 &&
+              digest_len == 64U;
+    EVP_MD_CTX_free(root);
+    EVP_MD_CTX_free(leaf);
     return success;
 }
 
@@ -384,7 +430,6 @@ static int reseal(const char *source, const char *destination,
     unsigned char payload_key[AES256_KEY_SIZE];
     unsigned char sig_key[SIG_KEY_SIZE];
     unsigned char digest[64];
-    unsigned int digest_len = 0U;
     size_t length = 0U;
     size_t metadata_len;
     size_t block_offset;
@@ -415,8 +460,9 @@ static int reseal(const char *source, const char *destination,
                    bytes + block_offset - NKEM_TAG_SIZE, bytes + block_offset,
                    plaintext,
                    bytes + block_offset + NKEM_V5_SIGNATURE_PLAINTEXT_SIZE) ||
-        EVP_Digest(bytes + metadata_len, block_offset - metadata_len, digest,
-                   &digest_len, EVP_sha512(), NULL) != 1) {
+        !payload_digest(bytes + metadata_len,
+                        block_offset - metadata_len - NKEM_TAG_SIZE,
+                        bytes + block_offset - NKEM_TAG_SIZE, digest)) {
         goto cleanup;
     }
     memcpy(message, message_label, label_len);
@@ -766,6 +812,7 @@ static int test_tampering(void)
 static int test_forgeries(void)
 {
     const char *trusted[] = {"a.pub"};
+    const char *recipient_b[] = {"b.pub"};
     char expected[NEKOKEM_FINGERPRINT_STRING_SIZE];
     NekoKEMVerifyPolicy policy;
     NekoKEMVerifyResult result;
@@ -806,6 +853,36 @@ static int test_forgeries(void)
     CHECK(verify("bad.nkem", "b.key", 0, &policy, &result) ==
           NEKOKEM_ERROR_SIGNER_NOT_TRUSTED);
     CHECK(!exists("out.bin"));
+
+    /*
+     * Several leaves: Core hashes them on worker threads, and signatures
+     * over the independently computed tree verify.
+     */
+    {
+        size_t big_size = 3U * 1048576U + 777U;
+        unsigned char *big = malloc(big_size);
+        size_t index;
+        int written;
+
+        CHECK(big != NULL);
+        for (index = 0U; index < big_size; ++index) {
+            big[index] = (unsigned char)(index * 131U + 7U);
+        }
+        written = write_bytes("big.bin", big, big_size);
+        free(big);
+        CHECK(written);
+    }
+    CHECK(encrypt_signed("big.bin", "big.nkem", recipient_b, 1U, "a.key", 1));
+    CHECK(verify("big.nkem", "b.key", 0, NULL, &result) ==
+          NEKOKEM_OPERATION_SUCCESS);
+    CHECK(same_file("big.bin", "out.bin"));
+    CHECK(reseal("big.nkem", "bad.nkem", "b.key", edit_none));
+    CHECK(verify("bad.nkem", "b.key", 0, NULL, &result) ==
+          NEKOKEM_OPERATION_SUCCESS);
+    CHECK(reseal("big.nkem", "bad.nkem", "b.key", edit_resign));
+    CHECK(verify("bad.nkem", "b.key", 0, NULL, &result) ==
+          NEKOKEM_OPERATION_SUCCESS);
+    CHECK(strcmp(result.signer_fingerprint, expected) == 0);
     return 1;
 }
 

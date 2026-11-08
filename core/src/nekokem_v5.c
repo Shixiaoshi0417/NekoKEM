@@ -5,6 +5,7 @@
 #include "hybrid.h"
 #include "identity.h"
 #include "nekokem_multi.h"
+#include "payload_hash.h"
 #include "secure_mem.h"
 
 #include <openssl/crypto.h>
@@ -15,7 +16,7 @@
 #include <stdio.h>
 #include <string.h>
 
-#define V5_DIGEST_SIZE 64U
+#define V5_DIGEST_SIZE PAYLOAD_HASH_DIGEST_SIZE
 #define V5_SIGNATURE_KEY_SIZE 32U
 
 _Static_assert(IDENTITY_ENCODING_SIZE + IDENTITY_SIGNATURE_SIZE ==
@@ -35,6 +36,14 @@ static const char message_label[] = "NekoKEM v5 sender signature";
 /* Each signature key encrypts exactly one block, so the nonce never repeats. */
 static const unsigned char block_nonce[NKEM_NONCE_SIZE] = {0};
 
+_Static_assert(NKEM_TAG_SIZE == PAYLOAD_HASH_TAG_SIZE, "Payload tag size");
+
+static int hash_ciphertext(const unsigned char *ciphertext, size_t length,
+                           void *user_data)
+{
+    return payload_hash_update((PayloadHash *)user_data, ciphertext, length);
+}
+
 static int valid_path(const char *path)
 {
     return path != NULL && path[0] != '\0';
@@ -52,8 +61,9 @@ static int derive_signature_key(
 }
 
 /*
- * M = label || metadata || SHA-512(ciphertext || tag) || identity encoding,
- * where metadata is header || salt || entries || header MAC || nonce.
+ * M = label || metadata || payload digest || identity encoding, where the
+ * payload digest is the leaf/root SHA-512 tree of payload_hash.h and
+ * metadata is header || salt || entries || header MAC || nonce.
  */
 static unsigned char *build_message(const unsigned char *metadata,
                                     size_t metadata_len,
@@ -193,7 +203,7 @@ int nekokem_encrypt_file_v5_with_progress(
     const char **key_paths = NULL;
     unsigned char *metadata = NULL;
     unsigned char *message = NULL;
-    EVP_MD_CTX *digest_context = NULL;
+    PayloadHash *payload_hash = NULL;
     unsigned char identity[IDENTITY_ENCODING_SIZE];
     unsigned char block_plaintext[NKEM_V5_SIGNATURE_PLAINTEXT_SIZE];
     unsigned char block[NKEM_V5_SIGNATURE_BLOCK_SIZE];
@@ -204,7 +214,6 @@ int nekokem_encrypt_file_v5_with_progress(
     unsigned char signature_key[V5_SIGNATURE_KEY_SIZE] = {0};
     unsigned char tag[NKEM_TAG_SIZE];
     unsigned char *nonce;
-    unsigned int digest_len = 0U;
     size_t message_len = 0U;
     size_t metadata_len = 0U;
     size_t mac_offset;
@@ -325,31 +334,23 @@ int nekokem_encrypt_file_v5_with_progress(
     secure_mem_clear(file_key, sizeof(file_key));
     secure_mem_clear(mac_key, sizeof(mac_key));
 
-    digest_context = EVP_MD_CTX_new();
-    if (digest_context == NULL ||
-        EVP_DigestInit_ex(digest_context, EVP_sha512(), NULL) != 1) {
-        print_openssl_error("Cannot hash NKEM ciphertext");
-        goto cleanup;
-    }
-    if (!atomic_file_open(&output, output_path, 0600) ||
+    payload_hash = payload_hash_new(plaintext_len);
+    if (payload_hash == NULL ||
+        !atomic_file_open(&output, output_path, 0600) ||
         !file_write_all(output.stream, metadata, metadata_len)) {
         goto cleanup;
     }
     aes_result = aes_gcm_encrypt_file_hashed(
         input, output.stream, plaintext_len, payload_key, nonce,
-        metadata, metadata_len, tag, digest_context,
+        metadata, metadata_len, tag, hash_ciphertext, payload_hash,
         progress_callback, progress_user_data);
     if (aes_result == AES_GCM_FILE_CANCELLED) {
         result = NEKOKEM_OPERATION_CANCELLED;
         goto cleanup;
     }
     if (aes_result != AES_GCM_FILE_SUCCESS ||
-        !file_write_all(output.stream, tag, sizeof(tag))) {
-        goto cleanup;
-    }
-    if (EVP_DigestFinal_ex(digest_context, digest, &digest_len) != 1 ||
-        digest_len != V5_DIGEST_SIZE) {
-        print_openssl_error("Cannot hash NKEM ciphertext");
+        !file_write_all(output.stream, tag, sizeof(tag)) ||
+        !payload_hash_final(payload_hash, tag, digest)) {
         goto cleanup;
     }
     message = build_message(metadata, metadata_len, digest, identity,
@@ -382,7 +383,7 @@ cleanup:
     OPENSSL_free(key_paths);
     OPENSSL_free(metadata);
     OPENSSL_free(message);
-    EVP_MD_CTX_free(digest_context);
+    payload_hash_free(payload_hash);
     secure_mem_clear(file_key, sizeof(file_key));
     secure_mem_clear(payload_key, sizeof(payload_key));
     secure_mem_clear(mac_key, sizeof(mac_key));
@@ -498,7 +499,7 @@ int nekokem_v5_decrypt_opened(
     HybridKeys private_keys = {0};
     HybridKeys signer = {0};
     NkemV5Header header;
-    EVP_MD_CTX *digest_context = NULL;
+    PayloadHash *payload_hash = NULL;
     unsigned char *metadata = NULL;
     unsigned char *message = NULL;
     unsigned char *trusted = NULL;
@@ -511,7 +512,6 @@ int nekokem_v5_decrypt_opened(
     unsigned char signature_key[V5_SIGNATURE_KEY_SIZE] = {0};
     unsigned char tag[NKEM_TAG_SIZE];
     char fingerprint[IDENTITY_FINGERPRINT_STRING_SIZE] = {0};
-    unsigned int digest_len = 0U;
     uint32_t flags = policy == NULL ? 0U : policy->flags;
     size_t trusted_count = policy == NULL ? 0U : policy->trusted_signer_count;
     size_t trusted_index = 0U;
@@ -560,19 +560,15 @@ int nekokem_v5_decrypt_opened(
     }
     secure_mem_clear(file_key, sizeof(file_key));
 
-    digest_context = EVP_MD_CTX_new();
-    if (digest_context == NULL ||
-        EVP_DigestInit_ex(digest_context, EVP_sha512(), NULL) != 1) {
-        print_openssl_error("Cannot hash NKEM ciphertext");
-        goto cleanup;
-    }
-    if (!atomic_file_open(&output, output_path, 0600)) {
+    payload_hash = payload_hash_new(header.ciphertext_len);
+    if (payload_hash == NULL ||
+        !atomic_file_open(&output, output_path, 0600)) {
         goto cleanup;
     }
     aes_result = aes_gcm_decrypt_file_hashed(
         input, output.stream, header.ciphertext_len, payload_key,
         metadata + mac_offset + NKEM_V4_MAC_SIZE, metadata, metadata_len,
-        digest_context, tag, progress_callback, progress_user_data);
+        hash_ciphertext, payload_hash, tag, progress_callback, progress_user_data);
     if (aes_result == AES_GCM_FILE_CANCELLED) {
         result = NEKOKEM_OPERATION_CANCELLED;
         goto cleanup;
@@ -587,9 +583,7 @@ int nekokem_v5_decrypt_opened(
         }
         goto cleanup;
     }
-    if (EVP_DigestFinal_ex(digest_context, digest, &digest_len) != 1 ||
-        digest_len != V5_DIGEST_SIZE) {
-        print_openssl_error("Cannot hash NKEM ciphertext");
+    if (!payload_hash_final(payload_hash, tag, digest)) {
         goto cleanup;
     }
 
@@ -660,7 +654,7 @@ cleanup:
     atomic_file_abort(&output);
     hybrid_keys_cleanup(&private_keys);
     hybrid_keys_cleanup(&signer);
-    EVP_MD_CTX_free(digest_context);
+    payload_hash_free(payload_hash);
     OPENSSL_free(metadata);
     OPENSSL_free(message);
     OPENSSL_free(trusted);

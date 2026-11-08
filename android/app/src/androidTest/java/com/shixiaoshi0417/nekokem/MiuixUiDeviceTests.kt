@@ -240,9 +240,26 @@ internal fun runMiuixUiTests(instrumentation: Instrumentation, screenshotPrefix:
         await("signing back on") { !SignatureSettingsStore.read(context).unsignedEncryption }
         // The row toggles from the value it last drew, so wait for the redraw before toggling again.
         await("Material switch redrawn off") {
-            var row = exact(string(R.string.settings_unsigned_title))
-            while (row != null && !row.isCheckable) row = row.parent
-            row != null && !row.isChecked
+            // A window left over from the MIUIX shell can still hold a checked copy of
+            // the row, so look at every copy on screen and refresh each before reading.
+            reveal(string(R.string.settings_unsigned_title))
+            val roots = listOfNotNull(automation.rootInActiveWindow) +
+                runCatching { automation.windows.mapNotNull { it.root } }.getOrDefault(emptyList())
+            val title = string(R.string.settings_unsigned_title)
+            roots.any { root ->
+                val rows = mutableListOf<AccessibilityNodeInfo>()
+                fun collect(node: AccessibilityNodeInfo?) {
+                    if (node == null) return
+                    if (node.text?.toString() == title || node.contentDescription?.toString() == title) rows += node
+                    for (index in 0 until node.childCount) collect(node.getChild(index))
+                }
+                collect(root)
+                rows.any { match ->
+                    var row: AccessibilityNodeInfo? = match
+                    while (row != null && !row.isCheckable) row = row.parent
+                    row != null && row.refresh() && !row.isChecked
+                }
+            }
         }
         check(exact(string(R.string.unsigned_confirm_title)) == null) { "Turning signing on asked for confirmation" }
         click(string(R.string.settings_unsigned_title))

@@ -208,12 +208,45 @@ The header MAC commits to the file key, as described in
 [NKEM v4](NKEM-v4.md#header-mac-and-key-commitment). The payload is
 processed in 64 KiB chunks and keeps the `2^36 - 32` byte AES-GCM limit.
 
+## Payload digest
+
+The signature covers the payload through a two-level SHA-512 tree, so the
+leaves can be hashed in parallel. The ciphertext of `L` bytes is split into
+`n = ceil(L / 1048576)` leaves of 1 MiB; only the last may be shorter, and an
+empty payload has no leaves. `u64be` is an 8-byte big-endian integer and the
+labels are ASCII without NUL.
+
+```text
+leaf i         = SHA-512("NekoKEM v5 payload leaf" || u64be(i) ||
+                         payload ciphertext[i * 1048576 .. min((i + 1) * 1048576, L)])
+payload digest = SHA-512("NekoKEM v5 payload root" || u64be(L) ||
+                         leaf 0 || ... || leaf n-1 || payload tag)
+```
+
+Every leaf and the root are fixed-layout inputs with distinct labels, and
+the root fixes `L` and therefore `n`, so finding two payloads with one
+digest needs a SHA-512 collision. The leaf size is part of the format: a
+different split gives a different digest.
+
+Core hashes leaves on up to four worker threads (one per online processor)
+while the calling thread runs AES-GCM and file I/O, and hashes inline when
+threads cannot start or the payload has one leaf. The digest does not depend
+on the number of threads.
+
+Test vector: `L = 2621443` (2.5 MiB + 3 bytes) with ciphertext byte `i`
+equal to `i mod 251` and the payload tag `00 01 02 ... 0f` give
+
+```text
+829a3198f9894e5f0008a34575168f0cc436a5a341cb9511b6ed501e69277962
+ecbcc712915fd1602efe47c2ea4a8c4ff80c61638a71e62790dd1208c35d744d
+```
+
 ## Signature
 
 ```text
 M = "NekoKEM v5 sender signature" ||
     header || salt || all recipient entries || header MAC || payload nonce ||
-    SHA-512(payload ciphertext || payload tag) ||
+    payload digest ||
     sender identity encoding
 
 Ed448 signature     = Ed448(sender Ed448 key, M, context = "NekoKEM v5 Ed448")
@@ -245,9 +278,9 @@ What this provides:
   someone else changes the entries, so the original signature no longer
   verifies and the recipient cannot present it as the sender's message to a
   new recipient.
-- The ciphertext enters `M` through SHA-512, not through the GCM tag. GCM is
-  not collision resistant for anyone who knows its key, and every recipient
-  knows the file key.
+- The ciphertext enters `M` through the SHA-512 payload digest, not through
+  the GCM tag. GCM is not collision resistant for anyone who knows its key,
+  and every recipient knows the file key.
 - `M` includes the sender's whole identity, so a signature cannot be
   attributed to another identity even if a signature algorithm lacks
   exclusive ownership.
@@ -270,7 +303,8 @@ What it does not provide:
    key. The recipient rules of v4 apply: 1 to 64 keys, no two keys the same
    or sharing a component. Nothing is created on failure.
 2. Write the header, salt, recipient entries and header MAC as above.
-3. Stream the payload, feeding ciphertext and tag into SHA-512.
+3. Stream the payload, feeding the ciphertext and then the tag into the
+   payload digest.
 4. Sign `M`, encrypt the signature block and append it.
 5. Commit the output atomically.
 
@@ -284,7 +318,8 @@ What it does not provide:
    ciphertext is read. A key with no entry and modified entries or MAC take
    the same path and report the same error.
 3. Decrypt the payload into a private temporary file while feeding the
-   ciphertext and tag into SHA-512, and verify the payload tag.
+   ciphertext and then the tag into the payload digest, and verify the
+   payload tag.
 4. Decrypt the signature block. A failed signature block tag is a signature
    failure.
 5. Decode and validate the sender identity encoding, rebuild `M`, and verify
