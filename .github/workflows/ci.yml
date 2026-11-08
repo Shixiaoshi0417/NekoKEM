@@ -549,7 +549,7 @@ jobs:
             if ($LASTEXITCODE -ne 0) { throw 'Native before-and-after throughput measurement failed' }
             $return = Join-Path $env:RUNNER_TEMP 'windows-fixtures'
             New-Item -ItemType Directory -Path $return | Out-Null
-            foreach ($name in @('binary','empty','windows-fingerprint.txt','windows-public.key','windows-private.enc','binary.windows.nkem','empty.windows.nkem')) {
+            foreach ($name in @('binary','empty','linux-private.enc','windows-legacy.key','windows-legacy-fingerprint.txt','binary.windows.nkem','empty.windows.nkem')) {
               Copy-Item (Join-Path $interop $name) $return
             }
           } finally { Remove-Item $work -Recurse -Force }
@@ -869,9 +869,9 @@ jobs:
           path: |
             ${{ runner.temp }}/macos-fixtures/binary
             ${{ runner.temp }}/macos-fixtures/empty
-            ${{ runner.temp }}/macos-fixtures/macos-public.key
-            ${{ runner.temp }}/macos-fixtures/macos-private.enc
-            ${{ runner.temp }}/macos-fixtures/macos-fingerprint.txt
+            ${{ runner.temp }}/macos-fixtures/linux-private.enc
+            ${{ runner.temp }}/macos-fixtures/macos-legacy.key
+            ${{ runner.temp }}/macos-fixtures/macos-legacy-fingerprint.txt
             ${{ runner.temp }}/macos-fixtures/*.macos.nkem
           retention-days: 14
           if-no-files-found: error

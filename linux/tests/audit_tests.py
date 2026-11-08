@@ -73,7 +73,9 @@ class AuditTests(unittest.TestCase):
         result = self.cli('keygen', data=(password + b'\n') * 2)
         self.assertEqual(result.returncode, 0, result.stderr)
         (self.root / 'input').write_bytes(b'payload')
-        self.assertEqual(self.cli('encrypt', 'hybrid', 'input', 'cipher.nkem', 'keys/public.key').returncode, 0)
+        # Signing unlocks the same key, so a non-UTF-8 unlock attempt still fails.
+        result = self.cli('encrypt', 'hybrid', 'input', 'cipher.nkem', 'keys/public.key', data=password + b'\n')
+        self.assertEqual(result.returncode, 0, result.stderr)
         result = self.cli('decrypt', 'hybrid', 'cipher.nkem', 'output', 'keys/private.key.enc', data=b'\xff\n')
         self.assertEqual(result.returncode, 1)
         self.assertNotIn(b'valid UTF-8', result.stderr)
@@ -89,8 +91,9 @@ class AuditTests(unittest.TestCase):
                     (self.root / path).unlink(missing_ok=True)
                 result = self.cli('keygen', data=(password + ending) * 2)
                 self.assertEqual(result.returncode, 0, result.stderr)
-                self.assertEqual(self.cli('encrypt', 'hybrid', 'input', 'cipher.nkem',
-                                          'keys/public.key').returncode, 0)
+                result = self.cli('encrypt', 'hybrid', 'input', 'cipher.nkem',
+                                  'keys/public.key', data=password + ending)
+                self.assertEqual(result.returncode, 0, result.stderr)
                 for unlock in [b'\n', b'\r\n']:
                     (self.root / 'output').unlink(missing_ok=True)
                     result = self.cli('decrypt', 'hybrid', 'cipher.nkem', 'output',
@@ -109,7 +112,8 @@ class AuditTests(unittest.TestCase):
     def test_interactive_decryption_preserves_existing_plaintext(self):
         self.keys()
         (self.root / 'input').write_bytes(b'new plaintext')
-        self.assertEqual(self.cli('encrypt', 'hybrid', 'input', 'input.nkem', 'keys/public.key').returncode, 0)
+        self.assertEqual(self.cli('encrypt', 'hybrid', 'input', 'input.nkem', 'keys/public.key',
+                                  data=PASSWORD).returncode, 0)
         output = self.root / 'plaintext/input'
         output.parent.mkdir(mode=0o700)
         output.write_bytes(b'previous output')
@@ -121,7 +125,8 @@ class AuditTests(unittest.TestCase):
     def test_interactive_decryption_refuses_output_created_after_precheck(self):
         self.keys()
         (self.root / 'input').write_bytes(b'new plaintext')
-        self.assertEqual(self.cli('encrypt', 'hybrid', 'input', 'input.nkem', 'keys/public.key').returncode, 0)
+        self.assertEqual(self.cli('encrypt', 'hybrid', 'input', 'input.nkem', 'keys/public.key',
+                                  data=PASSWORD).returncode, 0)
         process = subprocess.Popen([str(BINARY), '--lang', 'en'], cwd=self.root, env=self.env,
             stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         try:
@@ -159,7 +164,7 @@ class AuditTests(unittest.TestCase):
         self.keys()
         filename = 'input\x1b[31m\n\x7f\u0085\u202e\u200b\u2028\u2029'
         (self.root / filename).write_bytes(b'payload')
-        result = self.cli('encrypt', 'hybrid', filename, 'cipher.nkem', 'keys/public.key')
+        result = self.cli('encrypt', 'hybrid', filename, 'cipher.nkem', 'keys/public.key', data=PASSWORD)
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn(b'input?[31m', result.stdout)
         for control in ['\x1b', '\x7f', '\u0085', '\u202e', '\u200b', '\u2028', '\u2029']:
@@ -194,6 +199,68 @@ class AuditTests(unittest.TestCase):
                     process.wait()
                 process.stdin.close()
                 process.stderr.close()
+
+    def test_signed_encryption_policy_and_legacy_keys(self):
+        self.keys()
+        (self.root / 'input').write_bytes(b'signed payload')
+        result = self.cli('encrypt', 'hybrid', 'input', 'signed.nkem', 'keys/public.key', data=PASSWORD)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn(b'Encrypted and signed NKEM v5', result.stdout)
+        self.assertEqual((self.root / 'signed.nkem').read_bytes()[4], 5)
+        result = self.cli('decrypt', 'hybrid', '--trust', 'keys/public.key', '--require-trusted',
+                          '--save-signer', 'signer.key', 'signed.nkem', 'out', 'keys/private.key.enc',
+                          data=PASSWORD)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn(b'Signature: valid, signed by trusted key keys/public.key', result.stdout)
+        self.assertEqual((self.root / 'out').read_bytes(), b'signed payload')
+        self.assertEqual(self.cli('fingerprint', 'signer.key').stdout,
+                         self.cli('fingerprint', 'keys/public.key').stdout)
+        # Flipping the last byte breaks the encrypted signature block.
+        data = bytearray((self.root / 'signed.nkem').read_bytes())
+        data[-1] ^= 1
+        (self.root / 'bad.nkem').write_bytes(bytes(data))
+        result = self.cli('decrypt', 'hybrid', 'bad.nkem', 'bad-out', 'keys/private.key.enc', data=PASSWORD)
+        self.assertEqual(result.returncode, 1)
+        self.assertIn(b'The sender signature is invalid', result.stderr)
+        self.assertFalse((self.root / 'bad-out').exists())
+
+        result = self.cli('encrypt', 'hybrid', '--unsigned', 'input', 'unsigned.nkem', 'keys/public.key')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn(b'recipients cannot confirm that it came from you', result.stderr)
+        self.assertEqual((self.root / 'unsigned.nkem').read_bytes()[4], 3)
+        result = self.cli('decrypt', 'hybrid', '--require-signature', 'unsigned.nkem', 'out2',
+                          'keys/private.key.enc', data=PASSWORD)
+        self.assertEqual(result.returncode, 1)
+        self.assertIn(b'only signed files are accepted', result.stderr)
+        self.assertFalse((self.root / 'out2').exists())
+        result = self.cli('decrypt', 'hybrid', 'unsigned.nkem', 'out2', 'keys/private.key.enc', data=PASSWORD)
+        self.assertIn(b'Signature: none. This NKEM v3 file is not signed', result.stdout)
+
+        # Signing never falls back silently, and the two options exclude each other.
+        result = self.cli('encrypt', 'hybrid', '--sign-key', 'missing.enc', 'input', 'x.nkem', 'keys/public.key')
+        self.assertEqual(result.returncode, 1)
+        self.assertIn(b'Signing key not found', result.stderr)
+        result = self.cli('encrypt', 'hybrid', '--unsigned', '--sign-key', 'keys/private.key.enc',
+                          'input', 'x.nkem', 'keys/public.key')
+        self.assertEqual(result.returncode, 1)
+        self.assertIn(b'Usage:', result.stderr)
+        self.assertFalse((self.root / 'x.nkem').exists())
+
+        # The legacy export pastes as two blocks; the next line answers the next prompt.
+        self.assertEqual(self.cli('export-legacy-public-key', 'keys/public.key', 'legacy.key').returncode, 0)
+        legacy = (self.root / 'legacy.key').read_bytes()
+        self.assertEqual(legacy.count(b'-----BEGIN PUBLIC KEY-----'), 2)
+        self.assertIn(b'cannot sign', self.cli('fingerprint', 'legacy.key').stdout)
+        result = self.cli('upgrade-key', 'keys/public.key', 'keys/private.key.enc', data=PASSWORD)
+        self.assertEqual(result.returncode, 1)
+        self.assertIn(b'already a signing identity key', result.stderr)
+        result = self.cli(data=b'2\n2\n' + legacy + b'input\n' + PASSWORD + b'5\n')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual((self.root / 'encrypted/input.nkem').read_bytes()[4], 5)
+        result = self.cli('decrypt', 'hybrid', 'encrypted/input.nkem', 'out3', 'keys/private.key.enc',
+                          data=PASSWORD)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual((self.root / 'out3').read_bytes(), b'signed payload')
 
     def test_installer_uses_one_release_and_requires_requested_attestation(self):
         fixtures = self.root / 'fixtures'

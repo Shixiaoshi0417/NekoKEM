@@ -51,7 +51,7 @@ class Tests(unittest.TestCase):
     def valid_cipher(self):
         self.generate()
         (self.root/'plain').write_bytes(b'original\x00\r\n\x1a')
-        self.run_cli('encrypt', 'hybrid', 'plain', 'valid.nkem', 'keys/public.key')
+        self.run_cli('encrypt', 'hybrid', 'plain', 'valid.nkem', 'keys/public.key', password=PASSWORD)
 
     def assert_no_transaction_artifacts(self):
         self.assertFalse(any('.tmp.' in path.name or '.bak.' in path.name
@@ -63,7 +63,7 @@ class Tests(unittest.TestCase):
         plain = self.root/'中文-日本語-한국어-😀.bin'
         plain.write_bytes(bytes(range(256))*4096)
         encrypted, output = self.root/'加密😀.nkem', self.root/'解密😀.bin'
-        self.run_cli('encrypt', 'hybrid', plain, encrypted, 'keys/public.key')
+        self.run_cli('encrypt', 'hybrid', plain, encrypted, 'keys/public.key', password=PASSWORD)
         self.run_cli('decrypt', 'hybrid', encrypted, output, 'keys/private.key.enc', password=PASSWORD)
         self.assertEqual(plain.read_bytes(), output.read_bytes())
 
@@ -71,7 +71,7 @@ class Tests(unittest.TestCase):
         data = bytes(range(256))+b'\x00\r\nmenu'
         (self.root/'plain.bin').write_bytes(data)
         commands = (b'1\n'+PASSWORD*2+
-                    b'2\n1\nkeys/public.key\nplain.bin\n'+
+                    b'2\n1\nkeys/public.key\nplain.bin\n'+PASSWORD+
                     b'3\n1\nkeys/private.key.enc\nencrypted/plain.bin.nkem\n'+PASSWORD+
                     b'4\n1\nkeys/public.key\n5\n')
         result = self.run_cli(password=commands)
@@ -171,11 +171,11 @@ class Tests(unittest.TestCase):
         public = self.root/'keys/public.key'
         data = public.read_bytes()
         public.write_bytes(data+b'X')
-        self.run_cli('encrypt', 'hybrid', 'plain', 'output', public, ok=False)
+        self.run_cli('encrypt', 'hybrid', 'plain', 'output', public, password=PASSWORD, ok=False)
         public.write_bytes(data+b' '*(1048576-len(data)))
-        self.run_cli('encrypt', 'hybrid', 'plain', 'output', public)
+        self.run_cli('encrypt', 'hybrid', 'plain', 'output', public, password=PASSWORD)
         public.write_bytes(public.read_bytes()+b' ')
-        self.run_cli('encrypt', 'hybrid', 'plain', 'extra-output', public, ok=False)
+        self.run_cli('encrypt', 'hybrid', 'plain', 'extra-output', public, password=PASSWORD, ok=False)
         self.assertFalse((self.root/'extra-output').exists())
 
     def test_utf8_crlf_and_exact_password_limit(self):
@@ -184,7 +184,7 @@ class Tests(unittest.TestCase):
             # keygen never replaces keys unless asked to.
             self.generate(password=password, replace=index > 0)
             (self.root/'plain').write_bytes(b'data')
-            self.run_cli('encrypt', 'hybrid', 'plain', 'cipher.nkem', 'keys/public.key')
+            self.run_cli('encrypt', 'hybrid', 'plain', 'cipher.nkem', 'keys/public.key', password=password)
             self.run_cli('decrypt', 'hybrid', 'cipher.nkem', 'output', 'keys/private.key.enc', password=password)
             self.assertEqual((self.root/'output').read_bytes(), b'data')
 
@@ -266,7 +266,8 @@ class Tests(unittest.TestCase):
         transcript = self.terminal_run([], [
             (b'Select [1-5]:', b'3\n', False),
             (b'Select [1/2]:', b'2\n', False),
-            (b'input will not be echoed.', private+b'\n-----END PRIVATE KEY-----\n-----END PRIVATE KEY-----\n', True),
+            # A two-block paste ends with an empty line, as the prompt asks.
+            (b'input will not be echoed.', private+b'\n-----END PRIVATE KEY-----\n-----END PRIVATE KEY-----\n\n', True),
             (b'.nkem file path:', b'missing.nkem\n', False),
             (b'Select [1-5]:', b'5\n', False),
         ], expected_returncode=1)

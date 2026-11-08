@@ -111,6 +111,19 @@ def summarize(samples, size_mib):
     }
 
 
+def unsigned_option(executable, root, environment, timeout):
+    """NekoKEM 5 signs by default; compare the same unsigned v3 operation.
+
+    The shared keys come from the baseline's keygen, so a 5.x candidate must
+    write the unsigned container both versions can read.
+    """
+    completed = subprocess.run(
+        [str(executable), "--lang", "en", "--help"], cwd=root, env=environment,
+        stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=timeout, check=False,
+    )
+    return ("--unsigned",) if b"--unsigned" in completed.stdout else ()
+
+
 def benchmark_size(root, executables, environment, args, size_mib, size_index):
     case = root / f"size-{size_mib}-MiB"
     case.mkdir()
@@ -128,7 +141,8 @@ def benchmark_size(root, executables, environment, args, size_mib, size_index):
         cipher = reference_cipher if producer == "baseline" else case / "candidate-reference.nkem"
         recovered = case / f"compatibility-{consumer}.bin"
         run_cli(executables[producer], root, environment, args.timeout,
-                "encrypt", "hybrid", plain, cipher, public_key)
+                "encrypt", "hybrid", *args.unsigned[producer], plain, cipher,
+                public_key)
         require_output(cipher)
         run_cli(executables[consumer], root, environment, args.timeout,
                 "decrypt", "hybrid", cipher, recovered, private_key,
@@ -161,7 +175,8 @@ def benchmark_size(root, executables, environment, args, size_mib, size_index):
                     if operation == "encrypt":
                         elapsed = run_cli(
                             executables[label], root, environment, args.timeout,
-                            "encrypt", "hybrid", plain, output, public_key,
+                            "encrypt", "hybrid", *args.unsigned[label], plain,
+                            output, public_key,
                         )
                         require_output(output)
                         if output.stat().st_size <= expected_size:
@@ -268,6 +283,8 @@ def main():
                 raise RuntimeError("Key generation did not produce an NKPR protected key")
         if (root / "keys" / "private.key").exists():
             raise RuntimeError("Key generation unexpectedly left a plaintext private key")
+        args.unsigned = {label: unsigned_option(executable, root, environment, args.timeout)
+                         for label, executable in executables.items()}
         for index, size_mib in enumerate(args.sizes_mib):
             print(f"Benchmarking {size_mib} MiB ({args.samples} paired samples)...", file=sys.stderr, flush=True)
             report["sizes"].append(benchmark_size(root, executables, environment, args, size_mib, index))

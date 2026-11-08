@@ -253,9 +253,10 @@ if [[ "$build_tests" == 1 ]]; then
         test -s keys/private.key.enc
         test ! -e keys/private.key
         test "$(dd if=keys/private.key.enc bs=1 count=4 status=none)" = NKPR
-        "${run_command[@]}" encrypt hybrid input.bin output.nkem keys/public.key
+        printf '%s\n' "$password" | \
+            "${run_command[@]}" encrypt hybrid input.bin output.nkem keys/public.key
         test "$(dd if=output.nkem bs=1 count=4 status=none)" = NKEM
-        test "$(od -An -tu1 -j4 -N1 output.nkem | tr -d ' ')" = 3
+        test "$(od -An -tu1 -j4 -N1 output.nkem | tr -d ' ')" = 5
         printf '%s\n' "$password" | \
             "${run_command[@]}" decrypt hybrid output.nkem recovered.bin \
                 keys/private.key.enc
@@ -263,7 +264,7 @@ if [[ "$build_tests" == 1 ]]; then
         sha256sum input.bin recovered.bin
     )
     unset password
-    printf 'Hybrid NKEM v3 smoke test passed (%s).\n' "$target_arch"
+    printf 'Signed NKEM v5 smoke test passed (%s).\n' "$target_arch"
 fi
 
 package_name="NekoKEM-linux-${target_arch}"

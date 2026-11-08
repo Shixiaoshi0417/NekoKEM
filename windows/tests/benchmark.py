@@ -26,10 +26,11 @@ for exe in executables:
         run('keygen',secret=password*2)
         encrypt, decrypt = [], []
         for _ in range(3):
-            encrypt.append(run('encrypt','hybrid','plain','cipher.nkem','keys/public.key'))
+            # Encryption signs by default, so it unlocks the key (Argon2id) too.
+            encrypt.append(run('encrypt','hybrid','plain','cipher.nkem','keys/public.key',secret=password))
             decrypt.append(run('decrypt','hybrid','cipher.nkem','output','keys/private.key.enc',secret=password))
         assert (root/'plain').read_bytes() == (root/'output').read_bytes()
         results.append({'executable':exe,'bytes':64*1024*1024,'samples':3,
-                        'encrypt_MiB_s':64/statistics.median(encrypt),
+                        'encrypt_and_sign_MiB_s_including_Argon2':64/statistics.median(encrypt),
                         'decrypt_MiB_s_including_Argon2':64/statistics.median(decrypt)})
 print(json.dumps({'system':platform.platform(),'machine':platform.machine(),'results':results},indent=2))

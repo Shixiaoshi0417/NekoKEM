@@ -317,6 +317,7 @@ test: $(TARGET) test-openssl analyze test-ubsan test-parser test-file-security t
 			"$$test_dir/before-replace.pub" \
 			"$$test_dir/replace-warning.txt" \
 			"$$test_dir/multi-output.txt" \
+			"$$test_dir/signed-output.txt" \
 			"$$test_dir/multi-decrypted.txt" \
 			"$$test_dir/encrypted/tampered.nkem" \
 			"$$test_dir/encrypted/interactive.txt.nkem" \
@@ -347,10 +348,19 @@ test: $(TARGET) test-openssl analyze test-ubsan test-parser test-file-security t
 		echo "Protected private key contains plaintext PEM" >&2; \
 		exit 1; \
 	fi; \
-	./nekokem encrypt hybrid test.txt encrypted/hybrid.nkem keys/public.key; \
 	printf '%s\n' "$$key_password" | \
-		./nekokem decrypt hybrid encrypted/hybrid.nkem \
-			hybrid-output.txt keys/private.key.enc; \
+		./nekokem --lang en encrypt hybrid test.txt encrypted/hybrid.nkem \
+			keys/public.key > signed-output.txt; \
+	grep -F 'Encrypted and signed NKEM v5 for 1 recipient(s)' \
+		signed-output.txt >/dev/null; \
+	test "$$(dd if=encrypted/hybrid.nkem bs=1 skip=4 count=1 \
+		status=none | od -An -tu1 | tr -d ' ')" = 5; \
+	printf '%s\n' "$$key_password" | \
+		./nekokem --lang en decrypt hybrid --trust keys/public.key \
+			--require-trusted encrypted/hybrid.nkem \
+			hybrid-output.txt keys/private.key.enc > signed-output.txt; \
+	grep -F 'Signature: valid, signed by trusted key keys/public.key' \
+		signed-output.txt >/dev/null; \
 	sha256sum test.txt hybrid-output.txt; \
 	cmp test.txt hybrid-output.txt; \
 	cp keys/public.key keys-before.pub; \
@@ -426,7 +436,7 @@ test: $(TARGET) test-openssl analyze test-ubsan test-parser test-file-security t
 	mv keys/private.key.enc correct-private.key.enc; \
 	printf '%s\n%s\n' "$$key_password" "$$key_password" | \
 		./nekokem keygen hybrid; \
-	./nekokem encrypt hybrid test.txt encrypted/multi.nkem \
+	./nekokem encrypt hybrid --unsigned test.txt encrypted/multi.nkem \
 		first-public.key keys/public.key > multi-output.txt; \
 	grep -F 'NKEM v4 for 2 recipients' multi-output.txt >/dev/null; \
 	test "$$(dd if=encrypted/multi.nkem bs=1 skip=4 count=1 \
@@ -438,7 +448,7 @@ test: $(TARGET) test-openssl analyze test-ubsan test-parser test-file-security t
 		cmp test.txt multi-decrypted.txt; \
 		rm -f multi-decrypted.txt; \
 	done; \
-	if ./nekokem encrypt hybrid test.txt encrypted/duplicate.nkem \
+	if ./nekokem encrypt hybrid --unsigned test.txt encrypted/duplicate.nkem \
 		keys/public.key keys/public.key; then \
 		echo "Duplicate recipient public key was accepted" >&2; \
 		exit 1; \
@@ -499,7 +509,8 @@ test: $(TARGET) test-openssl analyze test-ubsan test-parser test-file-security t
 	mkdir plaintext; \
 	cp test.txt plaintext/interactive.txt; \
 	{ printf '2\n2\n'; cat keys/public.key; \
-		printf '%s\n5\n' "$$test_dir/plaintext/interactive.txt"; \
+		printf '%s\n%s\n5\n' "$$test_dir/plaintext/interactive.txt" \
+			"$$interactive_password"; \
 	} | ./nekokem >/dev/null; \
 	test -d encrypted; \
 	test "$$(stat -c %a encrypted)" = 700; \
