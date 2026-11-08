@@ -1,6 +1,7 @@
 #ifndef NEKOKEM_AES_H
 #define NEKOKEM_AES_H
 
+#include <openssl/evp.h>
 #include <stddef.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -38,6 +39,20 @@ int aes_gcm_encrypt_file_with_progress(
     AesProgressCallback progress_callback,
     void *progress_user_data);
 
+/* As above; also feeds ciphertext || tag into ciphertext_digest when set. */
+int aes_gcm_encrypt_file_hashed(
+    FILE *input,
+    FILE *output,
+    uint64_t plaintext_len,
+    const unsigned char key[AES_GCM_KEY_SIZE],
+    const unsigned char nonce[AES_GCM_NONCE_SIZE],
+    const unsigned char *aad,
+    size_t aad_len,
+    unsigned char tag[AES_GCM_TAG_SIZE],
+    EVP_MD_CTX *ciphertext_digest,
+    AesProgressCallback progress_callback,
+    void *progress_user_data);
+
 int aes_gcm_decrypt_file(FILE *input,
                          FILE *output,
                          uint64_t ciphertext_len,
@@ -54,6 +69,23 @@ int aes_gcm_decrypt_file_with_progress(
     const unsigned char nonce[AES_GCM_NONCE_SIZE],
     const unsigned char *aad,
     size_t aad_len,
+    AesProgressCallback progress_callback,
+    void *progress_user_data);
+
+/*
+ * As above; also feeds ciphertext || tag into ciphertext_digest when set and
+ * copies the verified tag to tag_out when set.
+ */
+int aes_gcm_decrypt_file_hashed(
+    FILE *input,
+    FILE *output,
+    uint64_t ciphertext_len,
+    const unsigned char key[AES_GCM_KEY_SIZE],
+    const unsigned char nonce[AES_GCM_NONCE_SIZE],
+    const unsigned char *aad,
+    size_t aad_len,
+    EVP_MD_CTX *ciphertext_digest,
+    unsigned char tag_out[AES_GCM_TAG_SIZE],
     AesProgressCallback progress_callback,
     void *progress_user_data);
 

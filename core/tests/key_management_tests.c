@@ -203,10 +203,11 @@ int main(void)
     memcpy(modified_private_pem, private_pem, private_pem_len);
     modified_private_pem[private_pem_len] = '\n';
     modified_private_pem[private_pem_len + 1U] = '\t';
-    if (!protected_private_key_write(
+    if (!protected_private_key_write_version(
             modified_private_path, modified_private_pem,
             private_pem_len + 2U,
-            password, sizeof(initial_password) - 1U) ||
+            password, sizeof(initial_password) - 1U,
+            NKPR_VERSION_IDENTITY) ||
         !nekokem_check_private_key_password(
             modified_private_path, password,
             sizeof(initial_password) - 1U)) {
@@ -214,10 +215,11 @@ int main(void)
         goto cleanup;
     }
     modified_private_pem[private_pem_len + 2U] = 'X';
-    if (!protected_private_key_write(
+    if (!protected_private_key_write_version(
             modified_private_path, modified_private_pem,
             private_pem_len + 3U,
-            password, sizeof(initial_password) - 1U) ||
+            password, sizeof(initial_password) - 1U,
+            NKPR_VERSION_IDENTITY) ||
         nekokem_check_private_key_password(
             modified_private_path, password,
             sizeof(initial_password) - 1U) != 0) {

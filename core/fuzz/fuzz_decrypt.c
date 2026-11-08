@@ -1,7 +1,8 @@
 /*
- * Full decryption of an untrusted container: NKEM v3/v4 header parsing,
- * X448 and ML-KEM-1024 decapsulation, v4 entry unwrapping and header MAC,
- * streaming AES-GCM authentication and the atomic output transaction. The
+ * Full decryption of an untrusted container: NKEM v3/v4/v5 header parsing,
+ * X448 and ML-KEM-1024 decapsulation, v4/v5 entry unwrapping and header MAC,
+ * streaming AES-GCM authentication, the v5 signature block and Ed448 +
+ * ML-DSA-87 verification, and the atomic output transaction. The
  * plaintext-PEM key beside this binary is a throwaway fuzzing key written by
  * fuzz_decrypt_seeds; it protects nothing.
  */

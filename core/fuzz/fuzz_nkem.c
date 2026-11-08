@@ -12,6 +12,7 @@ int main(int argc, char **argv)
     }
     (void)nkem_v3_container_parse(input, input_len);
     (void)nkem_v4_container_parse(input, input_len);
+    (void)nkem_v5_container_parse(input, input_len);
     free(input);
     return 0;
 }

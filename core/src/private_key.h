@@ -7,6 +7,8 @@
 
 #define NKPR_MAGIC "NKPR"
 #define NKPR_VERSION 1U
+/* NKPR v2: same protection, four identity private keys; see docs/NKEM-v5.md. */
+#define NKPR_VERSION_IDENTITY 2U
 #define NKPR_HEADER_SIZE 36U
 #define NKPR_SALT_SIZE 32U
 #define NKPR_NONCE_SIZE 12U
@@ -28,6 +30,16 @@ int protected_private_key_stage(
     const unsigned char *password,
     size_t password_len);
 
+/* As protected_private_key_stage, writing the given NKPR version (1 or 2). */
+int protected_private_key_stage_version(
+    AtomicFile *output,
+    const char *path,
+    const unsigned char *pem,
+    size_t pem_len,
+    const unsigned char *password,
+    size_t password_len,
+    unsigned int version);
+
 int protected_private_key_write(
     const char *path,
     const unsigned char *pem,
@@ -35,12 +47,39 @@ int protected_private_key_write(
     const unsigned char *password,
     size_t password_len);
 
+int protected_private_key_write_version(
+    const char *path,
+    const unsigned char *pem,
+    size_t pem_len,
+    const unsigned char *password,
+    size_t password_len,
+    unsigned int version);
+
 int protected_private_key_read(
     const char *path,
     const unsigned char *password,
     size_t password_len,
     unsigned char **pem,
     size_t *pem_len);
+
+/* As protected_private_key_read, also reporting the NKPR version. */
+int protected_private_key_read_version(
+    const char *path,
+    const unsigned char *password,
+    size_t password_len,
+    unsigned char **pem,
+    size_t *pem_len,
+    unsigned int *version);
+
+/* As protected_private_key_decode, also reporting the NKPR version. */
+int protected_private_key_decode_version(
+    const unsigned char *container,
+    size_t container_len,
+    const unsigned char *password,
+    size_t password_len,
+    unsigned char **pem,
+    size_t *pem_len,
+    unsigned int *version);
 
 /* Decrypts an NKPR container already read into memory; borrows container. */
 int protected_private_key_decode(

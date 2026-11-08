@@ -195,3 +195,145 @@ int nkem_v4_container_parse(const unsigned char *input, size_t input_len)
     }
     return 1;
 }
+
+/* NKEM v5: the v4 layout with a signature block after the payload tag. */
+void nkem_v5_header_encode(unsigned char output[NKEM_V4_HEADER_SIZE],
+                           uint16_t recipient_count,
+                           uint64_t ciphertext_len)
+{
+    memcpy(output, "NKEM", 4U);
+    output[4] = NKEM_V5_VERSION;
+    output[5] = NKEM_V5_ALGORITHM_ID;
+    put_u16_be(output + 6U, (uint16_t)NKEM_V4_HEADER_SIZE);
+    put_u16_be(output + 8U, recipient_count);
+    put_u16_be(output + 10U, (uint16_t)NKEM_V4_ENTRY_SIZE);
+    put_u16_be(output + 12U, (uint16_t)NKEM_V5_SIGNATURE_BLOCK_SIZE);
+    put_u16_be(output + 14U, 0U);
+    put_u64_be(output + 16U, ciphertext_len);
+    output[24] = NKEM_V4_SALT_SIZE;
+    output[25] = NKEM_NONCE_SIZE;
+    output[26] = NKEM_TAG_SIZE;
+    output[27] = NKEM_V4_MAC_SIZE;
+    put_u32_be(output + 28U, 0U);
+}
+
+static int nkem_v5_header_decode_internal(
+    const unsigned char input[NKEM_V4_HEADER_SIZE],
+    NkemV5Header *header,
+    int report_errors)
+{
+    if (memcmp(input, "NKEM", 4U) != 0 || input[4] != NKEM_V5_VERSION ||
+        input[5] != NKEM_V5_ALGORITHM_ID ||
+        get_u16_be(input + 6U) != NKEM_V4_HEADER_SIZE ||
+        get_u16_be(input + 14U) != 0U || get_u32_be(input + 28U) != 0U) {
+        if (report_errors != 0) {
+            fprintf(stderr, file_message("Invalid NKEM v5 header\n"));
+        }
+        return 0;
+    }
+
+    header->recipient_count = get_u16_be(input + 8U);
+    header->entry_len = get_u16_be(input + 10U);
+    header->signature_block_len = get_u16_be(input + 12U);
+    header->ciphertext_len = get_u64_be(input + 16U);
+    header->salt_len = input[24];
+    header->nonce_len = input[25];
+    header->tag_len = input[26];
+    header->mac_len = input[27];
+
+    if (header->recipient_count == 0U ||
+        header->recipient_count > NKEM_V4_MAX_RECIPIENTS ||
+        header->entry_len != NKEM_V4_ENTRY_SIZE ||
+        header->signature_block_len != NKEM_V5_SIGNATURE_BLOCK_SIZE ||
+        header->salt_len != NKEM_V4_SALT_SIZE ||
+        header->nonce_len != NKEM_NONCE_SIZE ||
+        header->tag_len != NKEM_TAG_SIZE ||
+        header->mac_len != NKEM_V4_MAC_SIZE) {
+        if (report_errors != 0) {
+            fprintf(stderr, file_message("Invalid NKEM v5 header\n"));
+        }
+        return 0;
+    }
+    if (!nkem_gcm_data_size_is_valid(header->ciphertext_len)) {
+        if (report_errors != 0) {
+            fprintf(stderr, file_message("NKEM v5 ciphertext exceeds AES-GCM limit\n"));
+        }
+        return 0;
+    }
+    return 1;
+}
+
+int nkem_v5_header_decode(
+    const unsigned char input[NKEM_V4_HEADER_SIZE],
+    NkemV5Header *header)
+{
+    if (input == NULL || header == NULL) {
+        fprintf(stderr, file_message("Invalid NKEM v5 header\n"));
+        return 0;
+    }
+    return nkem_v5_header_decode_internal(input, header, 1);
+}
+
+uint64_t nkem_v5_metadata_size(uint16_t recipient_count)
+{
+    return nkem_v4_metadata_size(recipient_count);
+}
+
+static int nkem_v5_container_size_is_valid_internal(
+    const NkemV5Header *header,
+    uint64_t actual_size,
+    int report_errors)
+{
+    if (header->recipient_count == 0U ||
+        header->recipient_count > NKEM_V4_MAX_RECIPIENTS ||
+        header->signature_block_len != NKEM_V5_SIGNATURE_BLOCK_SIZE ||
+        !nkem_gcm_data_size_is_valid(header->ciphertext_len)) {
+        if (report_errors != 0) {
+            fprintf(stderr, file_message("Invalid NKEM v5 header\n"));
+        }
+        return 0;
+    }
+    /* Every term is bounded far below 2^64, so the sum cannot wrap. */
+    if (nkem_v5_metadata_size(header->recipient_count) +
+            header->ciphertext_len + NKEM_TAG_SIZE +
+            NKEM_V5_SIGNATURE_BLOCK_SIZE != actual_size) {
+        if (report_errors != 0) {
+            fprintf(stderr,
+                    file_message("NKEM v5 container is truncated or has trailing data\n"));
+        }
+        return 0;
+    }
+    return 1;
+}
+
+int nkem_v5_container_size_is_valid(const NkemV5Header *header,
+                                    uint64_t actual_size)
+{
+    if (header == NULL) {
+        fprintf(stderr, file_message("Invalid NKEM v5 header\n"));
+        return 0;
+    }
+    return nkem_v5_container_size_is_valid_internal(header, actual_size, 1);
+}
+
+int nkem_v5_container_parse(const unsigned char *input, size_t input_len)
+{
+    NkemV5Header header;
+    size_t index;
+
+    if (input == NULL || input_len < NKEM_V4_HEADER_SIZE ||
+        (uintmax_t)input_len > UINT64_MAX ||
+        !nkem_v5_header_decode_internal(input, &header, 0) ||
+        !nkem_v5_container_size_is_valid_internal(
+            &header, (uint64_t)input_len, 0)) {
+        return 0;
+    }
+    for (index = 0U; index < header.recipient_count; ++index) {
+        if (!x448_public_is_canonical(
+                input + NKEM_V4_HEADER_SIZE + NKEM_V4_SALT_SIZE +
+                index * NKEM_V4_ENTRY_SIZE)) {
+            return 0;
+        }
+    }
+    return 1;
+}

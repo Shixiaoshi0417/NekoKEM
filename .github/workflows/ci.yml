@@ -141,7 +141,7 @@ jobs:
           make -C linux fuzz-build \
             FUZZ_LDFLAGS="-fsanitize=undefined -L$LIBRARY_PATH"
           status=0
-          for format in nkem nkpr decrypt; do
+          for format in nkem nkpr decrypt identity; do
             if ! python3 .github/scripts/run_fuzz_smoke.py \
               --seeds "core/fuzz/seeds/$format" \
               --target "core/fuzz/bin/fuzz_$format" \
@@ -524,7 +524,7 @@ jobs:
             $ancestor = $ancestor.Parent
           }
           try {
-            foreach ($name in @('openssl_version', 'hybrid_kdf', 'gcm_limit', 'aes_stream', 'parser', 'multi_recipient', 'key_safety', 'windows_core', 'console')) {
+            foreach ($name in @('openssl_version', 'hybrid_kdf', 'gcm_limit', 'aes_stream', 'parser', 'multi_recipient', 'signature', 'key_safety', 'windows_core', 'console')) {
               $testDirectory = Join-Path $work $name
               New-Item -ItemType Directory -Path $testDirectory | Out-Null
               Push-Location $testDirectory

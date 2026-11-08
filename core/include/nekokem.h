@@ -94,8 +94,9 @@ NEKOKEM_API int nekokem_encrypt_file_multi_with_progress(
     void *progress_user_data);
 
 /*
- * Decrypts the NKEM v3 single-recipient container and the NKEM v4
- * multi-recipient container. Other versions are rejected.
+ * Decrypts the NKEM v3 single-recipient container, the NKEM v4
+ * multi-recipient container and the signed NKEM v5 container, which is
+ * verified completely without a policy. Other versions are rejected.
  */
 NEKOKEM_API int nekokem_decrypt_file(
     const char *input_path,
@@ -118,6 +119,129 @@ NEKOKEM_API int nekokem_public_key_fingerprint(
     const char *public_key_path,
     char *output,
     size_t output_size);
+
+/*
+ * Signed NKEM v5 containers and identity keys; see docs/NKEM-v5.md.
+ *
+ * Key generation writes four-component identity keys (X448, ML-KEM-1024,
+ * Ed448, ML-DSA-87) with an NKPR v2 private key. Two-component keys stay
+ * valid recipients and decryption keys, but cannot sign or be trusted
+ * signers. nekokem_public_key_fingerprint() returns the identity
+ * fingerprint for a four-component key and the legacy fingerprint for a
+ * two-component key.
+ */
+
+/*
+ * Adds Ed448 and ML-DSA-87 keys to an NKPR v1 key pair, keeping its X448
+ * and ML-KEM-1024 keys, and atomically replaces both files (NKPR v2, same
+ * password). The public file must hold this private key's public keys.
+ */
+NEKOKEM_API int nekokem_upgrade_to_identity_keys(
+    const char *public_key_path,
+    const char *private_key_path,
+    const unsigned char *password,
+    size_t password_len);
+
+/* 1 for a valid four-component identity public key, 0 otherwise. */
+NEKOKEM_API int nekokem_public_key_can_verify(const char *public_key_path);
+
+/*
+ * The legacy fingerprint over only the X448 and ML-KEM-1024 components,
+ * for both key kinds. Front ends deduplicate contacts by it.
+ */
+NEKOKEM_API int nekokem_public_key_legacy_fingerprint(
+    const char *public_key_path,
+    char *output,
+    size_t output_size);
+
+/* Writes only the two encryption components, readable by NekoKEM <= 4.4. */
+NEKOKEM_API int nekokem_export_legacy_public_key(
+    const char *public_key_path,
+    const char *output_path);
+
+/* Encryption signs unless this flag is set; then it writes v3 or v4. */
+#define NEKOKEM_ENCRYPT_UNSIGNED 0x1U
+
+typedef struct {
+    size_t struct_size;               /* sizeof(NekoKEMEncryptOptions) */
+    uint32_t flags;                   /* NEKOKEM_ENCRYPT_* */
+    const char *sender_private_key_path;
+    const unsigned char *password;    /* borrowed for the call */
+    size_t password_len;
+} NekoKEMEncryptOptions;
+
+typedef struct {
+    size_t struct_size;               /* sizeof(NekoKEMEncryptResult) */
+    int format_version;               /* 3, 4 or 5 as written */
+    int signed_by_sender;             /* 1 for v5 */
+} NekoKEMEncryptResult;
+
+/*
+ * Writes NKEM v5 signed by the sender's identity key for 1 to 64
+ * recipients. With NEKOKEM_ENCRYPT_UNSIGNED it writes v3 or v4 exactly as
+ * nekokem_encrypt_file_multi_with_progress(). A missing or two-component
+ * sender key is an error, never a silent unsigned fallback. Returns
+ * NEKOKEM_OPERATION_SUCCESS, _ERROR or _CANCELLED.
+ */
+NEKOKEM_API int nekokem_encrypt_file_v5_with_progress(
+    const char *input_path,
+    const char *output_path,
+    const char *const *public_key_paths,
+    size_t public_key_count,
+    const NekoKEMEncryptOptions *options,
+    NekoKEMEncryptResult *result,
+    NekoKEMProgressCallback progress_callback,
+    void *progress_user_data);
+
+/* Reject v3 and v4 containers. */
+#define NEKOKEM_VERIFY_REQUIRE_SIGNATURE 0x1U
+/* Reject v5 signers outside trusted_signer_paths (implies a signature). */
+#define NEKOKEM_VERIFY_REQUIRE_TRUSTED 0x2U
+
+typedef struct {
+    size_t struct_size;               /* sizeof(NekoKEMVerifyPolicy) */
+    uint32_t flags;                   /* NEKOKEM_VERIFY_* */
+    /* Identity public keys the user trusts, such as contacts and their own;
+     * two-component keys are ignored, a missing or invalid file fails. */
+    const char *const *trusted_signer_paths;
+    size_t trusted_signer_count;
+    /* When set, a v5 signer's identity is written there as a public key. */
+    const char *signer_public_key_output_path;
+} NekoKEMVerifyPolicy;
+
+#define NEKOKEM_SIGNATURE_UNSIGNED 0          /* v3 or v4 */
+#define NEKOKEM_SIGNATURE_TRUSTED 1           /* v5, signer is trusted */
+#define NEKOKEM_SIGNATURE_VALID_UNTRUSTED 2   /* v5, signer is not listed */
+
+typedef struct {
+    size_t struct_size;               /* sizeof(NekoKEMVerifyResult) */
+    int format_version;               /* 3, 4 or 5 */
+    int signature_status;             /* NEKOKEM_SIGNATURE_* */
+    size_t trusted_signer_index;      /* valid for _TRUSTED */
+    char signer_fingerprint[NEKOKEM_FINGERPRINT_STRING_SIZE];
+} NekoKEMVerifyResult;
+
+/* Policy failures; no output is committed for any of them. */
+#define NEKOKEM_ERROR_SIGNATURE_INVALID (-10)
+#define NEKOKEM_ERROR_SIGNATURE_REQUIRED (-11)
+#define NEKOKEM_ERROR_SIGNER_NOT_TRUSTED (-12)
+
+/*
+ * Decrypts v3, v4 and v5 and enforces policy (NULL means no flags). Core
+ * decides the signature status and matches the signer; output is committed
+ * only after the payload and every check pass. Returns
+ * NEKOKEM_OPERATION_SUCCESS, _ERROR, _CANCELLED or a NEKOKEM_ERROR_* code.
+ */
+NEKOKEM_API int nekokem_decrypt_file_verified_with_progress(
+    const char *input_path,
+    const char *output_path,
+    const char *private_key_path,
+    const unsigned char *password,
+    size_t password_len,
+    const NekoKEMVerifyPolicy *policy,
+    NekoKEMVerifyResult *result,
+    NekoKEMProgressCallback progress_callback,
+    void *progress_user_data);
 
 /*
  * Managed-key helpers for application front ends. The existence check only

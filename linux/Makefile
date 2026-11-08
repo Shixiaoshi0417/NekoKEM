@@ -18,7 +18,8 @@ TARGET = nekokem
 CORE_LIBRARY = libnekokem_core.a
 CORE_SOURCES = ../core/src/nekokem.c \
 	../core/src/key_management.c \
-	../core/src/nekokem_v3.c ../core/src/nekokem_v4.c ../core/src/kem.c ../core/src/hybrid.c \
+	../core/src/nekokem_v3.c ../core/src/nekokem_v4.c ../core/src/nekokem_v5.c \
+	../core/src/identity.c ../core/src/kem.c ../core/src/hybrid.c \
 	../core/src/aes.c ../core/src/file.c ../core/src/file_v3.c ../core/src/file_v4.c \
 	../core/src/secure_mem.c ../core/src/private_key.c
 CLI_SOURCES = src/main.c src/cli.c src/i18n.c
@@ -32,7 +33,7 @@ DEPS = $(OBJECTS:.o=.d)
 	fuzz-build test-key-management test-progress test-progress-large \
 	test-file-security test-version-rejection test-gcm-limit test-aes-stream \
 	test-hybrid-kdf test-asan test-input-boundaries test-pem-interaction test-openssl \
-	test-multi-recipient test-key-safety
+	test-multi-recipient test-signature test-key-safety
 
 all: $(TARGET)
 
@@ -175,8 +176,13 @@ fuzz-build: fuzz-seeds
 	$(AFL_CC) $(FUZZ_CPPFLAGS) -I../core/include -I../core/src $(FUZZ_CFLAGS) \
 		../core/fuzz/fuzz_decrypt_seeds.c $(CORE_SOURCES) $(FUZZ_LDFLAGS) $(LDLIBS) \
 		-o ../core/fuzz/bin/fuzz_decrypt_seeds
-	rm -rf ../core/fuzz/seeds/decrypt ../core/fuzz/bin/decrypt-*
-	../core/fuzz/bin/fuzz_decrypt_seeds ../core/fuzz/bin ../core/fuzz/seeds/decrypt
+	$(AFL_CC) $(FUZZ_CPPFLAGS) -I../core/include -I../core/src $(FUZZ_CFLAGS) \
+		../core/fuzz/fuzz_identity.c $(CORE_SOURCES) $(FUZZ_LDFLAGS) $(LDLIBS) \
+		-o ../core/fuzz/bin/fuzz_identity
+	rm -rf ../core/fuzz/seeds/decrypt ../core/fuzz/seeds/identity \
+		../core/fuzz/bin/decrypt-*
+	../core/fuzz/bin/fuzz_decrypt_seeds ../core/fuzz/bin ../core/fuzz/seeds/decrypt \
+		../core/fuzz/seeds/identity
 
 
 test-key-management: $(CORE_LIBRARY)
@@ -231,6 +237,18 @@ test-multi-recipient:
 	ASAN_OPTIONS=detect_leaks=1:halt_on_error=1 \
 		UBSAN_OPTIONS=halt_on_error=1:print_stacktrace=1 "$$multi_binary"
 
+test-signature:
+	@set -eu; \
+	signature_binary=$$(mktemp /tmp/nekokem-signature-tests.XXXXXX); \
+	cleanup_signature() { rm -f "$$signature_binary"; }; \
+	trap cleanup_signature EXIT INT TERM; \
+	$(CC) $(CPPFLAGS) $(CFLAGS) -O1 -g -fno-omit-frame-pointer \
+		-fsanitize=address,undefined -fno-sanitize-recover=undefined \
+		$(LDFLAGS) ../core/tests/signature_tests.c $(CORE_SOURCES) \
+		$(LDLIBS) -fsanitize=address,undefined -o "$$signature_binary"; \
+	ASAN_OPTIONS=detect_leaks=1:halt_on_error=1 \
+		UBSAN_OPTIONS=halt_on_error=1:print_stacktrace=1 "$$signature_binary"
+
 test-key-safety:
 	@set -eu; \
 	safety_binary=$$(mktemp /tmp/nekokem-key-safety-tests.XXXXXX); \
@@ -261,7 +279,7 @@ test-progress test-progress-large: $(CORE_LIBRARY)
 
 test: $(TARGET) test-openssl analyze test-ubsan test-parser test-file-security test-gcm-limit test-aes-stream \
 	test-key-management test-version-rejection test-progress test-hybrid-kdf test-input-boundaries \
-	test-asan test-pem-interaction test-i18n test-multi-recipient test-key-safety test-interrupts \
+	test-asan test-pem-interaction test-i18n test-multi-recipient test-signature test-key-safety test-interrupts \
 	test-cli-audit test-crypto-audit
 	@set -eu; \
 	test_dir=$$(mktemp -d); \
@@ -535,7 +553,7 @@ test: $(TARGET) test-openssl analyze test-ubsan test-parser test-file-security t
 
 clean:
 	rm -f $(TARGET) $(CORE_LIBRARY) $(OBJECTS) $(DEPS)
-	rm -f ../core/fuzz/bin/fuzz_nkem ../core/fuzz/bin/fuzz_nkpr
+	rm -f ../core/fuzz/bin/fuzz_nkem ../core/fuzz/bin/fuzz_nkpr ../core/fuzz/bin/fuzz_identity
 
 -include $(DEPS)
 

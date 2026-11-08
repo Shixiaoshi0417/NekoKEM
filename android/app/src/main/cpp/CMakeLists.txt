@@ -48,6 +48,8 @@ set(
     "${NEKOKEM_REPOSITORY_ROOT}/core/src/key_management.c"
     "${NEKOKEM_REPOSITORY_ROOT}/core/src/nekokem_v3.c"
     "${NEKOKEM_REPOSITORY_ROOT}/core/src/nekokem_v4.c"
+    "${NEKOKEM_REPOSITORY_ROOT}/core/src/nekokem_v5.c"
+    "${NEKOKEM_REPOSITORY_ROOT}/core/src/identity.c"
     "${NEKOKEM_REPOSITORY_ROOT}/core/src/kem.c"
     "${NEKOKEM_REPOSITORY_ROOT}/core/src/hybrid.c"
     "${NEKOKEM_REPOSITORY_ROOT}/core/src/aes.c"

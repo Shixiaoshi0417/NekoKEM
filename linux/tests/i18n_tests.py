@@ -100,7 +100,8 @@ class LanguageTests(unittest.TestCase):
         self.assertEqual(0, generated.returncode, generated.stderr)
         protected = (self.root/'keys/private.key.enc').read_bytes()
         self.assertEqual(b'NKPR', protected[:4])
-        self.assertEqual(bytes([1,1,1,0]), protected[4:8])
+        # NKPR v2 holds the four identity components; KDF parameters are unchanged.
+        self.assertEqual(bytes([2,1,1,0]), protected[4:8])
         self.assertEqual((65536).to_bytes(4,'big'), protected[8:12])
         self.assertEqual(bytes([12,16]), protected[26:28])
         payload = bytes(range(256)) * 17

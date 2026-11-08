@@ -83,8 +83,9 @@ cleanup:
     return success;
 }
 
-int nekokem_export_public_key(const char *public_key_path,
-                              const char *output_path)
+static int export_public_key(const char *public_key_path,
+                             const char *output_path,
+                             int legacy)
 {
     HybridKeys keys = {0};
     AtomicFile output = {0};
@@ -99,9 +100,9 @@ int nekokem_export_public_key(const char *public_key_path,
         !atomic_file_open(&output, output_path, 0600)) {
         goto cleanup;
     }
-    if (PEM_write_PUBKEY(output.stream, keys.x448) != 1 ||
-        PEM_write_PUBKEY(output.stream, keys.mlkem) != 1) {
-        print_openssl_error("Cannot export hybrid public key");
+    if (!hybrid_write_public_keys(output.stream, &keys,
+                                  legacy == 0 &&
+                                      hybrid_keys_have_identity(&keys))) {
         goto cleanup;
     }
     if (!atomic_file_commit(&output)) {
@@ -113,6 +114,18 @@ cleanup:
     atomic_file_abort(&output);
     hybrid_keys_cleanup(&keys);
     return success;
+}
+
+int nekokem_export_public_key(const char *public_key_path,
+                              const char *output_path)
+{
+    return export_public_key(public_key_path, output_path, 0);
+}
+
+int nekokem_export_legacy_public_key(const char *public_key_path,
+                                     const char *output_path)
+{
+    return export_public_key(public_key_path, output_path, 1);
 }
 
 _Static_assert(FILE_KEY_DELETED_RESIDUE_RETAINED == NEKOKEM_DELETE_RESIDUE_RETAINED,

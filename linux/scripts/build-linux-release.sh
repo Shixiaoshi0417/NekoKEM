@@ -149,6 +149,8 @@ sources=(
     core/src/key_management.c
     core/src/nekokem_v3.c
     core/src/nekokem_v4.c
+    core/src/nekokem_v5.c
+    core/src/identity.c
     core/src/kem.c
     core/src/hybrid.c
     core/src/aes.c

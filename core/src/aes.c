@@ -5,6 +5,7 @@
 
 #include <limits.h>
 #include <openssl/evp.h>
+#include <string.h>
 
 #define IO_BUFFER_SIZE 65536U
 
@@ -57,6 +58,18 @@ static int progress_should_continue(AesProgressCallback callback,
     return callback(processed_bytes, total_bytes, user_data) != 0;
 }
 
+static int digest_update(EVP_MD_CTX *digest,
+                         const unsigned char *data,
+                         size_t length)
+{
+    if (digest != NULL && length > 0U &&
+        EVP_DigestUpdate(digest, data, length) != 1) {
+        print_openssl_error("Cannot hash NKEM ciphertext");
+        return 0;
+    }
+    return 1;
+}
+
 int aes_gcm_encrypt_file_with_progress(
     FILE *input,
     FILE *output,
@@ -66,6 +79,24 @@ int aes_gcm_encrypt_file_with_progress(
     const unsigned char *aad,
     size_t aad_len,
     unsigned char tag[AES_GCM_TAG_SIZE],
+    AesProgressCallback progress_callback,
+    void *progress_user_data)
+{
+    return aes_gcm_encrypt_file_hashed(
+        input, output, plaintext_len, key, nonce, aad, aad_len, tag,
+        NULL, progress_callback, progress_user_data);
+}
+
+int aes_gcm_encrypt_file_hashed(
+    FILE *input,
+    FILE *output,
+    uint64_t plaintext_len,
+    const unsigned char key[AES_GCM_KEY_SIZE],
+    const unsigned char nonce[AES_GCM_NONCE_SIZE],
+    const unsigned char *aad,
+    size_t aad_len,
+    unsigned char tag[AES_GCM_TAG_SIZE],
+    EVP_MD_CTX *ciphertext_digest,
     AesProgressCallback progress_callback,
     void *progress_user_data)
 {
@@ -127,6 +158,7 @@ int aes_gcm_encrypt_file_with_progress(
         }
         if (output_len < 0 ||
             (size_t)output_len > sizeof(buffer) ||
+            !digest_update(ciphertext_digest, buffer, (size_t)output_len) ||
             !file_write_all(output, buffer, (size_t)output_len)) {
             goto cleanup;
         }
@@ -153,12 +185,16 @@ int aes_gcm_encrypt_file_with_progress(
     }
     if (output_len < 0 ||
         (size_t)output_len > sizeof(buffer) ||
+        !digest_update(ciphertext_digest, buffer, (size_t)output_len) ||
         !file_write_all(output, buffer, (size_t)output_len)) {
         goto cleanup;
     }
     if (EVP_CIPHER_CTX_ctrl(context, EVP_CTRL_GCM_GET_TAG,
                             (int)AES_GCM_TAG_SIZE, tag) <= 0) {
         print_openssl_error("Cannot retrieve AES-GCM authentication tag");
+        goto cleanup;
+    }
+    if (!digest_update(ciphertext_digest, tag, AES_GCM_TAG_SIZE)) {
         goto cleanup;
     }
     result = AES_GCM_FILE_SUCCESS;
@@ -191,6 +227,24 @@ int aes_gcm_decrypt_file_with_progress(
     const unsigned char nonce[AES_GCM_NONCE_SIZE],
     const unsigned char *aad,
     size_t aad_len,
+    AesProgressCallback progress_callback,
+    void *progress_user_data)
+{
+    return aes_gcm_decrypt_file_hashed(
+        input, output, ciphertext_len, key, nonce, aad, aad_len,
+        NULL, NULL, progress_callback, progress_user_data);
+}
+
+int aes_gcm_decrypt_file_hashed(
+    FILE *input,
+    FILE *output,
+    uint64_t ciphertext_len,
+    const unsigned char key[AES_GCM_KEY_SIZE],
+    const unsigned char nonce[AES_GCM_NONCE_SIZE],
+    const unsigned char *aad,
+    size_t aad_len,
+    EVP_MD_CTX *ciphertext_digest,
+    unsigned char tag_out[AES_GCM_TAG_SIZE],
     AesProgressCallback progress_callback,
     void *progress_user_data)
 {
@@ -235,7 +289,8 @@ int aes_gcm_decrypt_file_with_progress(
                             ? IO_BUFFER_SIZE
                             : (size_t)remaining;
 
-        if (!file_read_exact(input, buffer, wanted)) {
+        if (!file_read_exact(input, buffer, wanted) ||
+            !digest_update(ciphertext_digest, buffer, wanted)) {
             goto cleanup;
         }
         if (EVP_DecryptUpdate(context, buffer, &output_len,
@@ -257,7 +312,8 @@ int aes_gcm_decrypt_file_with_progress(
         }
     }
 
-    if (!file_read_exact(input, tag, sizeof(tag))) {
+    if (!file_read_exact(input, tag, sizeof(tag)) ||
+        !digest_update(ciphertext_digest, tag, sizeof(tag))) {
         goto cleanup;
     }
     if (EVP_CIPHER_CTX_ctrl(context, EVP_CTRL_GCM_SET_TAG,
@@ -274,6 +330,9 @@ int aes_gcm_decrypt_file_with_progress(
         (size_t)output_len > sizeof(buffer) ||
         !file_write_all(output, buffer, (size_t)output_len)) {
         goto cleanup;
+    }
+    if (tag_out != NULL) {
+        memcpy(tag_out, tag, sizeof(tag));
     }
     result = AES_GCM_FILE_SUCCESS;
 
