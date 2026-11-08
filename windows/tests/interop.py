@@ -1,10 +1,10 @@
 """Historical format interoperability and current Linux/Windows CLI equality.
 All generated keys/passwords are disposable public test fixtures.
 
-The pre-port Linux CLI (NekoKEM 4.x) reads only two-component keys, NKPR v1
-and NKEM v3/v4, so Windows returns unsigned v3 files for the historical Linux
-key and the legacy export of its own identity key; signed v5 files, identity
-keys and upgrades are checked natively.
+The historical Linux CLI reads only two-component keys, NKPR v1 and
+single-recipient NKEM v3, so Windows returns unsigned v3 files for the
+historical key and checks the legacy export of its own identity key;
+signed v5 files, identity keys and upgrades are checked natively.
 """
 import os
 import json
@@ -93,9 +93,9 @@ elif phase == 'windows':
                 name+'.signed.nkem',name+'.roundtrip','keys/private.key.enc',password=PASSWORD)
         assert identity in p.stdout, p.stdout
         assert (root/(name+'.roundtrip')).read_bytes() == (root/name).read_bytes()
-        # The historical CLI reads only unsigned v3/v4 for two-component keys.
-        run('encrypt','hybrid','--unsigned',name,name+'.windows.nkem','linux-public.key','windows-legacy.key')
-        assert (root/(name+'.windows.nkem')).read_bytes()[4] == 4
+        # The historical CLI reads only unsigned single-recipient v3.
+        run('encrypt','hybrid','--unsigned',name,name+'.windows.nkem','linux-public.key')
+        assert (root/(name+'.windows.nkem')).read_bytes()[4] == 3
     # Upgrading the historical key keeps its encryption keys and legacy fingerprint.
     # Core replaces only privately owned key files, as keygen leaves them.
     for source, target in [('linux-public.key','upgraded-public.key'),('linux-private.enc','upgraded.enc')]:
@@ -113,6 +113,6 @@ elif phase == 'verify':
     for name in ['binary','empty']:
         run('decrypt','hybrid',name+'.windows.nkem',name+'.from-windows','linux-private.enc',password=PASSWORD)
         assert (root/(name+'.from-windows')).read_bytes() == (root/name).read_bytes()
-    print('Pre-port Linux main decrypted Windows v4 and read its legacy public key; binary and empty data match')
+    print('Pre-port Linux main decrypted Windows v3 and read its legacy public key; binary and empty data match')
 else:
     raise SystemExit('Unknown phase')

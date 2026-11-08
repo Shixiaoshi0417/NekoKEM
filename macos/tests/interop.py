@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """Strict current CLI equality and historical Linux NKEM v3/NKPR v1 exchange.
 
-The historical Linux CLI (NekoKEM 4.x) reads only two-component keys, NKPR v1
-and NKEM v3/v4, so macOS returns unsigned v4 files for the historical key and
-the legacy export of its own identity key; signed v5 files, identity keys and
-upgrades are checked natively.
+The historical Linux CLI reads only two-component keys, NKPR v1 and
+single-recipient NKEM v3, so macOS returns unsigned v3 files for the
+historical key and checks the legacy export of its own identity key;
+signed v5 files, identity keys and upgrades are checked natively.
 """
 import json
 import os
@@ -79,8 +79,9 @@ if phase == 'macos':
                       name+'.signed', name+'.roundtrip-macos', 'macos-private.enc', password=PASSWORD)
         assert identity in process.stdout, process.stdout
         assert (root/(name+'.roundtrip-macos')).read_bytes() == (root/name).read_bytes()
-        run('encrypt', 'hybrid', '--unsigned', name, name+'.macos.nkem', 'linux-public.key', 'macos-legacy.key')
-        assert (root/(name+'.macos.nkem')).read_bytes()[4] == 4
+        # The historical CLI reads only unsigned single-recipient v3.
+        run('encrypt', 'hybrid', '--unsigned', name, name+'.macos.nkem', 'linux-public.key')
+        assert (root/(name+'.macos.nkem')).read_bytes()[4] == 3
     # Upgrading the historical key keeps its encryption keys and legacy fingerprint.
     shutil.copyfile(root/'linux-public.key', root/'upgraded-public.key')
     shutil.copyfile(root/'linux-private.enc', root/'upgraded.enc')
@@ -97,6 +98,6 @@ elif phase == 'verify':
     for name in ['binary', 'empty']:
         run('decrypt', 'hybrid', name+'.macos.nkem', name+'.from-macos', 'linux-private.enc', password=PASSWORD)
         assert (root/(name+'.from-macos')).read_bytes() == (root/name).read_bytes()
-    print('Historical Linux decrypted native macOS NKEM v4 and read its legacy public key; binary and empty data match')
+    print('Historical Linux decrypted native macOS NKEM v3 and read its legacy public key; binary and empty data match')
 else:
     raise SystemExit('Unknown phase: use macos or verify')
