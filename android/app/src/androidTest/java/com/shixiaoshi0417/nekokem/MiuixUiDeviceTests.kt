@@ -84,15 +84,6 @@ internal fun runMiuixUiTests(instrumentation: Instrumentation, screenshotPrefix:
             SystemClock.sleep(100)
         }
     }
-    fun click(value: String) {
-        // Keep the node the wait found; a recomposition can drop it before a second lookup.
-        var found: AccessibilityNodeInfo? = null
-        await("missing $value") { reveal(value); found = exact(value); found != null }
-        var target = checkNotNull(found)
-        while (!target.isClickable) target = checkNotNull(target.parent) { "$value is not clickable" }
-        check(target.performAction(AccessibilityNodeInfo.ACTION_CLICK))
-        instrumentation.waitForIdleSync()
-    }
     fun reveal(value: String) {
         // On small screens the row can sit below the fold or under the floating bar.
         // A lazy list drops rows scrolled past, so look back up once the end is reached.
@@ -105,6 +96,15 @@ internal fun runMiuixUiTests(instrumentation: Instrumentation, screenshotPrefix:
                 SystemClock.sleep(300)
             }
         }
+    }
+    fun click(value: String) {
+        // Keep the node the wait found; a recomposition can drop it before a second lookup.
+        var found: AccessibilityNodeInfo? = null
+        await("missing $value") { reveal(value); found = exact(value); found != null }
+        var target = checkNotNull(found)
+        while (!target.isClickable) target = checkNotNull(target.parent) { "$value is not clickable" }
+        check(target.performAction(AccessibilityNodeInfo.ACTION_CLICK))
+        instrumentation.waitForIdleSync()
     }
     fun secureWindowShown(): Boolean {
         val dump = automation.executeShellCommand("dumpsys window windows").let { descriptor ->
