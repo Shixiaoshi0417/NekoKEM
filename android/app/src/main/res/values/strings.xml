@@ -278,4 +278,17 @@
     <string name="contact_verifies">Identity key · verifies signatures</string>
     <string name="contact_legacy">Legacy key · cannot verify signatures</string>
     <string name="error_settings_save">The setting could not be saved. The previous setting is still in effect.</string>
+    <string name="settings_updates_title">Updates</string>
+    <string name="settings_auto_update_title">Check for updates automatically</string>
+    <string name="settings_auto_update_summary">At most once a day. Only asks GitHub for the latest version number; no keys or file details are sent.</string>
+    <string name="action_check_update">Check for updates</string>
+    <string name="update_checking">Checking for updates…</string>
+    <string name="update_up_to_date">NekoKEM is up to date</string>
+    <string name="update_failed">Could not check for updates. Try again later.</string>
+    <string name="update_available_title">NekoKEM %1$s is available</string>
+    <string name="update_available_message">You have %1$s. Download the new version from the GitHub release page and verify it as the release notes describe before installing.</string>
+    <string name="action_open_release">Go to download</string>
+    <string name="action_later">Later</string>
+    <string name="action_ignore_version">Skip this version</string>
+    <string name="error_open_release">No app can open the release page</string>
 </resources>

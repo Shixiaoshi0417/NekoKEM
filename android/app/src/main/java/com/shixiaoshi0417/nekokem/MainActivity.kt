@@ -2,6 +2,8 @@ package com.shixiaoshi0417.nekokem
 
 import android.content.Context
 import com.shixiaoshi0417.nekokem.i18n.AppLanguages
+import android.content.ActivityNotFoundException
+import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
 import androidx.activity.ComponentActivity
@@ -43,6 +45,7 @@ import com.shixiaoshi0417.nekokem.keys.SignatureReport
 import com.shixiaoshi0417.nekokem.ui.SignatureSettings
 import com.shixiaoshi0417.nekokem.ui.SignatureSettingsStore
 import com.shixiaoshi0417.nekokem.ui.UnsignedEncryptionWarningDialog
+import com.shixiaoshi0417.nekokem.ui.UpdateAvailableDialog
 import com.shixiaoshi0417.nekokem.keys.LocalKeyManager
 import com.shixiaoshi0417.nekokem.keys.LocalKeyState
 import com.shixiaoshi0417.nekokem.keys.PublicKeyContact
@@ -74,6 +77,11 @@ import com.shixiaoshi0417.nekokem.ui.PublicKeyContactNoteDialog
 import com.shixiaoshi0417.nekokem.ui.DeletePublicKeyContactDialog
 import com.shixiaoshi0417.nekokem.ui.runWithUiBusyReset
 import com.shixiaoshi0417.nekokem.ui.theme.NekoKEMTheme
+import com.shixiaoshi0417.nekokem.update.ReleaseInfo
+import com.shixiaoshi0417.nekokem.update.Releases
+import com.shixiaoshi0417.nekokem.update.UpdateResult
+import com.shixiaoshi0417.nekokem.update.UpdateSettings
+import com.shixiaoshi0417.nekokem.update.UpdateSettingsStore
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -275,6 +283,11 @@ private fun NekoKEMRoute(
     // Signing is on unless the user turned it off behind the red warning.
     var signatureSettings by remember { mutableStateOf(SignatureSettingsStore.read(context)) }
     var confirmUnsignedEncryption by remember { mutableStateOf(false) }
+    // Update checks: automatic once a day unless turned off; the dialog only links to the release page.
+    var updateSettings by remember { mutableStateOf(UpdateSettingsStore.read(context)) }
+    var updateChecking by remember { mutableStateOf(false) }
+    var availableRelease by remember { mutableStateOf<ReleaseInfo?>(null) }
+    val currentVersion = remember { installedVersion(context) }
     val selectedInputUri = selectedInputState.uriString?.let(Uri::parse)
     val selectedInputName = selectedInputState.displayName
     val selectedDocument = if (
@@ -1596,6 +1609,61 @@ private fun NekoKEMRoute(
         }
     }
 
+    fun storeUpdateSettings(updated: UpdateSettings): Boolean {
+        if (!UpdateSettingsStore.write(context, updated)) return false
+        updateSettings = updated
+        return true
+    }
+
+    /** [manual] reports every outcome; an automatic check speaks only about a new version. */
+    fun checkForUpdate(manual: Boolean) {
+        if (updateChecking) return
+        updateChecking = true
+        scope.launch {
+            val result = withContext(Dispatchers.IO) { Releases.check(currentVersion) }
+            updateChecking = false
+            val checked = UpdateSettingsStore.read(context)
+            if (result != UpdateResult.Failed) {
+                storeUpdateSettings(checked.copy(lastCheckMillis = System.currentTimeMillis()))
+            }
+            when (result) {
+                is UpdateResult.Available ->
+                    if (manual || result.release.version != checked.ignoredVersion) availableRelease = result.release
+                UpdateResult.UpToDate -> if (manual) showSnackbar(R.string.update_up_to_date)
+                UpdateResult.Failed -> if (manual) showSnackbar(R.string.update_failed)
+            }
+        }
+    }
+
+    LaunchedEffect(Unit) {
+        if (UpdateSettingsStore.due(updateSettings, System.currentTimeMillis())) checkForUpdate(manual = false)
+    }
+
+    availableRelease?.let { release ->
+        UpdateAvailableDialog(
+            release = release,
+            currentVersion = currentVersion,
+            onOpen = {
+                availableRelease = null
+                try {
+                    context.startActivity(
+                        Intent(Intent.ACTION_VIEW, Uri.parse(release.pageUrl))
+                            .addCategory(Intent.CATEGORY_BROWSABLE),
+                    )
+                } catch (_: ActivityNotFoundException) {
+                    showSnackbar(R.string.error_open_release)
+                }
+            },
+            onIgnore = {
+                availableRelease = null
+                if (!storeUpdateSettings(UpdateSettingsStore.read(context).copy(ignoredVersion = release.version))) {
+                    showSnackbar(R.string.error_settings_save)
+                }
+            },
+            onLater = { availableRelease = null },
+        )
+    }
+
     if (confirmUnsignedEncryption) {
         UnsignedEncryptionWarningDialog(
             onConfirm = {
@@ -1636,6 +1704,8 @@ private fun NekoKEMRoute(
             canSign = keyState.canSign,
             legacyFingerprint = keyState.legacyFingerprint,
             signatureSettings = signatureSettings,
+            autoUpdateCheck = updateSettings.autoCheck,
+            updateChecking = updateChecking,
         ),
         actions = NekoKEMActions(
             onGenerate = {
@@ -1799,6 +1869,12 @@ private fun NekoKEMRoute(
             onRequireSignatureChange = { required ->
                 updateSignatureSettings(signatureSettings.copy(requireSignature = required))
             },
+            onCheckUpdate = { checkForUpdate(manual = true) },
+            onAutoUpdateChange = { enabled ->
+                if (!storeUpdateSettings(UpdateSettingsStore.read(context).copy(autoCheck = enabled))) {
+                    showSnackbar(R.string.error_settings_save)
+                }
+            },
         ),
         snackbarHostState = snackbarHostState,
     )
@@ -1924,3 +2000,10 @@ private fun signatureDetails(
 }
 
 private const val ANY_MIME_TYPE = "*/*"
+
+/** This App's versionName, such as "5.0.0". */
+private fun installedVersion(context: Context): String = try {
+    context.packageManager.getPackageInfo(context.packageName, 0).versionName.orEmpty()
+} catch (_: android.content.pm.PackageManager.NameNotFoundException) {
+    ""
+}

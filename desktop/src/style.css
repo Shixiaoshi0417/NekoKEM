@@ -255,3 +255,11 @@ select[aria-invalid=true] { border-color: #bd6650; background: #fffaf8; }
   .progress-track { border: 1px solid CanvasText; height: 7px; }
   .spinner { border-color: GrayText; border-top-color: ButtonText; }
 }
+.update-setting .contact-actions { margin: 10px 0 0 30px; }
+.update-notice { margin: 8px 0 0 30px; }
+.update-backdrop { position: fixed; inset: 0; z-index: 20; display: grid; place-items: center; padding: 24px; background: #1d2b2366; }
+.update-dialog { width: min(460px, 100%); }
+.update-dialog strong { font-size: 16px; }
+.update-dialog p { margin: 10px 0 18px; line-height: 1.7; color: var(--muted); }
+.update-dialog .spacer { flex: 1; }
+

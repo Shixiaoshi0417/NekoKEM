@@ -122,6 +122,8 @@ data class NekoKEMUiState(
     val canSign: Boolean = false,
     val legacyFingerprint: String? = null,
     val signatureSettings: SignatureSettings = SignatureSettings(),
+    val autoUpdateCheck: Boolean = true,
+    val updateChecking: Boolean = false,
 )
 
 data class NekoKEMActions(
@@ -156,6 +158,8 @@ data class NekoKEMActions(
     /** Turning unsigned encryption on goes through the red warning first. */
     val onUnsignedEncryptionChange: (Boolean) -> Unit = {},
     val onRequireSignatureChange: (Boolean) -> Unit = {},
+    val onCheckUpdate: () -> Unit = {},
+    val onAutoUpdateChange: (Boolean) -> Unit = {},
 )
 
 internal enum class AppDestination(
@@ -328,7 +332,7 @@ fun NekoKEMAppShell(
                                 },
                             )
                             AppDestination.SETTINGS -> SettingsPage(state, actions)
-                            AppDestination.ABOUT -> AboutPage(state)
+                            AppDestination.ABOUT -> AboutPage(state, actions)
                         }
                     }
                 }
@@ -844,6 +848,20 @@ private fun SettingsPage(state: NekoKEMUiState, actions: NekoKEMActions) {
                 onCheckedChange = actions.onRequireSignatureChange,
             )
         }
+        Text(
+            modifier = Modifier.padding(top = 24.dp),
+            text = stringResource(R.string.settings_updates_title),
+            style = MaterialTheme.typography.titleLargeEmphasized,
+        )
+        SectionCard(modifier = Modifier.padding(top = 16.dp)) {
+            SwitchSetting(
+                title = stringResource(R.string.settings_auto_update_title),
+                summary = stringResource(R.string.settings_auto_update_summary),
+                checked = state.autoUpdateCheck,
+                running = false,
+                onCheckedChange = actions.onAutoUpdateChange,
+            )
+        }
     }
 }
 
@@ -909,7 +927,7 @@ private fun ChoiceSetting(title: String, running: Boolean, value: String, onClic
 
 @OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
-private fun AboutPage(state: NekoKEMUiState) {
+private fun AboutPage(state: NekoKEMUiState, actions: NekoKEMActions) {
     val unavailable = stringResource(R.string.not_available)
 
     PageColumn {
@@ -956,6 +974,15 @@ private fun AboutPage(state: NekoKEMUiState) {
                 ),
             )
         }
+        ExpressiveButton(
+            text = stringResource(
+                if (state.updateChecking) R.string.update_checking else R.string.action_check_update,
+            ),
+            onClick = actions.onCheckUpdate,
+            modifier = Modifier.fillMaxWidth().padding(top = 24.dp),
+            enabled = !state.updateChecking,
+            emphasis = ActionEmphasis.TONAL,
+        )
     }
 }
 

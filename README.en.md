@@ -480,6 +480,12 @@ This target builds with `afl-clang-fast` and UBSan:
 
 All three harnesses accept an `argv[1]` file path. The two parser harnesses reject inputs above 2 MiB and do not execute decapsulation, Argon2id, AES-GCM, or plaintext output; their seeds in `core/fuzz/seeds/` are zero-filled structural samples without passwords, private keys, or real sensitive data, and several truncated samples are included. Seeds for `fuzz_decrypt` are generated at every build: a throwaway plaintext-PEM test key and genuine v3, empty v3 and two-recipient v4 containers for it, so mutations reach trial decryption, the MAC and payload authentication. The key protects nothing and is never committed. See `core/fuzz/README.md` for AFL commands.
 
+## Update checks
+
+Android and the desktop GUI can check for a newer release: Check for updates is on the About page (Android) or the Settings page (desktop). Automatic checks are on by default, run at most once a day at launch, and can be turned off in Settings. A newer release is only announced by its version number; Go to download opens the GitHub release page, where you download and verify it as the release notes describe. The App never downloads or installs anything itself. Skip this version keeps automatic checks quiet about that version.
+
+A check sends one HTTPS GET to the fixed address `https://api.github.com/repos/Shixiaoshi0417/NekoKEM/releases/latest`, with no keys, fingerprints, files or settings. A response over 1 MiB, a draft or pre-release, or an unexpected version format counts as a failure, and the release page address is built from the version number rather than taken from the response. GitHub sees the request's IP address and time. Android adds the INTERNET permission for this and uses the system HTTPS stack; the desktop backend runs the system curl (Windows `System32\curl.exe`, macOS/Linux `/usr/bin/curl`), and the frontend still cannot make network requests. The CLI does not check for updates.
+
 ## Security boundaries
 
 - Hybrid private keys are now password-protected, but security still depends on strong, unique passwords and operating-system protection of process memory, terminals, and files.
@@ -488,6 +494,7 @@ All three harnesses accept an `argv[1]` file path. The two parser harnesses reje
 - v4 hides which entry belongs to which key, not whether a key can decrypt the file: anyone who can submit the file for decryption and see the result learns that from the unmodified file.
 - The X448/ML-KEM combination and this project's KDF/AAD binding are experimental designs, not a standardized hybrid KEM.
 - Project-internal parser fuzzing has been performed, but there has been no independent third-party audit or broad interoperability testing.
+- When an update check runs, GitHub sees the request's IP address and time; automatic checks can be turned off in Settings.
 - This implementation is not a substitute for mature, audited file encryption protocols and key management systems.
 
 ## Bug reports and feature requests

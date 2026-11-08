@@ -1,6 +1,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 mod contacts;
 mod core;
+mod update;
 use crate::contacts::{Contact,Contacts,Source,Store};
 use crate::core::{Backend,Failure,Request,Reservation,Outcome,CORE_LOCK};
 use serde::{Deserialize,Serialize};
@@ -52,6 +53,31 @@ async fn run_operation(request:Request,state:State<'_,Arc<Backend>>,app:tauri::A
         if backend.close_after.load(Ordering::Acquire){app.exit(0);}
         result
     }).await.map_err(|_|Failure::new("internal"))?
+}
+// The check needs no Core lock and no job: it never touches keys or files.
+#[tauri::command]
+async fn check_update()->Result<update::UpdateStatus,Failure>{
+    tauri::async_runtime::spawn_blocking(||update::check(env!("CARGO_PKG_VERSION"))).await.map_err(|_|Failure::new("internal"))
+}
+// Core's file layer runs under CORE_LOCK; off the UI thread, since an operation may hold it.
+#[tauri::command]
+async fn update_preferences()->Result<update::Preferences,Failure>{
+    tauri::async_runtime::spawn_blocking(||{
+        let _core=CORE_LOCK.lock().map_err(|_|Failure::new("internal"))?;
+        Ok(update::config_directory().map(|directory|update::load(&directory)).unwrap_or_default())
+    }).await.map_err(|_|Failure::new("internal"))?
+}
+#[tauri::command]
+async fn save_update_preferences(preferences:update::Preferences)->Result<(),Failure>{
+    tauri::async_runtime::spawn_blocking(move||{
+        let _core=CORE_LOCK.lock().map_err(|_|Failure::new("internal"))?;
+        let directory=update::config_directory().ok_or_else(||Failure::new("settings-save"))?;
+        if update::store(&directory,&preferences){Ok(())}else{Err(Failure::new("settings-save"))}
+    }).await.map_err(|_|Failure::new("internal"))?
+}
+#[tauri::command]
+fn open_release_page(version:String)->Result<(),Failure>{
+    if update::open_page(&version){Ok(())}else{Err(Failure::new("open-release"))}
 }
 #[derive(Deserialize)]
 #[serde(rename_all="camelCase",deny_unknown_fields)]
@@ -122,7 +148,7 @@ fn main(){
             builder.build()?;
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![get_settings,set_language,run_operation,cancel_operation,close_app,list_contacts,save_contact,update_contact_note,delete_contact])
+        .invoke_handler(tauri::generate_handler![get_settings,set_language,run_operation,cancel_operation,close_app,list_contacts,save_contact,update_contact_note,delete_contact,check_update,open_release_page,update_preferences,save_update_preferences])
         .on_window_event(|window,event|{if let tauri::WindowEvent::CloseRequested{api,..}=event{
             let state=window.state::<Arc<Backend>>();
             if state.defer_close(){api.prevent_close();}

@@ -263,4 +263,17 @@
     <string name="contact_verifies">ID 鍵 · 署名を検証できます</string>
     <string name="contact_legacy">旧形式の鍵 · 署名を検証できません</string>
     <string name="error_settings_save">設定を保存できませんでした。以前の設定が引き続き有効です。</string>
+    <string name="settings_updates_title">アップデート</string>
+    <string name="settings_auto_update_title">アップデートを自動で確認</string>
+    <string name="settings_auto_update_summary">1 日に最大 1 回、GitHub に最新のバージョン番号だけを問い合わせます。鍵やファイルの情報は送信しません。</string>
+    <string name="action_check_update">アップデートを確認</string>
+    <string name="update_checking">アップデートを確認しています…</string>
+    <string name="update_up_to_date">最新バージョンです</string>
+    <string name="update_failed">アップデートを確認できませんでした。しばらくしてからもう一度お試しください。</string>
+    <string name="update_available_title">NekoKEM %1$s が利用できます</string>
+    <string name="update_available_message">現在のバージョンは %1$s です。GitHub のリリースページから新しいバージョンをダウンロードし、リリースノートの手順で検証してからインストールしてください。</string>
+    <string name="action_open_release">ダウンロードページへ</string>
+    <string name="action_later">後で</string>
+    <string name="action_ignore_version">このバージョンをスキップ</string>
+    <string name="error_open_release">リリースページを開けるアプリがありません</string>
 </resources>

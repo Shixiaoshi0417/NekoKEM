@@ -12,6 +12,10 @@ import com.shixiaoshi0417.nekokem.keys.LocalKeyManager
 import com.shixiaoshi0417.nekokem.nativecore.NativeBridge
 import com.shixiaoshi0417.nekokem.progress.CancellableProgressCallback
 import com.shixiaoshi0417.nekokem.ui.runWithUiBusyReset
+import com.shixiaoshi0417.nekokem.update.ReleaseSource
+import com.shixiaoshi0417.nekokem.update.Releases
+import com.shixiaoshi0417.nekokem.update.UpdateSettings
+import com.shixiaoshi0417.nekokem.update.UpdateSettingsStore
 import com.shixiaoshi0417.nekokem.ui.FileInputState
 import com.shixiaoshi0417.nekokem.ui.InputSelectionEvent
 import java.io.File
@@ -40,6 +44,9 @@ class TemporaryKeyInstrumentation : Instrumentation() {
         val status = try {
             // The tests below use the Material style; MIUIX has its own phase.
             useMaterialStyle(targetContext)
+            // No test reaches the network: checks see an up-to-date stub, and
+            // automatic checks stay off except in the MIUIX phase that tests them.
+            quietUpdateChecks(targetContext)
             runContactProcessRestartTests(this, languagePhase)
             val publicKeyTrace = if (languagePhase == null) runTemporaryKeyTests(targetContext) else "language-only"
             runLanguageDeviceTests(this, languagePhase, expectedSystemLanguage, screenshotPrefix)
@@ -944,4 +951,14 @@ class TemporaryKeyInstrumentation : Instrumentation() {
             ): Boolean = false
         }
     }
+}
+
+/** A release document naming [version], as GitHub's API returns it. */
+internal fun releaseStub(version: String) = ReleaseSource {
+    """{"tag_name":"v$version","draft":false,"prerelease":false}"""
+}
+
+internal fun quietUpdateChecks(context: Context) {
+    Releases.source = releaseStub("0.0.1")
+    check(UpdateSettingsStore.write(context, UpdateSettings(autoCheck = false)))
 }
