@@ -2,6 +2,8 @@
 //! Core-normalized public key to its fingerprint, source file name and note.
 //! Every use re-reads the record and re-validates it with Core; a missing or
 //! damaged entry fails closed and never falls back to another public key.
+//! Identity keys (four components) also verify signatures; their record keeps
+//! the legacy fingerprint so one person's old and upgraded keys stay one contact.
 use crate::core::{self, Failure, Staged};
 use serde::{Deserialize, Serialize};
 use std::ffi::{c_char, c_int, c_void, CStr, CString};
@@ -41,6 +43,9 @@ pub struct Contact {
     pub fingerprint: String,
     pub name: String,
     pub note: String,
+    // An identity key: files this contact signs are reported as trusted.
+    pub can_verify: bool,
+    #[serde(skip_serializing_if = "Option::is_none")] pub legacy_fingerprint: Option<String>,
 }
 impl Contact {
     fn label(&self) -> &str { if self.note.is_empty() { &self.name } else { &self.note } }
@@ -61,18 +66,29 @@ struct Record {
     name: String,
     note: String,
     public_key: String,
+    // Present exactly for identity keys; records from 4.x have neither.
+    #[serde(default, skip_serializing_if = "Option::is_none")] legacy_fingerprint: Option<String>,
 }
 impl Record {
     fn is_valid(&self, id: &str) -> bool {
+        let components = self.public_key.matches(BEGIN).count();
         self.version == RECORD_VERSION && identity(&self.fingerprint).as_deref() == Some(id) &&
             (self.name == clean_name(&self.name) || self.name == legacy_clean_name(&self.name)) &&
             clean_note(&self.note).is_ok_and(|note| note == self.note) &&
-            valid_public_key(&self.public_key)
+            valid_public_key(&self.public_key) &&
+            match (&self.legacy_fingerprint, components) {
+                (None, 2) => true,
+                (Some(legacy), 4) => identity(legacy).is_some_and(|legacy| legacy != id),
+                _ => false,
+            }
     }
+    fn can_verify(&self) -> bool { self.legacy_fingerprint.is_some() }
     fn contact(&self, id: &str) -> Contact {
-        Contact { id: id.into(), fingerprint: self.fingerprint.clone(), name: clean_name(&self.name), note: self.note.clone() }
+        Contact { id: id.into(), fingerprint: self.fingerprint.clone(), name: clean_name(&self.name), note: self.note.clone(),
+                  can_verify: self.can_verify(), legacy_fingerprint: self.legacy_fingerprint.clone() }
     }
 }
+const BEGIN: &str = "-----BEGIN PUBLIC KEY-----";
 
 pub enum Source<'a> { Path(&'a str), Text(&'a str) }
 
@@ -136,6 +152,15 @@ impl Store {
     pub fn delete(&self, id: &str) -> Result<(), Failure> {
         let _lock = self.lock()?;
         if !self.exists(checked(id)?)? { return Err(Failure::new(MISSING)); }
+        self.remove(id)
+    }
+
+    /// The identity contact whose legacy fingerprint is this one, if any.
+    fn identity_with_legacy(&self, legacy: &str) -> Result<Option<String>, Failure> {
+        Ok(self.ids()?.0.into_iter().find(|id| self.read(id).is_ok_and(|record| record.legacy_fingerprint.as_deref() == Some(legacy))))
+    }
+
+    fn remove(&self, id: &str) -> Result<(), Failure> {
         let directory = CString::new(self.directory.as_str()).map_err(|_| Failure::new(STORAGE))?;
         let name = CString::new(format!("{id}.json")).map_err(|_| Failure::new(STORAGE))?;
         if unsafe { desktop_remove_private(directory.as_ptr(), name.as_ptr()) } != 1 {
@@ -156,10 +181,36 @@ impl Store {
         Err(Failure::new(MISMATCH))
     }
 
+    /// Staged identity keys of every contact Core still verifies, for
+    /// decryption to match signers against. Others are left out.
+    pub fn signers(&self) -> Vec<(String, Staged)> {
+        let Ok((ids, _)) = self.ids() else { return Vec::new() };
+        ids.into_iter().filter(|id| self.read(id).is_ok_and(|record| record.can_verify()))
+            .filter_map(|id| self.stage(&id).ok().map(|(stage, _)| (id, stage)))
+            .filter(|(_, stage)| stage.path().is_some_and(core::can_verify))
+            .collect()
+    }
+
     fn import(&self, input: &CStr, name: String, note: String) -> Result<Contact, Failure> {
         let fingerprint = core::fingerprint(input).ok_or_else(|| Failure::new("public-key-invalid"))?;
         let id = identity(&fingerprint).ok_or_else(|| Failure::new("public-key-invalid"))?;
+        let can_verify = core::can_verify(input);
+        let legacy = if can_verify {
+            Some(core::legacy_fingerprint(input).filter(|legacy| identity(legacy).is_some()).ok_or_else(|| Failure::new("public-key-invalid"))?)
+        } else { None };
         let _lock = self.lock()?;
+        // The same person's upgraded key replaces their legacy contact, keeping
+        // its note and name; their legacy key is not added beside the identity one.
+        let mut replaces = None;
+        if let Some(legacy) = legacy.as_deref().and_then(identity) {
+            if let Ok(record) = self.read(&legacy) { replaces = Some((legacy, record)); }
+        } else if let Some(owner) = self.identity_with_legacy(&fingerprint)? {
+            return Err(Failure::existing(owner));
+        }
+        let (name, note) = match &replaces {
+            Some((_, old)) => (if name.is_empty() { old.name.clone() } else { name }, if note.is_empty() { old.note.clone() } else { note }),
+            None => (name, note),
+        };
         // Only an entry that Core still verifies counts as already saved.
         match self.stage(&id) {
             Ok((mut stage, _)) => {
@@ -167,14 +218,14 @@ impl Store {
             }
             Err(error) if error.code == MISSING => {
                 let (ids, overflow) = self.ids()?;
-                if ids.len() + overflow >= MAX_CONTACTS { return Err(Failure::new("contact-limit")); }
+                if replaces.is_none() && ids.len() + overflow >= MAX_CONTACTS { return Err(Failure::new("contact-limit")); }
             }
             // Explicitly re-importing the same key replaces a damaged or substituted record.
             Err(error) if error.code == INVALID || error.code == MISMATCH => {}
             Err(error) => return Err(error),
         }
-        // Store only Core's canonical export: the two validated public
-        // components, never extra PEM blocks or text from the source file.
+        // Store only Core's canonical export: the validated public components
+        // (two, or four for an identity key), never extra text from the source.
         let mut output = Staged::output()?;
         let result = (|| {
             if unsafe { nekokem_export_public_key(input.as_ptr(), output.path().ok_or_else(||Failure::new("internal"))?.as_ptr()) } != 1 {
@@ -187,8 +238,10 @@ impl Store {
                 .and_then(|bytes| String::from_utf8(bytes).ok())
                 .filter(|key| valid_public_key(key))
                 .ok_or_else(|| Failure::new("public-key-invalid"))?;
-            let record = Record { version: RECORD_VERSION, fingerprint, name, note, public_key };
+            let record = Record { version: RECORD_VERSION, fingerprint, name, note, public_key, legacy_fingerprint: legacy };
+            if !record.is_valid(&id) { return Err(Failure::new("public-key-invalid")); }
             self.write(&id, &record)?;
+            if let Some((old, _)) = &replaces { self.remove(old)?; }
             Ok(record.contact(&id))
         })();
         if !output.close() { return Err(Failure::new("cleanup-error")); }
@@ -267,6 +320,11 @@ impl Store {
     }
 }
 
+/// A public key Core wrote to a private staged file.
+pub fn read_public_key(path: &CStr) -> Option<String> {
+    read_private(path, MAX_PUBLIC_KEY_BYTES).and_then(|bytes| String::from_utf8(bytes).ok()).filter(|key| valid_public_key(key))
+}
+
 fn read_private(path: &CStr, maximum: usize) -> Option<Vec<u8>> {
     let mut buffer = std::ptr::null_mut();
     let mut length = 0;
@@ -294,7 +352,7 @@ fn identity(fingerprint: &str) -> Option<String> {
 
 fn valid_public_key(key: &str) -> bool {
     !key.is_empty() && key.len() <= MAX_PUBLIC_KEY_BYTES && key.is_ascii() && !key.contains('\0') &&
-        key.starts_with("-----BEGIN PUBLIC KEY-----") && key.split('\n').all(|line| line.len() <= MAX_LINE_BYTES)
+        key.starts_with(BEGIN) && key.split('\n').all(|line| line.len() <= MAX_LINE_BYTES)
 }
 
 pub fn clean_note(note: &str) -> Result<String, Failure> {
@@ -360,6 +418,14 @@ pub mod tests {
     extern "C" {
         fn nekokem_generate_keypair(public: *const c_char, private: *const c_char, password: *const u8, length: usize) -> c_int;
         fn desktop_private_directory(path: *const c_char) -> c_int;
+        fn nekokem_export_legacy_public_key(public: *const c_char, output: *const c_char) -> c_int;
+    }
+
+    /// The two-component key NekoKEM 4.x reads, exported from an identity key.
+    pub fn legacy_export(public: &str, output: String) -> String {
+        let (cpublic, coutput) = (CString::new(public).unwrap(), CString::new(output.as_str()).unwrap());
+        assert_eq!(unsafe { nekokem_export_legacy_public_key(cpublic.as_ptr(), coutput.as_ptr()) }, 1);
+        output
     }
 
     pub struct Directory(pub PathBuf);
@@ -451,7 +517,10 @@ pub mod tests {
         assert_eq!(saved.name, "annotated yek.pem");
         let record = store.read(&saved.id).unwrap();
         assert!(!record.public_key.contains("trusted channel"));
-        assert_eq!(record.public_key.matches("-----BEGIN PUBLIC KEY-----").count(), 2);
+        // An identity key keeps all four components and its legacy fingerprint.
+        assert_eq!(record.public_key.matches("-----BEGIN PUBLIC KEY-----").count(), 4);
+        assert!(saved.can_verify);
+        assert_eq!(saved.legacy_fingerprint, core::legacy_fingerprint(&CString::new(alice.as_str()).unwrap()));
         assert_eq!(record_names(&contacts), vec![format!("{}.json", saved.id)]);
 
         let duplicate = store.save(Source::Path(&alice), "other note").err().unwrap();
@@ -483,6 +552,53 @@ pub mod tests {
     }
 
     #[test]
+    fn a_legacy_and_an_identity_key_of_one_person_stay_one_contact() {
+        let _core = core_lock();
+        let keys = Directory::new();
+        let contacts = keys.private("contacts");
+        let store = store(&contacts);
+        let (alice, _, alice_fingerprint) = keypair(&keys, "alice", "public-test-alice");
+        let legacy = legacy_export(&alice, keys.file("alice-legacy.pub"));
+        let legacy_fingerprint = core::fingerprint(&CString::new(legacy.as_str()).unwrap()).unwrap();
+        assert_ne!(legacy_fingerprint, alice_fingerprint);
+
+        // A 4.x contact: two components, no signature verification.
+        let old = store.save(Source::Path(&legacy), "Alice").unwrap();
+        assert_eq!((old.fingerprint.as_str(), old.can_verify, old.legacy_fingerprint.as_deref()), (legacy_fingerprint.as_str(), false, None));
+        assert_eq!(store.read(&old.id).unwrap().public_key.matches(BEGIN).count(), 2);
+        assert!(store.signers().is_empty());
+
+        // The upgraded key replaces it under the identity id and keeps the note.
+        let upgraded = store.save(Source::Text(&fs::read_to_string(&alice).unwrap()), "").unwrap();
+        assert_eq!((upgraded.fingerprint.as_str(), upgraded.note.as_str(), upgraded.name.as_str()), (alice_fingerprint.as_str(), "Alice", "alice-legacy.pub"));
+        assert_eq!(upgraded.legacy_fingerprint.as_deref(), Some(legacy_fingerprint.as_str()));
+        assert_eq!(record_names(&contacts), vec![format!("{}.json", upgraded.id)]);
+        let mut signers = store.signers();
+        assert_eq!(signers.iter().map(|(id, _)| id.as_str()).collect::<Vec<_>>(), vec![upgraded.id.as_str()]);
+        for (_, stage) in signers.iter_mut() { assert!(stage.close()); }
+
+        // The legacy key now names the identity contact as already saved.
+        let duplicate = store.save(Source::Path(&legacy), "again").err().unwrap();
+        assert_eq!((duplicate.code, duplicate.contact.as_deref()), ("contact-exists", Some(upgraded.id.as_str())));
+        assert_eq!(record_names(&contacts).len(), 1);
+
+        // A legacy fingerprint that does not belong with an identity key, or
+        // one on a two-component key, makes the record invalid.
+        let original = fs::read_to_string(store.file(&upgraded.id)).unwrap();
+        let mut missing: serde_json::Value = serde_json::from_str(&original).unwrap();
+        missing.as_object_mut().unwrap().remove("legacyFingerprint");
+        let mut own: serde_json::Value = serde_json::from_str(&original).unwrap();
+        own["legacyFingerprint"] = alice_fingerprint.clone().into();
+        for damaged in [missing.to_string(), own.to_string()] {
+            rewrite(&store, &upgraded.id, &damaged);
+            assert_eq!(code(store.stage(&upgraded.id)), "contact-invalid");
+            assert!(store.signers().is_empty());
+        }
+        rewrite(&store, &upgraded.id, &original);
+        assert!(store.stage(&upgraded.id).is_ok());
+    }
+
+    #[test]
     fn invalid_keys_notes_and_identifiers_are_refused_without_records() {
         let _core = core_lock();
         let keys = Directory::new();
@@ -497,7 +613,7 @@ pub mod tests {
         assert_eq!(code(store.save(Source::Path(&private), "")), "public-key-invalid");
         assert_eq!(code(store.save(Source::Path(&keys.file("missing.key")), "")), "public-key-invalid");
         assert_eq!(code(store.save(Source::Text("-----BEGIN PUBLIC KEY-----\nAAAA\n-----END PUBLIC KEY-----\n"), "")), "public-key-invalid");
-        // A truncated second component fails Core's two-component validation.
+        // A truncated last component fails Core's component validation.
         let text = fs::read_to_string(&alice).unwrap();
         assert_eq!(code(store.save(Source::Text(&text[..text.len() - 40]), "")), "public-key-invalid");
         assert_eq!(code(store.save(Source::Text(""), "")), "key-limit");

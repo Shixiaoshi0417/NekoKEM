@@ -1,13 +1,15 @@
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { open, save } from '@tauri-apps/plugin-dialog';
-export type Operation='keygen'|'encrypt'|'decrypt'|'fingerprint';
-export interface Request {id:string;kind:Operation;input:string;output:string;keyPath:string;publicPath:string;privatePath:string;password:string;confirmation:string;keyText:string;paste:boolean;contacts:string[];replace:boolean;overwrite:boolean}
-export interface Outcome {output:string|null;fingerprint:string|null;recipients?:string[]}
-// Same limit as Core's NEKOKEM_MAX_RECIPIENTS for one NKEM v4 file.
+export type Operation='keygen'|'encrypt'|'decrypt'|'fingerprint'|'upgrade'|'export-legacy';
+export interface Request {id:string;kind:Operation;input:string;output:string;keyPath:string;publicPath:string;privatePath:string;password:string;confirmation:string;keyText:string;paste:boolean;contacts:string[];replace:boolean;overwrite:boolean;signKeyPath:string;unsigned:boolean;requireSignature:boolean}
+// Core decides the status and matches the signer against saved identity contacts.
+export interface Signature {status:'trusted'|'untrusted'|'unsigned';fingerprint?:string;contact?:string;signerKey?:string}
+export interface Outcome {output:string|null;fingerprint:string|null;recipients?:string[];format?:number;signature?:Signature;legacyFingerprint?:string;canVerify?:boolean}
+// Same limit as Core's NEKOKEM_MAX_RECIPIENTS for one NKEM v4/v5 file.
 export const MAX_RECIPIENTS=64;
 export interface Progress {id:string;processed:number;total:number}
-export interface Contact {id:string;fingerprint:string;name:string;note:string}
+export interface Contact {id:string;fingerprint:string;name:string;note:string;canVerify:boolean;legacyFingerprint?:string}
 export interface ContactList {contacts:Contact[];unreadable:number}
 export interface ContactImport {keyPath:string;keyText:string;paste:boolean;note:string}
 export const getSettings=()=>invoke<{language:string;selection:string;version:string}>('get_settings');

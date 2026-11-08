@@ -215,6 +215,8 @@ class AuditTests(unittest.TestCase):
         self.assertEqual((self.root / 'out').read_bytes(), b'signed payload')
         self.assertEqual(self.cli('fingerprint', 'signer.key').stdout,
                          self.cli('fingerprint', 'keys/public.key').stdout)
+        # Owner-only like every key file Core exports; front ends stage it privately.
+        self.assertEqual((self.root / 'signer.key').stat().st_mode & 0o777, 0o600)
         # Flipping the last byte breaks the encrypted signature block.
         data = bytearray((self.root / 'signed.nkem').read_bytes())
         data[-1] ^= 1

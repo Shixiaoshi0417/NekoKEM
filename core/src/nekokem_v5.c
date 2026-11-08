@@ -465,12 +465,13 @@ failure:
     return NULL;
 }
 
+/* Owner-only, like nekokem_export_public_key(): front ends stage it privately. */
 static int write_signer_public_key(const char *path, const HybridKeys *signer)
 {
     AtomicFile output = {0};
     int success = 0;
 
-    if (atomic_file_open(&output, path, 0644) &&
+    if (atomic_file_open(&output, path, 0600) &&
         hybrid_write_public_keys(output.stream, signer, 1) &&
         atomic_file_commit(&output)) {
         success = 1;

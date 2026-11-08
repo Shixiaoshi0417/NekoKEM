@@ -4,7 +4,7 @@ use zeroize::Zeroizing;
 use std::time::{Duration,Instant,SystemTime};
 
 pub static CORE_LOCK: Mutex<()> = Mutex::new(());
-// Same limit as Core's NEKOKEM_MAX_RECIPIENTS for one NKEM v4 container.
+// Same limit as Core's NEKOKEM_MAX_RECIPIENTS for one NKEM v4/v5 container.
 pub const MAX_RECIPIENTS: usize = 64;
 #[derive(Debug,Serialize)]
 pub struct Failure {
@@ -17,8 +17,8 @@ impl Failure {
     pub fn existing(contact: String) -> Self { Self{code:"contact-exists",contact:Some(contact)} }
 }
 #[derive(Deserialize,PartialEq,Eq)]
-#[serde(rename_all="lowercase")]
-pub enum Kind { Keygen, Encrypt, Decrypt, Fingerprint }
+#[serde(rename_all="kebab-case")]
+pub enum Kind { Keygen, Encrypt, Decrypt, Fingerprint, Upgrade, ExportLegacy }
 #[derive(Deserialize)]
 #[serde(rename_all="camelCase",deny_unknown_fields)]
 pub struct Request {
@@ -36,17 +36,40 @@ pub struct Request {
     #[serde(default)] pub replace:bool,
     // Encryption/decryption only: one confirmed overwrite of the offered output.
     #[serde(default)] pub overwrite:bool,
-    // Saved recipient contacts (encryption only), in the user's order. One contact
-    // writes NKEM v3; two or more write one NKEM v4 file that each of them decrypts.
-    // Never combined with another key source.
+    // Saved recipient contacts (encryption only), in the user's order. Signed
+    // encryption writes one NKEM v5 file for all of them; unsigned writes v3
+    // for one and v4 for several. Never combined with another key source.
     #[serde(default)] pub contacts:Vec<String>,
+    // Encryption: the sender's identity private key, opened with `password`.
+    #[serde(default)] pub sign_key_path:String,
+    // Encryption: the user turned on unsigned (legacy-compatible) output.
+    #[serde(default)] pub unsigned:bool,
+    // Decryption: Core refuses NKEM v3/v4 files without a signature.
+    #[serde(default)] pub require_signature:bool,
 }
-#[derive(Serialize)]
+#[derive(Serialize,Default)]
 #[serde(rename_all="camelCase")]
 pub struct Outcome {
     pub output:Option<String>, pub fingerprint:Option<String>,
     // Core-verified fingerprints of the saved contacts used, in request order.
     pub recipients:Vec<String>,
+    // NKEM version Core wrote or read.
+    #[serde(skip_serializing_if="Option::is_none")] pub format:Option<i32>,
+    #[serde(skip_serializing_if="Option::is_none")] pub signature:Option<Signature>,
+    // Fingerprint and upgrade: the X448 + ML-KEM-1024 fingerprint NekoKEM 4.x shows.
+    #[serde(skip_serializing_if="Option::is_none")] pub legacy_fingerprint:Option<String>,
+    #[serde(skip_serializing_if="Option::is_none")] pub can_verify:Option<bool>,
+}
+// Core decides the status and matches the signer; the GUI only reports it.
+#[derive(Serialize,Debug)]
+#[serde(rename_all="camelCase")]
+pub struct Signature {
+    pub status:&'static str,
+    #[serde(skip_serializing_if="Option::is_none")] pub fingerprint:Option<String>,
+    // The saved contact Core matched as the signer.
+    #[serde(skip_serializing_if="Option::is_none")] pub contact:Option<String>,
+    // An unknown signer's public key, offered for saving as a contact.
+    #[serde(skip_serializing_if="Option::is_none")] pub signer_key:Option<String>,
 }
 pub struct Job { pub id:String, pub cancellable:bool, pub cancelled:AtomicBool }
 #[derive(PartialEq,Eq)]
@@ -117,13 +140,22 @@ pub struct Reservation { pub backend:Arc<Backend>, pub job:Arc<Job> }
 impl Drop for Reservation { fn drop(&mut self){ self.backend.finish(&self.job); } }
 
 type Progress=unsafe extern "C" fn(u64,u64,*mut c_void)->c_int;
+const ENCRYPT_UNSIGNED:u32=0x1;
+const VERIFY_REQUIRE_SIGNATURE:u32=0x1;
+#[repr(C)] struct EncryptOptions {struct_size:usize,flags:u32,sender_private_key_path:*const c_char,password:*const u8,password_len:usize}
+#[repr(C)] struct EncryptResult {struct_size:usize,format_version:c_int,signed_by_sender:c_int}
+#[repr(C)] struct VerifyPolicy {struct_size:usize,flags:u32,trusted_signer_paths:*const *const c_char,trusted_signer_count:usize,signer_public_key_output_path:*const c_char}
+#[repr(C)] struct VerifyResult {struct_size:usize,format_version:c_int,signature_status:c_int,trusted_signer_index:usize,signer_fingerprint:[c_char;96]}
 extern "C" {
     fn nekokem_generate_keypair(public:*const c_char, private:*const c_char,password:*const u8,length:usize)->c_int;
     fn nekokem_replace_keypair(public:*const c_char, private:*const c_char,password:*const u8,length:usize)->c_int;
-    fn nekokem_encrypt_file_with_progress(input:*const c_char,output:*const c_char,key:*const c_char,callback:Option<Progress>,data:*mut c_void)->c_int;
-    fn nekokem_encrypt_file_multi_with_progress(input:*const c_char,output:*const c_char,keys:*const *const c_char,count:usize,callback:Option<Progress>,data:*mut c_void)->c_int;
-    fn nekokem_decrypt_file_with_progress(input:*const c_char,output:*const c_char,key:*const c_char,password:*const u8,length:usize,callback:Option<Progress>,data:*mut c_void)->c_int;
+    fn nekokem_encrypt_file_v5_with_progress(input:*const c_char,output:*const c_char,keys:*const *const c_char,count:usize,options:*const EncryptOptions,result:*mut EncryptResult,callback:Option<Progress>,data:*mut c_void)->c_int;
+    fn nekokem_decrypt_file_verified_with_progress(input:*const c_char,output:*const c_char,key:*const c_char,password:*const u8,length:usize,policy:*const VerifyPolicy,result:*mut VerifyResult,callback:Option<Progress>,data:*mut c_void)->c_int;
+    fn nekokem_upgrade_to_identity_keys(public:*const c_char,private:*const c_char,password:*const u8,length:usize)->c_int;
+    fn nekokem_export_legacy_public_key(key:*const c_char,output:*const c_char)->c_int;
     fn nekokem_public_key_fingerprint(key:*const c_char,output:*mut c_char,size:usize)->c_int;
+    fn nekokem_public_key_legacy_fingerprint(key:*const c_char,output:*mut c_char,size:usize)->c_int;
+    fn nekokem_public_key_can_verify(key:*const c_char)->c_int;
     fn file_path_exists(path:*const c_char,exists:*mut c_int)->c_int;
     fn file_paths_are_same_file(first:*const c_char,second:*const c_char,same:*mut c_int)->c_int;
     fn file_set_output_no_replace(enabled:c_int)->c_int;
@@ -150,12 +182,21 @@ fn same_file(first:&CStr,second:&CStr)->Option<bool> {
     let mut same=0;
     (unsafe{file_paths_are_same_file(first.as_ptr(),second.as_ptr(),&mut same)}==1).then_some(same!=0)
 }
-// Core parses and validates both hybrid public components before hashing them.
+fn fingerprint_text(output:&[c_char;96])->String { unsafe{CStr::from_ptr(output.as_ptr()).to_string_lossy().into_owned()} }
+// Core parses and validates every public component before hashing: the
+// identity fingerprint for a four-component key, the legacy one otherwise.
 pub fn fingerprint(key:&CStr)->Option<String> {
     let mut output=[0 as c_char;96];
     if unsafe{nekokem_public_key_fingerprint(key.as_ptr(),output.as_mut_ptr(),output.len())}!=1 {return None;}
-    Some(unsafe{CStr::from_ptr(output.as_ptr()).to_string_lossy().into_owned()})
+    Some(fingerprint_text(&output))
 }
+// Over only X448 + ML-KEM-1024, for both key kinds: what NekoKEM 4.x shows.
+pub fn legacy_fingerprint(key:&CStr)->Option<String> {
+    let mut output=[0 as c_char;96];
+    if unsafe{nekokem_public_key_legacy_fingerprint(key.as_ptr(),output.as_mut_ptr(),output.len())}!=1 {return None;}
+    Some(fingerprint_text(&output))
+}
+pub fn can_verify(key:&CStr)->bool { (unsafe{nekokem_public_key_can_verify(key.as_ptr())})==1 }
 pub fn language()->String { unsafe{CStr::from_ptr(desktop_language()).to_string_lossy().into_owned()} }
 pub fn preference()->String { unsafe{CStr::from_ptr(cli_language_preference()).to_string_lossy().into_owned()} }
 pub fn save_language(value:&str)->Result<String,Failure> {
@@ -208,7 +249,10 @@ pub fn execute<F:Fn(u64,u64)>(backend:&Backend,request:Request,job:Arc<Job>,emit
         return Err(Failure::new("invalid-request"));
     }
     if request.replace && request.kind!=Kind::Keygen {return Err(Failure::new("invalid-request"));}
-    if request.overwrite && !matches!(request.kind,Kind::Encrypt|Kind::Decrypt) {return Err(Failure::new("invalid-request"));}
+    if request.overwrite && !matches!(request.kind,Kind::Encrypt|Kind::Decrypt|Kind::ExportLegacy) {return Err(Failure::new("invalid-request"));}
+    if (request.kind!=Kind::Encrypt && (request.unsigned || !request.sign_key_path.is_empty())) ||
+        (request.kind==Kind::Encrypt && request.unsigned && !request.sign_key_path.is_empty()) ||
+        (request.require_signature && request.kind!=Kind::Decrypt) {return Err(Failure::new("invalid-request"));}
     if request.contacts.len()>MAX_RECIPIENTS {return Err(Failure::new("recipient-limit"));}
     let mut seen=std::collections::HashSet::new();
     if !request.contacts.iter().all(|id|seen.insert(id.as_str())) {return Err(Failure::new("invalid-request"));}
@@ -224,10 +268,28 @@ pub fn execute<F:Fn(u64,u64)>(backend:&Backend,request:Request,job:Arc<Job>,emit
         }
         let commit=if request.replace {nekokem_replace_keypair} else {nekokem_generate_keypair};
         let result=unsafe{commit(public.as_ptr(),private.as_ptr(),request.password.as_ptr(),request.password.len())};
-        return if result==1 {Ok(Outcome{output:Some(request.private_path),fingerprint:None,recipients:Vec::new()})}else{Err(Failure::new("core-error"))};
+        return if result==1 {Ok(Outcome{output:Some(request.private_path),..Outcome::default()})}else{Err(Failure::new("core-error"))};
+    }
+    if request.kind==Kind::Upgrade {
+        // Keeps the encryption keys and password; adds the two signing keys.
+        if request.password.is_empty(){return Err(Failure::new("password-empty"));}
+        let public=path(&request.public_path)?; let private=path(&request.private_path)?;
+        if can_verify(&public) {return Err(Failure::new("already-identity"));}
+        if unsafe{nekokem_upgrade_to_identity_keys(public.as_ptr(),private.as_ptr(),request.password.as_ptr(),request.password.len())}!=1 {
+            return Err(Failure::new("core-error"));
+        }
+        return Ok(Outcome{output:Some(request.public_path.clone()),fingerprint:fingerprint(&public),legacy_fingerprint:legacy_fingerprint(&public),can_verify:Some(true),..Outcome::default()});
+    }
+    let signing=request.kind==Kind::Encrypt && !request.unsigned;
+    if signing {
+        // Signing never silently falls back to an unsigned file.
+        if request.sign_key_path.is_empty() {return Err(Failure::new("sign-key-missing"));}
+        if exists(&path(&request.sign_key_path)?)==Some(false) {return Err(Failure::new("sign-key-missing"));}
+        if request.password.is_empty(){return Err(Failure::new("password-empty"));}
+        if same_file(&path(&request.output)?,&path(&request.sign_key_path)?)==Some(true) {return Err(Failure::new("output-is-key"));}
     }
     // Core refuses an output that is the key in use; this names the reason.
-    if matches!(request.kind,Kind::Encrypt|Kind::Decrypt) && !request.key_path.is_empty() && !request.paste {
+    if matches!(request.kind,Kind::Encrypt|Kind::Decrypt|Kind::ExportLegacy) && !request.key_path.is_empty() && !request.paste {
         if same_file(&path(&request.output)?,&path(&request.key_path)?)==Some(true) {
             return Err(Failure::new("output-is-key"));
         }
@@ -247,14 +309,24 @@ pub fn execute<F:Fn(u64,u64)>(backend:&Backend,request:Request,job:Arc<Job>,emit
     let keys=if staged.is_empty(){vec![path(&request.key_path)?]}else{
         staged.iter().map(|stage|stage.path().map(CStr::to_owned).ok_or_else(||Failure::new("internal"))).collect::<Result<Vec<_>,_>>()?
     };
+    // Decryption trusts every saved contact with an identity key. A contact
+    // that is missing or fails Core's check is left out: that only makes the
+    // reported status weaker, never stronger.
+    let mut signers=Vec::new();
+    if request.kind==Kind::Decrypt {
+        if let Ok(store)=crate::contacts::Store::open() { signers=store.signers(); }
+    }
+    let mut signer_output=if request.kind==Kind::Decrypt {Some(Staged::output()?)} else {None};
     let mut state=ProgressContext{job,emit,last_emit:None};
     let data=&mut state as *mut _ as *mut c_void;
     let result=(|| {
         if request.kind==Kind::Fingerprint {
             let fingerprint=fingerprint(&keys[0]).ok_or_else(||Failure::new("core-error"))?;
-            return Ok(Outcome{output:None,fingerprint:Some(fingerprint),recipients:Vec::new()});
+            return Ok(Outcome{fingerprint:Some(fingerprint),legacy_fingerprint:legacy_fingerprint(&keys[0]),can_verify:Some(can_verify(&keys[0])),..Outcome::default()});
         }
-        let input=path(&request.input)?; let output=path(&request.output)?;
+        // Exporting a legacy key reads only the key and writes the output.
+        let input=if request.kind==Kind::ExportLegacy {CString::default()} else {path(&request.input)?};
+        let output=path(&request.output)?;
         if !request.overwrite && exists(&output)==Some(true) {
             backend.offer(Confirmation::Output(request.output.clone()))?;
             return Err(Failure::new("output-exists"));
@@ -262,13 +334,26 @@ pub fn execute<F:Fn(u64,u64)>(backend:&Backend,request:Request,job:Arc<Job>,emit
         // A competing writer may create the target after the preflight check.
         // Core's thread-local mode makes the actual commit atomically create-only.
         let output_mode=OutputMode::new(!request.overwrite);
+        let sign_key=if signing {Some(path(&request.sign_key_path)?)} else {None};
+        let mut written=EncryptResult{struct_size:std::mem::size_of::<EncryptResult>(),format_version:0,signed_by_sender:0};
+        let mut verified=VerifyResult{struct_size:std::mem::size_of::<VerifyResult>(),format_version:0,signature_status:0,trusted_signer_index:0,signer_fingerprint:[0;96]};
+        let signer_paths:Vec<*const c_char>=signers.iter().map(|(_,stage):&(String,Staged)|stage.path().map_or(std::ptr::null(),CStr::as_ptr)).collect();
+        if signer_paths.iter().any(|pointer|pointer.is_null()) {return Err(Failure::new("internal"));}
         let status=unsafe{match request.kind {
-            Kind::Encrypt if keys.len()>1=>{
+            Kind::Encrypt=>{
                 let pointers:Vec<*const c_char>=keys.iter().map(|key|key.as_ptr()).collect();
-                nekokem_encrypt_file_multi_with_progress(input.as_ptr(),output.as_ptr(),pointers.as_ptr(),pointers.len(),Some(progress::<F>),data)
+                let options=EncryptOptions{struct_size:std::mem::size_of::<EncryptOptions>(),flags:if signing {0} else {ENCRYPT_UNSIGNED},
+                    sender_private_key_path:sign_key.as_ref().map_or(std::ptr::null(),|key|key.as_ptr()),
+                    password:if signing {request.password.as_ptr()} else {std::ptr::null()},password_len:if signing {request.password.len()} else {0}};
+                nekokem_encrypt_file_v5_with_progress(input.as_ptr(),output.as_ptr(),pointers.as_ptr(),pointers.len(),&options,&mut written,Some(progress::<F>),data)
             }
-            Kind::Encrypt=>nekokem_encrypt_file_with_progress(input.as_ptr(),output.as_ptr(),keys[0].as_ptr(),Some(progress::<F>),data),
-            Kind::Decrypt=>nekokem_decrypt_file_with_progress(input.as_ptr(),output.as_ptr(),keys[0].as_ptr(),request.password.as_ptr(),request.password.len(),Some(progress::<F>),data),
+            Kind::Decrypt=>{
+                let policy=VerifyPolicy{struct_size:std::mem::size_of::<VerifyPolicy>(),flags:if request.require_signature {VERIFY_REQUIRE_SIGNATURE} else {0},
+                    trusted_signer_paths:if signer_paths.is_empty() {std::ptr::null()} else {signer_paths.as_ptr()},trusted_signer_count:signer_paths.len(),
+                    signer_public_key_output_path:signer_output.as_ref().and_then(Staged::path).map_or(std::ptr::null(),CStr::as_ptr)};
+                nekokem_decrypt_file_verified_with_progress(input.as_ptr(),output.as_ptr(),keys[0].as_ptr(),request.password.as_ptr(),request.password.len(),&policy,&mut verified,Some(progress::<F>),data)
+            }
+            Kind::ExportLegacy=>nekokem_export_legacy_public_key(keys[0].as_ptr(),output.as_ptr()),
             _=>unreachable!(),
         }};
         drop(output_mode);
@@ -276,11 +361,31 @@ pub fn execute<F:Fn(u64,u64)>(backend:&Backend,request:Request,job:Arc<Job>,emit
             backend.offer(Confirmation::Output(request.output.clone()))?;
             return Err(Failure::new("output-exists"));
         }
+        match status {1=>{},-1=>return Err(Failure::new("cancelled")),-10=>return Err(Failure::new("signature-invalid")),
+            -11=>return Err(Failure::new("signature-required")),-12=>return Err(Failure::new("signer-not-trusted")),_=>return Err(Failure::new("core-error"))}
         let fingerprint=if recipients.len()==1 {recipients.first().cloned()} else {None};
-        match status {1=>Ok(Outcome{output:Some(request.output.clone()),fingerprint,recipients:recipients.clone()}),-1=>Err(Failure::new("cancelled")),_=>Err(Failure::new("core-error"))}
+        let mut outcome=Outcome{output:Some(request.output.clone()),fingerprint,recipients:recipients.clone(),..Outcome::default()};
+        match request.kind {
+            Kind::Encrypt=>outcome.format=Some(written.format_version),
+            Kind::Decrypt=>{
+                outcome.format=Some(verified.format_version);
+                outcome.signature=Some(match verified.signature_status {
+                    1=>Signature{status:"trusted",fingerprint:Some(fingerprint_text(&verified.signer_fingerprint)),
+                        contact:signers.get(verified.trusted_signer_index).map(|(id,_)|id.clone()),signer_key:None},
+                    // A public key, not a secret: offered for saving as a contact.
+                    2=>Signature{status:"untrusted",fingerprint:Some(fingerprint_text(&verified.signer_fingerprint)),contact:None,
+                        signer_key:signer_output.as_ref().and_then(Staged::path).and_then(crate::contacts::read_public_key)},
+                    _=>Signature{status:"unsigned",fingerprint:None,contact:None,signer_key:None},
+                });
+            }
+            _=>{}
+        }
+        Ok(outcome)
     })();
     let mut cleaned=true;
     for stage in staged.iter_mut() {cleaned&=stage.close();}
+    for (_,stage) in signers.iter_mut() {cleaned&=stage.close();}
+    if let Some(stage)=signer_output.as_mut() {cleaned&=stage.close();}
     if !cleaned {return Err(Failure::new("cleanup-error"));}
     result
 }
@@ -338,7 +443,9 @@ mod tests {
         assert!(unsafe { CStr::from_ptr(version) }.to_bytes().starts_with(b"OpenSSL 4.0.3 "),
                 "GUI linked runtime does not match pinned OpenSSL 4.0.3");
     }
-    fn request(kind:Kind)->Request {Request{id:"test-job".into(),kind,input:String::new(),output:String::new(),key_path:String::new(),public_path:String::new(),private_path:String::new(),password:Zeroizing::new(String::new()),confirmation:Zeroizing::new(String::new()),key_text:Zeroizing::new(String::new()),paste:false,replace:false,overwrite:false,contacts:Vec::new()}}
+    fn request(kind:Kind)->Request {Request{id:"test-job".into(),input:String::new(),output:String::new(),key_path:String::new(),public_path:String::new(),private_path:String::new(),password:Zeroizing::new(String::new()),confirmation:Zeroizing::new(String::new()),key_text:Zeroizing::new(String::new()),paste:false,replace:false,overwrite:false,contacts:Vec::new(),
+        // Signing has its own tests; the others check one behaviour of all formats.
+        sign_key_path:String::new(),unsigned:kind==Kind::Encrypt,require_signature:false,kind}}
     fn run(backend:&Arc<Backend>,r:Request)->Result<Outcome,Failure>{let job=backend.reserve(&r)?;let _hold=Reservation{backend:backend.clone(),job:job.clone()};execute(&backend,r,job,|_,_|{})}
     struct Directory(PathBuf);
     impl Directory{fn new()->Self{let path=std::env::temp_dir().join(format!("nekokem-rust-{}-{}",std::process::id(),SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_nanos()));let name=super::path(path.to_str().unwrap()).unwrap();assert_eq!(unsafe{desktop_private_directory(name.as_ptr())},1);Self(path)}fn file(&self,name:&str)->String{self.0.join(name).to_str().unwrap().into()}}
@@ -595,6 +702,127 @@ mod tests {
         assert_eq!(execute(&backend,r,job,move|_,_|{cancel.cancelled.store(true,Ordering::Release);}).err().unwrap().code,"cancelled");
         assert_eq!(fs::read(keys.file("group.nkem")).unwrap(),before);
         assert_eq!(staging_entries(),staged);
+    }
+    // A NekoKEM 4.x key pair: the two encryption components under NKPR v1.
+    fn legacy_keypair(dir:&Directory,identity_public:&str,identity_private:&str,password:&str)->(String,String){
+        extern "C" {fn protected_private_key_write_version(path:*const c_char,pem:*const u8,length:usize,password:*const u8,password_length:usize,version:u32)->c_int;}
+        let public=crate::contacts::tests::legacy_export(identity_public,dir.file("legacy.public.key"));
+        let source=path(identity_private).unwrap();let mut pem=std::ptr::null_mut();let mut length=0;
+        assert_eq!(unsafe{protected_private_key_read(source.as_ptr(),password.as_ptr(),password.len(),&mut pem,&mut length)},1);
+        let text=unsafe{String::from_utf8(std::slice::from_raw_parts(pem,length).to_vec()).unwrap()};
+        unsafe{CRYPTO_clear_free(pem.cast(),length,std::ptr::null(),0)};
+        let end="-----END PRIVATE KEY-----\n";
+        let two:String=text.split_inclusive(end).take(2).collect();
+        let private=dir.file("legacy.private.key.enc");let target=path(&private).unwrap();
+        assert_eq!(unsafe{protected_private_key_write_version(target.as_ptr(),two.as_ptr(),two.len(),password.as_ptr(),password.len(),1)},1);
+        (public,private)
+    }
+    #[test]
+    fn signed_files_report_the_signer_and_the_policy_is_enforced_by_core() {
+        let _serial=STAGING_TESTS.lock().unwrap_or_else(|error|error.into_inner());
+        use crate::contacts::{tests as contact,Source,Store};
+        struct Override;
+        impl Drop for Override {fn drop(&mut self){*contact::DIRECTORY.lock().unwrap_or_else(|error|error.into_inner())=None;}}
+        let keys=contact::Directory::new();
+        let contacts=keys.private("contacts");
+        *contact::DIRECTORY.lock().unwrap_or_else(|error|error.into_inner())=Some(contacts.0.to_str().unwrap().into());
+        let _override=Override;
+        let ((alice,alice_private,alice_fingerprint),(bob,bob_private,_))={let _core=contact::core_lock();
+            (contact::keypair(&keys,"alice","public-test-alice"),contact::keypair(&keys,"bob","public-test-bob"))};
+        let alice_id={let _core=contact::core_lock();Store::open().unwrap().save(Source::Path(&alice),"Alice").unwrap().id};
+        let data:Vec<u8>=(0..100000).map(|i|(i%239) as u8).collect();
+        fs::write(keys.file("plain"),&data).unwrap();
+        let staged=staging_entries();
+        let backend=Arc::new(Backend::default());
+        let encrypt=|output:&str|{let mut r=request(Kind::Encrypt);r.input=keys.file("plain");r.output=keys.file(output);r.key_path=bob.clone();
+            r.unsigned=false;r.sign_key_path=alice_private.clone();r.password=Zeroizing::new("public-test-alice".into());r};
+        let decrypt=|input:&str,output:&str|{let mut r=request(Kind::Decrypt);r.input=keys.file(input);r.output=keys.file(output);r.key_path=bob_private.clone();r.password=Zeroizing::new("public-test-bob".into());r};
+
+        // Signing is the default and never falls back to an unsigned file.
+        let mut r=encrypt("bad.nkem");r.password=Zeroizing::new(String::new());assert_eq!(run(&backend,r).err().unwrap().code,"password-empty");
+        let mut r=encrypt("bad.nkem");r.sign_key_path=String::new();assert_eq!(run(&backend,r).err().unwrap().code,"sign-key-missing");
+        let mut r=encrypt("bad.nkem");r.sign_key_path=keys.file("missing.key.enc");assert_eq!(run(&backend,r).err().unwrap().code,"sign-key-missing");
+        let mut r=encrypt("bad.nkem");r.password=Zeroizing::new("wrong".into());assert_eq!(run(&backend,r).err().unwrap().code,"core-error");
+        let mut r=encrypt("bad.nkem");r.unsigned=true;assert_eq!(run(&backend,r).err().unwrap().code,"invalid-request");
+        let mut r=encrypt("bad.nkem");r.output=alice_private.clone();assert_eq!(run(&backend,r).err().unwrap().code,"output-is-key");
+        for kind in [Kind::Decrypt,Kind::Fingerprint] {let mut r=request(kind);r.sign_key_path=alice_private.clone();assert_eq!(run(&backend,r).err().unwrap().code,"invalid-request");}
+        let mut r=request(Kind::Encrypt);r.require_signature=true;assert_eq!(run(&backend,r).err().unwrap().code,"invalid-request");
+        assert!(fs::metadata(keys.file("bad.nkem")).is_err());
+
+        let outcome=run(&backend,encrypt("signed.nkem")).unwrap();
+        assert_eq!(outcome.format,Some(5));
+        assert_eq!(fs::read(keys.file("signed.nkem")).unwrap()[4],5);
+        // Alice is a saved identity contact: Core names her as the signer.
+        let outcome=run(&backend,decrypt("signed.nkem","trusted.out")).unwrap();
+        assert_eq!(fs::read(keys.file("trusted.out")).unwrap(),data);
+        let signature=outcome.signature.unwrap();
+        assert_eq!((signature.status,signature.fingerprint.as_deref(),signature.contact.as_deref(),signature.signer_key.is_none()),
+                   ("trusted",Some(alice_fingerprint.as_str()),Some(alice_id.as_str()),true));
+        assert_eq!(outcome.format,Some(5));
+
+        // Not a contact: valid but untrusted, with her key offered for saving.
+        {let _core=contact::core_lock();Store::open().unwrap().delete(&alice_id).unwrap();}
+        let mut r=decrypt("signed.nkem","untrusted.out");r.require_signature=true;
+        let signature=run(&backend,r).unwrap().signature.unwrap();
+        assert_eq!((signature.status,signature.fingerprint.as_deref(),signature.contact),("untrusted",Some(alice_fingerprint.as_str()),None));
+        let offered=signature.signer_key.unwrap();
+        let saved={let _core=contact::core_lock();Store::open().unwrap().save(Source::Text(&offered),"").unwrap()};
+        assert_eq!((saved.id.as_str(),saved.fingerprint.as_str(),saved.can_verify),(alice_id.as_str(),alice_fingerprint.as_str(),true));
+
+        // Unsigned files are reported, and refused when a signature is required.
+        let mut r=encrypt("unsigned.nkem");r.unsigned=true;r.sign_key_path=String::new();r.password=Zeroizing::new(String::new());
+        assert_eq!(run(&backend,r).unwrap().format,Some(3));
+        let outcome=run(&backend,decrypt("unsigned.nkem","unsigned.out")).unwrap();
+        assert_eq!((outcome.format,outcome.signature.unwrap().status),(Some(3),"unsigned"));
+        let mut r=decrypt("unsigned.nkem","required.out");r.require_signature=true;
+        assert_eq!(run(&backend,r).err().unwrap().code,"signature-required");
+        assert!(fs::metadata(keys.file("required.out")).is_err());
+
+        // Signed for several saved contacts: one v5 file.
+        let bob_id={let _core=contact::core_lock();Store::open().unwrap().save(Source::Path(&bob),"Bob").unwrap().id};
+        let mut r=encrypt("group.nkem");r.key_path=String::new();r.contacts=vec![bob_id,alice_id];
+        let outcome=run(&backend,r).unwrap();
+        assert_eq!((outcome.format,outcome.recipients.len()),(Some(5),2));
+        run(&backend,decrypt("group.nkem","group.out")).unwrap();
+        assert_eq!(fs::read(keys.file("group.out")).unwrap(),data);
+
+        // Both fingerprints; the exported legacy key cannot verify.
+        let mut r=request(Kind::Fingerprint);r.key_path=alice.clone();let outcome=run(&backend,r).unwrap();
+        assert_eq!((outcome.fingerprint.as_deref(),outcome.can_verify),(Some(alice_fingerprint.as_str()),Some(true)));
+        let legacy=outcome.legacy_fingerprint.unwrap();
+        let mut r=request(Kind::ExportLegacy);r.key_path=alice.clone();r.output=keys.file("alice-legacy.pub");run(&backend,r).unwrap();
+        let mut r=request(Kind::ExportLegacy);r.key_path=alice.clone();r.output=keys.file("alice-legacy.pub");assert_eq!(run(&backend,r).err().unwrap().code,"output-exists");
+        let mut r=request(Kind::Fingerprint);r.key_path=keys.file("alice-legacy.pub");let outcome=run(&backend,r).unwrap();
+        assert_eq!((outcome.fingerprint,outcome.legacy_fingerprint,outcome.can_verify),(Some(legacy.clone()),Some(legacy),Some(false)));
+        assert_eq!(staging_entries(),staged);
+    }
+    #[test]
+    fn upgrading_a_legacy_key_keeps_its_encryption_keys_and_password() {
+        let dir=Directory::new();let backend=Arc::new(Backend::default());
+        let mut r=request(Kind::Keygen);r.public_path=dir.file("public.key");r.private_path=dir.file("private.key.enc");
+        r.password=Zeroizing::new("public test password".into());r.confirmation=r.password.clone();run(&backend,r).unwrap();
+        let (public,private)={let _core=CORE_LOCK.lock().unwrap_or_else(|error|error.into_inner());
+            legacy_keypair(&dir,&dir.file("public.key"),&dir.file("private.key.enc"),"public test password")};
+        let legacy=fingerprint(&path(&public).unwrap()).unwrap();
+        fs::write(dir.file("plain"),b"public test input").unwrap();
+        let mut r=request(Kind::Encrypt);r.input=dir.file("plain");r.output=dir.file("old.nkem");r.key_path=public.clone();run(&backend,r).unwrap();
+        // A legacy key cannot sign.
+        let mut r=request(Kind::Encrypt);r.input=dir.file("plain");r.output=dir.file("signed.nkem");r.key_path=public.clone();
+        r.unsigned=false;r.sign_key_path=private.clone();r.password=Zeroizing::new("public test password".into());
+        assert_eq!(run(&backend,r).err().unwrap().code,"core-error");
+        let upgrade=|password:&str|{let mut r=request(Kind::Upgrade);r.public_path=public.clone();r.private_path=private.clone();r.password=Zeroizing::new(password.into());r};
+        assert_eq!(run(&backend,upgrade("")).err().unwrap().code,"password-empty");
+        assert_eq!(run(&backend,upgrade("wrong")).err().unwrap().code,"core-error");
+        let outcome=run(&backend,upgrade("public test password")).unwrap();
+        assert_eq!((outcome.legacy_fingerprint.as_deref(),outcome.can_verify),(Some(legacy.as_str()),Some(true)));
+        assert_ne!(outcome.fingerprint.as_deref(),Some(legacy.as_str()));
+        assert_eq!(run(&backend,upgrade("public test password")).err().unwrap().code,"already-identity");
+        // Old files still decrypt with the same password; the key now signs.
+        let mut r=request(Kind::Decrypt);r.input=dir.file("old.nkem");r.output=dir.file("old.out");r.key_path=private.clone();r.password=Zeroizing::new("public test password".into());
+        run(&backend,r).unwrap();assert_eq!(fs::read(dir.file("old.out")).unwrap(),b"public test input");
+        let mut r=request(Kind::Encrypt);r.input=dir.file("plain");r.output=dir.file("signed.nkem");r.key_path=public.clone();
+        r.unsigned=false;r.sign_key_path=private.clone();r.password=Zeroizing::new("public test password".into());
+        assert_eq!(run(&backend,r).unwrap().format,Some(5));
     }
     #[cfg(unix)]
     #[test]
