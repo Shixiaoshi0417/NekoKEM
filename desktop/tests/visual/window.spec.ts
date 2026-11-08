@@ -61,6 +61,8 @@ test.beforeEach(async({page})=>{
      return new Promise((resolve,reject)=>{finish=resolve;fail=reject;});
     }
     if(command==='cancel_operation')return Promise.resolve(true);
+    if(command==='update_preferences')return Promise.resolve((window as unknown as {updatePreferences?:unknown}).updatePreferences??{auto:true,lastCheck:Date.now(),ignored:''});
+    if(command==='save_update_preferences'){Object.assign(window,{updatePreferences:args.preferences});return Promise.resolve(null);}
     if(command==='check_update')return Promise.resolve((window as unknown as {updateStatus?:unknown}).updateStatus??{status:'current'});
     if(command==='open_release_page'){Object.assign(window,{openedRelease:args.version});return Promise.resolve(null);}
     if(command==='list_contacts')return Promise.resolve({contacts:contacts.map(contact=>({...contact})),unreadable:0});

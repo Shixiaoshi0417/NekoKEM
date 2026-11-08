@@ -112,6 +112,23 @@ internal fun runMiuixUiTests(instrumentation: Instrumentation, screenshotPrefix:
         check(target.performAction(AccessibilityNodeInfo.ACTION_CLICK))
         instrumentation.waitForIdleSync()
     }
+    // A dropdown that closes again before its menu is read is opened once more.
+    fun choose(title: String, option: String) {
+        repeat(3) {
+            click(title)
+            val deadline = SystemClock.uptimeMillis() + 3_000L
+            while (SystemClock.uptimeMillis() < deadline) {
+                if (exact(option) != null) {
+                    click(option)
+                    return
+                }
+                instrumentation.waitForIdleSync()
+                SystemClock.sleep(100)
+            }
+        }
+        runCatching { capture("timeout") }
+        error("MIUIX: $title did not offer $option")
+    }
     fun secureWindowShown(): Boolean {
         val dump = automation.executeShellCommand("dumpsys window windows").let { descriptor ->
             android.os.ParcelFileDescriptor.AutoCloseInputStream(descriptor).bufferedReader().use { it.readText() }
@@ -201,8 +218,7 @@ internal fun runMiuixUiTests(instrumentation: Instrumentation, screenshotPrefix:
 
         // MIUIX settings: the dropdown switches to Material at once.
         clickNavigationTab(instrumentation, string(R.string.tab_settings))
-        click(string(R.string.settings_ui_style_title))
-        click(string(R.string.settings_ui_style_material))
+        choose(string(R.string.settings_ui_style_title), string(R.string.settings_ui_style_material))
         await("Material style stored") { UiStyles.selection(context) == UiStyle.MATERIAL }
         // The Material shell opens on Files; its settings picker switches back to MIUIX.
         await("Material Files page") { exact(string(R.string.navigation_files)) != null }
