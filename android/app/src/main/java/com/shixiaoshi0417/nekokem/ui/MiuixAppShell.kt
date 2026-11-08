@@ -75,6 +75,7 @@ import top.yukonga.miuix.kmp.icon.extended.Lock
 import top.yukonga.miuix.kmp.icon.extended.Settings
 import top.yukonga.miuix.kmp.preference.ArrowPreference
 import top.yukonga.miuix.kmp.preference.OverlayDropdownPreference
+import top.yukonga.miuix.kmp.preference.SwitchPreference
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 import top.yukonga.miuix.kmp.utils.overScrollVertical
 
@@ -300,6 +301,12 @@ private fun LazyListScope.filesPage(state: NekoKEMUiState, actions: NekoKEMActio
             onFirst = actions.onEncrypt,
             onSecond = actions.onDecrypt,
         )
+        if (state.signatureSettings.unsignedEncryption) {
+            BasicComponent(
+                title = stringResource(R.string.unsigned_warning),
+                titleColor = BasicComponentDefaults.titleColor(color = MiuixTheme.colorScheme.error),
+            )
+        }
         Action(R.string.action_select_file, !state.running, actions.onSelectFile)
         if (state.selectedFileName != null) {
             Action(R.string.action_clear_selection, !state.running, actions.onClearSelectedFile)
@@ -363,8 +370,17 @@ private fun LazyListScope.keysPage(state: NekoKEMUiState, actions: NekoKEMAction
             title = stringResource(
                 if (state.privateKeyExists) R.string.private_key_exists else R.string.private_key_not_found,
             ),
-            summary = stringResource(R.string.fingerprint_label) + "\n" +
-                (state.fingerprint ?: stringResource(R.string.not_available)),
+            summary = buildList {
+                add(stringResource(R.string.fingerprint_label))
+                add(state.fingerprint ?: stringResource(R.string.not_available))
+                if (state.fingerprint != null) {
+                    add(stringResource(if (state.canSign) R.string.key_identity_status else R.string.key_legacy_status))
+                }
+                state.legacyFingerprint?.let { legacy ->
+                    add(stringResource(R.string.legacy_fingerprint_label))
+                    add(legacy)
+                }
+            }.joinToString("\n"),
         )
         ButtonPair(
             first = stringResource(R.string.action_generate_keypair),
@@ -374,10 +390,21 @@ private fun LazyListScope.keysPage(state: NekoKEMUiState, actions: NekoKEMAction
             onSecond = actions.onCheckPassword,
             secondEnabled = canRun && state.privateKeyExists,
         )
+        if (state.fingerprint != null && state.privateKeyExists && !state.canSign) {
+            Action(R.string.action_upgrade_key, canRun, actions.onUpgradeKey)
+        }
     }
     section(R.string.miuix_keys_transfer_title, key = "transfer") {
         Action(R.string.action_import_public_key, canRun, actions.onImportPublicKey)
         Action(R.string.action_export_public_key, canRun && state.fingerprint != null, actions.onExportPublicKey)
+        if (state.canSign) {
+            ArrowPreference(
+                title = stringResource(R.string.action_export_legacy_public_key),
+                summary = stringResource(R.string.legacy_export_hint),
+                enabled = canRun,
+                onClick = actions.onExportLegacyPublicKey,
+            )
+        }
         Action(R.string.action_import_private_key, canRun, actions.onImportPrivateKey)
         Action(R.string.action_export_private_key, canRun && state.privateKeyExists, actions.onExportPrivateKey)
     }
@@ -458,7 +485,8 @@ private fun LazyListScope.contactsPage(
             BasicComponent(
                 title = contact.label,
                 summary = stringResource(R.string.key_file_line, contact.displayName) + "\n" +
-                    stringResource(R.string.key_fingerprint_line, contact.fingerprint),
+                    stringResource(R.string.key_fingerprint_line, contact.fingerprint) + "\n" +
+                    stringResource(if (contact.canVerify) R.string.contact_verifies else R.string.contact_legacy),
             )
             FlowRow(
                 modifier = Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, bottom = 16.dp),
@@ -556,6 +584,30 @@ private fun MiuixSettingsPage(
                 summary = stringResource(R.string.settings_theme_system),
             )
             // MIUIX keeps its own palette; wallpaper color is a Material setting.
+        }
+        section(R.string.settings_signing_title, key = "signing") {
+            val unsigned = state.signatureSettings.unsignedEncryption
+            val red = MiuixTheme.colorScheme.error
+            SwitchPreference(
+                checked = unsigned,
+                onCheckedChange = actions.onUnsignedEncryptionChange,
+                title = stringResource(R.string.settings_unsigned_title),
+                titleColor = if (unsigned) BasicComponentDefaults.titleColor(color = red) else BasicComponentDefaults.titleColor(),
+                summary = if (unsigned) {
+                    stringResource(R.string.unsigned_warning)
+                } else {
+                    stringResource(R.string.settings_unsigned_summary)
+                },
+                summaryColor = if (unsigned) BasicComponentDefaults.summaryColor(color = red) else BasicComponentDefaults.summaryColor(),
+                enabled = !state.running,
+            )
+            SwitchPreference(
+                checked = state.signatureSettings.requireSignature,
+                onCheckedChange = actions.onRequireSignatureChange,
+                title = stringResource(R.string.settings_require_signature_title),
+                summary = stringResource(R.string.settings_require_signature_summary),
+                enabled = !state.running,
+            )
         }
         section(key = "version") {
             BasicComponent(

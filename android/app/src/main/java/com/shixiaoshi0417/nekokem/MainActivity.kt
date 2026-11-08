@@ -38,6 +38,11 @@ import com.shixiaoshi0417.nekokem.files.decryptedDocumentRequest
 import com.shixiaoshi0417.nekokem.files.encryptedDocumentRequest
 import com.shixiaoshi0417.nekokem.files.encryptedPrivateKeyExportRequest
 import com.shixiaoshi0417.nekokem.files.publicKeyExportRequest
+import com.shixiaoshi0417.nekokem.files.legacyPublicKeyExportRequest
+import com.shixiaoshi0417.nekokem.keys.SignatureReport
+import com.shixiaoshi0417.nekokem.ui.SignatureSettings
+import com.shixiaoshi0417.nekokem.ui.SignatureSettingsStore
+import com.shixiaoshi0417.nekokem.ui.UnsignedEncryptionWarningDialog
 import com.shixiaoshi0417.nekokem.keys.LocalKeyManager
 import com.shixiaoshi0417.nekokem.keys.LocalKeyState
 import com.shixiaoshi0417.nekokem.keys.PublicKeyContact
@@ -139,6 +144,7 @@ private enum class PendingOutputAction {
     SAVE_DECRYPTED_FILE,
     EXPORT_PUBLIC_KEY,
     EXPORT_PRIVATE_KEY,
+    EXPORT_LEGACY_PUBLIC_KEY,
 }
 
 private enum class PendingKeyImport {
@@ -152,6 +158,8 @@ private enum class PasswordPrompt {
     IMPORT_PUBLIC_KEY,
     SELECT_TEMPORARY_PRIVATE_KEY,
     DECRYPT_FILE,
+    SIGN_ENCRYPTION,
+    UPGRADE_KEY,
 }
 
 private enum class DeleteTarget(
@@ -263,6 +271,9 @@ private fun NekoKEMRoute(
     // Saved across recreation, so a dismissed warning returns only for new backups.
     var recoveryBackupCount by rememberSaveable { mutableStateOf(0) }
     var recoveryWarningDismissed by rememberSaveable { mutableStateOf(false) }
+    // Signing is on unless the user turned it off behind the red warning.
+    var signatureSettings by remember { mutableStateOf(SignatureSettingsStore.read(context)) }
+    var confirmUnsignedEncryption by remember { mutableStateOf(false) }
     val selectedInputUri = selectedInputState.uriString?.let(Uri::parse)
     val selectedInputName = selectedInputState.displayName
     val selectedDocument = if (
@@ -470,6 +481,7 @@ private fun NekoKEMRoute(
         code: Int,
         progress: OperationProgressSnapshot,
         fileName: String,
+        extraDetails: List<OperationResultDetail> = emptyList(),
     ) {
         // The selection and the result dialog come first: the page may already
         // be idle, and refreshing can wait on the key lock for a while.
@@ -496,7 +508,7 @@ private fun NekoKEMRoute(
                         R.string.completion_file,
                         fileName,
                     ),
-                ),
+                ) + extraDetails,
                 progress = progress,
             )
 
@@ -710,6 +722,7 @@ private fun NekoKEMRoute(
 
                 PendingOutputAction.EXPORT_PUBLIC_KEY,
                 PendingOutputAction.EXPORT_PRIVATE_KEY,
+                PendingOutputAction.EXPORT_LEGACY_PUBLIC_KEY,
                 null -> showSnackbar(R.string.snackbar_operation_cancelled)
             }
             return@rememberLauncherForActivityResult
@@ -753,6 +766,21 @@ private fun NekoKEMRoute(
                             result,
                             combined,
                             destinationName,
+                            listOf(
+                                if (prepared.signed) {
+                                    OperationResultDetail(
+                                        R.string.completion_signature,
+                                        context.getString(R.string.signature_signed),
+                                    )
+                                } else {
+                                    OperationResultDetail(
+                                        R.string.completion_signature,
+                                        context.getString(R.string.signature_unsigned) + " · " +
+                                            context.getString(R.string.unsigned_warning),
+                                        warning = true,
+                                    )
+                                },
+                            ),
                         )
                     }
                 }
@@ -792,6 +820,7 @@ private fun NekoKEMRoute(
                             result,
                             combined,
                             destinationName,
+                            signatureDetails(context, prepared.signature, prepared.signerLabel),
                         )
                     }
                 }
@@ -812,6 +841,18 @@ private fun NekoKEMRoute(
                 }
             }
 
+            PendingOutputAction.EXPORT_LEGACY_PUBLIC_KEY -> {
+                runKeyOperation(
+                    operationResource = R.string.operation_export_legacy_public_key,
+                    completionDetails = { state ->
+                        keyCompletionDetails(destinationName, state.legacyFingerprint)
+                    },
+                ) {
+                    destinationName = fileWorkflow.describe(destination).displayName
+                    fileWorkflow.exportLegacyPublicKey(destination)
+                }
+            }
+
             PendingOutputAction.EXPORT_PRIVATE_KEY -> {
                 runKeyOperation(
                     operationResource = R.string.operation_export_private_key,
@@ -826,7 +867,8 @@ private fun NekoKEMRoute(
         }
     }
 
-    fun prepareEncryption(source: SelectedDocument) {
+    /** Signs with this device's identity key when [signingPassword] is given; takes ownership of it. */
+    fun prepareEncryption(source: SelectedDocument, signingPassword: ByteArray?) {
         val selectedKey = temporaryPublicKey
         val contactIds = selectedContactIds
         val tracker = beginProgress(R.string.operation_encrypt_file)
@@ -844,12 +886,18 @@ private fun NekoKEMRoute(
                 }
                 val outcome = pageWork {
                     if (recipients.isNotEmpty()) {
-                        fileWorkflow.prepareEncryptionForRecipients(source.uri, tracker, recipients)
+                        fileWorkflow.prepareEncryptionForRecipients(
+                            source.uri,
+                            tracker,
+                            recipients,
+                            signingPassword?.copyOf(),
+                        )
                     } else {
                         fileWorkflow.prepareEncryption(
                             source.uri,
                             tracker,
                             selectedKey,
+                            signingPassword?.copyOf(),
                         )
                     }
                 }
@@ -860,6 +908,7 @@ private fun NekoKEMRoute(
                 if (outcome.code == NativeBridge.RESULT_SUCCESS &&
                     outcome.prepared != null
                 ) {
+                    outcome.prepared.signed = signingPassword != null
                     preparedEncryption = outcome.prepared
                     encryptionPreparationProgress = finalProgress
                     pendingOutputAction = PendingOutputAction.ENCRYPT_FILE
@@ -879,6 +928,10 @@ private fun NekoKEMRoute(
                         finalProgress,
                         source.displayName,
                     )
+                    // Core reports a wrong signing password as a general error.
+                    if (signingPassword != null && outcome.code == NativeBridge.RESULT_CORE_ERROR) {
+                        reportFailureReason(R.string.operation_encrypt_file, R.string.error_reason_sign)
+                    }
                 }
             } catch (_: Exception) {
                 pageWork {
@@ -899,6 +952,7 @@ private fun NekoKEMRoute(
                     LocalKeyManager.RESULT_STORAGE_ERROR,
                 )
             } finally {
+                signingPassword?.fill(0)
                 endProgress(tracker)
             }
         }
@@ -916,14 +970,25 @@ private fun NekoKEMRoute(
             return
         }
         val tracker = beginProgress(R.string.operation_decrypt_file)
+        val requireSignature = signatureSettings.requireSignature
         scope.launch {
             try {
+                var signerIds = emptyList<String>()
                 val outcome = pageWork {
+                    // Saved identity contacts are the trusted signers; Core decides.
+                    val signers = try {
+                        publicKeyContacts.stageSigners()
+                    } catch (_: Exception) {
+                        null
+                    }
+                    signerIds = signers?.ids.orEmpty()
                     fileWorkflow.prepareDecryption(
                         source.uri,
                         password,
                         tracker,
                         selectedKey,
+                        signers?.keys.orEmpty(),
+                        requireSignature,
                     )
                 }
                 if (temporaryPrivateKey === selectedKey) {
@@ -933,6 +998,10 @@ private fun NekoKEMRoute(
                 if (outcome.code == NativeBridge.RESULT_SUCCESS &&
                     outcome.prepared != null
                 ) {
+                    outcome.prepared.signature = outcome.signature
+                    outcome.prepared.signerLabel = outcome.signature?.trustedContact
+                        ?.let { signerIds.getOrNull(it) }
+                        ?.let { id -> contactsState.contacts.firstOrNull { it.id == id }?.label }
                     preparedDecryption = outcome.prepared
                     decryptionPreparationProgress = finalProgress
                     pendingOutputAction = PendingOutputAction.SAVE_DECRYPTED_FILE
@@ -1030,6 +1099,8 @@ private fun NekoKEMRoute(
             PasswordPrompt.SELECT_TEMPORARY_PRIVATE_KEY ->
                 R.string.select_temporary_private_key_password_title
             PasswordPrompt.DECRYPT_FILE -> R.string.decrypt_password_title
+            PasswordPrompt.SIGN_ENCRYPTION -> R.string.sign_password_title
+            PasswordPrompt.UPGRADE_KEY -> R.string.upgrade_password_title
         }
         val message = when (prompt) {
             PasswordPrompt.CHECK_PRIVATE_KEY -> R.string.check_password_message
@@ -1038,6 +1109,8 @@ private fun NekoKEMRoute(
             PasswordPrompt.SELECT_TEMPORARY_PRIVATE_KEY ->
                 R.string.select_temporary_private_key_password_message
             PasswordPrompt.DECRYPT_FILE -> R.string.decrypt_password_message
+            PasswordPrompt.SIGN_ENCRYPTION -> R.string.sign_password_message
+            PasswordPrompt.UPGRADE_KEY -> R.string.upgrade_password_message
         }
         val label = if (prompt == PasswordPrompt.DECRYPT_FILE) {
             R.string.decrypt_password_label
@@ -1170,6 +1243,29 @@ private fun NekoKEMRoute(
                     }
 
                     PasswordPrompt.DECRYPT_FILE -> prepareDecryption(password)
+
+                    PasswordPrompt.SIGN_ENCRYPTION -> {
+                        val source = selectedDocument
+                        if (source == null) {
+                            password.fill(0)
+                            reportFailureReason(R.string.operation_encrypt_file, R.string.error_select_file_first)
+                        } else {
+                            prepareEncryption(source, password)
+                        }
+                    }
+
+                    PasswordPrompt.UPGRADE_KEY -> runKeyOperation(
+                        operationResource = R.string.operation_upgrade_key,
+                        sensitiveInput = password,
+                        completionDetails = { state ->
+                            keyCompletionDetails(
+                                context.getString(R.string.default_public_key_filename),
+                                state.fingerprint,
+                            )
+                        },
+                    ) {
+                        keyManager.upgradeToIdentityKeys(password.copyOf())
+                    }
                 }
             },
         )
@@ -1485,6 +1581,24 @@ private fun NekoKEMRoute(
         )
     }
 
+    fun updateSignatureSettings(updated: SignatureSettings) {
+        if (SignatureSettingsStore.write(context, updated)) {
+            signatureSettings = updated
+        } else {
+            showSnackbar(R.string.error_settings_save)
+        }
+    }
+
+    if (confirmUnsignedEncryption) {
+        UnsignedEncryptionWarningDialog(
+            onConfirm = {
+                confirmUnsignedEncryption = false
+                updateSignatureSettings(signatureSettings.copy(unsignedEncryption = true))
+            },
+            onDismiss = { confirmUnsignedEncryption = false },
+        )
+    }
+
     NekoKEMAppShell(
         state = NekoKEMUiState(
             nativeConnected = nativeConnected,
@@ -1512,6 +1626,9 @@ private fun NekoKEMRoute(
             publicKeyRecipientCount = selectedContactIds.size,
             contactSelection = contactSelection,
             uiStyle = uiStyle,
+            canSign = keyState.canSign,
+            legacyFingerprint = keyState.legacyFingerprint,
+            signatureSettings = signatureSettings,
         ),
         actions = NekoKEMActions(
             onGenerate = {
@@ -1603,7 +1720,13 @@ private fun NekoKEMRoute(
                         R.string.operation_encrypt_file,
                         R.string.error_public_key_not_found,
                     )
-                    else -> prepareEncryption(source)
+                    signatureSettings.unsignedEncryption -> prepareEncryption(source, null)
+                    // Signing needs this device's identity key pair.
+                    !keyState.privateKeyExists || !keyState.canSign -> reportFailure(
+                        R.string.operation_encrypt_file,
+                        LocalKeyManager.RESULT_SIGNING_KEY_LEGACY,
+                    )
+                    else -> passwordPrompt = PasswordPrompt.SIGN_ENCRYPTION
                 }
             },
             onDecrypt = {
@@ -1653,6 +1776,22 @@ private fun NekoKEMRoute(
                 }
             },
             onUiStyleChange = onUiStyleChange,
+            onUpgradeKey = { passwordPrompt = PasswordPrompt.UPGRADE_KEY },
+            onExportLegacyPublicKey = {
+                pendingOutputAction = PendingOutputAction.EXPORT_LEGACY_PUBLIC_KEY
+                createOutputLauncher.launch(legacyPublicKeyExportRequest())
+            },
+            onUnsignedEncryptionChange = { enabled ->
+                // Turning signing off always asks first; turning it back on never does.
+                if (enabled) {
+                    confirmUnsignedEncryption = true
+                } else {
+                    updateSignatureSettings(signatureSettings.copy(unsignedEncryption = false))
+                }
+            },
+            onRequireSignatureChange = { required ->
+                updateSignatureSettings(signatureSettings.copy(requireSignature = required))
+            },
         ),
         snackbarHostState = snackbarHostState,
     )
@@ -1702,6 +1841,11 @@ private fun resultReason(
             R.string.error_reason_public_key_commit
         LocalKeyManager.RESULT_PUBLIC_KEY_INTEGRITY_FAILED ->
             R.string.error_reason_public_key_integrity
+        LocalKeyManager.RESULT_SIGNING_KEY_LEGACY -> R.string.error_reason_signing_key
+        LocalKeyManager.RESULT_ALREADY_IDENTITY -> R.string.error_reason_already_identity
+        LocalKeyManager.RESULT_SIGNATURE_INVALID -> R.string.error_reason_signature_invalid
+        LocalKeyManager.RESULT_SIGNATURE_REQUIRED -> R.string.error_reason_signature_required
+        LocalKeyManager.RESULT_SIGNER_NOT_TRUSTED -> R.string.error_reason_signer_not_trusted
         NativeBridge.RESULT_INVALID_ARGUMENT -> R.string.error_reason_invalid_argument
         NativeBridge.RESULT_ALLOCATION_ERROR -> R.string.error_reason_memory
         NativeBridge.RESULT_JAVA_EXCEPTION -> R.string.error_reason_jni
@@ -1721,7 +1865,9 @@ private fun resultReason(
                 R.string.error_reason_public_key
             R.string.operation_select_temporary_private_key ->
                 R.string.error_reason_authentication
+            R.string.operation_upgrade_key -> R.string.error_reason_upgrade
             R.string.operation_export_public_key,
+            R.string.operation_export_legacy_public_key,
             R.string.operation_export_private_key -> R.string.error_reason_export
             R.string.operation_delete_public_key,
             R.string.operation_delete_private_key,
@@ -1731,6 +1877,43 @@ private fun resultReason(
         }
     }
     return context.getString(reasonResource)
+}
+
+/** Core's signature report as completion lines; an unsigned file is marked red. */
+private fun signatureDetails(
+    context: Context,
+    signature: SignatureReport?,
+    signerLabel: String?,
+): List<OperationResultDetail> {
+    if (signature == null) return emptyList()
+    val format = OperationResultDetail(
+        R.string.completion_format,
+        context.getString(R.string.completion_format_value, signature.format),
+    )
+    val status = when (signature.status) {
+        NativeBridge.SIGNATURE_TRUSTED -> OperationResultDetail(
+            R.string.completion_signature,
+            when {
+                signature.signedBySelf -> context.getString(R.string.signature_trusted_self)
+                signerLabel != null -> context.getString(R.string.signature_trusted_contact, signerLabel)
+                else -> context.getString(R.string.signature_trusted_self)
+            },
+        )
+        NativeBridge.SIGNATURE_VALID_UNTRUSTED -> OperationResultDetail(
+            R.string.completion_signature,
+            context.getString(R.string.signature_untrusted),
+            warning = true,
+        )
+        else -> OperationResultDetail(
+            R.string.completion_signature,
+            context.getString(R.string.signature_none),
+            warning = true,
+        )
+    }
+    val signer = signature.signerFingerprint?.let {
+        OperationResultDetail(R.string.completion_signer_fingerprint, it)
+    }
+    return listOfNotNull(format, status, signer)
 }
 
 private const val ANY_MIME_TYPE = "*/*"

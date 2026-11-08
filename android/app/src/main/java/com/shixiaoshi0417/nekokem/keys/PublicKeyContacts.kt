@@ -16,7 +16,12 @@ data class PublicKeyContact(
     val fingerprint: String,
     val displayName: String,
     val note: String,
+    /** The 4.x fingerprint of an identity key; null for a legacy key. */
+    val legacyFingerprint: String? = null,
 ) {
+    /** Identity keys verify signatures; files this contact signs are trusted. */
+    val canVerify: Boolean get() = legacyFingerprint != null
+
     val label: String get() = note.ifBlank { displayName }
 }
 
@@ -27,6 +32,9 @@ data class PublicKeyContactsState(
 )
 
 data class PublicKeyContactResult(val code: Int, val contact: PublicKeyContact? = null)
+
+/** Verified identity-key snapshots of saved contacts, trusted as signers. */
+class ContactSigners internal constructor(val ids: List<String>, val keys: List<TemporaryPublicKey>)
 
 /** Snapshots for one encryption, or the code and id of the contact that failed. */
 class ContactRecipientsResult internal constructor(
@@ -70,6 +78,11 @@ class PublicKeyContacts(
         }
     }
 
+    /**
+     * One person's legacy and upgraded keys stay one contact: an identity key
+     * replaces the contact saved for its legacy fingerprint and keeps its
+     * note, and a legacy key never adds a second entry beside its identity key.
+     */
     fun save(key: TemporaryPublicKey, note: String): PublicKeyContactResult = synchronized(lock) {
         var canonical: TemporaryPublicKey? = null
         try {
@@ -77,12 +90,33 @@ class PublicKeyContacts(
             requirePrivateDirectory(directory, create = true)
             val id = identity(key.fingerprint)
             val target = recordFile(id)
-            if (!target.exists()) {
+            canonical = verifiedSnapshot(key.file, key.fingerprint, key.displayName)
+            val legacy = if (keyManager.publicKeyCanVerify(canonical.file)) {
+                checkNotNull(keyManager.publicKeyLegacyFingerprint(canonical.file)).also { identity(it) }
+            } else {
+                null
+            }
+            if (legacy == null) {
+                existingIdentityFor(key.fingerprint)?.let {
+                    return@synchronized PublicKeyContactResult(NativeBridge.RESULT_SUCCESS, it)
+                }
+            }
+            val replaced = legacy?.let { readable(identity(it)) }
+            if (!target.exists() && replaced == null) {
                 check(checkNotNull(directory.listFiles()).count { it.name.endsWith(".json") } < MAX_CONTACTS)
             }
-            canonical = verifiedSnapshot(key.file, key.fingerprint, key.displayName)
-            val contact = PublicKeyContact(id, key.fingerprint, safeName(key.displayName), note.trim())
+            val contact = PublicKeyContact(
+                id,
+                key.fingerprint,
+                safeName(key.displayName),
+                note.trim().ifEmpty { replaced?.contact?.note.orEmpty() },
+                legacy,
+            )
             writeRecord(Record(contact, readPrivateFile(canonical.file, MAX_PUBLIC_KEY_BYTES)))
+            if (replaced != null) {
+                check(recordFile(replaced.contact.id).delete())
+                syncDirectory(directory)
+            }
             PublicKeyContactResult(NativeBridge.RESULT_SUCCESS, contact)
         } catch (error: Failure) {
             PublicKeyContactResult(error.code)
@@ -122,6 +156,37 @@ class PublicKeyContacts(
             LocalKeyManager.RESULT_STORAGE_ERROR
         }
     }
+
+    /**
+     * Stages every saved identity contact that still verifies, for Core to
+     * match signers against. A damaged entry is left out: that only weakens
+     * the reported status, never strengthens it.
+     */
+    fun stageSigners(): ContactSigners {
+        val ids = mutableListOf<String>()
+        val keys = mutableListOf<TemporaryPublicKey>()
+        readState().contacts.filter { it.canVerify }.forEach { contact ->
+            val key = stageForEncryption(contact.id).key ?: return@forEach
+            if (keyManager.publicKeyCanVerify(key.file)) {
+                ids += contact.id
+                keys += key
+            } else {
+                key.file.delete()
+            }
+        }
+        return ContactSigners(ids, keys)
+    }
+
+    private fun readable(id: String): Record? = try {
+        readRecord(id)
+    } catch (_: Exception) {
+        null
+    }
+
+    private fun existingIdentityFor(legacyFingerprint: String): PublicKeyContact? =
+        checkNotNull(directory.listFiles()).filter { it.name.endsWith(".json") }
+            .mapNotNull { readable(it.name.removeSuffix(".json"))?.contact }
+            .firstOrNull { it.legacyFingerprint == legacyFingerprint }
 
     /** Always re-read and validate; a missing/damaged entry never selects the default key. */
     fun stageForEncryption(id: String): TemporaryPublicKeyResult = synchronized(lock) {
@@ -216,7 +281,11 @@ class PublicKeyContacts(
         check(name == safeName(name) && validNote(note))
         val key = Base64.decode(json.get("publicKey") as String, Base64.NO_WRAP)
         check(key.isNotEmpty() && key.size <= MAX_PUBLIC_KEY_BYTES)
-        return Record(PublicKeyContact(id, fingerprint, name, note), key)
+        // Present exactly for identity keys; records from 4.x have neither.
+        val legacy = if (json.has("legacyFingerprint")) json.get("legacyFingerprint") as String else null
+        val components = key.toString(Charsets.US_ASCII).split("-----BEGIN PUBLIC KEY-----").size - 1
+        check(if (legacy == null) components == 2 else components == 4 && identity(legacy) != id)
+        return Record(PublicKeyContact(id, fingerprint, name, note, legacy), key)
     }
 
     private fun writeRecord(record: Record) {
@@ -229,6 +298,7 @@ class PublicKeyContacts(
             .put("displayName", contact.displayName)
             .put("note", contact.note)
             .put("publicKey", Base64.encodeToString(record.publicKey, Base64.NO_WRAP))
+            .apply { contact.legacyFingerprint?.let { put("legacyFingerprint", it) } }
             .toString().toByteArray(Charsets.UTF_8)
         check(encoded.size <= MAX_RECORD_BYTES)
         val candidate = File.createTempFile(".contact-", ".tmp", directory)

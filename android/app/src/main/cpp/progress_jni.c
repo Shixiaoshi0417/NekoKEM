@@ -362,3 +362,290 @@ cleanup:
     progress_path_release(env, &input);
     return (jint)result;
 }
+
+/*
+ * Converts a Java String[] of key paths into borrowed UTF-8 values. On
+ * failure the caller still releases the first *acquired entries.
+ */
+static int progress_paths_acquire(JNIEnv *env,
+                                  jobjectArray sources,
+                                  jsize minimum,
+                                  ProgressJniPath *paths,
+                                  const char **values,
+                                  jsize *count,
+                                  jsize *acquired)
+{
+    jsize index;
+
+    *count = 0;
+    *acquired = 0;
+    if (sources == NULL) {
+        return PROGRESS_JNI_INVALID_ARGUMENT;
+    }
+    *count = (*env)->GetArrayLength(env, sources);
+    if ((*env)->ExceptionCheck(env) == JNI_TRUE) {
+        return PROGRESS_JNI_JAVA_EXCEPTION;
+    }
+    if (*count < minimum || (size_t)*count > NEKOKEM_MAX_RECIPIENTS) {
+        return PROGRESS_JNI_INVALID_ARGUMENT;
+    }
+    if ((*env)->EnsureLocalCapacity(env, *count + 8) != 0) {
+        return (*env)->ExceptionCheck(env) == JNI_TRUE
+                   ? PROGRESS_JNI_JAVA_EXCEPTION
+                   : PROGRESS_JNI_ALLOCATION_ERROR;
+    }
+    for (index = 0; index < *count; ++index) {
+        jstring path = (jstring)(*env)->GetObjectArrayElement(env, sources, index);
+        int result;
+
+        if ((*env)->ExceptionCheck(env) == JNI_TRUE) {
+            if (path != NULL) {
+                (*env)->DeleteLocalRef(env, path);
+            }
+            return PROGRESS_JNI_JAVA_EXCEPTION;
+        }
+        *acquired = index + 1;
+        result = progress_path_acquire(env, path, &paths[index]);
+        if (result != PROGRESS_JNI_SUCCESS) {
+            return result;
+        }
+        values[index] = paths[index].value;
+    }
+    return PROGRESS_JNI_SUCCESS;
+}
+
+static void progress_paths_release(JNIEnv *env,
+                                   ProgressJniPath *paths,
+                                   jsize acquired)
+{
+    jsize index;
+
+    for (index = 0; index < acquired; ++index) {
+        jstring source = paths[index].source;
+
+        progress_path_release(env, &paths[index]);
+        if (source != NULL) {
+            (*env)->DeleteLocalRef(env, source);
+        }
+    }
+}
+
+/* Core's signature policy failures reach Kotlin unchanged. */
+static jint signature_result_to_jni(int core_result,
+                                    const ProgressJniCallback *callback)
+{
+    if (callback->java_exception == 0 &&
+        (core_result == NEKOKEM_ERROR_SIGNATURE_INVALID ||
+         core_result == NEKOKEM_ERROR_SIGNATURE_REQUIRED ||
+         core_result == NEKOKEM_ERROR_SIGNER_NOT_TRUSTED)) {
+        return (jint)core_result;
+    }
+    return progress_result_to_jni(core_result, callback);
+}
+
+/*
+ * NKEM v5 for 1 to 64 recipients, signed with the identity private key at
+ * sign_key_path. A missing or two-component signing key is a Core error;
+ * Core never falls back to an unsigned file.
+ */
+JNIEXPORT jint JNICALL
+Java_com_shixiaoshi0417_nekokem_nativecore_NativeBridge_nativeEncryptFileSignedWithProgress(
+    JNIEnv *env,
+    jobject bridge,
+    jstring input_path,
+    jstring output_path,
+    jobjectArray public_key_paths,
+    jstring sign_key_path,
+    jbyteArray password_array,
+    jobject callback)
+{
+    ProgressJniPath input = {0};
+    ProgressJniPath output = {0};
+    ProgressJniPath sign_path = {0};
+    ProgressJniPath keys[NEKOKEM_MAX_RECIPIENTS] = {{0}};
+    const char *key_values[NEKOKEM_MAX_RECIPIENTS] = {0};
+    ProgressJniCallback progress = {0};
+    NekoKEMEncryptOptions options = {0};
+    NekoKEMEncryptResult written = {0};
+    unsigned char *password = NULL;
+    size_t password_len = 0U;
+    jsize count = 0;
+    jsize acquired = 0;
+    int result;
+    int core_result;
+
+    (void)bridge;
+    result = progress_paths_acquire(env, public_key_paths, 1, keys,
+                                    key_values, &count, &acquired);
+    if (result != PROGRESS_JNI_SUCCESS) {
+        goto cleanup;
+    }
+    result = progress_path_acquire(env, input_path, &input);
+    if (result != PROGRESS_JNI_SUCCESS) {
+        goto cleanup;
+    }
+    result = progress_path_acquire(env, output_path, &output);
+    if (result != PROGRESS_JNI_SUCCESS) {
+        goto cleanup;
+    }
+    result = progress_path_acquire(env, sign_key_path, &sign_path);
+    if (result != PROGRESS_JNI_SUCCESS) {
+        goto cleanup;
+    }
+    result = progress_password_copy(env, password_array,
+                                    &password, &password_len);
+    if (result != PROGRESS_JNI_SUCCESS) {
+        goto cleanup;
+    }
+    result = progress_callback_prepare(env, callback, &progress);
+    if (result != PROGRESS_JNI_SUCCESS) {
+        goto cleanup;
+    }
+    options.struct_size = sizeof(options);
+    options.flags = 0U;
+    options.sender_private_key_path = sign_path.value;
+    options.password = password;
+    options.password_len = password_len;
+    written.struct_size = sizeof(written);
+    core_result = nekokem_encrypt_file_v5_with_progress(
+        input.value, output.value, key_values, (size_t)count, &options,
+        &written, progress_callback_bridge, &progress);
+    result = (int)progress_result_to_jni(core_result, &progress);
+    if (result == PROGRESS_JNI_SUCCESS && written.format_version != 5) {
+        result = PROGRESS_JNI_CORE_ERROR;
+    }
+
+cleanup:
+    OPENSSL_clear_free(password, password_len);
+    progress_path_release(env, &sign_path);
+    progress_path_release(env, &output);
+    progress_path_release(env, &input);
+    progress_paths_release(env, keys, acquired);
+    return (jint)result;
+}
+
+/*
+ * Decrypts NKEM v3, v4 or v5 and lets Core enforce the signature policy.
+ * report receives {format, status, trusted signer index}; signer receives
+ * the signer's fingerprint for v5. Output is committed only after every
+ * check passes.
+ */
+JNIEXPORT jint JNICALL
+Java_com_shixiaoshi0417_nekokem_nativecore_NativeBridge_nativeDecryptFileVerifiedWithProgress(
+    JNIEnv *env,
+    jobject bridge,
+    jstring input_path,
+    jstring output_path,
+    jstring private_key_path,
+    jbyteArray password_array,
+    jobjectArray trusted_paths,
+    jboolean require_signature,
+    jstring signer_output_path,
+    jintArray report,
+    jobjectArray signer,
+    jobject callback)
+{
+    ProgressJniPath input = {0};
+    ProgressJniPath output = {0};
+    ProgressJniPath private_path = {0};
+    ProgressJniPath signer_output = {0};
+    ProgressJniPath trusted[NEKOKEM_MAX_RECIPIENTS] = {{0}};
+    const char *trusted_values[NEKOKEM_MAX_RECIPIENTS] = {0};
+    ProgressJniCallback progress = {0};
+    NekoKEMVerifyPolicy policy = {0};
+    NekoKEMVerifyResult verified = {0};
+    unsigned char *password = NULL;
+    size_t password_len = 0U;
+    jsize count = 0;
+    jsize acquired = 0;
+    jint values[3];
+    int result;
+    int core_result;
+
+    (void)bridge;
+    if (report == NULL || signer == NULL ||
+        (*env)->GetArrayLength(env, report) != 3 ||
+        (*env)->GetArrayLength(env, signer) != 1) {
+        result = PROGRESS_JNI_INVALID_ARGUMENT;
+        goto cleanup;
+    }
+    result = progress_paths_acquire(env, trusted_paths, 0, trusted,
+                                    trusted_values, &count, &acquired);
+    if (result != PROGRESS_JNI_SUCCESS) {
+        goto cleanup;
+    }
+    result = progress_path_acquire(env, input_path, &input);
+    if (result != PROGRESS_JNI_SUCCESS) {
+        goto cleanup;
+    }
+    result = progress_path_acquire(env, output_path, &output);
+    if (result != PROGRESS_JNI_SUCCESS) {
+        goto cleanup;
+    }
+    result = progress_path_acquire(env, private_key_path, &private_path);
+    if (result != PROGRESS_JNI_SUCCESS) {
+        goto cleanup;
+    }
+    if (signer_output_path != NULL) {
+        result = progress_path_acquire(env, signer_output_path, &signer_output);
+        if (result != PROGRESS_JNI_SUCCESS) {
+            goto cleanup;
+        }
+    }
+    result = progress_password_copy(env, password_array,
+                                    &password, &password_len);
+    if (result != PROGRESS_JNI_SUCCESS) {
+        goto cleanup;
+    }
+    result = progress_callback_prepare(env, callback, &progress);
+    if (result != PROGRESS_JNI_SUCCESS) {
+        goto cleanup;
+    }
+    policy.struct_size = sizeof(policy);
+    policy.flags = require_signature == JNI_TRUE
+                       ? NEKOKEM_VERIFY_REQUIRE_SIGNATURE : 0U;
+    policy.trusted_signer_paths = count > 0 ? trusted_values : NULL;
+    policy.trusted_signer_count = (size_t)count;
+    policy.signer_public_key_output_path = signer_output.value;
+    verified.struct_size = sizeof(verified);
+    core_result = nekokem_decrypt_file_verified_with_progress(
+        input.value, output.value, private_path.value, password, password_len,
+        &policy, &verified, progress_callback_bridge, &progress);
+    result = (int)signature_result_to_jni(core_result, &progress);
+    if (result == PROGRESS_JNI_SUCCESS) {
+        jstring fingerprint = NULL;
+
+        values[0] = (jint)verified.format_version;
+        values[1] = (jint)verified.signature_status;
+        values[2] = verified.signature_status == NEKOKEM_SIGNATURE_TRUSTED
+                        ? (jint)verified.trusted_signer_index : -1;
+        (*env)->SetIntArrayRegion(env, report, 0, 3, values);
+        if ((*env)->ExceptionCheck(env) == JNI_TRUE) {
+            result = PROGRESS_JNI_JAVA_EXCEPTION;
+            goto cleanup;
+        }
+        if (verified.format_version == 5) {
+            fingerprint = (*env)->NewStringUTF(env, verified.signer_fingerprint);
+            if (fingerprint == NULL) {
+                result = (*env)->ExceptionCheck(env) == JNI_TRUE
+                             ? PROGRESS_JNI_JAVA_EXCEPTION
+                             : PROGRESS_JNI_ALLOCATION_ERROR;
+                goto cleanup;
+            }
+            (*env)->SetObjectArrayElement(env, signer, 0, fingerprint);
+            (*env)->DeleteLocalRef(env, fingerprint);
+            if ((*env)->ExceptionCheck(env) == JNI_TRUE) {
+                result = PROGRESS_JNI_JAVA_EXCEPTION;
+            }
+        }
+    }
+
+cleanup:
+    OPENSSL_clear_free(password, password_len);
+    progress_path_release(env, &signer_output);
+    progress_path_release(env, &private_path);
+    progress_path_release(env, &output);
+    progress_path_release(env, &input);
+    progress_paths_release(env, trusted, acquired);
+    return (jint)result;
+}

@@ -17,7 +17,25 @@ import kotlin.concurrent.withLock
 data class LocalKeyState(
     val privateKeyExists: Boolean,
     val fingerprint: String?,
+    /** An identity key (four components): it signs and verifies signatures. */
+    val canSign: Boolean = false,
+    /** The X448 + ML-KEM-1024 fingerprint NekoKEM 4.x shows for this key. */
+    val legacyFingerprint: String? = null,
 )
+
+/**
+ * Core's report for one decryption. [trustedContact] is the index into the
+ * trusted contact keys, or -1; [signedBySelf] means this device's own key.
+ */
+data class SignatureReport(
+    val format: Int,
+    val status: Int,
+    val signerFingerprint: String?,
+    val signedBySelf: Boolean = false,
+    val trustedContact: Int = -1,
+)
+
+data class VerifiedDecryptionResult(val code: Int, val signature: SignatureReport?)
 
 class LocalKeyManager internal constructor(
     context: Context,
@@ -29,16 +47,88 @@ class LocalKeyManager internal constructor(
     private val publicKey = File(keysDirectory, PUBLIC_KEY_NAME)
     private val privateKey = File(keysDirectory, PRIVATE_KEY_NAME)
 
-    fun readState(): LocalKeyState = LocalKeyState(
-        privateKeyExists = NativeBridge.nativeHasPrivateKey(
-            privateKey.absolutePath,
-        ),
-        fingerprint = if (publicKey.isFile) {
-            NativeBridge.nativeGetFingerprint(publicKey.absolutePath)
+    fun readState(): LocalKeyState {
+        val hasPublicKey = publicKey.isFile
+        val canVerify = hasPublicKey && NativeBridge.nativePublicKeyCanVerify(publicKey.absolutePath)
+        return LocalKeyState(
+            privateKeyExists = NativeBridge.nativeHasPrivateKey(
+                privateKey.absolutePath,
+            ),
+            fingerprint = if (hasPublicKey) {
+                NativeBridge.nativeGetFingerprint(publicKey.absolutePath)
+            } else {
+                null
+            },
+            canSign = canVerify,
+            legacyFingerprint = if (canVerify) {
+                NativeBridge.nativePublicKeyLegacyFingerprint(publicKey.absolutePath)
+            } else {
+                null
+            },
+        )
+    }
+
+    /**
+     * Adds signing keys to this device's NekoKEM 4.x key pair. Its encryption
+     * keys and password stay the same. Takes ownership of [password].
+     */
+    fun upgradeToIdentityKeys(password: ByteArray): Int = keyMutationLock.withLock {
+        try {
+            when {
+                password.isEmpty() -> NativeBridge.RESULT_INVALID_ARGUMENT
+                NativeBridge.nativePublicKeyCanVerify(publicKey.absolutePath) -> RESULT_ALREADY_IDENTITY
+                else -> {
+                    val result = NativeBridge.nativeUpgradeToIdentityKeys(
+                        publicKey.absolutePath,
+                        privateKey.absolutePath,
+                        password,
+                    )
+                    if (result != NativeBridge.RESULT_SUCCESS) {
+                        result
+                    } else if (!setAndVerifyRegularFileMode(publicKey, PRIVATE_FILE_MODE)) {
+                        RESULT_STORAGE_ERROR
+                    } else {
+                        NativeBridge.RESULT_SUCCESS
+                    }
+                }
+            }
+        } catch (_: Exception) {
+            RESULT_STORAGE_ERROR
+        } finally {
+            password.fill(0)
+        }
+    }
+
+    /** Only the two encryption components, for recipients on NekoKEM 4.x. */
+    fun exportLegacyPublicKey(output: File): Int = try {
+        val result = NativeBridge.nativeExportLegacyPublicKey(
+            publicKey.absolutePath,
+            output.absolutePath,
+        )
+        if (result != NativeBridge.RESULT_SUCCESS) {
+            result
+        } else if (!setAndVerifyRegularFileMode(output, PRIVATE_FILE_MODE)) {
+            clearAndDeleteRegularFile(output)
+            RESULT_STORAGE_ERROR
         } else {
-            null
-        },
-    )
+            NativeBridge.RESULT_SUCCESS
+        }
+    } catch (_: Exception) {
+        clearAndDeleteRegularFile(output)
+        RESULT_STORAGE_ERROR
+    }
+
+    fun publicKeyCanVerify(input: File): Boolean = try {
+        NativeBridge.nativePublicKeyCanVerify(input.absolutePath)
+    } catch (_: Exception) {
+        false
+    }
+
+    fun publicKeyLegacyFingerprint(input: File): String? = try {
+        NativeBridge.nativePublicKeyLegacyFingerprint(input.absolutePath)
+    } catch (_: Exception) {
+        null
+    }
 
     /** Whether either key file exists, valid or not; generation never replaces one. */
     fun hasKeyFiles(): Boolean = publicKey.exists() || privateKey.exists()
@@ -128,23 +218,56 @@ class LocalKeyManager internal constructor(
         progress: NativeProgressCallback,
     ): Int = encryptFile(input, output, null, progress)
 
+    /**
+     * With [signingPassword] the file is NKEM v5 signed with this device's
+     * identity key; without it, unsigned NKEM v3. Takes ownership of
+     * [signingPassword] and clears it before returning.
+     */
     fun encryptFile(
         input: File,
         output: File,
         temporaryKey: TemporaryPublicKey?,
         progress: NativeProgressCallback,
+        signingPassword: ByteArray? = null,
     ): Int = try {
         val currentFingerprint = temporaryKey?.let { publicKeyFingerprint(it.file) }
+        val recipient = (temporaryKey?.file ?: publicKey).absolutePath
         if (temporaryKey != null && currentFingerprint != temporaryKey.fingerprint) {
             RESULT_FINGERPRINT_MISMATCH
+        } else if (signingPassword != null) {
+            encryptSigned(input, output, arrayOf(recipient), signingPassword, progress)
         } else NativeBridge.nativeEncryptFileWithProgress(
             input.absolutePath,
             output.absolutePath,
-            (temporaryKey?.file ?: publicKey).absolutePath,
+            recipient,
             progress,
         )
     } catch (_: Exception) {
         RESULT_STORAGE_ERROR
+    } finally {
+        signingPassword?.fill(0)
+    }
+
+    private fun encryptSigned(
+        input: File,
+        output: File,
+        recipients: Array<String>,
+        password: ByteArray,
+        progress: NativeProgressCallback,
+    ): Int = if (password.isEmpty()) {
+        NativeBridge.RESULT_INVALID_ARGUMENT
+    } else if (!NativeBridge.nativePublicKeyCanVerify(publicKey.absolutePath)) {
+        // A 4.x key cannot sign; the user upgrades it or turns signing off.
+        RESULT_SIGNING_KEY_LEGACY
+    } else {
+        NativeBridge.nativeEncryptFileSignedWithProgress(
+            input.absolutePath,
+            output.absolutePath,
+            recipients,
+            privateKey.absolutePath,
+            password,
+            progress,
+        )
     }
 
     /**
@@ -157,12 +280,20 @@ class LocalKeyManager internal constructor(
         output: File,
         keys: List<TemporaryPublicKey>,
         progress: NativeProgressCallback,
+        signingPassword: ByteArray? = null,
     ): Int = try {
         when {
             keys.isEmpty() || keys.size > NativeBridge.MAX_RECIPIENTS ||
                 keys.map { it.fingerprint }.toSet().size != keys.size -> NativeBridge.RESULT_INVALID_ARGUMENT
-            keys.size == 1 -> encryptFile(input, output, keys.single(), progress)
+            keys.size == 1 -> encryptFile(input, output, keys.single(), progress, signingPassword?.copyOf())
             keys.any { publicKeyFingerprint(it.file) != it.fingerprint } -> RESULT_FINGERPRINT_MISMATCH
+            signingPassword != null -> encryptSigned(
+                input,
+                output,
+                keys.map { it.file.absolutePath }.toTypedArray(),
+                signingPassword,
+                progress,
+            )
             else -> NativeBridge.nativeEncryptFileMultiWithProgress(
                 input.absolutePath,
                 output.absolutePath,
@@ -172,6 +303,8 @@ class LocalKeyManager internal constructor(
         }
     } catch (_: Exception) {
         RESULT_STORAGE_ERROR
+    } finally {
+        signingPassword?.fill(0)
     }
 
     /** Takes ownership of [password] and clears it before returning. */
@@ -241,6 +374,73 @@ class LocalKeyManager internal constructor(
         }
     } catch (_: Exception) {
         RESULT_STORAGE_ERROR
+    } finally {
+        password.fill(0)
+    }
+
+    /**
+     * Decrypts with Core's signature verification. This device's own identity
+     * key and [trustedKeys] (saved contacts) are trusted signers; Core decides
+     * the status. Takes ownership of [password].
+     */
+    fun decryptFileVerified(
+        input: File,
+        output: File,
+        temporaryKey: TemporaryPrivateKey?,
+        password: ByteArray,
+        progress: NativeProgressCallback,
+        trustedKeys: List<File> = emptyList(),
+        requireSignature: Boolean = false,
+    ): VerifiedDecryptionResult = try {
+        if (password.isEmpty()) {
+            VerifiedDecryptionResult(NativeBridge.RESULT_INVALID_ARGUMENT, null)
+        } else {
+            val selectedPath = temporaryKey?.file ?: privateKey
+            val currentFingerprint = temporaryKey?.let {
+                NativeBridge.nativePrivateKeyFingerprint(selectedPath.absolutePath, password)
+            }
+            when {
+                temporaryKey != null && currentFingerprint == null ->
+                    VerifiedDecryptionResult(NativeBridge.RESULT_CORE_ERROR, null)
+                temporaryKey != null && currentFingerprint != temporaryKey.fingerprint ->
+                    VerifiedDecryptionResult(RESULT_FINGERPRINT_MISMATCH, null)
+                else -> {
+                    val own = publicKey.isFile && NativeBridge.nativePublicKeyCanVerify(publicKey.absolutePath)
+                    val trusted = (if (own) listOf(publicKey) else emptyList()) + trustedKeys
+                    val report = IntArray(3)
+                    val signer = arrayOfNulls<String>(1)
+                    val code = NativeBridge.nativeDecryptFileVerifiedWithProgress(
+                        input.absolutePath,
+                        output.absolutePath,
+                        selectedPath.absolutePath,
+                        password,
+                        trusted.map { it.absolutePath }.toTypedArray(),
+                        requireSignature,
+                        null,
+                        report,
+                        signer,
+                        progress,
+                    )
+                    if (code != NativeBridge.RESULT_SUCCESS) {
+                        VerifiedDecryptionResult(signatureCode(code), null)
+                    } else {
+                        val index = report[2]
+                        VerifiedDecryptionResult(
+                            code,
+                            SignatureReport(
+                                format = report[0],
+                                status = report[1],
+                                signerFingerprint = signer[0],
+                                signedBySelf = own && index == 0,
+                                trustedContact = if (index < 0 || (own && index == 0)) -1 else index - if (own) 1 else 0,
+                            ),
+                        )
+                    }
+                }
+            }
+        }
+    } catch (_: Exception) {
+        VerifiedDecryptionResult(RESULT_STORAGE_ERROR, null)
     } finally {
         password.fill(0)
     }
@@ -1023,6 +1223,20 @@ class LocalKeyManager internal constructor(
 
         /** The key is deleted, but a residue that may hold a private key remains. */
         const val RESULT_DELETED_RESIDUE_RETAINED = -18
+        /** Signing needs an identity key; this device still has a 4.x key. */
+        const val RESULT_SIGNING_KEY_LEGACY = -19
+        const val RESULT_ALREADY_IDENTITY = -20
+        /** Core's signature failures, moved clear of the codes above. */
+        const val RESULT_SIGNATURE_INVALID = -30
+        const val RESULT_SIGNATURE_REQUIRED = -31
+        const val RESULT_SIGNER_NOT_TRUSTED = -32
+
+        fun signatureCode(code: Int): Int = when (code) {
+            NativeBridge.RESULT_SIGNATURE_INVALID -> RESULT_SIGNATURE_INVALID
+            NativeBridge.RESULT_SIGNATURE_REQUIRED -> RESULT_SIGNATURE_REQUIRED
+            NativeBridge.RESULT_SIGNER_NOT_TRUSTED -> RESULT_SIGNER_NOT_TRUSTED
+            else -> code
+        }
         private const val CACHE_CLEAR_BUFFER_SIZE = 64 * 1024
         private const val KEY_COPY_BUFFER_SIZE = 64 * 1024
         private const val MAX_KEY_FILE_BYTES = 16L * 1024L * 1024L

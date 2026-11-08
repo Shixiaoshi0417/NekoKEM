@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
@@ -17,6 +18,8 @@ import com.shixiaoshi0417.nekokem.progress.OperationProgressSnapshot
 data class OperationResultDetail(
     @StringRes val labelResource: Int,
     val value: String,
+    /** Shown in the theme's error color, such as an unsigned file. */
+    val warning: Boolean = false,
 )
 
 @Composable
@@ -45,6 +48,7 @@ fun OperationCompletedDialog(
                     ResultLine(
                         label = stringResource(detail.labelResource),
                         value = detail.value,
+                        warning = detail.warning,
                     )
                 }
                 progress?.let { snapshot ->
@@ -101,9 +105,10 @@ fun OperationErrorDialog(
 }
 
 @Composable
-private fun ResultLine(label: String, value: String) {
+private fun ResultLine(label: String, value: String, warning: Boolean = false) {
     Text(
         modifier = Modifier.padding(vertical = 4.dp),
         text = stringResource(R.string.result_line, label, value),
+        color = if (warning) signatureWarningColor() else Color.Unspecified,
     )
 }

@@ -184,6 +184,11 @@ private fun ContactIdentity(contact: PublicKeyContact) {
     Text(contact.label, style = MaterialTheme.typography.titleMediumEmphasized)
     Text(stringResource(R.string.key_file_line, contact.displayName), style = MaterialTheme.typography.bodyMedium)
     Text(stringResource(R.string.key_fingerprint_line, contact.fingerprint), style = MaterialTheme.typography.bodySmall)
+    Text(
+        stringResource(if (contact.canVerify) R.string.contact_verifies else R.string.contact_legacy),
+        style = MaterialTheme.typography.labelMedium,
+        color = if (contact.canVerify) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+    )
 }
 
 @Composable

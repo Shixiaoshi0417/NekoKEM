@@ -10,6 +10,7 @@ import android.os.Build
 import android.os.SystemClock
 import android.view.accessibility.AccessibilityNodeInfo
 import com.shixiaoshi0417.nekokem.i18n.AppLanguages
+import com.shixiaoshi0417.nekokem.ui.SignatureSettingsStore
 import com.shixiaoshi0417.nekokem.ui.UiStyle
 import com.shixiaoshi0417.nekokem.ui.UiStyles
 import java.io.File
@@ -35,6 +36,9 @@ internal fun runMiuixUiTests(instrumentation: Instrumentation, screenshotPrefix:
     // No stored choice, as after installation.
     check(context.getSharedPreferences("interface_style", Context.MODE_PRIVATE).edit().clear().commit())
     check(UiStyles.selection(context) == UiStyle.MIUIX) { "MIUIX is not the default interface style" }
+    // Signing is on after installation.
+    check(context.getSharedPreferences("signature_settings", Context.MODE_PRIVATE).edit().clear().commit())
+    check(!SignatureSettingsStore.read(context).unsignedEncryption) { "Unsigned encryption is on by default" }
     instrumentation.runOnMainSync { check(AppLanguages.setSelection(context, "en")) }
     var activity: Activity? = null
     fun find(root: AccessibilityNodeInfo?, predicate: (AccessibilityNodeInfo) -> Boolean): AccessibilityNodeInfo? {
@@ -153,6 +157,24 @@ internal fun runMiuixUiTests(instrumentation: Instrumentation, screenshotPrefix:
         }
         await("back to Files") { exact(string(R.string.navigation_files)) != null }
 
+        // Turning signing off needs the red warning; Cancel keeps signing on.
+        clickNavigationTab(instrumentation, string(R.string.tab_settings))
+        reveal(string(R.string.settings_unsigned_title))
+        click(string(R.string.settings_unsigned_title))
+        await("unsigned warning") { exact(string(R.string.unsigned_confirm_title)) != null }
+        capture("unsigned-warning")
+        click(string(R.string.action_cancel))
+        await("unsigned warning closed") { exact(string(R.string.unsigned_confirm_title)) == null }
+        check(!SignatureSettingsStore.read(context).unsignedEncryption) { "Cancel turned signing off" }
+        click(string(R.string.settings_unsigned_title))
+        click(string(R.string.action_turn_off_signing))
+        await("unsigned encryption stored") { SignatureSettingsStore.read(context).unsignedEncryption }
+        await("settings red warning") { exact(string(R.string.unsigned_warning)) != null }
+        capture("settings-unsigned")
+        clickNavigationTab(instrumentation, string(R.string.tab_files))
+        await("Files red warning") { exact(string(R.string.unsigned_warning)) != null }
+        capture("files-unsigned")
+
         // MIUIX settings: the dropdown switches to Material at once.
         clickNavigationTab(instrumentation, string(R.string.tab_settings))
         click(string(R.string.settings_ui_style_title))
@@ -160,7 +182,25 @@ internal fun runMiuixUiTests(instrumentation: Instrumentation, screenshotPrefix:
         await("Material style stored") { UiStyles.selection(context) == UiStyle.MATERIAL }
         // The Material shell opens on Files; its settings picker switches back to MIUIX.
         await("Material Files page") { exact(string(R.string.navigation_files)) != null }
+        await("Material Files red warning") { exact(string(R.string.unsigned_warning)) != null }
         capture("material-files")
+        clickNavigationTab(instrumentation, string(R.string.tab_settings))
+        // Turning signing back on never asks.
+        reveal(string(R.string.settings_unsigned_title))
+        capture("material-settings-unsigned")
+        click(string(R.string.settings_unsigned_title))
+        await("signing back on") { !SignatureSettingsStore.read(context).unsignedEncryption }
+        check(exact(string(R.string.unsigned_confirm_title)) == null) { "Turning signing on asked for confirmation" }
+        click(string(R.string.settings_unsigned_title))
+        await("Material unsigned warning") { exact(string(R.string.unsigned_confirm_title)) != null }
+        capture("material-unsigned-warning")
+        click(string(R.string.action_cancel))
+        await("Material unsigned warning closed") { exact(string(R.string.unsigned_confirm_title)) == null }
+        check(!SignatureSettingsStore.read(context).unsignedEncryption) { "Material Cancel turned signing off" }
+        instrumentation.runOnMainSync {
+            (checkNotNull(activity) as androidx.activity.ComponentActivity).onBackPressedDispatcher.onBackPressed()
+        }
+        await("Material Files page again") { exact(string(R.string.navigation_files)) != null }
         clickNavigationTab(instrumentation, string(R.string.tab_settings))
         click(string(R.string.settings_ui_style_title))
         click(string(R.string.settings_ui_style_miuix))
@@ -173,6 +213,7 @@ internal fun runMiuixUiTests(instrumentation: Instrumentation, screenshotPrefix:
         }
         automation.serviceInfo = priorServiceInfo
         useMaterialStyle(context)
+        context.getSharedPreferences("signature_settings", Context.MODE_PRIVATE).edit().clear().commit()
     }
     // Below Android 13 the language is stored by the App; it must not leak into later phases.
     if (Build.VERSION.SDK_INT < 33) check(AppLanguages.selection(context) == priorLanguage)
