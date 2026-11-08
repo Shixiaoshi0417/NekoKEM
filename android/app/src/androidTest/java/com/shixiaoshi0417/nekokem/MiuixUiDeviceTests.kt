@@ -195,6 +195,8 @@ internal fun runMiuixUiTests(instrumentation: Instrumentation, screenshotPrefix:
         capture("material-settings-unsigned")
         click(string(R.string.settings_unsigned_title))
         await("signing back on") { !SignatureSettingsStore.read(context).unsignedEncryption }
+        // The row toggles from the value it last drew, so wait for the redraw before toggling again.
+        await("Material red warning cleared") { exact(string(R.string.unsigned_warning)) == null }
         check(exact(string(R.string.unsigned_confirm_title)) == null) { "Turning signing on asked for confirmation" }
         click(string(R.string.settings_unsigned_title))
         await("Material unsigned warning") { exact(string(R.string.unsigned_confirm_title)) != null }
