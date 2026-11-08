@@ -32,6 +32,13 @@ object NativeBridge {
     /** Core's NEKOKEM_MAX_RECIPIENTS: most recipients in one NKEM v4/v5 file. */
     const val MAX_RECIPIENTS = 64
 
+    /**
+     * Core's NEKOKEM_MAX_TRUSTED_SIGNERS: most trusted signers (this device
+     * plus saved contacts) in one verified decryption. Separate from
+     * [MAX_RECIPIENTS], and above the 500 saved contacts plus this device.
+     */
+    const val MAX_TRUSTED_SIGNERS = 1024
+
     init {
         System.loadLibrary("nekokem_jni")
     }

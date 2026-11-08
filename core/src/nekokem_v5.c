@@ -400,6 +400,7 @@ int nekokem_v5_policy_is_valid(const NekoKEMVerifyPolicy *policy)
     if (policy->struct_size < sizeof(*policy) ||
         (policy->flags & ~(uint32_t)(NEKOKEM_VERIFY_REQUIRE_SIGNATURE |
                                      NEKOKEM_VERIFY_REQUIRE_TRUSTED)) != 0U ||
+        policy->trusted_signer_count > NEKOKEM_MAX_TRUSTED_SIGNERS ||
         (policy->trusted_signer_count > 0U &&
          policy->trusted_signer_paths == NULL) ||
         (policy->signer_public_key_output_path != NULL &&

@@ -677,8 +677,30 @@ static int test_signer_path_conflicts(void)
               NULL, NULL) == NEKOKEM_OPERATION_ERROR);
     CHECK(same_file("c.pub", "c-pub.copy"));
 
+    /* Core has its own trusted-signer limit, separate from recipients. */
+    {
+        static const char *repeated[NEKOKEM_MAX_TRUSTED_SIGNERS + 1U];
+        size_t index;
+
+        for (index = 0U; index < NEKOKEM_MAX_TRUSTED_SIGNERS + 1U; ++index) {
+            repeated[index] = "c.pub";
+        }
+        policy = policy_of(NEKOKEM_VERIFY_REQUIRE_TRUSTED, repeated,
+                           NEKOKEM_MAX_RECIPIENTS + 1U);
+        CHECK(verify("v5.nkem", "b.key", 0, &policy, &result) ==
+              NEKOKEM_ERROR_SIGNER_NOT_TRUSTED);
+        policy = policy_of(0U, repeated, NEKOKEM_MAX_TRUSTED_SIGNERS);
+        CHECK(verify("v5.nkem", "b.key", 0, &policy, &result) ==
+              NEKOKEM_OPERATION_SUCCESS);
+        policy = policy_of(0U, repeated, NEKOKEM_MAX_TRUSTED_SIGNERS + 1U);
+        CHECK(verify("v5.nkem", "b.key", 0, &policy, &result) ==
+              NEKOKEM_OPERATION_ERROR);
+        CHECK(!exists("out.bin"));
+    }
+
     /* A separate path still works. */
     (void)remove("signer.pub");
+    policy = policy_of(0U, trusted, 1U);
     policy.signer_public_key_output_path = "signer.pub";
     CHECK(verify("v5.nkem", "b.key", 0, &policy, &result) ==
           NEKOKEM_OPERATION_SUCCESS);

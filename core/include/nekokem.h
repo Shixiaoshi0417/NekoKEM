@@ -193,6 +193,10 @@ NEKOKEM_API int nekokem_encrypt_file_v5_with_progress(
     NekoKEMProgressCallback progress_callback,
     void *progress_user_data);
 
+/* Most trusted signers one verified decryption accepts. Separate from the
+ * recipient limit: a user may trust every saved contact plus their own key. */
+#define NEKOKEM_MAX_TRUSTED_SIGNERS 1024U
+
 /* Reject v3 and v4 containers. */
 #define NEKOKEM_VERIFY_REQUIRE_SIGNATURE 0x1U
 /* Reject v5 signers outside trusted_signer_paths (implies a signature). */
@@ -204,7 +208,7 @@ typedef struct {
     /* Identity public keys the user trusts, such as contacts and their own;
      * two-component keys are ignored, a missing or invalid file fails. */
     const char *const *trusted_signer_paths;
-    size_t trusted_signer_count;
+    size_t trusted_signer_count;      /* at most NEKOKEM_MAX_TRUSTED_SIGNERS */
     /* When set, a v5 signer's identity is written there as a public key. */
     const char *signer_public_key_output_path;
 } NekoKEMVerifyPolicy;

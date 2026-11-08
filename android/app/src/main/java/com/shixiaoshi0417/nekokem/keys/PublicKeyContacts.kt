@@ -379,7 +379,8 @@ class PublicKeyContacts(
         const val MAX_NOTE_LENGTH = 512
         internal const val DIRECTORY_NAME = "public-key-contacts"
         private const val WORK_DIRECTORY_NAME = "nekokem-contact-work"
-        private const val MAX_CONTACTS = 500
+        /** With this device's own key, stays within NativeBridge.MAX_TRUSTED_SIGNERS. */
+        internal const val MAX_CONTACTS = 500
         private const val MAX_PUBLIC_KEY_BYTES = 32 * 1024
         private const val MAX_RECORD_BYTES = 64 * 1024
         private const val PRIVATE_DIRECTORY_MODE = 0x1C0

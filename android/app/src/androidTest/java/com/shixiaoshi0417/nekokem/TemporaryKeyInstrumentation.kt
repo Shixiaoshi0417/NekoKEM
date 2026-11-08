@@ -407,6 +407,27 @@ class TemporaryKeyInstrumentation : Instrumentation() {
         check(!manager.publicKeyCanVerify(legacy))
         check(manager.publicKeyFingerprint(legacy) == state.legacyFingerprint)
         check(manager.upgradeToIdentityKeys(password(DEFAULT_PASSWORD)) == LocalKeyManager.RESULT_ALREADY_IDENTITY)
+
+        // Trusted signers are this device plus every saved contact, limited
+        // separately from the 64 recipients: 63, 64, 65 and 500 contacts all
+        // decrypt, up to Core's trusted-signer limit, and one more is refused.
+        for (contacts in listOf(63, 64, 65, 500, NativeBridge.MAX_TRUSTED_SIGNERS - 1)) {
+            signedOutput.delete()
+            val many = manager.decryptFileVerified(
+                signed, signedOutput, null, password(DEFAULT_PASSWORD), CONTINUE_PROGRESS,
+                trustedKeys = List(contacts) { legacy },
+            )
+            check(many.code == NativeBridge.RESULT_SUCCESS) { "$contacts trusted contacts: ${many.code}" }
+            check(checkNotNull(many.signature).signedBySelf)
+            check(plaintext.readBytes().contentEquals(signedOutput.readBytes()))
+        }
+        signedOutput.delete()
+        val tooMany = manager.decryptFileVerified(
+            signed, signedOutput, null, password(DEFAULT_PASSWORD), CONTINUE_PROGRESS,
+            trustedKeys = List(NativeBridge.MAX_TRUSTED_SIGNERS) { legacy },
+        )
+        check(tooMany.code == NativeBridge.RESULT_INVALID_ARGUMENT) { "Too many trusted signers: ${tooMany.code}" }
+        check(!signedOutput.exists())
         listOf(signed, signedOutput, wrong, unsigned, refused, legacy).forEach { it.delete() }
     }
 
