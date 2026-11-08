@@ -21,7 +21,7 @@ function loadSettings(): { unsigned: boolean; requireSignature: boolean; signKey
 const operation = ref<View>('encrypt');
 const language = ref<Language>('en');
 const selectedLanguage = ref('system');
-const version = ref('4.4.0');
+const version = ref('5.0.0');
 const busy = ref(false), loaded = ref(false), cancelling = ref(false), jobId = ref('');
 const cancelPending = ref(false);
 const result = ref<bridge.Outcome | null>(null);
