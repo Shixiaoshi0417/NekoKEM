@@ -343,5 +343,7 @@
   "输入文件路径不能为空\n": "Input file path must not be empty\n",
   "输入路径不包含文件名\n": "Input path does not contain a filename\n",
   "输出文件：%s\n": "Output file: %s\n",
-  "输出路径长度溢出\n": "Output path length overflows\n"
+  "输出路径长度溢出\n": "Output path length overflows\n",
+  "Cannot compare the signer key path with the other files": "Cannot compare the signer key path with the other files",
+  "The signer key path is a file this decryption reads or writes; choose another path\n": "The signer key path is a file this decryption reads or writes; choose another path\n"
 }

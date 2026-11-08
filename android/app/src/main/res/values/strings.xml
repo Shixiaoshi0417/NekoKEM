@@ -196,6 +196,8 @@
     <string name="contact_note_hint">Recipient name or other reminder</string>
     <string name="contact_note_limit">Maximum %1$d characters</string>
     <string name="contact_duplicate">This public key is already saved. Saving updates its note.</string>
+    <string name="contact_upgrade_warning">One saved legacy key, “%1$s”, will be upgraded to this signing identity. Anyone who has the old key can attach their own signing keys to it, so check the full fingerprint above with the owner over a trusted channel before saving. Files signed with this key will then show as signed by this contact.</string>
+    <string name="contact_upgrade_confirm">I checked the new full fingerprint with the owner</string>
     <string name="contact_note_line">Note: %1$s</string>
     <string name="contact_saved">Public key saved</string>
     <string name="contact_updated">Note updated</string>

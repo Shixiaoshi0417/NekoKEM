@@ -99,9 +99,10 @@ checks that every private key's public part matches the component of the
 same position and rejects the degenerate X448 key as v1 does.
 
 Because the version byte is authenticated as AAD, a v2 container cannot be
-relabelled as v1. NekoKEM 4.4.0 and earlier report "Unsupported NKPR
-private-key format" for v2 instead of a password error. Core still reads
-NKPR v1 and plaintext two-component PEM keys.
+relabelled as v1. NekoKEM 4.4.0 and earlier cannot read v2 and report it
+as a wrong password: "Private-key password is incorrect or NKPR data is
+corrupted" in the CLI. The password is not the problem; the key needs NekoKEM 5.0.0 or later.
+Core still reads NKPR v1 and plaintext two-component PEM keys.
 
 Upgrading a key generates Ed448 and ML-DSA-87 keys, keeps the X448 and
 ML-KEM-1024 keys, and atomically replaces both files under the existing pair

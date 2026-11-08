@@ -195,6 +195,8 @@
     <string name="contact_note_hint">收件人名称或其他说明</string>
     <string name="contact_note_limit">最多 %1$d 个字符</string>
     <string name="contact_duplicate">此公钥已保存在通讯录，保存将更新备注。</string>
+    <string name="contact_upgrade_warning">将把已保存的旧版密钥「%1$s」升级为这把签名身份密钥。任何拥有旧密钥的人都能给它附上自己的签名密钥，请先通过可信渠道与对方核对上方的完整新指纹再保存。保存后，用这把密钥签名的文件会显示为该联系人签名。</string>
+    <string name="contact_upgrade_confirm">我已与对方核对新的完整指纹</string>
     <string name="contact_note_line">备注：%1$s</string>
     <string name="contact_saved">公钥已保存</string>
     <string name="contact_updated">备注已更新</string>

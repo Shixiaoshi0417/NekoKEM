@@ -54,6 +54,7 @@ static const char *const fixtures[] = {
     "e.pub", "e.key", "plain.bin", "empty.bin", "a-legacy.pub", "signer.pub",
     "v5.nkem", "v5-multi.nkem", "v5-empty.nkem", "v3.nkem", "v4.nkem",
     "old-v4.nkem", "bad.nkem", "out.bin", "upgraded.nkem", "legacy-to.nkem",
+    "b-key.copy", "c-pub.copy", "b-hard.key", "b-link.key", "here",
 };
 
 static int write_bytes(const char *path, const void *bytes, size_t length)
@@ -610,6 +611,104 @@ static int test_round_trips(void)
     return 1;
 }
 
+static int copy_file(const char *source, const char *destination)
+{
+    unsigned char *bytes = NULL;
+    size_t length = 0U;
+    int success = read_all(source, &bytes, &length) &&
+                  write_bytes(destination, bytes, length);
+
+    OPENSSL_free(bytes);
+    return success;
+}
+
+/* Fails, leaves out.bin absent and every key unchanged. */
+static int signer_path_refused(const char *save_path)
+{
+    const char *trusted[] = {"c.pub"};
+    NekoKEMVerifyPolicy policy = policy_of(0U, trusted, 1U);
+    NekoKEMVerifyResult result;
+
+    policy.signer_public_key_output_path = save_path;
+    if (verify("v5.nkem", "b.key", 0, &policy, &result) !=
+            NEKOKEM_OPERATION_ERROR ||
+        exists("out.bin") || !same_file("b.key", "b-key.copy") ||
+        !same_file("c.pub", "c-pub.copy")) {
+        fprintf(stderr, "The signer key was saved over %s\n", save_path);
+        return 0;
+    }
+    return 1;
+}
+
+static int test_signer_path_conflicts(void)
+{
+    const char *trusted[] = {"c.pub"};
+    NekoKEMVerifyPolicy policy;
+    NekoKEMVerifyResult result;
+
+    CHECK(copy_file("b.key", "b-key.copy"));
+    CHECK(copy_file("c.pub", "c-pub.copy"));
+    /* The private key, the input, the output and a trusted key, however
+     * they are spelled. */
+    CHECK(signer_path_refused("b.key"));
+    CHECK(signer_path_refused("./b.key"));
+    CHECK(signer_path_refused("v5.nkem"));
+    CHECK(signer_path_refused("out.bin"));
+    CHECK(signer_path_refused("./out.bin"));
+    CHECK(signer_path_refused("c.pub"));
+    CHECK(signer_path_refused("./c.pub"));
+#ifndef _WIN32
+    CHECK(link("b.key", "b-hard.key") == 0);
+    CHECK(signer_path_refused("b-hard.key"));
+    CHECK(remove("b-hard.key") == 0);
+    CHECK(symlink("b.key", "b-link.key") == 0);
+    CHECK(signer_path_refused("b-link.key"));
+    CHECK(symlink(".", "here") == 0);
+    CHECK(signer_path_refused("here/b.key"));
+    CHECK(signer_path_refused("here/out.bin"));
+#endif
+
+    /* The output must not replace a trusted key either. */
+    policy = policy_of(0U, trusted, 1U);
+    memset(&result, 0, sizeof(result));
+    result.struct_size = sizeof(result);
+    CHECK(nekokem_decrypt_file_verified_with_progress(
+              "v5.nkem", "./c.pub", "b.key", NULL, 0U, &policy, &result,
+              NULL, NULL) == NEKOKEM_OPERATION_ERROR);
+    CHECK(same_file("c.pub", "c-pub.copy"));
+
+    /* Core has its own trusted-signer limit, separate from recipients. */
+    {
+        static const char *repeated[NEKOKEM_MAX_TRUSTED_SIGNERS + 1U];
+        size_t index;
+
+        for (index = 0U; index < NEKOKEM_MAX_TRUSTED_SIGNERS + 1U; ++index) {
+            repeated[index] = "c.pub";
+        }
+        policy = policy_of(NEKOKEM_VERIFY_REQUIRE_TRUSTED, repeated,
+                           NEKOKEM_MAX_RECIPIENTS + 1U);
+        CHECK(verify("v5.nkem", "b.key", 0, &policy, &result) ==
+              NEKOKEM_ERROR_SIGNER_NOT_TRUSTED);
+        policy = policy_of(0U, repeated, NEKOKEM_MAX_TRUSTED_SIGNERS);
+        CHECK(verify("v5.nkem", "b.key", 0, &policy, &result) ==
+              NEKOKEM_OPERATION_SUCCESS);
+        policy = policy_of(0U, repeated, NEKOKEM_MAX_TRUSTED_SIGNERS + 1U);
+        CHECK(verify("v5.nkem", "b.key", 0, &policy, &result) ==
+              NEKOKEM_OPERATION_ERROR);
+        CHECK(!exists("out.bin"));
+    }
+
+    /* A separate path still works. */
+    (void)remove("signer.pub");
+    policy = policy_of(0U, trusted, 1U);
+    policy.signer_public_key_output_path = "signer.pub";
+    CHECK(verify("v5.nkem", "b.key", 0, &policy, &result) ==
+          NEKOKEM_OPERATION_SUCCESS);
+    CHECK(nekokem_public_key_can_verify("signer.pub") == 1);
+    CHECK(same_file("b.key", "b-key.copy"));
+    return 1;
+}
+
 static int test_tampering(void)
 {
     const size_t length = file_size("v5.nkem");
@@ -946,7 +1045,8 @@ static void remove_fixtures(void)
 
 static int run(void)
 {
-    return test_identity_keys() && test_round_trips() && test_tampering() &&
+    return test_identity_keys() && test_round_trips() &&
+           test_signer_path_conflicts() && test_tampering() &&
            test_forgeries() && test_unsigned_and_options() && test_upgrade() &&
            test_identity_decode();
 }

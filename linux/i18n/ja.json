@@ -343,5 +343,7 @@
   "输入文件路径不能为空\n": "入力ファイルのパスを空にできません\n",
   "输入路径不包含文件名\n": "入力パスにファイル名が含まれていません\n",
   "输出文件：%s\n": "出力ファイル：%s\n",
-  "输出路径长度溢出\n": "出力パスの長さがオーバーフローします\n"
+  "输出路径长度溢出\n": "出力パスの長さがオーバーフローします\n",
+  "Cannot compare the signer key path with the other files": "署名者の公開鍵のパスを他のファイルと比較できません",
+  "The signer key path is a file this decryption reads or writes; choose another path\n": "署名者の公開鍵の保存先は、この復号で読み書きするファイルです。別のパスを選んでください\n"
 }

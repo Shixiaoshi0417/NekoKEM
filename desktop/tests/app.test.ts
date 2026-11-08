@@ -275,6 +275,34 @@ describe('Desktop public-key contacts',()=>{
   expect(app.get('.contact.highlighted').attributes('data-contact')).toBe(bob.id);
   expect(app.get('.contact.highlighted .contact-label').text()).toBe('bob.pub');
  });
+ it('upgrades a legacy contact only after the new full fingerprint is checked',async()=>{
+  vi.mocked(bridge.listContacts).mockResolvedValue({contacts:[alice,bob],unreadable:0});
+  const identity='AA:'.repeat(31)+'AA';
+  vi.mocked(bridge.saveContact).mockRejectedValueOnce({code:'upgrade-unconfirmed',contact:alice.id,fingerprint:identity});
+  const app=await ready();await contactsPage(app);
+  await app.get('[name=contactKeyPath]').setValue('alice-new.pub');await app.get('form').trigger('submit');await flushPromises();
+  const panel=app.get('.upgrade-confirm');
+  expect(panel.attributes('role')).toBe('alertdialog');
+  expect(panel.text()).toContain('Upgrade “Alice” to a signing identity?');
+  expect(panel.text()).toContain('Anyone who has the old key');
+  expect((app.get('.upgrade-fingerprint').element as HTMLTextAreaElement).value).toBe(identity);
+  expect(document.activeElement).toBe(app.get('.upgrade-cancel').element);
+  expect(app.get('.upgrade-accept').attributes('disabled')).toBeDefined();
+  expect(app.find('[role=alert]').exists()).toBe(false);
+  // Cancel saves nothing.
+  await app.get('.upgrade-cancel').trigger('click');await flushPromises();
+  expect(app.find('.upgrade-confirm').exists()).toBe(false);
+  expect(bridge.saveContact).toHaveBeenCalledTimes(1);
+
+  vi.mocked(bridge.saveContact).mockRejectedValueOnce({code:'upgrade-unconfirmed',contact:alice.id,fingerprint:identity});
+  await app.get('[name=contactKeyPath]').setValue('alice-new.pub');await app.get('form').trigger('submit');await flushPromises();
+  vi.mocked(bridge.saveContact).mockResolvedValueOnce({...alice,fingerprint:identity,canVerify:true});
+  await app.get('[name=upgradeChecked]').setValue(true);
+  await app.get('.upgrade-accept').trigger('click');await flushPromises();
+  expect(vi.mocked(bridge.saveContact).mock.calls[2]![0]).toEqual({keyPath:'alice-new.pub',keyText:'',paste:false,note:'',confirmUpgrade:identity});
+  expect(app.find('.upgrade-confirm').exists()).toBe(false);
+  expect(app.text()).toContain('Public key saved');
+ });
  it('encrypts only for explicitly selected contacts without sending another key source',async()=>{
   vi.mocked(bridge.listContacts).mockResolvedValue({contacts:[alice,bob],unreadable:0});
   vi.mocked(bridge.runOperation).mockResolvedValue({output:'out.nkem',fingerprint:bob.fingerprint,recipients:[bob.fingerprint]});

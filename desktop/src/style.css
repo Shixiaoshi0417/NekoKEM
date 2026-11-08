@@ -151,6 +151,8 @@ select[aria-invalid=true] { border-color: #bd6650; background: #fffaf8; }
 .unsigned-confirm { margin: 12px 0 0 30px; border: 1px solid var(--error); border-radius: 12px; background: #fff8f7; padding: 13px 15px; }
 .unsigned-confirm p { margin: 6px 0 12px; line-height: 1.7; font-size: 12px; }
 .unsigned-confirm .danger { background: var(--error); border-color: var(--error); }
+.upgrade-confirm { margin: 12px 0 0; }
+.upgrade-confirm .upgrade-check { margin: 10px 0 12px; font-size: 13px; }
 .unsigned-warning { font-weight: 500; }
 .notice.signature.trusted { border-color: #d6e7d7; background: #f2f8f1; color: #416c49; }
 .notice.signature.untrusted { border-color: #e6dcc0; background: #fbf8ef; color: #6b5a2a; }

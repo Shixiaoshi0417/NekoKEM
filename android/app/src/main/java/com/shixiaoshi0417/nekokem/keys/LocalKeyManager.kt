@@ -404,6 +404,9 @@ class LocalKeyManager internal constructor(
                     VerifiedDecryptionResult(NativeBridge.RESULT_CORE_ERROR, null)
                 temporaryKey != null && currentFingerprint != temporaryKey.fingerprint ->
                     VerifiedDecryptionResult(RESULT_FINGERPRINT_MISMATCH, null)
+                // Room is kept for this device's own key; Core enforces the same limit.
+                trustedKeys.size >= NativeBridge.MAX_TRUSTED_SIGNERS ->
+                    VerifiedDecryptionResult(NativeBridge.RESULT_INVALID_ARGUMENT, null)
                 else -> {
                     val own = publicKey.isFile && NativeBridge.nativePublicKeyCanVerify(publicKey.absolutePath)
                     val trusted = (if (own) listOf(publicKey) else emptyList()) + trustedKeys
