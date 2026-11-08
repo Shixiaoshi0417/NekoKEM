@@ -58,16 +58,12 @@ static int progress_should_continue(AesProgressCallback callback,
     return callback(processed_bytes, total_bytes, user_data) != 0;
 }
 
-static int digest_update(EVP_MD_CTX *digest,
-                         const unsigned char *data,
-                         size_t length)
+static int sink_update(AesCiphertextSink sink,
+                       void *user_data,
+                       const unsigned char *data,
+                       size_t length)
 {
-    if (digest != NULL && length > 0U &&
-        EVP_DigestUpdate(digest, data, length) != 1) {
-        print_openssl_error("Cannot hash NKEM ciphertext");
-        return 0;
-    }
-    return 1;
+    return sink == NULL || length == 0U || sink(data, length, user_data) != 0;
 }
 
 int aes_gcm_encrypt_file_with_progress(
@@ -84,7 +80,7 @@ int aes_gcm_encrypt_file_with_progress(
 {
     return aes_gcm_encrypt_file_hashed(
         input, output, plaintext_len, key, nonce, aad, aad_len, tag,
-        NULL, progress_callback, progress_user_data);
+        NULL, NULL, progress_callback, progress_user_data);
 }
 
 int aes_gcm_encrypt_file_hashed(
@@ -96,7 +92,8 @@ int aes_gcm_encrypt_file_hashed(
     const unsigned char *aad,
     size_t aad_len,
     unsigned char tag[AES_GCM_TAG_SIZE],
-    EVP_MD_CTX *ciphertext_digest,
+    AesCiphertextSink ciphertext_sink,
+    void *sink_user_data,
     AesProgressCallback progress_callback,
     void *progress_user_data)
 {
@@ -158,7 +155,7 @@ int aes_gcm_encrypt_file_hashed(
         }
         if (output_len < 0 ||
             (size_t)output_len > sizeof(buffer) ||
-            !digest_update(ciphertext_digest, buffer, (size_t)output_len) ||
+            !sink_update(ciphertext_sink, sink_user_data, buffer, (size_t)output_len) ||
             !file_write_all(output, buffer, (size_t)output_len)) {
             goto cleanup;
         }
@@ -185,16 +182,13 @@ int aes_gcm_encrypt_file_hashed(
     }
     if (output_len < 0 ||
         (size_t)output_len > sizeof(buffer) ||
-        !digest_update(ciphertext_digest, buffer, (size_t)output_len) ||
+        !sink_update(ciphertext_sink, sink_user_data, buffer, (size_t)output_len) ||
         !file_write_all(output, buffer, (size_t)output_len)) {
         goto cleanup;
     }
     if (EVP_CIPHER_CTX_ctrl(context, EVP_CTRL_GCM_GET_TAG,
                             (int)AES_GCM_TAG_SIZE, tag) <= 0) {
         print_openssl_error("Cannot retrieve AES-GCM authentication tag");
-        goto cleanup;
-    }
-    if (!digest_update(ciphertext_digest, tag, AES_GCM_TAG_SIZE)) {
         goto cleanup;
     }
     result = AES_GCM_FILE_SUCCESS;
@@ -232,7 +226,7 @@ int aes_gcm_decrypt_file_with_progress(
 {
     return aes_gcm_decrypt_file_hashed(
         input, output, ciphertext_len, key, nonce, aad, aad_len,
-        NULL, NULL, progress_callback, progress_user_data);
+        NULL, NULL, NULL, progress_callback, progress_user_data);
 }
 
 int aes_gcm_decrypt_file_hashed(
@@ -243,7 +237,8 @@ int aes_gcm_decrypt_file_hashed(
     const unsigned char nonce[AES_GCM_NONCE_SIZE],
     const unsigned char *aad,
     size_t aad_len,
-    EVP_MD_CTX *ciphertext_digest,
+    AesCiphertextSink ciphertext_sink,
+    void *sink_user_data,
     unsigned char tag_out[AES_GCM_TAG_SIZE],
     AesProgressCallback progress_callback,
     void *progress_user_data)
@@ -290,7 +285,7 @@ int aes_gcm_decrypt_file_hashed(
                             : (size_t)remaining;
 
         if (!file_read_exact(input, buffer, wanted) ||
-            !digest_update(ciphertext_digest, buffer, wanted)) {
+            !sink_update(ciphertext_sink, sink_user_data, buffer, wanted)) {
             goto cleanup;
         }
         if (EVP_DecryptUpdate(context, buffer, &output_len,
@@ -312,8 +307,7 @@ int aes_gcm_decrypt_file_hashed(
         }
     }
 
-    if (!file_read_exact(input, tag, sizeof(tag)) ||
-        !digest_update(ciphertext_digest, tag, sizeof(tag))) {
+    if (!file_read_exact(input, tag, sizeof(tag))) {
         goto cleanup;
     }
     if (EVP_CIPHER_CTX_ctrl(context, EVP_CTRL_GCM_SET_TAG,
