@@ -5,7 +5,7 @@ CPPFLAGS = -D_POSIX_C_SOURCE=200809L -D_FORTIFY_SOURCE=3 \
 CFLAGS = -std=c17 -O2 -Wall -Wextra -Wpedantic -Wconversion -Wshadow \
 	-Wformat=2 -Wstrict-prototypes -Werror -fstack-protector-strong -fPIE
 LDFLAGS = -pie
-LDLIBS = -lcrypto
+LDLIBS = -lcrypto -pthread
 AFL_CC ?= afl-clang-fast
 FUZZ_CPPFLAGS = -D_POSIX_C_SOURCE=200809L -D_FORTIFY_SOURCE=3
 FUZZ_CFLAGS = -std=c17 -O1 -g -Wall -Wextra -Wpedantic -Wconversion \
@@ -20,8 +20,8 @@ CORE_SOURCES = ../core/src/nekokem.c \
 	../core/src/key_management.c \
 	../core/src/nekokem_v3.c ../core/src/nekokem_v4.c ../core/src/nekokem_v5.c \
 	../core/src/identity.c ../core/src/kem.c ../core/src/hybrid.c \
-	../core/src/aes.c ../core/src/file.c ../core/src/file_v3.c ../core/src/file_v4.c \
-	../core/src/secure_mem.c ../core/src/private_key.c
+	../core/src/aes.c ../core/src/hash_pipeline.c ../core/src/file.c ../core/src/file_v3.c \
+	../core/src/file_v4.c ../core/src/secure_mem.c ../core/src/private_key.c
 CLI_SOURCES = src/main.c src/cli.c src/i18n.c
 SOURCES = $(CLI_SOURCES) $(CORE_SOURCES)
 CORE_OBJECTS = $(CORE_SOURCES:.c=.o)
@@ -105,7 +105,7 @@ test-gcm-limit:
 	trap cleanup_gcm EXIT INT TERM; \
 	$(CC) $(CPPFLAGS) $(CFLAGS) -O1 \
 		-fsanitize=undefined -fno-sanitize-recover=undefined \
-		$(LDFLAGS) ../core/tests/gcm_limit_tests.c ../core/src/aes.c \
+		$(LDFLAGS) ../core/tests/gcm_limit_tests.c ../core/src/aes.c ../core/src/hash_pipeline.c \
 		../core/src/file.c ../core/src/file_v3.c ../core/src/secure_mem.c \
 		$(LDLIBS) -fsanitize=undefined -o "$$gcm_binary"; \
 	UBSAN_OPTIONS=halt_on_error=1:print_stacktrace=1 \
@@ -126,7 +126,8 @@ test-aes-stream:
 	trap cleanup_aes EXIT INT TERM; \
 	$(CC) $(CPPFLAGS) $(CFLAGS) -O1 -g -fno-omit-frame-pointer \
 		-fsanitize=address,undefined -fno-sanitize-recover=undefined \
-		$(LDFLAGS) ../core/tests/aes_stream_tests.c ../core/src/aes.c \
+		-DNEKOKEM_TEST_FAULT_INJECTION \
+		$(LDFLAGS) ../core/tests/aes_stream_tests.c ../core/src/aes.c ../core/src/hash_pipeline.c \
 		../core/src/file.c ../core/src/file_v3.c ../core/src/secure_mem.c \
 		$(LDLIBS) -fsanitize=address,undefined -o "$$aes_binary"; \
 	ASAN_OPTIONS=detect_leaks=1:halt_on_error=1 \

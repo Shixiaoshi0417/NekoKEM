@@ -1,6 +1,7 @@
 #include "aes.h"
 
 #include "file.h"
+#include "hash_pipeline.h"
 #include "secure_mem.h"
 
 #include <limits.h>
@@ -101,6 +102,7 @@ int aes_gcm_encrypt_file_hashed(
     void *progress_user_data)
 {
     EVP_CIPHER_CTX *context = NULL;
+    HashPipeline *pipeline = NULL;
     /* GCM supports exact in-place updates. Keep the chunk size independent of
      * the spare EVP output capacity so cancellation remains every 64 KiB. */
     unsigned char buffer[IO_BUFFER_SIZE + EVP_MAX_BLOCK_LENGTH];
@@ -136,12 +138,21 @@ int aes_gcm_encrypt_file_hashed(
         result = AES_GCM_FILE_CANCELLED;
         goto cleanup;
     }
+    /* v5 hashes the ciphertext on a second thread; without one, inline. */
+    pipeline = hash_pipeline_start(ciphertext_digest);
 
     while (remaining > 0U) {
         size_t wanted = remaining > (uint64_t)IO_BUFFER_SIZE
                             ? IO_BUFFER_SIZE
                             : (size_t)remaining;
-        size_t count = fread(buffer, 1U, wanted, input);
+        unsigned char *chunk = pipeline != NULL ? hash_pipeline_acquire(pipeline) : buffer;
+        size_t count;
+
+        if (chunk == NULL) {
+            print_openssl_error("Cannot hash NKEM ciphertext");
+            goto cleanup;
+        }
+        count = fread(chunk, 1U, wanted, input);
 
         if (count != wanted) {
             if (ferror(input) != 0) {
@@ -151,15 +162,21 @@ int aes_gcm_encrypt_file_hashed(
             }
             goto cleanup;
         }
-        if (EVP_EncryptUpdate(context, buffer, &output_len,
-                              buffer, (int)count) <= 0) {
+        if (EVP_EncryptUpdate(context, chunk, &output_len,
+                              chunk, (int)count) <= 0) {
             print_openssl_error("AES-256-GCM encryption failed");
             goto cleanup;
         }
         if (output_len < 0 ||
             (size_t)output_len > sizeof(buffer) ||
-            !digest_update(ciphertext_digest, buffer, (size_t)output_len) ||
-            !file_write_all(output, buffer, (size_t)output_len)) {
+            (pipeline == NULL &&
+             !digest_update(ciphertext_digest, chunk, (size_t)output_len)) ||
+            !file_write_all(output, chunk, (size_t)output_len)) {
+            goto cleanup;
+        }
+        if (pipeline != NULL &&
+            !hash_pipeline_submit(pipeline, chunk, (size_t)output_len)) {
+            print_openssl_error("Cannot hash NKEM ciphertext");
             goto cleanup;
         }
         remaining -= (uint64_t)count;
@@ -178,6 +195,15 @@ int aes_gcm_encrypt_file_hashed(
     if (ferror(input) != 0) {
         print_system_error("Cannot verify the end of plaintext");
         goto cleanup;
+    }
+    /* The worker hands the digest back before the final block and tag. */
+    if (pipeline != NULL) {
+        HashPipeline *finished = pipeline;
+
+        pipeline = NULL;
+        if (!hash_pipeline_finish(finished)) {
+            goto cleanup;
+        }
     }
     if (EVP_EncryptFinal_ex(context, buffer, &output_len) <= 0) {
         print_openssl_error("Cannot finalize AES-256-GCM encryption");
@@ -200,6 +226,7 @@ int aes_gcm_encrypt_file_hashed(
     result = AES_GCM_FILE_SUCCESS;
 
 cleanup:
+    hash_pipeline_abort(pipeline);
     EVP_CIPHER_CTX_free(context);
     secure_mem_clear(buffer, sizeof(buffer));
     return result;
@@ -249,6 +276,7 @@ int aes_gcm_decrypt_file_hashed(
     void *progress_user_data)
 {
     EVP_CIPHER_CTX *context = NULL;
+    HashPipeline *pipeline = NULL;
     unsigned char buffer[IO_BUFFER_SIZE + EVP_MAX_BLOCK_LENGTH];
     unsigned char tag[AES_GCM_TAG_SIZE];
     uint64_t remaining = ciphertext_len;
@@ -283,19 +311,32 @@ int aes_gcm_decrypt_file_hashed(
         result = AES_GCM_FILE_CANCELLED;
         goto cleanup;
     }
+    /* v5 hashes the ciphertext on a second thread; without one, inline. */
+    pipeline = hash_pipeline_start(ciphertext_digest);
 
     while (remaining > 0U) {
         size_t wanted = remaining > (uint64_t)IO_BUFFER_SIZE
                             ? IO_BUFFER_SIZE
                             : (size_t)remaining;
+        /* The worker hashes the ciphertext chunk while it is decrypted
+         * out of place into buffer; inline, buffer is decrypted in place. */
+        unsigned char *chunk = pipeline != NULL ? hash_pipeline_acquire(pipeline) : buffer;
 
-        if (!file_read_exact(input, buffer, wanted) ||
-            !digest_update(ciphertext_digest, buffer, wanted)) {
+        if (chunk == NULL) {
+            print_openssl_error("Cannot hash NKEM ciphertext");
+            goto cleanup;
+        }
+        if (!file_read_exact(input, chunk, wanted) ||
+            (pipeline == NULL && !digest_update(ciphertext_digest, chunk, wanted))) {
             goto cleanup;
         }
         if (EVP_DecryptUpdate(context, buffer, &output_len,
-                              buffer, (int)wanted) <= 0) {
+                              chunk, (int)wanted) <= 0) {
             print_openssl_error("AES-256-GCM decryption failed");
+            goto cleanup;
+        }
+        if (pipeline != NULL && !hash_pipeline_submit(pipeline, chunk, wanted)) {
+            print_openssl_error("Cannot hash NKEM ciphertext");
             goto cleanup;
         }
         if (output_len < 0 ||
@@ -312,6 +353,14 @@ int aes_gcm_decrypt_file_hashed(
         }
     }
 
+    if (pipeline != NULL) {
+        HashPipeline *finished = pipeline;
+
+        pipeline = NULL;
+        if (!hash_pipeline_finish(finished)) {
+            goto cleanup;
+        }
+    }
     if (!file_read_exact(input, tag, sizeof(tag)) ||
         !digest_update(ciphertext_digest, tag, sizeof(tag))) {
         goto cleanup;
@@ -337,6 +386,7 @@ int aes_gcm_decrypt_file_hashed(
     result = AES_GCM_FILE_SUCCESS;
 
 cleanup:
+    hash_pipeline_abort(pipeline);
     EVP_CIPHER_CTX_free(context);
     secure_mem_clear(buffer, sizeof(buffer));
     secure_mem_clear(tag, sizeof(tag));

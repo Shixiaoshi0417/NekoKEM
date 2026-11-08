@@ -53,6 +53,7 @@ set(
     "${NEKOKEM_REPOSITORY_ROOT}/core/src/kem.c"
     "${NEKOKEM_REPOSITORY_ROOT}/core/src/hybrid.c"
     "${NEKOKEM_REPOSITORY_ROOT}/core/src/aes.c"
+    "${NEKOKEM_REPOSITORY_ROOT}/core/src/hash_pipeline.c"
     "${NEKOKEM_REPOSITORY_ROOT}/core/src/file.c"
     "${NEKOKEM_REPOSITORY_ROOT}/core/src/file_v3.c"
     "${NEKOKEM_REPOSITORY_ROOT}/core/src/file_v4.c"

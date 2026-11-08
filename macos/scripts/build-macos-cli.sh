@@ -36,7 +36,7 @@ flags=(-std=c17 -O2 -arch arm64 -mmacosx-version-min=11.0 -isysroot "$SDKROOT"
        -I"$repo_root/linux/src")
 link=(-Wl,-pie,-dead_strip)
 libs=("$prefix/lib/libcrypto.a" -pthread -framework CoreFoundation)
-core=(nekokem key_management nekokem_v3 nekokem_v4 nekokem_v5 identity kem hybrid aes file file_v3 file_v4 secure_mem private_key)
+core=(nekokem key_management nekokem_v3 nekokem_v4 nekokem_v5 identity kem hybrid aes hash_pipeline file file_v3 file_v4 secure_mem private_key)
 sources=()
 for name in "${core[@]}"; do sources+=("$repo_root/core/src/$name.c"); done
 cli=("$repo_root/linux/src/main.c" "$repo_root/linux/src/cli.c" "$repo_root/linux/src/i18n.c")

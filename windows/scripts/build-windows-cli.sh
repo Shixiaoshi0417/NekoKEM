@@ -64,6 +64,10 @@ if [[ -f "$repo_root/core/src/nekokem_v5.c" ]]; then
     core+=(nekokem_v5 identity)
     tests+=(signature)
 fi
+# The v5 ciphertext hash worker exists from 5.0 on.
+if [[ -f "$repo_root/core/src/hash_pipeline.c" ]]; then
+    core+=(hash_pipeline)
+fi
 if [[ -f "$repo_root/core/tests/key_safety_tests.c" ]]; then
     tests+=(key_safety)
 fi

@@ -1,5 +1,6 @@
 #include "aes.h"
 #include "file.h"
+#include "hash_pipeline.h"
 
 #include <limits.h>
 #include <openssl/evp.h>
@@ -322,6 +323,150 @@ static int test_cancellation(
     return 1;
 }
 
+static EVP_MD_CTX *new_digest(void)
+{
+    EVP_MD_CTX *digest = EVP_MD_CTX_new();
+
+    if (digest != NULL && EVP_DigestInit_ex(digest, EVP_sha512(), NULL) != 1) {
+        EVP_MD_CTX_free(digest);
+        digest = NULL;
+    }
+    return digest;
+}
+
+static int digest_is(EVP_MD_CTX *digest, const unsigned char *data, size_t length)
+{
+    unsigned char actual[EVP_MAX_MD_SIZE];
+    unsigned char expected[EVP_MAX_MD_SIZE];
+    unsigned int actual_length = 0U;
+    unsigned int expected_length = 0U;
+
+    return EVP_DigestFinal_ex(digest, actual, &actual_length) == 1 &&
+           EVP_Digest(data, length, expected, &expected_length, EVP_sha512(), NULL) == 1 &&
+           actual_length == expected_length &&
+           memcmp(actual, expected, actual_length) == 0;
+}
+
+/*
+ * The v5 ciphertext digest equals SHA-512(ciphertext || tag) whether a
+ * worker thread or the calling thread computes it, for every chunk boundary,
+ * and a cancelled or failed run still stops the worker cleanly.
+ */
+static int test_hashed(
+    unsigned char *plaintext, unsigned char *ciphertext,
+    const unsigned char key[AES_GCM_KEY_SIZE],
+    const unsigned char nonce[AES_GCM_NONCE_SIZE],
+    const unsigned char aad[TEST_AAD_SIZE])
+{
+    const size_t lengths[] = {
+        0U, 1U, STREAM_CHUNK_SIZE - 1U, STREAM_CHUNK_SIZE, STREAM_CHUNK_SIZE + 1U,
+        MAX_TEST_SIZE,
+    };
+    int inline_only;
+    size_t index;
+
+    for (inline_only = 0; inline_only <= 1; ++inline_only) {
+#ifdef NEKOKEM_TEST_FAULT_INJECTION
+        hash_pipeline_test_fail_start(inline_only);
+#else
+        if (inline_only != 0) {
+            break;
+        }
+#endif
+        for (index = 0U; index < sizeof(lengths) / sizeof(lengths[0]); ++index) {
+            const size_t length = lengths[index];
+            unsigned char tag[AES_GCM_TAG_SIZE];
+            EVP_MD_CTX *digest = new_digest();
+            FILE *input = make_stream(plaintext, length);
+            FILE *output = tmpfile();
+            int ok = digest != NULL && input != NULL && output != NULL &&
+                     reference_encrypt(plaintext, length, key, nonce, aad,
+                                       TEST_AAD_SIZE, ciphertext) &&
+                     aes_gcm_encrypt_file_hashed(input, output, length, key, nonce, aad,
+                                                 TEST_AAD_SIZE, tag, digest, NULL, NULL) ==
+                         AES_GCM_FILE_SUCCESS &&
+                     fflush(output) == 0 && stream_matches(output, ciphertext, length) &&
+                     memcmp(tag, ciphertext + length, sizeof(tag)) == 0 &&
+                     digest_is(digest, ciphertext, length + AES_GCM_TAG_SIZE);
+
+            if (input != NULL) (void)fclose(input);
+            if (output != NULL) (void)fclose(output);
+            EVP_MD_CTX_free(digest);
+            if (!ok) {
+                fprintf(stderr, "Hashed encryption of %zu bytes (inline %d) failed\n", length, inline_only);
+                return 0;
+            }
+            digest = new_digest();
+            input = make_stream(ciphertext, length + AES_GCM_TAG_SIZE);
+            output = tmpfile();
+            memset(tag, 0, sizeof(tag));
+            ok = digest != NULL && input != NULL && output != NULL &&
+                 aes_gcm_decrypt_file_hashed(input, output, length, key, nonce, aad,
+                                             TEST_AAD_SIZE, digest, tag, NULL, NULL) ==
+                     AES_GCM_FILE_SUCCESS &&
+                 fflush(output) == 0 && stream_matches(output, plaintext, length) &&
+                 memcmp(tag, ciphertext + length, sizeof(tag)) == 0 &&
+                 digest_is(digest, ciphertext, length + AES_GCM_TAG_SIZE);
+            if (input != NULL) (void)fclose(input);
+            if (output != NULL) (void)fclose(output);
+            EVP_MD_CTX_free(digest);
+            if (!ok) {
+                fprintf(stderr, "Hashed decryption of %zu bytes (inline %d) failed\n", length, inline_only);
+                return 0;
+            }
+        }
+        /* Cancelling mid-stream, a modified chunk and a short input all
+         * stop the worker; ASan reports a thread or chunk left behind. */
+        {
+            const size_t length = MAX_TEST_SIZE;
+            ProgressState state = {length, 0U, 0U, STREAM_CHUNK_SIZE, 0U, 0, 0};
+            unsigned char tag[AES_GCM_TAG_SIZE];
+            EVP_MD_CTX *digest = new_digest();
+            FILE *input = make_stream(plaintext, length);
+            FILE *output = tmpfile();
+            int ok = digest != NULL && input != NULL && output != NULL &&
+                     aes_gcm_encrypt_file_hashed(input, output, length, key, nonce, aad,
+                                                 TEST_AAD_SIZE, tag, digest, check_progress,
+                                                 &state) == AES_GCM_FILE_CANCELLED;
+
+            if (input != NULL) (void)fclose(input);
+            if (output != NULL) (void)fclose(output);
+            EVP_MD_CTX_free(digest);
+            ok = ok && reference_encrypt(plaintext, length, key, nonce, aad,
+                                         TEST_AAD_SIZE, ciphertext);
+            ciphertext[2U * STREAM_CHUNK_SIZE + 3U] ^= 1U;
+            digest = new_digest();
+            input = make_stream(ciphertext, length + AES_GCM_TAG_SIZE);
+            output = tmpfile();
+            ok = ok && digest != NULL && input != NULL && output != NULL &&
+                 aes_gcm_decrypt_file_hashed(input, output, length, key, nonce, aad,
+                                             TEST_AAD_SIZE, digest, tag, NULL, NULL) ==
+                     AES_GCM_FILE_ERROR;
+            if (input != NULL) (void)fclose(input);
+            if (output != NULL) (void)fclose(output);
+            EVP_MD_CTX_free(digest);
+            digest = new_digest();
+            input = make_stream(ciphertext, STREAM_CHUNK_SIZE + 5U);
+            output = tmpfile();
+            ok = ok && digest != NULL && input != NULL && output != NULL &&
+                 aes_gcm_decrypt_file_hashed(input, output, length, key, nonce, aad,
+                                             TEST_AAD_SIZE, digest, tag, NULL, NULL) ==
+                     AES_GCM_FILE_ERROR;
+            if (input != NULL) (void)fclose(input);
+            if (output != NULL) (void)fclose(output);
+            EVP_MD_CTX_free(digest);
+            if (!ok) {
+                fprintf(stderr, "Hashed failure paths (inline %d) failed\n", inline_only);
+                return 0;
+            }
+        }
+    }
+#ifdef NEKOKEM_TEST_FAULT_INJECTION
+    hash_pipeline_test_fail_start(0);
+#endif
+    return 1;
+}
+
 int main(void)
 {
     unsigned char key[AES_GCM_KEY_SIZE];
@@ -342,10 +487,11 @@ int main(void)
     fill_pattern(aad, sizeof(aad));
     if (!test_lengths(plaintext, ciphertext, key, nonce, aad) ||
         !test_rejections(plaintext, ciphertext, key, nonce, aad) ||
-        !test_cancellation(plaintext, ciphertext, key, nonce, aad)) {
+        !test_cancellation(plaintext, ciphertext, key, nonce, aad) ||
+        !test_hashed(plaintext, ciphertext, key, nonce, aad)) {
         goto cleanup;
     }
-    puts("AES-GCM streaming reference, authentication, and cancellation tests passed");
+    puts("AES-GCM streaming reference, authentication, cancellation and hashing tests passed");
     result = EXIT_SUCCESS;
 
 cleanup:
