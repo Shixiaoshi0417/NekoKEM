@@ -343,5 +343,7 @@
   "输入文件路径不能为空\n": "입력 파일 경로는 비어 있을 수 없습니다\n",
   "输入路径不包含文件名\n": "입력 경로에 파일 이름이 없습니다\n",
   "输出文件：%s\n": "출력 파일: %s\n",
-  "输出路径长度溢出\n": "출력 경로 길이가 오버플로됩니다\n"
+  "输出路径长度溢出\n": "출력 경로 길이가 오버플로됩니다\n",
+  "Cannot compare the signer key path with the other files": "서명자 공개 키 경로를 다른 파일과 비교할 수 없습니다",
+  "The signer key path is a file this decryption reads or writes; choose another path\n": "서명자 공개 키 저장 경로가 이 복호화에서 읽거나 쓰는 파일입니다. 다른 경로를 선택하세요\n"
 }

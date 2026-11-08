@@ -160,6 +160,13 @@ int file_delete_private_key_under_lock(const char *path);
  */
 int file_paths_are_same_file(const char *first, const char *second, int *same);
 /*
+ * Like file_paths_are_same_file, but also matches a path that does not exist
+ * yet when it names the same entry as the other path: the same final
+ * component (loosely compared) in the same directory. Returns 0 only when
+ * the check itself fails.
+ */
+int file_paths_may_alias(const char *first, const char *second, int *same);
+/*
  * Fails with a message when the output path names the same file as one of
  * the keys an operation uses, so a commit can never replace that key.
  */

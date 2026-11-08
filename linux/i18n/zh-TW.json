@@ -343,5 +343,7 @@
   "输入文件路径不能为空\n": "輸入檔案路徑不能留空\n",
   "输入路径不包含文件名\n": "輸入路徑不包含檔案名稱\n",
   "输出文件：%s\n": "輸出檔案：%s\n",
-  "输出路径长度溢出\n": "輸出路徑長度溢位\n"
+  "输出路径长度溢出\n": "輸出路徑長度溢位\n",
+  "Cannot compare the signer key path with the other files": "無法將簽署者公鑰路徑與其他檔案比較",
+  "The signer key path is a file this decryption reads or writes; choose another path\n": "簽署者公鑰的儲存路徑是本次解密讀取或寫入的檔案，請選擇其他路徑\n"
 }

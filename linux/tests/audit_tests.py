@@ -217,6 +217,26 @@ class AuditTests(unittest.TestCase):
                          self.cli('fingerprint', 'keys/public.key').stdout)
         # Owner-only like every key file Core exports; front ends stage it privately.
         self.assertEqual((self.root / 'signer.key').stat().st_mode & 0o777, 0o600)
+        # The signer key never replaces the private key, the input, the output
+        # or a trusted key, however the path is spelled or linked.
+        private = (self.root / 'keys/private.key.enc').read_bytes()
+        public = (self.root / 'keys/public.key').read_bytes()
+        os.symlink('keys', self.root / 'keys-link')
+        for target in ['keys/private.key.enc', './keys/../keys/private.key.enc',
+                       'keys-link/private.key.enc', 'signed.nkem', 'out3', './out3',
+                       'keys/public.key']:
+            result = self.cli('decrypt', 'hybrid', '--trust', 'keys/public.key', '--save-signer',
+                              target, 'signed.nkem', 'out3', 'keys/private.key.enc', data=PASSWORD)
+            self.assertEqual(result.returncode, 1, target)
+            self.assertIn(b'The signer key path is a file this decryption reads or writes',
+                          result.stderr)
+            self.assertFalse((self.root / 'out3').exists())
+            self.assertEqual((self.root / 'keys/private.key.enc').read_bytes(), private)
+            self.assertEqual((self.root / 'keys/public.key').read_bytes(), public)
+        result = self.cli('decrypt', 'hybrid', '--trust', 'keys/public.key', 'signed.nkem',
+                          'keys/public.key', 'keys/private.key.enc', data=PASSWORD)
+        self.assertEqual(result.returncode, 1)
+        self.assertEqual((self.root / 'keys/public.key').read_bytes(), public)
         # Flipping the last byte breaks the encrypted signature block.
         data = bytearray((self.root / 'signed.nkem').read_bytes())
         data[-1] ^= 1

@@ -32,6 +32,50 @@ static int validate_file_paths(const char *input_path,
     return file_output_spares_keys(output_path, &key_path, 1U);
 }
 
+/*
+ * The saved signer key must not replace any file this decryption reads or
+ * writes, and the output must not replace a trusted key. Paths are compared
+ * by file identity, so links and other spellings of one file also match.
+ */
+static int verify_paths_are_separate(const char *input_path,
+                                     const char *output_path,
+                                     const char *private_key_path,
+                                     const NekoKEMVerifyPolicy *policy)
+{
+    const char *save_path;
+    size_t index;
+    int same = 0;
+
+    if (policy == NULL) {
+        return 1;
+    }
+    if (policy->trusted_signer_count > 0U &&
+        !file_output_spares_keys(output_path, policy->trusted_signer_paths,
+                                 policy->trusted_signer_count)) {
+        return 0;
+    }
+    save_path = policy->signer_public_key_output_path;
+    if (save_path == NULL) {
+        return 1;
+    }
+    for (index = 0U; index < 3U + policy->trusted_signer_count; ++index) {
+        const char *other = index == 0U ? input_path
+                            : index == 1U ? output_path
+                            : index == 2U ? private_key_path
+                                          : policy->trusted_signer_paths[index - 3U];
+
+        if (!file_paths_may_alias(save_path, other, &same)) {
+            print_system_error("Cannot compare the signer key path with the other files");
+            return 0;
+        }
+        if (same != 0) {
+            fprintf(stderr, file_message("The signer key path is a file this decryption reads or writes; choose another path\n"));
+            return 0;
+        }
+    }
+    return 1;
+}
+
 static unsigned char *build_v3_aad(
     const unsigned char header[NKEM_V3_HEADER_SIZE],
     const unsigned char *ephemeral_public,
@@ -347,7 +391,9 @@ int nekokem_decrypt_file_verified_with_progress(
         verify_result->signer_fingerprint[0] = '\0';
     }
     if (!nekokem_v5_policy_is_valid(policy) ||
-        !validate_file_paths(input_path, output_path, private_key_path)) {
+        !validate_file_paths(input_path, output_path, private_key_path) ||
+        !verify_paths_are_separate(input_path, output_path, private_key_path,
+                                   policy)) {
         return NEKOKEM_OPERATION_ERROR;
     }
     input = file_open_regular(input_path);
