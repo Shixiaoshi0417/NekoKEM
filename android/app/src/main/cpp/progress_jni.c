@@ -7,6 +7,7 @@
 #include <stddef.h>
 #include <stdint.h>
 #include <stdlib.h>
+#include <string.h>
 
 #define PROGRESS_JNI_PASSWORD_MAX_SIZE 1024U
 
@@ -416,6 +417,78 @@ static int progress_paths_acquire(JNIEnv *env,
     return PROGRESS_JNI_SUCCESS;
 }
 
+/*
+ * Copies up to [maximum] trusted signer paths into native memory, dropping
+ * each Java reference at once: older ART caps local references at 512, and
+ * a user may trust every saved contact plus this device's key.
+ */
+static int progress_path_copies_acquire(JNIEnv *env,
+                                        jobjectArray sources,
+                                        size_t maximum,
+                                        char **values,
+                                        jsize *count)
+{
+    jsize index;
+
+    *count = 0;
+    if (sources == NULL) {
+        return PROGRESS_JNI_INVALID_ARGUMENT;
+    }
+    {
+        jsize length = (*env)->GetArrayLength(env, sources);
+
+        if ((*env)->ExceptionCheck(env) == JNI_TRUE) {
+            return PROGRESS_JNI_JAVA_EXCEPTION;
+        }
+        if (length < 0 || (size_t)length > maximum) {
+            return PROGRESS_JNI_INVALID_ARGUMENT;
+        }
+        for (index = 0; index < length; ++index) {
+            jstring path = (jstring)(*env)->GetObjectArrayElement(env, sources, index);
+            const char *chars;
+            size_t size;
+
+            if ((*env)->ExceptionCheck(env) == JNI_TRUE || path == NULL) {
+                if (path != NULL) {
+                    (*env)->DeleteLocalRef(env, path);
+                }
+                return (*env)->ExceptionCheck(env) == JNI_TRUE
+                           ? PROGRESS_JNI_JAVA_EXCEPTION
+                           : PROGRESS_JNI_INVALID_ARGUMENT;
+            }
+            chars = (*env)->GetStringUTFChars(env, path, NULL);
+            if (chars == NULL) {
+                (*env)->DeleteLocalRef(env, path);
+                return (*env)->ExceptionCheck(env) == JNI_TRUE
+                           ? PROGRESS_JNI_JAVA_EXCEPTION
+                           : PROGRESS_JNI_ALLOCATION_ERROR;
+            }
+            size = strlen(chars) + 1U;
+            values[index] = malloc(size);
+            if (values[index] != NULL) {
+                memcpy(values[index], chars, size);
+            }
+            (*env)->ReleaseStringUTFChars(env, path, chars);
+            (*env)->DeleteLocalRef(env, path);
+            if (values[index] == NULL) {
+                return PROGRESS_JNI_ALLOCATION_ERROR;
+            }
+            *count = index + 1;
+        }
+    }
+    return PROGRESS_JNI_SUCCESS;
+}
+
+static void progress_path_copies_release(char **values, jsize count)
+{
+    jsize index;
+
+    for (index = 0; index < count; ++index) {
+        free(values[index]);
+        values[index] = NULL;
+    }
+}
+
 static void progress_paths_release(JNIEnv *env,
                                    ProgressJniPath *paths,
                                    jsize acquired)
@@ -554,15 +627,13 @@ Java_com_shixiaoshi0417_nekokem_nativecore_NativeBridge_nativeDecryptFileVerifie
     ProgressJniPath signer_output = {0};
     /* Trusted signers are every saved contact plus this device's key, so
      * their limit is Core's trusted-signer limit, not the recipient limit. */
-    ProgressJniPath *trusted = NULL;
-    const char **trusted_values = NULL;
+    char **trusted_values = NULL;
     ProgressJniCallback progress = {0};
     NekoKEMVerifyPolicy policy = {0};
     NekoKEMVerifyResult verified = {0};
     unsigned char *password = NULL;
     size_t password_len = 0U;
     jsize count = 0;
-    jsize acquired = 0;
     jint values[3];
     int result;
     int core_result;
@@ -574,15 +645,14 @@ Java_com_shixiaoshi0417_nekokem_nativecore_NativeBridge_nativeDecryptFileVerifie
         result = PROGRESS_JNI_INVALID_ARGUMENT;
         goto cleanup;
     }
-    trusted = calloc(NEKOKEM_MAX_TRUSTED_SIGNERS, sizeof(*trusted));
     trusted_values = calloc(NEKOKEM_MAX_TRUSTED_SIGNERS, sizeof(*trusted_values));
-    if (trusted == NULL || trusted_values == NULL) {
+    if (trusted_values == NULL) {
         result = PROGRESS_JNI_ALLOCATION_ERROR;
         goto cleanup;
     }
-    result = progress_paths_acquire(env, trusted_paths, 0,
-                                    NEKOKEM_MAX_TRUSTED_SIGNERS, trusted,
-                                    trusted_values, &count, &acquired);
+    result = progress_path_copies_acquire(env, trusted_paths,
+                                          NEKOKEM_MAX_TRUSTED_SIGNERS,
+                                          trusted_values, &count);
     if (result != PROGRESS_JNI_SUCCESS) {
         goto cleanup;
     }
@@ -616,7 +686,7 @@ Java_com_shixiaoshi0417_nekokem_nativecore_NativeBridge_nativeDecryptFileVerifie
     policy.struct_size = sizeof(policy);
     policy.flags = require_signature == JNI_TRUE
                        ? NEKOKEM_VERIFY_REQUIRE_SIGNATURE : 0U;
-    policy.trusted_signer_paths = count > 0 ? trusted_values : NULL;
+    policy.trusted_signer_paths = count > 0 ? (const char *const *)trusted_values : NULL;
     policy.trusted_signer_count = (size_t)count;
     policy.signer_public_key_output_path = signer_output.value;
     verified.struct_size = sizeof(verified);
@@ -658,10 +728,9 @@ cleanup:
     progress_path_release(env, &private_path);
     progress_path_release(env, &output);
     progress_path_release(env, &input);
-    if (trusted != NULL) {
-        progress_paths_release(env, trusted, acquired);
+    if (trusted_values != NULL) {
+        progress_path_copies_release(trusted_values, count);
     }
-    free(trusted);
     free(trusted_values);
     return (jint)result;
 }
