@@ -964,8 +964,8 @@ int main(void)
 #endif
     int success = run();
 
-#ifndef _WIN32
     remove_fixtures();
+#ifndef _WIN32
     if (chdir("/") == 0) {
         (void)rmdir(directory);
     }
