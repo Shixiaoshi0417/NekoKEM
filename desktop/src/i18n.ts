@@ -105,6 +105,7 @@ const messages={
  openRelease:['Go to download', '前往下载', '前往下載', 'ダウンロードページへ', '다운로드하러 가기'],
  later:['Later', '稍后', '稍後', '後で', '나중에'],
  ignoreVersion:['Skip this version', '忽略此版本', '略過此版本', 'このバージョンをスキップ', '이 버전 건너뛰기'],
+ 'settings-save':['The setting could not be saved and applies only until the App closes.','设置未能保存，仅在本次运行期间有效。','設定未能儲存，僅在本次執行期間有效。','設定を保存できませんでした。アプリを閉じるまでのみ有効です。','설정을 저장하지 못해 앱을 닫을 때까지만 적용됩니다.'],
  'open-release':['The release page could not be opened in a browser.', '无法在浏览器中打开发布页面。', '無法在瀏覽器中開啟發布頁面。', 'リリースページをブラウザーで開けませんでした。', '릴리스 페이지를 브라우저에서 열 수 없습니다.'],
  encryptedSigned:['Encrypted and signed (NKEM v5)','已加密并签名（NKEM v5）','已加密並簽章（NKEM v5）','暗号化して署名しました（NKEM v5）','암호화 및 서명 완료(NKEM v5)'],
  encryptedUnsigned:['Encrypted · Unsigned','已加密 · 未签名','已加密 · 未簽章','暗号化しました · 未署名','암호화 완료 · 서명 없음'],

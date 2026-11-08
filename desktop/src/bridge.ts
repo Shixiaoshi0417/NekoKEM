@@ -21,6 +21,10 @@ export const closeApp=()=>invoke<void>('close_app');
 export type UpdateStatus={status:'available';version:string}|{status:'current'}|{status:'failed'};
 export const checkUpdate=()=>invoke<UpdateStatus>('check_update');
 export const openReleasePage=(version:string)=>invoke<void>('open_release_page',{version});
+// Kept by the backend: the incognito WebView forgets its own storage on exit.
+export interface UpdatePreferences {auto:boolean;lastCheck:number;ignored:string}
+export const updatePreferences=()=>invoke<UpdatePreferences>('update_preferences');
+export const saveUpdatePreferences=(preferences:UpdatePreferences)=>invoke<void>('save_update_preferences',{preferences});
 export const listContacts=()=>invoke<ContactList>('list_contacts');
 export const saveContact=(contact:ContactImport)=>invoke<Contact>('save_contact',{contact});
 export const updateContactNote=(id:string,note:string)=>invoke<Contact>('update_contact_note',{id,note});

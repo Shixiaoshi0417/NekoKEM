@@ -3,9 +3,11 @@ import { afterEach,beforeEach,describe,expect,it,vi } from 'vitest';
 import App from '../src/App.vue';
 import * as bridge from '../src/bridge';
 import { catalog, translate } from '../src/i18n';
-vi.mock('../src/bridge',()=>({checkUpdate:vi.fn(),openReleasePage:vi.fn(),getSettings:vi.fn(),setLanguage:vi.fn(),runOperation:vi.fn(),cancelOperation:vi.fn(),closeApp:vi.fn(),onProgress:vi.fn(),chooseOpen:vi.fn(),chooseSave:vi.fn(),listContacts:vi.fn(),saveContact:vi.fn(),updateContactNote:vi.fn(),deleteContact:vi.fn(),MAX_RECIPIENTS:64}));
+vi.mock('../src/bridge',()=>({checkUpdate:vi.fn(),openReleasePage:vi.fn(),updatePreferences:vi.fn(),saveUpdatePreferences:vi.fn(),getSettings:vi.fn(),setLanguage:vi.fn(),runOperation:vi.fn(),cancelOperation:vi.fn(),closeApp:vi.fn(),onProgress:vi.fn(),chooseOpen:vi.fn(),chooseSave:vi.fn(),listContacts:vi.fn(),saveContact:vi.fn(),updateContactNote:vi.fn(),deleteContact:vi.fn(),MAX_RECIPIENTS:64}));
 enableAutoUnmount(afterEach);
-beforeEach(()=>{localStorage.clear();vi.clearAllMocks();vi.mocked(bridge.checkUpdate).mockResolvedValue({status:'current'});vi.mocked(bridge.openReleasePage).mockResolvedValue();vi.mocked(bridge.getSettings).mockResolvedValue({language:'en',selection:'system',version:'5.0.0'});vi.mocked(bridge.onProgress).mockResolvedValue(()=>{});vi.mocked(bridge.runOperation).mockResolvedValue({output:'output.nkem',fingerprint:null,recipients:[]});vi.mocked(bridge.chooseOpen).mockResolvedValue(null);vi.mocked(bridge.chooseSave).mockResolvedValue(null);vi.mocked(bridge.cancelOperation).mockResolvedValue(true);vi.mocked(bridge.listContacts).mockResolvedValue({contacts:[],unreadable:0});});
+// The backend's update preferences, which outlive the incognito WebView.
+let stored:bridge.UpdatePreferences|null=null;
+beforeEach(()=>{localStorage.clear();vi.clearAllMocks();vi.mocked(bridge.checkUpdate).mockResolvedValue({status:'current'});vi.mocked(bridge.openReleasePage).mockResolvedValue();stored=null;vi.mocked(bridge.updatePreferences).mockImplementation(async()=>stored??{auto:true,lastCheck:0,ignored:''});vi.mocked(bridge.saveUpdatePreferences).mockImplementation(async value=>{stored={...value};});vi.mocked(bridge.getSettings).mockResolvedValue({language:'en',selection:'system',version:'5.0.0'});vi.mocked(bridge.onProgress).mockResolvedValue(()=>{});vi.mocked(bridge.runOperation).mockResolvedValue({output:'output.nkem',fingerprint:null,recipients:[]});vi.mocked(bridge.chooseOpen).mockResolvedValue(null);vi.mocked(bridge.chooseSave).mockResolvedValue(null);vi.mocked(bridge.cancelOperation).mockResolvedValue(true);vi.mocked(bridge.listContacts).mockResolvedValue({contacts:[],unreadable:0});});
 async function ready(){const app=mount(App,{attachTo:document.body});await flushPromises();return app;}
 // Encryption signs by default: the sender's identity key and its password.
 async function signWith(app:Awaited<ReturnType<typeof ready>>){await app.get('[name=signKeyPath]').setValue('private.key.enc');await app.get('[name=password]').setValue('public-test-password');}
@@ -556,14 +558,14 @@ describe('Update checks',()=>{
   await app.get('.open-release').trigger('click');await flushPromises();
   expect(bridge.openReleasePage).toHaveBeenCalledWith('5.1.0');
   expect(app.find('[role=dialog]').exists()).toBe(false);
-  expect(JSON.parse(localStorage.getItem('nekokem.update')!).lastCheck).toBeGreaterThan(0);
+  expect(stored!.lastCheck).toBeGreaterThan(0);
   app.unmount();
   // Within a day no automatic check runs again.
   await ready();
   expect(bridge.checkUpdate).toHaveBeenCalledTimes(1);
  });
  it('a skipped version stays quiet automatically but a manual check still shows it',async()=>{
-  localStorage.setItem('nekokem.update',JSON.stringify({auto:true,lastCheck:0,ignored:'5.1.0'}));
+  stored={auto:true,lastCheck:0,ignored:'5.1.0'};
   vi.mocked(bridge.checkUpdate).mockResolvedValue({status:'available',version:'5.1.0'});
   const app=await ready();
   expect(bridge.checkUpdate).toHaveBeenCalledTimes(1);
@@ -572,10 +574,10 @@ describe('Update checks',()=>{
   expect(app.get('[role=dialog]').text()).toContain('5.1.0');
   await app.get('.ignore-update').trigger('click');
   expect(app.find('[role=dialog]').exists()).toBe(false);
-  expect(JSON.parse(localStorage.getItem('nekokem.update')!).ignored).toBe('5.1.0');
+  expect(stored!.ignored).toBe('5.1.0');
  });
  it('turning automatic checks off stops them; manual checks report every outcome',async()=>{
-  localStorage.setItem('nekokem.update',JSON.stringify({auto:false,lastCheck:0,ignored:''}));
+  stored={auto:false,lastCheck:0,ignored:''};
   const app=await ready();
   expect(bridge.checkUpdate).not.toHaveBeenCalled();
   await settingsTab(app);
@@ -586,14 +588,21 @@ describe('Update checks',()=>{
   await app.get('.check-update').trigger('click');await flushPromises();
   expect(app.get('.update-notice').text()).toContain('Could not check');
   await app.get('[name=autoUpdate]').setValue(true);await flushPromises();
-  expect(JSON.parse(localStorage.getItem('nekokem.update')!).auto).toBe(true);
+  expect(stored!.auto).toBe(true);
+  expect(localStorage.getItem('nekokem.update')).toBeNull();
  });
  it('a failed automatic check stays silent and is retried next launch',async()=>{
   vi.mocked(bridge.checkUpdate).mockResolvedValue({status:'failed'});
   const app=await ready();
   expect(app.find('[role=dialog]').exists()).toBe(false);
   expect(app.find('.update-notice').exists()).toBe(false);
-  expect(localStorage.getItem('nekokem.update')).toBeNull();
+  expect(stored).toBeNull();
+ });
+ it('a choice that cannot be saved is reported',async()=>{
+  const app=await ready();await app.findAll('nav button')[5]!.trigger('click');
+  vi.mocked(bridge.saveUpdatePreferences).mockRejectedValueOnce({code:'settings-save'});
+  await app.get('[name=autoUpdate]').setValue(false);await flushPromises();
+  expect(app.get('.update-notice').text()).toContain('could not be saved');
  });
 });
 

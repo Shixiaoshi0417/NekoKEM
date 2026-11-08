@@ -59,17 +59,13 @@ function confirmUnsigned(enable: boolean) {
 }
 const signing = computed(() => operation.value === 'encrypt' && !settings.unsigned);
 // Update checks are on by default, at most daily; they only name a newer version.
-const UPDATE_KEY = 'nekokem.update';
+// The backend keeps these choices, because the incognito WebView storage ends with the App.
 const DAY = 24 * 60 * 60 * 1000;
-function loadUpdate(): { auto: boolean; lastCheck: number; ignored: string } {
-  try {
-    const value = JSON.parse(localStorage.getItem(UPDATE_KEY) ?? '{}');
-    return { auto: value.auto !== false, lastCheck: Number.isFinite(value.lastCheck) ? value.lastCheck : 0, ignored: typeof value.ignored === 'string' ? value.ignored : '' };
-  } catch { return { auto: true, lastCheck: 0, ignored: '' }; }
-}
-const update = reactive(loadUpdate());
-watch(() => [update.auto, update.lastCheck, update.ignored], () => {
-  try { localStorage.setItem(UPDATE_KEY, JSON.stringify(update)); } catch { /* checked again next launch */ }
+const update = reactive<bridge.UpdatePreferences>({ auto: true, lastCheck: 0, ignored: '' });
+let updateLoaded = false;
+watch(() => [update.auto, update.lastCheck, update.ignored], async () => {
+  if (!updateLoaded) return;
+  try { await bridge.saveUpdatePreferences({ ...update }); } catch (error) { updateNotice.value = errorCode(error); }
 });
 const checkingUpdate = ref(false);
 const updateNotice = ref<Message | null>(null);
@@ -538,6 +534,9 @@ onMounted(async () => {
     loaded.value = true;
     document.documentElement.lang = language.value;
   } catch (error) { failure.value = errorCode(error); return; }
+  try { Object.assign(update, await bridge.updatePreferences()); } catch { /* the defaults apply */ }
+  await nextTick();
+  updateLoaded = true;
   const now = Date.now();
   if (update.auto && (now - update.lastCheck >= DAY || now < update.lastCheck)) void checkForUpdate(false);
   await refreshContacts();

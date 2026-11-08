@@ -3,6 +3,7 @@
 // fixed here; the frontend cannot choose where the App connects, and nothing
 // is downloaded or installed.
 use serde::{Deserialize,Serialize};
+use std::ffi::{c_char,c_int,c_void,CStr,CString};
 use std::process::{Command,Stdio};
 
 const LATEST_URL:&str="https://api.github.com/repos/Shixiaoshi0417/NekoKEM/releases/latest";
@@ -13,6 +14,52 @@ const MAX_RESPONSE_BYTES:usize=1<<20;
 #[derive(Debug,PartialEq,Eq,Serialize)]
 #[serde(rename_all="camelCase",tag="status")]
 pub enum UpdateStatus{Available{version:String},Current,Failed}
+
+// The main WebView is incognito, so its storage ends with the App: the
+// choices live in a private file beside the contacts directory instead.
+const PREFERENCES_FILE:&str="update.json";
+const MAX_PREFERENCES_BYTES:usize=4096;
+extern "C" {
+    fn desktop_contacts_directory(path:*mut c_char,capacity:usize)->c_int;
+    fn desktop_write_private(path:*const c_char,bytes:*const u8,length:usize)->c_int;
+    fn file_read_sensitive(path:*const c_char,maximum:usize,buffer:*mut *mut u8,length:*mut usize)->c_int;
+    fn secure_free(memory:*mut c_void,length:usize);
+}
+
+/// Automatic checks are on unless turned off; a missing or damaged file means the defaults.
+#[derive(Debug,Clone,PartialEq,Eq,Serialize,Deserialize)]
+#[serde(rename_all="camelCase",default)]
+pub struct Preferences{pub auto:bool,pub last_check:u64,pub ignored:String}
+impl Default for Preferences{fn default()->Self{Self{auto:true,last_check:0,ignored:String::new()}}}
+impl Preferences{
+    fn valid(&self)->bool{self.ignored.is_empty()||parse_version(&self.ignored).is_some()}
+}
+
+/// The NekoKEM configuration directory: LocalAppData/NekoKEM or ~/.config/nekokem.
+pub fn config_directory()->Option<String>{
+    let mut buffer=vec![0 as c_char;32768];
+    if unsafe{desktop_contacts_directory(buffer.as_mut_ptr(),buffer.len())}!=1{return None;}
+    let contacts=unsafe{CStr::from_ptr(buffer.as_ptr())}.to_str().ok()?;
+    contacts.strip_suffix("/contacts").map(str::to_owned)
+}
+
+pub fn load(directory:&str)->Preferences{
+    let file=format!("{directory}/{PREFERENCES_FILE}");
+    // Not yet saved is the usual first launch; Core would report it as an error.
+    if std::fs::symlink_metadata(&file).is_err(){return Preferences::default();}
+    let Ok(path)=CString::new(file) else {return Preferences::default()};
+    let mut buffer=std::ptr::null_mut();let mut length=0;
+    if unsafe{file_read_sensitive(path.as_ptr(),MAX_PREFERENCES_BYTES,&mut buffer,&mut length)}!=1{return Preferences::default();}
+    let parsed=serde_json::from_slice::<Preferences>(unsafe{std::slice::from_raw_parts(buffer,length)});
+    unsafe{secure_free(buffer.cast(),length)};
+    parsed.ok().filter(Preferences::valid).unwrap_or_default()
+}
+
+pub fn store(directory:&str,preferences:&Preferences)->bool{
+    if !preferences.valid(){return false;}
+    let (Ok(bytes),Ok(path))=(serde_json::to_vec(preferences),CString::new(format!("{directory}/{PREFERENCES_FILE}"))) else {return false};
+    bytes.len()<=MAX_PREFERENCES_BYTES&&unsafe{desktop_write_private(path.as_ptr(),bytes.as_ptr(),bytes.len())}==1
+}
 
 #[derive(Deserialize)]
 struct Release{tag_name:String,#[serde(default)] draft:bool,#[serde(default)] prerelease:bool}
@@ -108,6 +155,21 @@ mod tests {
         assert_eq!(page_url("5.1.0").as_deref(),Some("https://github.com/Shixiaoshi0417/NekoKEM/releases/tag/v5.1.0"));
         assert_eq!(page_url("v05.1.0").as_deref(),Some("https://github.com/Shixiaoshi0417/NekoKEM/releases/tag/v5.1.0"));
         for bad in ["5.1.0 --x","5.1.0&calc","https://evil/","",".."]{assert_eq!(page_url(bad),None);}
+    }
+    #[test]
+    fn preferences_survive_in_a_private_file_and_damage_means_defaults(){
+        let _core=crate::contacts::tests::core_lock();
+        let directory=crate::contacts::tests::Directory::new();
+        let path=directory.0.to_str().unwrap();
+        assert_eq!(load(path),Preferences::default());
+        let chosen=Preferences{auto:false,last_check:42,ignored:"5.1.0".into()};
+        assert!(store(path,&chosen));
+        assert_eq!(load(path),chosen);
+        #[cfg(unix)]{use std::os::unix::fs::PermissionsExt;
+            assert_eq!(std::fs::metadata(directory.file(PREFERENCES_FILE)).unwrap().permissions().mode()&0o777,0o600);}
+        assert!(!store(path,&Preferences{ignored:"../x".into(),..Preferences::default()}));
+        std::fs::write(directory.file(PREFERENCES_FILE),b"{not json").ok();
+        assert_eq!(load(path),Preferences::default());
     }
     #[test]
     fn status_serializes_for_the_frontend(){
