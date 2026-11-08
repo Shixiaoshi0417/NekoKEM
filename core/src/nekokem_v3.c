@@ -5,6 +5,7 @@
 #include "hybrid.h"
 #include "kem.h"
 #include "nekokem_v4.h"
+#include "nekokem_v5.h"
 #include "secure_mem.h"
 
 #include <limits.h>
@@ -29,6 +30,50 @@ static int validate_file_paths(const char *input_path,
         return 0;
     }
     return file_output_spares_keys(output_path, &key_path, 1U);
+}
+
+/*
+ * The saved signer key must not replace any file this decryption reads or
+ * writes, and the output must not replace a trusted key. Paths are compared
+ * by file identity, so links and other spellings of one file also match.
+ */
+static int verify_paths_are_separate(const char *input_path,
+                                     const char *output_path,
+                                     const char *private_key_path,
+                                     const NekoKEMVerifyPolicy *policy)
+{
+    const char *save_path;
+    size_t index;
+    int same = 0;
+
+    if (policy == NULL) {
+        return 1;
+    }
+    if (policy->trusted_signer_count > 0U &&
+        !file_output_spares_keys(output_path, policy->trusted_signer_paths,
+                                 policy->trusted_signer_count)) {
+        return 0;
+    }
+    save_path = policy->signer_public_key_output_path;
+    if (save_path == NULL) {
+        return 1;
+    }
+    for (index = 0U; index < 3U + policy->trusted_signer_count; ++index) {
+        const char *other = index == 0U ? input_path
+                            : index == 1U ? output_path
+                            : index == 2U ? private_key_path
+                                          : policy->trusted_signer_paths[index - 3U];
+
+        if (!file_paths_may_alias(save_path, other, &same)) {
+            print_system_error("Cannot compare the signer key path with the other files");
+            return 0;
+        }
+        if (same != 0) {
+            fprintf(stderr, file_message("The signer key path is a file this decryption reads or writes; choose another path\n"));
+            return 0;
+        }
+    }
+    return 1;
 }
 
 static unsigned char *build_v3_aad(
@@ -318,21 +363,37 @@ cleanup:
     return result;
 }
 
-int nekokem_decrypt_file_with_progress(
+int nekokem_decrypt_file_verified_with_progress(
     const char *input_path,
     const char *output_path,
     const char *private_key_path,
     const unsigned char *password,
     size_t password_len,
+    const NekoKEMVerifyPolicy *policy,
+    NekoKEMVerifyResult *verify_result,
     NekoKEMProgressCallback progress_callback,
     void *progress_user_data)
 {
     FILE *input = NULL;
     unsigned char raw_header[NKEM_V3_HEADER_SIZE];
     uint64_t container_size = 0U;
+    uint32_t flags = policy == NULL ? 0U : policy->flags;
     int result = NEKOKEM_OPERATION_ERROR;
 
-    if (!validate_file_paths(input_path, output_path, private_key_path)) {
+    if (verify_result != NULL) {
+        if (verify_result->struct_size < sizeof(*verify_result)) {
+            fprintf(stderr, file_message("Invalid signature verification result\n"));
+            return NEKOKEM_OPERATION_ERROR;
+        }
+        verify_result->format_version = 0;
+        verify_result->signature_status = NEKOKEM_SIGNATURE_UNSIGNED;
+        verify_result->trusted_signer_index = 0U;
+        verify_result->signer_fingerprint[0] = '\0';
+    }
+    if (!nekokem_v5_policy_is_valid(policy) ||
+        !validate_file_paths(input_path, output_path, private_key_path) ||
+        !verify_paths_are_separate(input_path, output_path, private_key_path,
+                                   policy)) {
         return NEKOKEM_OPERATION_ERROR;
     }
     input = file_open_regular(input_path);
@@ -342,23 +403,61 @@ int nekokem_decrypt_file_with_progress(
     if (file_disable_buffering(input) &&
         file_get_size(input, &container_size) &&
         file_read_exact(input, raw_header, sizeof(raw_header))) {
-        /* Both versions share the 32-byte header size and magic. Anything
-         * that is not v4 takes the v3 path, which rejects v1/v2/unknown. */
-        if (memcmp(raw_header, "NKEM", 4U) == 0 &&
-            raw_header[4] == NKEM_V4_VERSION) {
-            result = nekokem_v4_decrypt_opened(
+        /* Every version shares the 32-byte header size and magic. Anything
+         * that is not v4 or v5 takes the v3 path, which rejects v1/v2/unknown. */
+        int is_nkem = memcmp(raw_header, "NKEM", 4U) == 0;
+
+        if (is_nkem && raw_header[4] == NKEM_V5_VERSION) {
+            result = nekokem_v5_decrypt_opened(
                 input, container_size, raw_header, output_path,
-                private_key_path, password, password_len,
-                progress_callback, progress_user_data);
+                private_key_path, password, password_len, policy,
+                verify_result, progress_callback, progress_user_data);
+        } else if ((flags & (NEKOKEM_VERIFY_REQUIRE_SIGNATURE |
+                             NEKOKEM_VERIFY_REQUIRE_TRUSTED)) != 0U) {
+            /* Rejected before any key is unlocked or output created. */
+            fprintf(stderr, file_message("This file is not signed, and only signed files are accepted\n"));
+            result = NEKOKEM_ERROR_SIGNATURE_REQUIRED;
         } else {
-            result = decrypt_v3_opened(
-                input, container_size, raw_header, output_path,
-                private_key_path, password, password_len,
-                progress_callback, progress_user_data);
+            int version = is_nkem && raw_header[4] == NKEM_V4_VERSION ? 4 : 3;
+
+            result = version == 4
+                         ? nekokem_v4_decrypt_opened(
+                               input, container_size, raw_header,
+                               output_path, private_key_path, password,
+                               password_len, progress_callback,
+                               progress_user_data)
+                         : decrypt_v3_opened(
+                               input, container_size, raw_header,
+                               output_path, private_key_path, password,
+                               password_len, progress_callback,
+                               progress_user_data);
+            if (result == NEKOKEM_OPERATION_SUCCESS && verify_result != NULL) {
+                verify_result->format_version = version;
+            }
         }
     }
     (void)fclose(input);
     return result;
+}
+
+int nekokem_decrypt_file_with_progress(
+    const char *input_path,
+    const char *output_path,
+    const char *private_key_path,
+    const unsigned char *password,
+    size_t password_len,
+    NekoKEMProgressCallback progress_callback,
+    void *progress_user_data)
+{
+    int result = nekokem_decrypt_file_verified_with_progress(
+        input_path, output_path, private_key_path, password, password_len,
+        NULL, NULL, progress_callback, progress_user_data);
+
+    /* Callers of the policy-free API only know these three results. */
+    return result == NEKOKEM_OPERATION_SUCCESS ||
+                   result == NEKOKEM_OPERATION_CANCELLED
+               ? result
+               : NEKOKEM_OPERATION_ERROR;
 }
 
 int nekokem_decrypt_file(const char *input_path,

@@ -184,7 +184,8 @@ progress reports, while a key with no entry stops at step 4.
 - Every recipient shares the file key. A recipient can therefore create a
   different container that reuses the original recipient entries and header
   MAC. NKEM has no sender authentication in v3 or v4, so recipients must not
-  treat a container's recipient list as proof of who sent it.
+  treat a container's recipient list as proof of who sent it. Signed
+  containers use [NKEM v5](NKEM-v5.md).
 - The recipient count is visible to anyone who holds the file, as is the
   file length.
 - Front ends pass recipients as a list of public-key files. Core validates

@@ -15,6 +15,8 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.RadioButton
+import androidx.compose.material3.Switch
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.platform.LocalContext
@@ -116,6 +118,10 @@ data class NekoKEMUiState(
     // Checkbox selection on the contacts page, not yet applied to encryption.
     val contactSelection: List<String> = emptyList(),
     val uiStyle: UiStyle = UiStyles.default,
+    /** This device's key is an identity key: files are signed with it. */
+    val canSign: Boolean = false,
+    val legacyFingerprint: String? = null,
+    val signatureSettings: SignatureSettings = SignatureSettings(),
 )
 
 data class NekoKEMActions(
@@ -145,6 +151,11 @@ data class NekoKEMActions(
     val onClearContactSelection: () -> Unit = {},
     val onEncryptForSelectedContacts: () -> Unit = {},
     val onUiStyleChange: (UiStyle) -> Unit = {},
+    val onUpgradeKey: () -> Unit = {},
+    val onExportLegacyPublicKey: () -> Unit = {},
+    /** Turning unsigned encryption on goes through the red warning first. */
+    val onUnsignedEncryptionChange: (Boolean) -> Unit = {},
+    val onRequireSignatureChange: (Boolean) -> Unit = {},
 )
 
 internal enum class AppDestination(
@@ -316,7 +327,7 @@ fun NekoKEMAppShell(
                                     destination = AppDestination.FILES
                                 },
                             )
-                            AppDestination.SETTINGS -> SettingsPage(state.running, state.uiStyle, actions.onUiStyleChange)
+                            AppDestination.SETTINGS -> SettingsPage(state, actions)
                             AppDestination.ABOUT -> AboutPage(state)
                         }
                     }
@@ -382,6 +393,9 @@ private fun FileOperationsPage(
                 ),
             ),
         )
+        if (state.signatureSettings.unsignedEncryption) {
+            UnsignedWarningText(modifier = Modifier.padding(top = 12.dp))
+        }
         Spacer(modifier = Modifier.height(24.dp))
         val publicKeyActions: @Composable ColumnScope.() -> Unit = {
             if (state.publicKeyRecipientCount > 0 &&
@@ -570,6 +584,27 @@ private fun KeyManagementPage(
                 text = state.fingerprint ?: unavailable,
                 style = MaterialTheme.typography.bodyMedium,
             )
+            if (state.fingerprint != null) {
+                Text(
+                    modifier = Modifier.padding(top = 12.dp),
+                    text = stringResource(
+                        if (state.canSign) R.string.key_identity_status else R.string.key_legacy_status,
+                    ),
+                    style = MaterialTheme.typography.labelLarge,
+                )
+            }
+            state.legacyFingerprint?.let { legacy ->
+                Text(
+                    modifier = Modifier.padding(top = 12.dp),
+                    text = stringResource(R.string.legacy_fingerprint_label),
+                    style = MaterialTheme.typography.labelLarge,
+                )
+                Text(
+                    modifier = Modifier.padding(top = 8.dp),
+                    text = legacy,
+                    style = MaterialTheme.typography.bodySmall,
+                )
+            }
         }
         Spacer(modifier = Modifier.height(16.dp))
         ActionButton(
@@ -584,6 +619,26 @@ private fun KeyManagementPage(
             onClick = actions.onCheckPassword,
             emphasis = ActionEmphasis.TONAL,
         )
+        if (state.fingerprint != null && state.privateKeyExists && !state.canSign) {
+            ActionButton(
+                labelResource = R.string.action_upgrade_key,
+                enabled = canRun,
+                onClick = actions.onUpgradeKey,
+            )
+        }
+        if (state.canSign) {
+            ActionButton(
+                labelResource = R.string.action_export_legacy_public_key,
+                enabled = canRun,
+                onClick = actions.onExportLegacyPublicKey,
+                emphasis = ActionEmphasis.TONAL,
+            )
+            Text(
+                text = stringResource(R.string.legacy_export_hint),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
         Spacer(modifier = Modifier.height(12.dp))
         ActionButtonGroup(
             modifier = Modifier.padding(vertical = 4.dp),
@@ -644,7 +699,10 @@ private fun KeyManagementPage(
 }
 
 @Composable
-private fun SettingsPage(running: Boolean, uiStyle: UiStyle, onUiStyleChange: (UiStyle) -> Unit) {
+private fun SettingsPage(state: NekoKEMUiState, actions: NekoKEMActions) {
+    val running = state.running
+    val uiStyle = state.uiStyle
+    val onUiStyleChange = actions.onUiStyleChange
     val context = LocalContext.current
     var showLanguages by remember { mutableStateOf(false) }
     var showUiStyles by remember { mutableStateOf(false) }
@@ -762,6 +820,69 @@ private fun SettingsPage(running: Boolean, uiStyle: UiStyle, onUiStyleChange: (U
                 valueResource = R.string.app_version,
             )
         }
+        Text(
+            modifier = Modifier.padding(top = 24.dp),
+            text = stringResource(R.string.settings_signing_title),
+            style = MaterialTheme.typography.titleLargeEmphasized,
+        )
+        SectionCard(modifier = Modifier.padding(top = 16.dp)) {
+            val unsigned = state.signatureSettings.unsignedEncryption
+            SwitchSetting(
+                title = stringResource(R.string.settings_unsigned_title),
+                summary = stringResource(R.string.settings_unsigned_summary),
+                checked = unsigned,
+                running = running,
+                onCheckedChange = actions.onUnsignedEncryptionChange,
+                warning = unsigned,
+            )
+            if (unsigned) UnsignedWarningText(modifier = Modifier.padding(horizontal = 8.dp))
+            SwitchSetting(
+                title = stringResource(R.string.settings_require_signature_title),
+                summary = stringResource(R.string.settings_require_signature_summary),
+                checked = state.signatureSettings.requireSignature,
+                running = running,
+                onCheckedChange = actions.onRequireSignatureChange,
+            )
+        }
+    }
+}
+
+/** A switch row; the whole row toggles it. [warning] tints the title red. */
+@Composable
+private fun SwitchSetting(
+    title: String,
+    summary: String,
+    checked: Boolean,
+    running: Boolean,
+    onCheckedChange: (Boolean) -> Unit,
+    warning: Boolean = false,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .toggleable(
+                value = checked,
+                enabled = !running,
+                role = Role.Switch,
+                onValueChange = onCheckedChange,
+            )
+            .padding(horizontal = 8.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(Modifier.weight(1f).padding(end = 16.dp)) {
+            Text(
+                title,
+                style = MaterialTheme.typography.titleMedium,
+                color = if (warning) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface,
+            )
+            Text(
+                modifier = Modifier.padding(top = 4.dp),
+                text = summary,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        Switch(checked = checked, onCheckedChange = null, enabled = !running)
     }
 }
 

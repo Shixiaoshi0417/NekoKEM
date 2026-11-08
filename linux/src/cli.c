@@ -378,12 +378,20 @@ static void print_usage(FILE *output, const char *program)
             "  %s keygen\n"
             "  %s keygen hybrid\n"
             "  %s keygen --replace\n"
-            "  %s encrypt hybrid <input_file> <output_file> <public.key> "
-            "[<public.key> ...]\n"
-            "  %s decrypt hybrid <input_file> <output_file> "
-            "<private.key|private.key.enc>\n"),
+            "  %s encrypt hybrid [--sign-key <private.key.enc>] [--unsigned] "
+            "<input_file> <output_file> <public.key> [<public.key> ...]\n"
+            "  %s decrypt hybrid [--trust <public.key>]... "
+            "[--require-signature] [--require-trusted] "
+            "[--save-signer <signer.key>] <input_file> <output_file> "
+            "<private.key|private.key.enc>\n"
+            "  %s upgrade-key [<public.key> <private.key.enc>]\n"
+            "  %s export-legacy-public-key <public.key> <output.key>\n"
+            "  %s fingerprint <public.key>\n"
+            "Encryption signs with keys/private.key.enc unless --sign-key or "
+            "--unsigned is given.\n"),
             safe_program, safe_program, safe_program, safe_program,
-            safe_program, safe_program, safe_program);
+            safe_program, safe_program, safe_program, safe_program,
+            safe_program, safe_program);
     fputs(file_message(
         "  --help                 Show this help\n"
         "  --lang LANGUAGE        Override language for this command\n"
@@ -581,7 +589,7 @@ static int generate_hybrid_keypair(int interactive, int replace)
         printf(file_message("已生成：\n  %s\n  %s\n"),
                PUBLIC_KEY_PATH, PROTECTED_PRIVATE_KEY_PATH);
     } else {
-        printf(file_message("Generated hybrid X448 + ML-KEM-1024 keys: %s and %s\n"),
+        printf(file_message("Generated identity keys (X448 + ML-KEM-1024 encryption, Ed448 + ML-DSA-87 signing): %s and %s\n"),
                PUBLIC_KEY_PATH, PROTECTED_PRIVATE_KEY_PATH);
     }
     success = 1;
@@ -596,59 +604,241 @@ int cli_run_hybrid_keygen(int replace)
     return generate_hybrid_keypair(0, replace);
 }
 
+static int read_existing_password(const char *private_key_path,
+                                  PasswordBuffer *password)
+{
+    return nekokem_private_key_requires_password(private_key_path) == 0 ||
+           read_password_line(file_message("请输入私钥密码："), password);
+}
+
 int cli_run_hybrid_encrypt(const char *input_path,
                            const char *output_path,
-                           const char *public_key_path)
-{
-    if (!nekokem_encrypt_file(input_path, output_path,
-                              public_key_path)) {
-        return 0;
-    }
-    printf(file_message("Encrypted hybrid NKEM v3 %s -> %s\n"),
-           file_display_safe_path(input_path), file_display_safe_path(output_path));
-    return 1;
-}
-
-int cli_run_hybrid_encrypt_multi(const char *input_path,
-                                 const char *output_path,
-                                 const char *const *public_key_paths,
-                                 size_t public_key_count)
-{
-    if (nekokem_encrypt_file_multi_with_progress(
-            input_path, output_path, public_key_paths, public_key_count,
-            NULL, NULL) != NEKOKEM_OPERATION_SUCCESS) {
-        return 0;
-    }
-    printf(file_message("Encrypted NKEM v4 for %zu recipients %s -> %s\n"),
-           public_key_count, file_display_safe_path(input_path),
-           file_display_safe_path(output_path));
-    return 1;
-}
-
-int cli_run_hybrid_decrypt(const char *input_path,
-                           const char *output_path,
-                           const char *private_key_path)
+                           const char *const *public_key_paths,
+                           size_t public_key_count,
+                           const char *sign_key_path,
+                           int unsigned_output)
 {
     PasswordBuffer password = {0};
+    NekoKEMEncryptOptions options;
+    NekoKEMEncryptResult result;
     int success = 0;
 
-    if (nekokem_private_key_requires_password(private_key_path) != 0 &&
-        !read_password_line(file_message("请输入私钥密码："), &password)) {
-        goto cleanup;
+    memset(&options, 0, sizeof(options));
+    memset(&result, 0, sizeof(result));
+    options.struct_size = sizeof(options);
+    result.struct_size = sizeof(result);
+    if (unsigned_output != 0) {
+        options.flags = NEKOKEM_ENCRYPT_UNSIGNED;
+    } else {
+        int exists = 0;
+
+        if (sign_key_path == NULL) {
+            sign_key_path = PROTECTED_PRIVATE_KEY_PATH;
+        }
+        if (!file_path_exists(sign_key_path, &exists)) {
+            print_system_error("Cannot check the key file path");
+            goto cleanup;
+        }
+        if (exists == 0) {
+            fprintf(stderr, file_message("Signing key not found: %s\nEncryption signs with your identity key; run keygen, pass --sign-key, or pass --unsigned for a file recipients cannot attribute to you.\n"),
+                    file_display_safe_path(sign_key_path));
+            goto cleanup;
+        }
+        if (!read_existing_password(sign_key_path, &password)) {
+            goto cleanup;
+        }
+        options.sender_private_key_path = sign_key_path;
+        options.password = password.data;
+        options.password_len = password.length;
     }
-    if (!nekokem_decrypt_file(input_path, output_path, private_key_path,
-                              password.data, password.length)) {
+    if (nekokem_encrypt_file_v5_with_progress(
+            input_path, output_path, public_key_paths, public_key_count,
+            &options, &result, NULL, NULL) != NEKOKEM_OPERATION_SUCCESS) {
         goto cleanup;
     }
     password_buffer_cleanup(&password);
-    printf(file_message("Decrypted NKEM %s -> %s\n"),
-           file_display_safe_path(input_path), file_display_safe_path(output_path));
+    if (result.format_version == 5) {
+        printf(file_message("Encrypted and signed NKEM v5 for %zu recipient(s) %s -> %s\n"),
+               public_key_count, file_display_safe_path(input_path),
+               file_display_safe_path(output_path));
+    } else {
+        if (result.format_version == 3) {
+            printf(file_message("Encrypted hybrid NKEM v3 %s -> %s\n"),
+                   file_display_safe_path(input_path),
+                   file_display_safe_path(output_path));
+        } else {
+            printf(file_message("Encrypted NKEM v4 for %zu recipients %s -> %s\n"),
+                   public_key_count, file_display_safe_path(input_path),
+                   file_display_safe_path(output_path));
+        }
+        fputs(file_message("Warning: this file is not signed; recipients cannot confirm that it came from you.\n"),
+              stderr);
+    }
     success = 1;
 
 cleanup:
     password_buffer_cleanup(&password);
     return success;
 }
+
+static void print_signature_status(const NekoKEMVerifyResult *result,
+                                   const char *const *trusted_paths)
+{
+    if (result->signature_status == NEKOKEM_SIGNATURE_TRUSTED) {
+        printf(file_message("Signature: valid, signed by trusted key %s\nSigner fingerprint:\n%s\n"),
+               file_display_safe_path(
+                   trusted_paths[result->trusted_signer_index]),
+               result->signer_fingerprint);
+    } else if (result->signature_status ==
+               NEKOKEM_SIGNATURE_VALID_UNTRUSTED) {
+        printf(file_message("Signature: valid, but the signer is not one of your trusted keys; compare this fingerprint with the sender:\n%s\n"),
+               result->signer_fingerprint);
+    } else {
+        printf(file_message("Signature: none. This NKEM v%d file is not signed, so its sender cannot be confirmed.\n"),
+               result->format_version);
+    }
+}
+
+int cli_run_hybrid_decrypt(const char *input_path,
+                           const char *output_path,
+                           const char *private_key_path,
+                           const CliVerifyOptions *verify)
+{
+    static const CliVerifyOptions none = {NULL, 0U, 0, 0, NULL};
+    PasswordBuffer password = {0};
+    NekoKEMVerifyPolicy policy;
+    NekoKEMVerifyResult result;
+    int status;
+    int success = 0;
+
+    if (verify == NULL) {
+        verify = &none;
+    }
+    memset(&policy, 0, sizeof(policy));
+    memset(&result, 0, sizeof(result));
+    policy.struct_size = sizeof(policy);
+    result.struct_size = sizeof(result);
+    policy.flags = (verify->require_signature != 0
+                        ? NEKOKEM_VERIFY_REQUIRE_SIGNATURE
+                        : 0U) |
+                   (verify->require_trusted != 0
+                        ? NEKOKEM_VERIFY_REQUIRE_TRUSTED
+                        : 0U);
+    policy.trusted_signer_paths = verify->trusted_paths;
+    policy.trusted_signer_count = verify->trusted_count;
+    policy.signer_public_key_output_path = verify->save_signer_path;
+    if (!read_existing_password(private_key_path, &password)) {
+        goto cleanup;
+    }
+    status = nekokem_decrypt_file_verified_with_progress(
+        input_path, output_path, private_key_path, password.data,
+        password.length, &policy, &result, NULL, NULL);
+    password_buffer_cleanup(&password);
+    if (status != NEKOKEM_OPERATION_SUCCESS) {
+        goto cleanup;
+    }
+    printf(file_message("Decrypted NKEM %s -> %s\n"),
+           file_display_safe_path(input_path), file_display_safe_path(output_path));
+    print_signature_status(&result, verify->trusted_paths);
+    if (verify->save_signer_path != NULL) {
+        printf(file_message("Saved the signer's public key: %s\n"),
+               file_display_safe_path(verify->save_signer_path));
+    }
+    success = 1;
+
+cleanup:
+    password_buffer_cleanup(&password);
+    return success;
+}
+
+static int print_fingerprints(const char *public_key_path)
+{
+    char fingerprint[NEKOKEM_FINGERPRINT_STRING_SIZE];
+    char legacy[NEKOKEM_FINGERPRINT_STRING_SIZE];
+    int success = 0;
+
+    if (!nekokem_public_key_fingerprint(public_key_path, fingerprint,
+                                        sizeof(fingerprint))) {
+        goto cleanup;
+    }
+    if (nekokem_public_key_can_verify(public_key_path) != 1) {
+        printf(file_message("SHA-256 fingerprint:\n%s\n"), fingerprint);
+        fputs(file_message("This legacy key can receive files but cannot sign; upgrade it with upgrade-key.\n"),
+              stdout);
+        success = 1;
+        goto cleanup;
+    }
+    if (!nekokem_public_key_legacy_fingerprint(public_key_path, legacy,
+                                               sizeof(legacy))) {
+        goto cleanup;
+    }
+    printf(file_message("SHA-256 fingerprint:\n%s\n"), fingerprint);
+    printf(file_message("Legacy fingerprint (NekoKEM 4.x and earlier):\n%s\n"),
+           legacy);
+    success = 1;
+
+cleanup:
+    secure_mem_clear(fingerprint, sizeof(fingerprint));
+    secure_mem_clear(legacy, sizeof(legacy));
+    return success;
+}
+
+int cli_run_upgrade_key(const char *public_key_path,
+                        const char *private_key_path)
+{
+    PasswordBuffer password = {0};
+    int success = 0;
+
+    if (public_key_path == NULL) {
+        public_key_path = PUBLIC_KEY_PATH;
+        private_key_path = PROTECTED_PRIVATE_KEY_PATH;
+    }
+    if (nekokem_public_key_can_verify(public_key_path) == 1) {
+        fputs(file_message("This key is already a signing identity key\n"), stderr);
+        goto cleanup;
+    }
+    if (!read_password_line(file_message("请输入私钥密码："), &password) ||
+        !nekokem_upgrade_to_identity_keys(public_key_path, private_key_path,
+                                          password.data, password.length)) {
+        goto cleanup;
+    }
+    password_buffer_cleanup(&password);
+    printf(file_message("Added Ed448 + ML-DSA-87 signing keys to %s and %s\n"),
+           file_display_safe_path(public_key_path),
+           file_display_safe_path(private_key_path));
+    if (!print_fingerprints(public_key_path)) {
+        goto cleanup;
+    }
+    fputs(file_message("Send the new public key to your contacts. NekoKEM 4.x cannot read it; give those users export-legacy-public-key output instead.\n"),
+          stdout);
+    success = 1;
+
+cleanup:
+    password_buffer_cleanup(&password);
+    return success;
+}
+
+int cli_run_export_legacy_public_key(const char *public_key_path,
+                                     const char *output_path)
+{
+    if (!nekokem_export_legacy_public_key(public_key_path, output_path)) {
+        return 0;
+    }
+    printf(file_message("Wrote the two-component public key for NekoKEM 4.x: %s\n"),
+           file_display_safe_path(output_path));
+    return 1;
+}
+
+int cli_run_fingerprint(const char *public_key_path)
+{
+    return print_fingerprints(public_key_path);
+}
+
+/*
+ * A pasted two-block legacy key ends at the first line after it that does
+ * not start another PEM block; that line is the answer to the next prompt.
+ */
+static char *cli_pending_line;
 
 static char *read_prompt_line(const char *prompt)
 {
@@ -660,6 +850,16 @@ static char *read_prompt_line(const char *prompt)
     if (fputs(prompt, stdout) == EOF || fflush(stdout) != 0) {
         print_system_error("Cannot display prompt");
         return NULL;
+    }
+    if (cli_pending_line != NULL) {
+        line = cli_pending_line;
+        cli_pending_line = NULL;
+        if (strlen(line) > MAX_PROMPT_LINE_SIZE) {
+            fprintf(stderr, file_message("Input exceeds %u bytes and was discarded\n"),
+                    MAX_PROMPT_LINE_SIZE);
+            line[0] = '\0';
+        }
+        return line;
     }
     line = calloc(MAX_PROMPT_LINE_SIZE + 1U, 1U);
     if (line == NULL) {
@@ -698,9 +898,11 @@ static char *read_prompt_line(const char *prompt)
     return line;
 }
 
+/* At EOF, *line stays NULL and 1 is returned only when eof_ok is set. */
 static int read_pasted_key_line(char **line,
                                 size_t *line_length,
-                                size_t *line_capacity)
+                                size_t *line_capacity,
+                                int eof_ok)
 {
     char *buffer = NULL;
     size_t length = 0U;
@@ -736,6 +938,10 @@ static int read_pasted_key_line(char **line,
         goto cleanup;
     }
     if (character == EOF && length == 0U && too_long == 0) {
+        if (eof_ok != 0) {
+            secure_free(buffer, capacity);
+            return 1;
+        }
         fprintf(stderr, file_message("Pasted key ended before two PEM blocks\n"));
         goto cleanup;
     }
@@ -775,6 +981,7 @@ static int collect_pasted_key(int private_key, char **temporary_path)
     size_t line_length = 0U;
     size_t total_size = 0U;
     unsigned int end_markers = 0U;
+    int identity_paste = 0;
     int descriptor = -1;
 #ifndef _WIN32
     int path_result;
@@ -840,7 +1047,7 @@ static int collect_pasted_key(int private_key, char **temporary_path)
     }
 
     if (private_key != 0) {
-        if (fputs(file_message("请粘贴两个 PEM 私钥块；输入过程不会回显。\n"),
+        if (fputs(file_message("请粘贴 PEM 私钥块（旧密钥两个，身份密钥四个），完成后按回车；输入过程不会回显。\n"),
                   stdout) == EOF ||
             fflush(stdout) != 0) {
             print_system_error("Cannot display private-key prompt");
@@ -854,16 +1061,40 @@ static int collect_pasted_key(int private_key, char **temporary_path)
             print_system_error("Cannot disable private-key echo");
             goto cleanup;
         }
-    } else if (fputs(file_message("请粘贴两个 PEM 公钥块：\n"), stdout) == EOF ||
+    } else if (fputs(file_message("请粘贴 PEM 公钥块（旧密钥两个，身份密钥四个），完成后按回车：\n"), stdout) == EOF ||
                fflush(stdout) != 0) {
         print_system_error("Cannot display public-key prompt");
         goto cleanup;
     }
 
-    while (end_markers < 2U) {
-        if (!read_pasted_key_line(&line, &line_length,
-                                  &line_capacity)) {
+    /*
+     * Two blocks are a legacy key and four an identity key. After the second
+     * block, an empty line or EOF ends the paste, another BEGIN line goes on
+     * to four, and any other line is kept for the next prompt.
+     */
+    while (end_markers < 4U) {
+        int after_legacy = end_markers == 2U && identity_paste == 0;
+
+        if (!read_pasted_key_line(&line, &line_length, &line_capacity,
+                                  after_legacy)) {
             goto cleanup;
+        }
+        if (line == NULL) {
+            break;
+        }
+        if (after_legacy && strstr(line, "-----BEGIN ") == NULL) {
+            if (strspn(line, " \t\r\n") != line_length) {
+                line[strcspn(line, "\r\n")] = '\0';
+                cli_pending_line = strdup(line);
+                if (cli_pending_line == NULL) {
+                    print_system_error("Cannot allocate input buffer");
+                    goto cleanup;
+                }
+            }
+            break;
+        }
+        if (after_legacy) {
+            identity_paste = 1;
         }
         if (private_key != 0 &&
             (strstr(line, "-----BEGIN ENCRYPTED PRIVATE KEY-----") != NULL ||
@@ -1126,7 +1357,13 @@ static int interactive_encrypt(void)
         goto cleanup;
     }
     printf(file_message("输出文件：%s\n"), file_display_safe_path(output_path));
-    success = cli_run_hybrid_encrypt(input_path, output_path, key_path);
+    {
+        const char *recipients[1];
+
+        recipients[0] = key_path;
+        success = cli_run_hybrid_encrypt(input_path, output_path, recipients,
+                                         1U, NULL, 0);
+    }
 
 cleanup:
     cleanup_key_input(key_path, temporary);
@@ -1173,7 +1410,8 @@ static int interactive_decrypt(void)
     printf(file_message("输出文件：%s\n"), file_display_safe_path(output_path));
     {
         int previous_policy = file_set_output_no_replace(1);
-        success = cli_run_hybrid_decrypt(input_path, output_path, key_path);
+        success = cli_run_hybrid_decrypt(input_path, output_path, key_path,
+                                         NULL);
         (void)file_set_output_no_replace(previous_policy);
     }
 
@@ -1186,19 +1424,12 @@ cleanup:
 
 static int interactive_fingerprint(void)
 {
-    char fingerprint[NEKOKEM_FINGERPRINT_STRING_SIZE];
     char *key_path = NULL;
     int temporary = 0;
-    int success = 0;
+    int success = select_key_input(0, &key_path, &temporary) &&
+                  print_fingerprints(key_path);
 
-    if (select_key_input(0, &key_path, &temporary) &&
-        nekokem_public_key_fingerprint(key_path, fingerprint,
-                                       sizeof(fingerprint))) {
-        printf(file_message("SHA-256 fingerprint:\n%s\n"), fingerprint);
-        success = 1;
-    }
     cleanup_key_input(key_path, temporary);
-    secure_mem_clear(fingerprint, sizeof(fingerprint));
     return success;
 }
 

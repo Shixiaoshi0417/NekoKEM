@@ -1,7 +1,7 @@
 <?xml version='1.0' encoding='utf-8'?>
 <resources>
     <string name="app_name">NekoKEM</string>
-    <string name="app_version">NekoKEM v4.4.0</string>
+    <string name="app_version">NekoKEM v5.0.0</string>
     <string name="navigation_files">ファイルの暗号化・復号</string>
     <string name="navigation_keys">鍵の管理</string>
     <string name="navigation_settings">設定</string>
@@ -181,6 +181,8 @@
     <string name="contact_note_hint">受信者の名前や説明</string>
     <string name="contact_note_limit">最大 %1$d 文字</string>
     <string name="contact_duplicate">この公開鍵は保存済みです。保存するとメモを更新します。</string>
+    <string name="contact_upgrade_warning">保存済みの旧形式の鍵「%1$s」をこの署名用 ID 鍵にアップグレードします。旧い鍵を持つ人は誰でも自分の署名鍵を付け加えられるため、保存する前に信頼できる手段で相手と上の新しい完全なフィンガープリントを照合してください。保存後、この鍵で署名されたファイルはこの連絡先の署名として表示されます。</string>
+    <string name="contact_upgrade_confirm">新しい完全なフィンガープリントを相手と照合しました</string>
     <string name="contact_note_line">メモ：%1$s</string>
     <string name="contact_saved">公開鍵を保存しました</string>
     <string name="contact_updated">メモを更新しました</string>
@@ -220,4 +222,45 @@
     <string name="miuix_keys_delete_title">鍵の削除</string>
     <string name="settings_ui_style_miuix">MIUIX</string>
     <string name="settings_ui_style_material">Material 3 Expressive</string>
+    <string name="settings_signing_title">署名</string>
+    <string name="settings_unsigned_title">署名せずに暗号化（旧バージョン互換）</string>
+    <string name="settings_unsigned_summary">オフ: すべてのファイルを ID 鍵で署名します（NKEM v5）。受信者が NekoKEM 4.x 以前を使う場合のみオンにしてください。</string>
+    <string name="unsigned_warning">受信者はファイルがあなたからのものか確認できません</string>
+    <string name="unsigned_confirm_title">署名をオフにしますか？</string>
+    <string name="unsigned_confirm_message">ファイルは署名なしの NKEM v3/v4 になります。受信者はあなたからのファイルか確認できず、相手の公開鍵を持つ誰でも同じように見えるファイルを送れます。</string>
+    <string name="action_turn_off_signing">署名をオフにする</string>
+    <string name="settings_require_signature_title">署名済みファイルのみ受け入れる</string>
+    <string name="settings_require_signature_summary">署名のない NKEM v3/v4 ファイルの復号を拒否し、出力を書き込みません。</string>
+    <string name="sign_password_title">ファイルに署名</string>
+    <string name="sign_password_message">秘密鍵のパスワードを入力してください。ファイルはあなたの ID 鍵で署名され、受信者はあなたからのものだと確認できます。</string>
+    <string name="completion_format">形式</string>
+    <string name="completion_format_value">NKEM v%1$d</string>
+    <string name="completion_signature">署名</string>
+    <string name="completion_signer_fingerprint">署名者の指紋</string>
+    <string name="signature_signed">あなたの ID 鍵で署名しました</string>
+    <string name="signature_unsigned">未署名</string>
+    <string name="signature_trusted_contact">有効 · 保存済みの連絡先 %1$s による署名</string>
+    <string name="signature_trusted_self">有効 · この端末の ID 鍵による署名</string>
+    <string name="signature_untrusted">署名は有効ですが、署名者は連絡先にいません。信頼する前に、この指紋を信頼できる方法で送信者と照合してください。</string>
+    <string name="signature_none">署名なし · この NKEM v3/v4 ファイルでは送信者を確認できません</string>
+    <string name="error_reason_signing_key">署名にはこの端末の ID 鍵が必要です。「鍵」ページで鍵を生成またはアップグレードするか、設定で署名なしの暗号化をオンにしてください。</string>
+    <string name="error_reason_sign">署名できませんでした。秘密鍵のパスワードが正しくないか、秘密鍵を読み取れません。何も書き込んでいません。</string>
+    <string name="error_reason_signature_invalid">署名が無効です。ファイルが改ざんまたは偽造されています。何も書き込んでいません。</string>
+    <string name="error_reason_signature_required">このファイルは署名されておらず、設定で署名済みファイルのみ受け入れています。何も書き込んでいません。</string>
+    <string name="error_reason_signer_not_trusted">署名者は信頼済みの鍵ではありません。何も書き込んでいません。</string>
+    <string name="error_reason_already_identity">この鍵は既に署名できます。アップグレードは不要です。</string>
+    <string name="error_reason_upgrade">鍵をアップグレードできませんでした。パスワードが正しくないか、鍵ファイルが一致しません。ファイルは変更していません。</string>
+    <string name="key_identity_status">ID 鍵 · 署名と検証ができます</string>
+    <string name="key_legacy_status">旧形式の鍵 · 署名できません。アップグレードすると署名できます。</string>
+    <string name="legacy_fingerprint_label">旧形式の指紋（NekoKEM 4.x 以前）</string>
+    <string name="action_upgrade_key">鍵をアップグレード</string>
+    <string name="action_export_legacy_public_key">旧形式の公開鍵を書き出す</string>
+    <string name="operation_upgrade_key">鍵のアップグレード</string>
+    <string name="operation_export_legacy_public_key">旧形式の公開鍵の書き出し</string>
+    <string name="upgrade_password_title">ID 鍵にアップグレード</string>
+    <string name="upgrade_password_message">この NekoKEM 4.x の鍵ペアに署名鍵を追加します。暗号化鍵、パスワード、既存ファイルはそのままです。秘密鍵のパスワードを入力してください。先に両方の鍵のバックアップを書き出してください。</string>
+    <string name="legacy_export_hint">NekoKEM 4.x 以前を使う受信者向けです。署名の検証には使えません。</string>
+    <string name="contact_verifies">ID 鍵 · 署名を検証できます</string>
+    <string name="contact_legacy">旧形式の鍵 · 署名を検証できません</string>
+    <string name="error_settings_save">設定を保存できませんでした。以前の設定が引き続き有効です。</string>
 </resources>

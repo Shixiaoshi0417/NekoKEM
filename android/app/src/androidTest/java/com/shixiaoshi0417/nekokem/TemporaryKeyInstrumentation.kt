@@ -345,6 +345,7 @@ class TemporaryKeyInstrumentation : Instrumentation() {
             CONTINUE_PROGRESS,
         ) == NativeBridge.RESULT_SUCCESS)
         check(plaintext.readBytes().contentEquals(temporaryDecrypted.readBytes()))
+        testSignedRoundTrip(manager, plaintext, cache)
 
         return "default=${record(defaultRecord)};" +
             "safExport=${record(safExport)};" +
@@ -355,6 +356,79 @@ class TemporaryKeyInstrumentation : Instrumentation() {
             "permission=${importTrace.permissionResult};" +
             "commit=${importTrace.commitResult};" +
             "errno=${importTrace.commitErrno ?: 0}"
+    }
+
+    /**
+     * New keys are identity keys: a signed file is NKEM v5, Core reports this
+     * device as the trusted signer, and requiring a signature refuses an
+     * unsigned file without writing its plaintext.
+     */
+    private fun testSignedRoundTrip(manager: LocalKeyManager, plaintext: File, cache: File) {
+        val state = manager.readState()
+        check(state.canSign) { "Generated key cannot sign" }
+        check(state.legacyFingerprint != null && state.legacyFingerprint != state.fingerprint)
+        val signed = File(cache, "signed.nkem")
+        check(manager.encryptFile(plaintext, signed, null, CONTINUE_PROGRESS, password(DEFAULT_PASSWORD)) ==
+            NativeBridge.RESULT_SUCCESS)
+        check(signed.readBytes()[4].toInt() == 5) { "Signed file is not NKEM v5" }
+        val signedOutput = File(cache, "signed.out")
+        val verified = manager.decryptFileVerified(
+            signed, signedOutput, null, password(DEFAULT_PASSWORD), CONTINUE_PROGRESS,
+        )
+        check(verified.code == NativeBridge.RESULT_SUCCESS) { "Signed decryption: ${verified.code}" }
+        val report = checkNotNull(verified.signature)
+        check(report.format == 5 && report.status == NativeBridge.SIGNATURE_TRUSTED && report.signedBySelf)
+        check(report.signerFingerprint == state.fingerprint)
+        check(plaintext.readBytes().contentEquals(signedOutput.readBytes()))
+
+        // A wrong signing password writes nothing.
+        val wrong = File(cache, "wrong-signer.nkem")
+        check(manager.encryptFile(plaintext, wrong, null, CONTINUE_PROGRESS, password("wrong-password")) !=
+            NativeBridge.RESULT_SUCCESS)
+        check(!wrong.exists() || wrong.length() == 0L)
+
+        val unsigned = File(cache, "unsigned.nkem")
+        check(manager.encryptFile(plaintext, unsigned, CONTINUE_PROGRESS) == NativeBridge.RESULT_SUCCESS)
+        val refused = File(cache, "unsigned.out")
+        val required = manager.decryptFileVerified(
+            unsigned, refused, null, password(DEFAULT_PASSWORD), CONTINUE_PROGRESS, requireSignature = true,
+        )
+        check(required.code == LocalKeyManager.RESULT_SIGNATURE_REQUIRED) { "Unsigned file accepted: ${required.code}" }
+        check(!refused.exists() || refused.length() == 0L)
+        val allowed = manager.decryptFileVerified(
+            unsigned, refused, null, password(DEFAULT_PASSWORD), CONTINUE_PROGRESS,
+        )
+        check(allowed.code == NativeBridge.RESULT_SUCCESS)
+        check(checkNotNull(allowed.signature).status == NativeBridge.SIGNATURE_UNSIGNED)
+
+        // The legacy export is the two encryption components, with the 4.x fingerprint.
+        val legacy = File(cache, "legacy-public.key")
+        check(manager.exportLegacyPublicKey(legacy) == NativeBridge.RESULT_SUCCESS)
+        check(!manager.publicKeyCanVerify(legacy))
+        check(manager.publicKeyFingerprint(legacy) == state.legacyFingerprint)
+        check(manager.upgradeToIdentityKeys(password(DEFAULT_PASSWORD)) == LocalKeyManager.RESULT_ALREADY_IDENTITY)
+
+        // Trusted signers are this device plus every saved contact, limited
+        // separately from the 64 recipients: 63, 64, 65 and 500 contacts all
+        // decrypt, up to Core's trusted-signer limit, and one more is refused.
+        for (contacts in listOf(63, 64, 65, 500, NativeBridge.MAX_TRUSTED_SIGNERS - 1)) {
+            signedOutput.delete()
+            val many = manager.decryptFileVerified(
+                signed, signedOutput, null, password(DEFAULT_PASSWORD), CONTINUE_PROGRESS,
+                trustedKeys = List(contacts) { legacy },
+            )
+            check(many.code == NativeBridge.RESULT_SUCCESS) { "$contacts trusted contacts: ${many.code}" }
+            check(checkNotNull(many.signature).signedBySelf)
+            check(plaintext.readBytes().contentEquals(signedOutput.readBytes()))
+        }
+        signedOutput.delete()
+        val tooMany = manager.decryptFileVerified(
+            signed, signedOutput, null, password(DEFAULT_PASSWORD), CONTINUE_PROGRESS,
+            trustedKeys = List(NativeBridge.MAX_TRUSTED_SIGNERS) { legacy },
+        )
+        check(tooMany.code == NativeBridge.RESULT_INVALID_ARGUMENT) { "Too many trusted signers: ${tooMany.code}" }
+        check(!signedOutput.exists())
+        listOf(signed, signedOutput, wrong, unsigned, refused, legacy).forEach { it.delete() }
     }
 
     private fun testEmptyPlaintextRoundTrip(

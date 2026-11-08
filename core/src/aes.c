@@ -5,6 +5,7 @@
 
 #include <limits.h>
 #include <openssl/evp.h>
+#include <string.h>
 
 #define IO_BUFFER_SIZE 65536U
 
@@ -57,6 +58,14 @@ static int progress_should_continue(AesProgressCallback callback,
     return callback(processed_bytes, total_bytes, user_data) != 0;
 }
 
+static int sink_update(AesCiphertextSink sink,
+                       void *user_data,
+                       const unsigned char *data,
+                       size_t length)
+{
+    return sink == NULL || length == 0U || sink(data, length, user_data) != 0;
+}
+
 int aes_gcm_encrypt_file_with_progress(
     FILE *input,
     FILE *output,
@@ -66,6 +75,25 @@ int aes_gcm_encrypt_file_with_progress(
     const unsigned char *aad,
     size_t aad_len,
     unsigned char tag[AES_GCM_TAG_SIZE],
+    AesProgressCallback progress_callback,
+    void *progress_user_data)
+{
+    return aes_gcm_encrypt_file_hashed(
+        input, output, plaintext_len, key, nonce, aad, aad_len, tag,
+        NULL, NULL, progress_callback, progress_user_data);
+}
+
+int aes_gcm_encrypt_file_hashed(
+    FILE *input,
+    FILE *output,
+    uint64_t plaintext_len,
+    const unsigned char key[AES_GCM_KEY_SIZE],
+    const unsigned char nonce[AES_GCM_NONCE_SIZE],
+    const unsigned char *aad,
+    size_t aad_len,
+    unsigned char tag[AES_GCM_TAG_SIZE],
+    AesCiphertextSink ciphertext_sink,
+    void *sink_user_data,
     AesProgressCallback progress_callback,
     void *progress_user_data)
 {
@@ -127,6 +155,7 @@ int aes_gcm_encrypt_file_with_progress(
         }
         if (output_len < 0 ||
             (size_t)output_len > sizeof(buffer) ||
+            !sink_update(ciphertext_sink, sink_user_data, buffer, (size_t)output_len) ||
             !file_write_all(output, buffer, (size_t)output_len)) {
             goto cleanup;
         }
@@ -153,6 +182,7 @@ int aes_gcm_encrypt_file_with_progress(
     }
     if (output_len < 0 ||
         (size_t)output_len > sizeof(buffer) ||
+        !sink_update(ciphertext_sink, sink_user_data, buffer, (size_t)output_len) ||
         !file_write_all(output, buffer, (size_t)output_len)) {
         goto cleanup;
     }
@@ -191,6 +221,25 @@ int aes_gcm_decrypt_file_with_progress(
     const unsigned char nonce[AES_GCM_NONCE_SIZE],
     const unsigned char *aad,
     size_t aad_len,
+    AesProgressCallback progress_callback,
+    void *progress_user_data)
+{
+    return aes_gcm_decrypt_file_hashed(
+        input, output, ciphertext_len, key, nonce, aad, aad_len,
+        NULL, NULL, NULL, progress_callback, progress_user_data);
+}
+
+int aes_gcm_decrypt_file_hashed(
+    FILE *input,
+    FILE *output,
+    uint64_t ciphertext_len,
+    const unsigned char key[AES_GCM_KEY_SIZE],
+    const unsigned char nonce[AES_GCM_NONCE_SIZE],
+    const unsigned char *aad,
+    size_t aad_len,
+    AesCiphertextSink ciphertext_sink,
+    void *sink_user_data,
+    unsigned char tag_out[AES_GCM_TAG_SIZE],
     AesProgressCallback progress_callback,
     void *progress_user_data)
 {
@@ -235,7 +284,8 @@ int aes_gcm_decrypt_file_with_progress(
                             ? IO_BUFFER_SIZE
                             : (size_t)remaining;
 
-        if (!file_read_exact(input, buffer, wanted)) {
+        if (!file_read_exact(input, buffer, wanted) ||
+            !sink_update(ciphertext_sink, sink_user_data, buffer, wanted)) {
             goto cleanup;
         }
         if (EVP_DecryptUpdate(context, buffer, &output_len,
@@ -274,6 +324,9 @@ int aes_gcm_decrypt_file_with_progress(
         (size_t)output_len > sizeof(buffer) ||
         !file_write_all(output, buffer, (size_t)output_len)) {
         goto cleanup;
+    }
+    if (tag_out != NULL) {
+        memcpy(tag_out, tag, sizeof(tag));
     }
     result = AES_GCM_FILE_SUCCESS;
 

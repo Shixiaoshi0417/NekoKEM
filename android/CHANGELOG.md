@@ -1,5 +1,13 @@
 # Changelog
 
+## 5.0.0
+
+- 全平台 5.0.0，Core 5.0，Android versionCode 15；沿用既有签名，可覆盖升级。
+- 加密默认生成带签名的 NKEM v5，加密前输入私钥密码；解密结果显示格式、签名状态和签名者指纹，本机密钥和已保存的身份联系人为可信签名者。
+- 设置新增「不签名加密（兼容旧版）」（默认关闭，开启需确认红色警告）和「只接受已签名文件」；密钥页可升级 4.x 密钥并导出旧版公钥。完整双语说明见 [v5.0.0](../release/v5.0.0.md)。
+
+Android 5.0.0 / versionCode 15 retains the existing signer. Encryption writes signed NKEM v5 by default after asking for the private key password; decryption shows the format, signature status and signer fingerprint, trusting this device's key and saved identity contacts. Settings add Encrypt without signing (legacy compatible), off by default behind a red warning, and Accept only signed files; the Keys page upgrades a 4.x key and exports the legacy public key. See the [bilingual notes](../release/v5.0.0.md).
+
 ## 4.4.0
 
 - 全平台 4.4.0，Core 4.0，Android versionCode 14；沿用既有签名，可覆盖升级。

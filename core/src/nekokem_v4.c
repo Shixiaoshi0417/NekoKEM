@@ -1,5 +1,6 @@
 /* NKEM v4 multi-recipient container; the format is specified in docs/NKEM-v4.md. */
 #include "nekokem_v4.h"
+#include "nekokem_multi.h"
 
 #include "aes.h"
 #include "hybrid.h"
@@ -25,7 +26,7 @@
 #define V4_WRAP_TAG_OFFSET (V4_WRAPPED_OFFSET + NKEM_V4_FILE_KEY_SIZE)
 /* header || salt || X448 ephemeral public key || ML-KEM ciphertext */
 #define V4_WRAP_AAD_SIZE (V4_PREFIX_SIZE + V4_WRAPPED_OFFSET)
-#define V4_MAC_KEY_SIZE 64U
+#define V4_MAC_KEY_SIZE NKEM_MULTI_MAC_KEY_SIZE
 
 _Static_assert(V4_WRAP_TAG_OFFSET + NKEM_TAG_SIZE == NKEM_V4_ENTRY_SIZE,
                "Recipient entry layout");
@@ -34,9 +35,11 @@ _Static_assert(KEM_CIPHERTEXT_SIZE == NKEM_V3_KEM_CIPHERTEXT_SIZE &&
                AES256_KEY_SIZE == NKEM_V4_FILE_KEY_SIZE,
                "Recipient entry component sizes");
 
-static const char wrap_label[] = "NekoKEM v4 recipient wrap X448-MLKEM1024";
-static const char payload_label[] = "NekoKEM v4 payload AES-256-GCM";
-static const char mac_label[] = "NekoKEM v4 header HMAC-SHA512";
+const NkemMultiLabels nkem_v4_labels = {
+    "NekoKEM v4 recipient wrap X448-MLKEM1024",
+    "NekoKEM v4 payload AES-256-GCM",
+    "NekoKEM v4 header HMAC-SHA512",
+};
 /* Each wrap key encrypts exactly one message, so a fixed nonce never repeats. */
 static const unsigned char wrap_nonce[NKEM_NONCE_SIZE] = {0};
 
@@ -45,7 +48,7 @@ static int valid_path(const char *path)
     return path != NULL && path[0] != '\0';
 }
 
-static int hkdf_sha512(const unsigned char *key,
+int nkem_multi_hkdf_sha512(const unsigned char *key,
                        size_t key_len,
                        const unsigned char salt[NKEM_V4_SALT_SIZE],
                        const unsigned char *info,
@@ -93,6 +96,7 @@ cleanup:
 
 /* The wrap key binds the X448 exchange it came from, as in X-Wing. */
 static int derive_wrap_key(
+    const NkemMultiLabels *labels,
     const unsigned char *x448_secret,
     size_t x448_secret_len,
     const unsigned char *mlkem_secret,
@@ -103,11 +107,12 @@ static int derive_wrap_key(
     unsigned char wrap_key[AES256_KEY_SIZE])
 {
     unsigned char secret[X448_SHARED_SECRET_SIZE + KEM_SHARED_SECRET_SIZE];
-    unsigned char info[sizeof(wrap_label) - 1U + 2U * X448_PUBLIC_KEY_SIZE];
-    size_t label_len = sizeof(wrap_label) - 1U;
+    unsigned char info[NKEM_MULTI_MAX_LABEL_SIZE + 2U * X448_PUBLIC_KEY_SIZE];
+    size_t label_len = strlen(labels->wrap);
     int success;
 
     if (x448_secret == NULL || mlkem_secret == NULL ||
+        label_len > NKEM_MULTI_MAX_LABEL_SIZE ||
         x448_secret_len != X448_SHARED_SECRET_SIZE ||
         mlkem_secret_len != KEM_SHARED_SECRET_SIZE) {
         fprintf(stderr, file_message("Invalid hybrid key-derivation input lengths\n"));
@@ -116,33 +121,35 @@ static int derive_wrap_key(
     memcpy(secret, x448_secret, X448_SHARED_SECRET_SIZE);
     memcpy(secret + X448_SHARED_SECRET_SIZE, mlkem_secret,
            KEM_SHARED_SECRET_SIZE);
-    memcpy(info, wrap_label, label_len);
+    memcpy(info, labels->wrap, label_len);
     memcpy(info + label_len, ephemeral_public, X448_PUBLIC_KEY_SIZE);
     memcpy(info + label_len + X448_PUBLIC_KEY_SIZE, recipient_public,
            X448_PUBLIC_KEY_SIZE);
-    success = hkdf_sha512(secret, sizeof(secret), salt, info, sizeof(info),
-                          wrap_key, AES256_KEY_SIZE);
+    success = nkem_multi_hkdf_sha512(secret, sizeof(secret), salt, info,
+                                     label_len + 2U * X448_PUBLIC_KEY_SIZE,
+                                     wrap_key, AES256_KEY_SIZE);
     secure_mem_clear(secret, sizeof(secret));
     return success;
 }
 
-static int derive_file_keys(const unsigned char file_key[NKEM_V4_FILE_KEY_SIZE],
+int nkem_multi_derive_file_keys(const NkemMultiLabels *labels,
+                                const unsigned char file_key[NKEM_V4_FILE_KEY_SIZE],
                             const unsigned char salt[NKEM_V4_SALT_SIZE],
                             unsigned char payload_key[AES256_KEY_SIZE],
                             unsigned char mac_key[V4_MAC_KEY_SIZE])
 {
-    return hkdf_sha512(file_key, NKEM_V4_FILE_KEY_SIZE, salt,
-                       (const unsigned char *)payload_label,
-                       sizeof(payload_label) - 1U,
-                       payload_key, AES256_KEY_SIZE) &&
-           hkdf_sha512(file_key, NKEM_V4_FILE_KEY_SIZE, salt,
-                       (const unsigned char *)mac_label,
-                       sizeof(mac_label) - 1U,
-                       mac_key, V4_MAC_KEY_SIZE);
+    return nkem_multi_hkdf_sha512(
+               file_key, NKEM_V4_FILE_KEY_SIZE, salt,
+               (const unsigned char *)labels->payload,
+               strlen(labels->payload), payload_key, AES256_KEY_SIZE) &&
+           nkem_multi_hkdf_sha512(
+               file_key, NKEM_V4_FILE_KEY_SIZE, salt,
+               (const unsigned char *)labels->mac,
+               strlen(labels->mac), mac_key, V4_MAC_KEY_SIZE);
 }
 
 /* HMAC-SHA512 commits to its key, unlike AES-GCM; see docs/NKEM-v4.md. */
-static int header_mac(const unsigned char mac_key[V4_MAC_KEY_SIZE],
+int nkem_multi_header_mac(const unsigned char mac_key[V4_MAC_KEY_SIZE],
                       const unsigned char *data,
                       size_t data_len,
                       unsigned char output[NKEM_V4_MAC_SIZE])
@@ -181,7 +188,7 @@ cleanup:
     return success;
 }
 
-static int x448_raw_public(EVP_PKEY *key,
+int nkem_multi_x448_raw_public(EVP_PKEY *key,
                            unsigned char output[X448_PUBLIC_KEY_SIZE])
 {
     size_t length = X448_PUBLIC_KEY_SIZE;
@@ -283,7 +290,8 @@ cleanup:
 }
 
 /* Fills one recipient entry: X448 + ML-KEM encapsulation and the wrapped file key. */
-static int seal_recipient(const HybridKeys *recipient,
+int nkem_multi_seal_recipient(const NkemMultiLabels *labels,
+                              const HybridKeys *recipient,
                           const unsigned char prefix[V4_PREFIX_SIZE],
                           const unsigned char file_key[NKEM_V4_FILE_KEY_SIZE],
                           unsigned char entry[NKEM_V4_ENTRY_SIZE])
@@ -299,7 +307,7 @@ static int seal_recipient(const HybridKeys *recipient,
     size_t mlkem_secret_len = 0U;
     int success = 0;
 
-    if (!x448_raw_public(recipient->x448, recipient_public) ||
+    if (!nkem_multi_x448_raw_public(recipient->x448, recipient_public) ||
         !hybrid_x448_encapsulate(recipient->x448, entry,
                                  &x448_secret, &x448_secret_len) ||
         !kem_encapsulate(recipient->mlkem, &kem_ciphertext,
@@ -311,7 +319,7 @@ static int seal_recipient(const HybridKeys *recipient,
     memcpy(entry + V4_KEM_OFFSET, kem_ciphertext, NKEM_V3_KEM_CIPHERTEXT_SIZE);
     memcpy(wrap_aad, prefix, V4_PREFIX_SIZE);
     memcpy(wrap_aad + V4_PREFIX_SIZE, entry, V4_WRAPPED_OFFSET);
-    if (!derive_wrap_key(x448_secret, x448_secret_len,
+    if (!derive_wrap_key(labels, x448_secret, x448_secret_len,
                          mlkem_secret, mlkem_secret_len,
                          prefix + NKEM_V4_HEADER_SIZE, entry,
                          recipient_public, wrap_key) ||
@@ -389,7 +397,8 @@ static int entry_x448_secret(EVP_PKEY *private_key,
 }
 
 /* Opens one entry into file_key; returns one of the ENTRY_ outcomes. */
-static int open_recipient(const HybridKeys *keys,
+static int open_recipient(const NkemMultiLabels *labels,
+                          const HybridKeys *keys,
                           const unsigned char recipient_public[X448_PUBLIC_KEY_SIZE],
                           const unsigned char prefix[V4_PREFIX_SIZE],
                           const unsigned char entry[NKEM_V4_ENTRY_SIZE],
@@ -413,7 +422,7 @@ static int open_recipient(const HybridKeys *keys,
     if (!kem_decapsulate(keys->mlkem, entry + V4_KEM_OFFSET,
                          NKEM_V3_KEM_CIPHERTEXT_SIZE,
                          &mlkem_secret, &mlkem_secret_len) ||
-        !derive_wrap_key(x448_secret, sizeof(x448_secret),
+        !derive_wrap_key(labels, x448_secret, sizeof(x448_secret),
                          mlkem_secret, mlkem_secret_len,
                          prefix + NKEM_V4_HEADER_SIZE, entry,
                          recipient_public, wrap_key)) {
@@ -440,7 +449,7 @@ cleanup:
     return result;
 }
 
-static void recipients_cleanup(HybridKeys *recipients, size_t count)
+void nkem_multi_recipients_cleanup(HybridKeys *recipients, size_t count)
 {
     size_t index;
 
@@ -454,7 +463,7 @@ static void recipients_cleanup(HybridKeys *recipients, size_t count)
 }
 
 /* Loads and validates every recipient before any output exists. */
-static HybridKeys *load_recipients(const char *const *public_key_paths,
+HybridKeys *nkem_multi_load_recipients(const char *const *public_key_paths,
                                    size_t public_key_count)
 {
     HybridKeys *recipients;
@@ -486,7 +495,7 @@ static HybridKeys *load_recipients(const char *const *public_key_paths,
     return recipients;
 
 failure:
-    recipients_cleanup(recipients, public_key_count);
+    nkem_multi_recipients_cleanup(recipients, public_key_count);
     return NULL;
 }
 
@@ -548,7 +557,7 @@ int nekokem_encrypt_file_multi_with_progress(
         !nkem_gcm_data_size_is_valid(plaintext_len)) {
         goto cleanup;
     }
-    recipients = load_recipients(public_key_paths, public_key_count);
+    recipients = nkem_multi_load_recipients(public_key_paths, public_key_count);
     if (recipients == NULL) {
         goto cleanup;
     }
@@ -571,18 +580,21 @@ int nekokem_encrypt_file_multi_with_progress(
         goto cleanup;
     }
     for (index = 0U; index < public_key_count; ++index) {
-        if (!seal_recipient(&recipients[index], metadata, file_key,
+        if (!nkem_multi_seal_recipient(&nkem_v4_labels,
+                                       &recipients[index], metadata, file_key,
                             metadata + V4_PREFIX_SIZE +
                                 index * NKEM_V4_ENTRY_SIZE)) {
             goto cleanup;
         }
     }
-    recipients_cleanup(recipients, public_key_count);
+    nkem_multi_recipients_cleanup(recipients, public_key_count);
     recipients = NULL;
 
-    if (!derive_file_keys(file_key, metadata + NKEM_V4_HEADER_SIZE,
-                          payload_key, mac_key) ||
-        !header_mac(mac_key, metadata, mac_offset, metadata + mac_offset)) {
+    if (!nkem_multi_derive_file_keys(&nkem_v4_labels, file_key,
+                                     metadata + NKEM_V4_HEADER_SIZE,
+                                     payload_key, mac_key) ||
+        !nkem_multi_header_mac(mac_key, metadata, mac_offset,
+                               metadata + mac_offset)) {
         goto cleanup;
     }
     secure_mem_clear(file_key, sizeof(file_key));
@@ -615,12 +627,104 @@ cleanup:
     if (input != NULL) {
         (void)fclose(input);
     }
-    recipients_cleanup(recipients, public_key_count);
+    nkem_multi_recipients_cleanup(recipients, public_key_count);
     OPENSSL_free(metadata);
     secure_mem_clear(file_key, sizeof(file_key));
     secure_mem_clear(payload_key, sizeof(payload_key));
     secure_mem_clear(mac_key, sizeof(mac_key));
     return result;
+}
+
+/*
+ * Trial-decrypts every entry of metadata (header through payload nonce) and
+ * verifies the header MAC. On success payload_key holds the payload key and,
+ * when file_key_out is set, the file key is copied there for further keys.
+ */
+int nkem_multi_open_metadata(const NkemMultiLabels *labels,
+                             const HybridKeys *private_keys,
+                             const unsigned char *metadata,
+                             uint16_t recipient_count,
+                             unsigned char payload_key[AES256_KEY_SIZE],
+                             unsigned char file_key_out[NKEM_V4_FILE_KEY_SIZE])
+{
+    unsigned char recipient_public[X448_PUBLIC_KEY_SIZE];
+    unsigned char candidate[NKEM_V4_FILE_KEY_SIZE] = {0};
+    unsigned char file_key[NKEM_V4_FILE_KEY_SIZE] = {0};
+    unsigned char mac_key[V4_MAC_KEY_SIZE] = {0};
+    unsigned char expected_mac[NKEM_V4_MAC_SIZE];
+    unsigned char found = 0U;
+    size_t mac_offset = V4_PREFIX_SIZE +
+                        (size_t)recipient_count * NKEM_V4_ENTRY_SIZE;
+    size_t index;
+    size_t byte;
+    int malformed = 0;
+    int mac_matches;
+    int success = 0;
+
+    if (!nkem_multi_x448_raw_public(private_keys->x448, recipient_public)) {
+        goto cleanup;
+    }
+    /*
+     * Entries carry no recipient identifier. Every entry is opened with the
+     * same work and the first match is kept with a constant-time select, so
+     * neither the time taken nor the error reported depends on where this
+     * key's entry is, or whether there is one.
+     */
+    for (index = 0U; index < recipient_count; ++index) {
+        int opened = open_recipient(
+            labels, private_keys, recipient_public, metadata,
+            metadata + V4_PREFIX_SIZE + index * NKEM_V4_ENTRY_SIZE,
+            candidate);
+        unsigned char take;
+
+        if (opened == ENTRY_ERROR) {
+            goto cleanup;
+        }
+        malformed |= (opened == ENTRY_MALFORMED);
+        take = (unsigned char)(0U - (unsigned int)(opened == ENTRY_OPENED)) &
+               (unsigned char)~found;
+        for (byte = 0U; byte < sizeof(file_key); ++byte) {
+            file_key[byte] = (unsigned char)((file_key[byte] & ~take) |
+                                             (candidate[byte] & take));
+        }
+        found |= take;
+    }
+    secure_mem_clear(candidate, sizeof(candidate));
+    /* Depends on the container alone, so it may be reported on its own. */
+    if (malformed) {
+        fprintf(stderr, file_message("An NKEM v4 recipient entry is malformed\n"));
+        goto cleanup;
+    }
+
+    /* Verify the whole recipient list before reading any ciphertext. With no
+     * match the MAC is still computed, over an all-zero file key, so a missing
+     * entry and a modified file take one path and report one message. */
+    if (!nkem_multi_derive_file_keys(labels, file_key,
+                                     metadata + NKEM_V4_HEADER_SIZE,
+                                     payload_key, mac_key) ||
+        !nkem_multi_header_mac(mac_key, metadata, mac_offset, expected_mac)) {
+        goto cleanup;
+    }
+    mac_matches = CRYPTO_memcmp(expected_mac, metadata + mac_offset,
+                                NKEM_V4_MAC_SIZE) == 0;
+    if (found == 0U || !mac_matches) {
+        fprintf(stderr, file_message("This file is not encrypted for this private key, or it was modified\n"));
+        goto cleanup;
+    }
+    if (file_key_out != NULL) {
+        memcpy(file_key_out, file_key, NKEM_V4_FILE_KEY_SIZE);
+    }
+    success = 1;
+
+cleanup:
+    if (success == 0) {
+        secure_mem_clear(payload_key, AES256_KEY_SIZE);
+    }
+    secure_mem_clear(candidate, sizeof(candidate));
+    secure_mem_clear(file_key, sizeof(file_key));
+    secure_mem_clear(mac_key, sizeof(mac_key));
+    secure_mem_clear(expected_mac, sizeof(expected_mac));
+    return success;
 }
 
 int nekokem_v4_decrypt_opened(
@@ -638,19 +742,9 @@ int nekokem_v4_decrypt_opened(
     HybridKeys private_keys = {0};
     NkemV4Header header;
     unsigned char *metadata = NULL;
-    unsigned char recipient_public[X448_PUBLIC_KEY_SIZE];
-    unsigned char candidate[NKEM_V4_FILE_KEY_SIZE] = {0};
-    unsigned char file_key[NKEM_V4_FILE_KEY_SIZE] = {0};
     unsigned char payload_key[AES256_KEY_SIZE] = {0};
-    unsigned char mac_key[V4_MAC_KEY_SIZE] = {0};
-    unsigned char expected_mac[NKEM_V4_MAC_SIZE];
-    unsigned char found = 0U;
     size_t metadata_len = 0U;
     size_t mac_offset;
-    size_t index;
-    size_t byte;
-    int malformed = 0;
-    int mac_matches;
     int aes_result;
     int result = NEKOKEM_OPERATION_ERROR;
 
@@ -670,59 +764,15 @@ int nekokem_v4_decrypt_opened(
     if (!file_read_exact(input, metadata + NKEM_V4_HEADER_SIZE,
                          metadata_len - NKEM_V4_HEADER_SIZE) ||
         !hybrid_load_decryption_keys(private_key_path, password,
-                                     password_len, &private_keys) ||
-        !x448_raw_public(private_keys.x448, recipient_public)) {
+                                     password_len, &private_keys)) {
         goto cleanup;
     }
-    /*
-     * Entries carry no recipient identifier. Every entry is opened with the
-     * same work and the first match is kept with a constant-time select, so
-     * neither the time taken nor the error reported depends on where this
-     * key's entry is, or whether there is one.
-     */
-    for (index = 0U; index < header.recipient_count; ++index) {
-        int opened = open_recipient(
-            &private_keys, recipient_public, metadata,
-            metadata + V4_PREFIX_SIZE + index * NKEM_V4_ENTRY_SIZE,
-            candidate);
-        unsigned char take;
-
-        if (opened == ENTRY_ERROR) {
-            goto cleanup;
-        }
-        malformed |= (opened == ENTRY_MALFORMED);
-        take = (unsigned char)(0U - (unsigned int)(opened == ENTRY_OPENED)) &
-               (unsigned char)~found;
-        for (byte = 0U; byte < sizeof(file_key); ++byte) {
-            file_key[byte] = (unsigned char)((file_key[byte] & ~take) |
-                                             (candidate[byte] & take));
-        }
-        found |= take;
+    if (!nkem_multi_open_metadata(&nkem_v4_labels, &private_keys, metadata,
+                                  header.recipient_count, payload_key,
+                                  NULL)) {
+        goto cleanup;
     }
-    secure_mem_clear(candidate, sizeof(candidate));
     hybrid_keys_cleanup(&private_keys);
-    /* Depends on the container alone, so it may be reported on its own. */
-    if (malformed) {
-        fprintf(stderr, file_message("An NKEM v4 recipient entry is malformed\n"));
-        goto cleanup;
-    }
-
-    /* Verify the whole recipient list before reading any ciphertext. With no
-     * match the MAC is still computed, over an all-zero file key, so a missing
-     * entry and a modified file take one path and report one message. */
-    if (!derive_file_keys(file_key, metadata + NKEM_V4_HEADER_SIZE,
-                          payload_key, mac_key) ||
-        !header_mac(mac_key, metadata, mac_offset, expected_mac)) {
-        goto cleanup;
-    }
-    secure_mem_clear(file_key, sizeof(file_key));
-    secure_mem_clear(mac_key, sizeof(mac_key));
-    mac_matches = CRYPTO_memcmp(expected_mac, metadata + mac_offset,
-                                NKEM_V4_MAC_SIZE) == 0;
-    if (found == 0U || !mac_matches) {
-        fprintf(stderr, file_message("This file is not encrypted for this private key, or it was modified\n"));
-        goto cleanup;
-    }
 
     if (!atomic_file_open(&output, output_path, 0600)) {
         goto cleanup;
@@ -751,10 +801,6 @@ cleanup:
     atomic_file_abort(&output);
     hybrid_keys_cleanup(&private_keys);
     OPENSSL_free(metadata);
-    secure_mem_clear(candidate, sizeof(candidate));
-    secure_mem_clear(file_key, sizeof(file_key));
     secure_mem_clear(payload_key, sizeof(payload_key));
-    secure_mem_clear(mac_key, sizeof(mac_key));
-    secure_mem_clear(expected_mac, sizeof(expected_mac));
     return result;
 }

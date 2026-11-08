@@ -137,25 +137,42 @@ internal fun DialogButton(
     text: String,
     onClick: () -> Unit,
     enabled: Boolean = true,
+    modifier: Modifier = Modifier,
+    /** Drawn in the theme's error color, for an action that lowers protection. */
+    destructive: Boolean = false,
 ) {
     val miuixSlot = LocalMiuixDialogSlot.current
     if (miuixSlot != null) {
+        val miuixColors = top.yukonga.miuix.kmp.theme.MiuixTheme.colorScheme
         top.yukonga.miuix.kmp.basic.TextButton(
             text = text,
             onClick = onClick,
-            modifier = Modifier.fillMaxWidth(),
+            modifier = modifier.fillMaxWidth(),
             enabled = enabled,
             // Long labels wrap; keep every line centered in the button.
             textStyle = top.yukonga.miuix.kmp.theme.MiuixTheme.textStyles.button.copy(textAlign = TextAlign.Center),
-            colors = if (miuixSlot.primary) {
-                top.yukonga.miuix.kmp.basic.ButtonDefaults.textButtonColorsPrimary()
-            } else {
-                top.yukonga.miuix.kmp.basic.ButtonDefaults.textButtonColors()
+            colors = when {
+                destructive -> top.yukonga.miuix.kmp.basic.ButtonDefaults.textButtonColorsPrimary(
+                    color = miuixColors.error,
+                    textColor = miuixColors.onError,
+                )
+                miuixSlot.primary -> top.yukonga.miuix.kmp.basic.ButtonDefaults.textButtonColorsPrimary()
+                else -> top.yukonga.miuix.kmp.basic.ButtonDefaults.textButtonColors()
             },
         )
         return
     }
-    TextButton(onClick = onClick, shapes = ButtonDefaults.shapes(), enabled = enabled) {
+    TextButton(
+        onClick = onClick,
+        shapes = ButtonDefaults.shapes(),
+        enabled = enabled,
+        modifier = modifier,
+        colors = if (destructive) {
+            ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)
+        } else {
+            ButtonDefaults.textButtonColors()
+        },
+    ) {
         Text(text)
     }
 }

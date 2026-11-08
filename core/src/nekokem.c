@@ -3,6 +3,7 @@
 
 #include "file.h"
 #include "hybrid.h"
+#include "identity.h"
 #include "private_key.h"
 #include "secure_mem.h"
 
@@ -119,7 +120,7 @@ cleanup:
     return success;
 }
 
-static int fingerprint_hybrid_keys(const HybridKeys *keys,
+static int legacy_fingerprint(const HybridKeys *keys,
                                    char *output,
                                    size_t output_size)
 {
@@ -178,6 +179,87 @@ cleanup:
     secure_mem_clear(fingerprint, sizeof(fingerprint));
     EVP_MD_CTX_free(context);
     return success;
+}
+
+/* Identity fingerprint for a four-component key, legacy otherwise. */
+static int fingerprint_hybrid_keys(const HybridKeys *keys,
+                                   char *output,
+                                   size_t output_size)
+{
+    unsigned char encoding[IDENTITY_ENCODING_SIZE];
+
+    if (!hybrid_keys_have_identity(keys)) {
+        return legacy_fingerprint(keys, output, output_size);
+    }
+    if (output == NULL || output_size < NEKOKEM_FINGERPRINT_STRING_SIZE) {
+        fprintf(stderr, file_message("Invalid fingerprint input or output buffer\n"));
+        return 0;
+    }
+    output[0] = '\0';
+    return identity_encode(keys, encoding) &&
+           identity_fingerprint(encoding, output, output_size);
+}
+
+int nekokem_public_key_legacy_fingerprint(const char *public_key_path,
+                                          char *output,
+                                          size_t output_size)
+{
+    HybridKeys keys = {0};
+    int success = 0;
+
+    if (!valid_path(public_key_path) || output == NULL ||
+        output_size < NEKOKEM_FINGERPRINT_STRING_SIZE) {
+        fprintf(stderr, file_message("Invalid fingerprint output buffer or key path\n"));
+        goto cleanup;
+    }
+    output[0] = '\0';
+    if (!hybrid_load_public_keys(public_key_path, &keys) ||
+        !legacy_fingerprint(&keys, output, output_size)) {
+        goto cleanup;
+    }
+    success = 1;
+
+cleanup:
+    if (success == 0 && output != NULL && output_size > 0U) {
+        output[0] = '\0';
+    }
+    hybrid_keys_cleanup(&keys);
+    return success;
+}
+
+int nekokem_public_key_can_verify(const char *public_key_path)
+{
+    HybridKeys keys = {0};
+    int identity;
+
+    if (!valid_path(public_key_path) ||
+        !hybrid_load_public_keys(public_key_path, &keys)) {
+        return 0;
+    }
+    identity = hybrid_keys_have_identity(&keys);
+    hybrid_keys_cleanup(&keys);
+    return identity;
+}
+
+int nekokem_upgrade_to_identity_keys(const char *public_key_path,
+                                     const char *private_key_path,
+                                     const unsigned char *password,
+                                     size_t password_len)
+{
+    if (!valid_path(public_key_path) || !valid_path(private_key_path)) {
+        fprintf(stderr, file_message("NekoKEM Core received an empty key path\n"));
+        return 0;
+    }
+    if (password == NULL || password_len == 0U) {
+        fprintf(stderr, file_message("A non-empty private-key password is required\n"));
+        return 0;
+    }
+    if (!nekokem_private_key_exists(private_key_path)) {
+        fprintf(stderr, file_message("Only a protected NKPR private key can be upgraded\n"));
+        return 0;
+    }
+    return hybrid_upgrade_to_identity(public_key_path, private_key_path,
+                                      password, password_len);
 }
 
 int nekokem_public_key_fingerprint(const char *public_key_path,

@@ -109,7 +109,7 @@ class Tests(unittest.TestCase):
             kernel.CloseHandle(server)
 
     def test_version_help_languages_and_unicode_paths(self):
-        self.assertEqual(self.run_cli('--version').stdout,b'NekoKEM 4.4.0\n')
+        self.assertEqual(self.run_cli('--version').stdout,b'NekoKEM 5.0.0\n')
         for lang,text in [('en','Usage:'),('zh-CN','用法'),('zh-TW','用法'),('ja','使用方法'),('ko','사용법')]:
             p = self.run_cli('--lang',lang,'--help')
             self.assertIn(text,p.stdout.decode('utf-8'))
@@ -118,14 +118,14 @@ class Tests(unittest.TestCase):
         plain.write_bytes(bytes(range(256))*4096)
         encrypted = self.root/'加密😀.nkem'
         output = self.root/'解密😀.bin'
-        self.run_cli('encrypt','hybrid',plain,encrypted,'keys/public.key')
+        self.run_cli('encrypt','hybrid',plain,encrypted,'keys/public.key',password=PASSWORD)
         self.run_cli('decrypt','hybrid',encrypted,output,'keys/private.key.enc',password=PASSWORD)
         self.assertEqual(plain.read_bytes(),output.read_bytes())
     def test_all_five_menu_actions_and_pasted_public_key(self):
         data = bytes(range(256))+b'\x00\r\nmenu'
         (self.root/'plain.bin').write_bytes(data)
         commands = (b'1\n'+PASSWORD*2+
-            b'2\n1\nkeys/public.key\nplain.bin\n'+
+            b'2\n1\nkeys/public.key\nplain.bin\n'+PASSWORD+
             b'3\n1\nkeys/private.key.enc\nencrypted/plain.bin.nkem\n'+PASSWORD+
             b'4\n1\nkeys/public.key\n5\n')
         p = self.run_cli('--lang','en',password=commands)
@@ -141,7 +141,7 @@ class Tests(unittest.TestCase):
     def test_wrong_password_tamper_versions_and_preserved_output(self):
         self.generate()
         (self.root/'plain').write_bytes(b'original\x00\r\n\x1a')
-        self.run_cli('encrypt','hybrid','plain','valid.nkem','keys/public.key')
+        self.run_cli('encrypt','hybrid','plain','valid.nkem','keys/public.key',password=PASSWORD)
         self.run_cli('decrypt','hybrid','valid.nkem','output','keys/private.key.enc',password=PASSWORD)
         sentinel = (self.root/'output').read_bytes()
         self.run_cli('decrypt','hybrid','valid.nkem','output','keys/private.key.enc',password=b'wrong\n',ok=False)
@@ -160,7 +160,7 @@ class Tests(unittest.TestCase):
     def test_private_acl_and_nonblocking_device_rejection(self):
         self.generate()
         (self.root/'plain').write_bytes(b'data')
-        self.run_cli('encrypt','hybrid','plain','valid.nkem','keys/public.key')
+        self.run_cli('encrypt','hybrid','plain','valid.nkem','keys/public.key',password=PASSWORD)
         key = self.root/'keys/private.key.enc'
         before = key.read_bytes()
         # Explicit broad read grant must make a private key unacceptable.
@@ -170,7 +170,7 @@ class Tests(unittest.TestCase):
         self.assertEqual(key.read_bytes(),before)
         for path in ['NUL','CON',r'\\.\pipe\nekokem-no-writer','plain:secret']:
             started = time.monotonic()
-            self.run_cli('encrypt','hybrid',path,'output','keys/public.key',ok=False)
+            self.run_cli('encrypt','hybrid',path,'output','keys/public.key',password=PASSWORD,ok=False)
             self.assertLess(time.monotonic()-started,5)
     def test_public_size_and_tail_limits(self):
         self.generate()
@@ -178,11 +178,11 @@ class Tests(unittest.TestCase):
         public = self.root/'keys/public.key'
         data = public.read_bytes()
         public.write_bytes(data+b'X')
-        self.run_cli('encrypt','hybrid','plain','output',public,ok=False)
+        self.run_cli('encrypt','hybrid','plain','output',public,password=PASSWORD,ok=False)
         public.write_bytes(data+b' '*(1048576-len(data)))
-        self.run_cli('encrypt','hybrid','plain','output',public)
+        self.run_cli('encrypt','hybrid','plain','output',public,password=PASSWORD)
         public.write_bytes(public.read_bytes()+b' ')
-        self.run_cli('encrypt','hybrid','plain','output',public,ok=False)
+        self.run_cli('encrypt','hybrid','plain','output',public,password=PASSWORD,ok=False)
     def test_reparse_points_and_untrusted_parent(self):
         self.generate()
         (self.root/'plain').write_bytes(b'data')
@@ -191,32 +191,32 @@ class Tests(unittest.TestCase):
         subprocess.run(['cmd','/c','mklink','/J',str(self.root/'junction'),str(self.root/'actual')],
                        check=True,capture_output=True)
         try:
-            self.run_cli('encrypt','hybrid','plain','junction/output','keys/public.key',ok=False)
+            self.run_cli('encrypt','hybrid','plain','junction/output','keys/public.key',password=PASSWORD,ok=False)
             self.assertFalse((self.root/'actual/output').exists())
         finally:
             os.rmdir(self.root/'junction')
         (self.root/'actual/input').write_bytes(b'untrusted directory input')
         subprocess.run(['icacls',str(self.root/'actual'),'/grant','*S-1-1-0:M'],check=True,capture_output=True)
-        self.run_cli('encrypt','hybrid','plain','actual/output','keys/public.key',ok=False)
-        self.run_cli('encrypt','hybrid','actual/input','unsafe-source.nkem','keys/public.key',ok=False)
+        self.run_cli('encrypt','hybrid','plain','actual/output','keys/public.key',password=PASSWORD,ok=False)
+        self.run_cli('encrypt','hybrid','actual/input','unsafe-source.nkem','keys/public.key',password=PASSWORD,ok=False)
         self.assertFalse((self.root/'unsafe-source.nkem').exists())
     def test_existing_insecure_output_is_never_replaced(self):
         self.generate()
         (self.root/'plain').write_bytes(b'data')
         (self.root/'output').write_bytes(b'sentinel')
         subprocess.run(['icacls',str(self.root/'output'),'/grant','*S-1-1-0:R'],check=True,capture_output=True)
-        self.run_cli('encrypt','hybrid','plain','output','keys/public.key',ok=False)
+        self.run_cli('encrypt','hybrid','plain','output','keys/public.key',password=PASSWORD,ok=False)
         self.assertEqual((self.root/'output').read_bytes(),b'sentinel')
     def test_utf8_and_exact_password_limit_with_crlf(self):
         password = ('中文-日本語-한국어-😀'+'a'*16).encode('utf-8')+b'\r\n'
         self.run_cli('keygen',password=password*2)
         (self.root/'plain').write_bytes(b'data')
-        self.run_cli('encrypt','hybrid','plain','cipher.nkem','keys/public.key')
+        self.run_cli('encrypt','hybrid','plain','cipher.nkem','keys/public.key',password=password)
         self.run_cli('decrypt','hybrid','cipher.nkem','output','keys/private.key.enc',password=password)
         self.assertEqual((self.root/'output').read_bytes(),b'data')
         password = b'a'*1024+b'\r\n'
         self.run_cli('keygen','--replace',password=password*2)
-        self.run_cli('encrypt','hybrid','plain','cipher.nkem','keys/public.key')
+        self.run_cli('encrypt','hybrid','plain','cipher.nkem','keys/public.key',password=password)
         self.run_cli('decrypt','hybrid','cipher.nkem','output','keys/private.key.enc',password=password)
         self.assertEqual((self.root/'output').read_bytes(),b'data')
     def test_password_and_prompt_bounds(self):

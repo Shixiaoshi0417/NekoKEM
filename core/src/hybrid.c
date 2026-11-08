@@ -1,4 +1,5 @@
 #include "hybrid.h"
+#include "identity.h"
 #include "private_key.h"
 #include "secure_mem.h"
 #include "x448_encoding.h"
@@ -106,38 +107,93 @@ void hybrid_keys_cleanup(HybridKeys *keys)
     }
     EVP_PKEY_free(keys->x448);
     EVP_PKEY_free(keys->mlkem);
+    EVP_PKEY_free(keys->ed448);
+    EVP_PKEY_free(keys->mldsa);
     keys->x448 = NULL;
     keys->mlkem = NULL;
+    keys->ed448 = NULL;
+    keys->mldsa = NULL;
 }
 
-int hybrid_generate_keypair(const char *public_path,
-                            const char *private_path,
-                            const unsigned char *password,
-                            size_t password_len,
-                            int replace)
+int hybrid_keys_have_identity(const HybridKeys *keys)
 {
-    HybridKeys keys = {0};
+    return keys != NULL && keys->ed448 != NULL && keys->mldsa != NULL;
+}
+
+static void hybrid_keys_reset(HybridKeys *keys)
+{
+    keys->x448 = NULL;
+    keys->mlkem = NULL;
+    keys->ed448 = NULL;
+    keys->mldsa = NULL;
+}
+
+/* Whether a memory BIO holds anything but whitespace; never consumes. */
+static int bio_has_more_content(BIO *input)
+{
+    char *data = NULL;
+    long length = BIO_get_mem_data(input, &data);
+    long index;
+
+    for (index = 0; data != NULL && index < length; ++index) {
+        if (isspace((unsigned char)data[index]) == 0) {
+            return 1;
+        }
+    }
+    return 0;
+}
+
+static int write_private_pem(BIO *output, const HybridKeys *keys)
+{
+    if (PEM_write_bio_PrivateKey(output, keys->x448,
+                                 NULL, NULL, 0, NULL, NULL) != 1 ||
+        PEM_write_bio_PrivateKey(output, keys->mlkem,
+                                 NULL, NULL, 0, NULL, NULL) != 1 ||
+        (hybrid_keys_have_identity(keys) &&
+         (PEM_write_bio_PrivateKey(output, keys->ed448,
+                                   NULL, NULL, 0, NULL, NULL) != 1 ||
+          PEM_write_bio_PrivateKey(output, keys->mldsa,
+                                   NULL, NULL, 0, NULL, NULL) != 1))) {
+        print_openssl_error("Cannot serialize hybrid private keys");
+        return 0;
+    }
+    return 1;
+}
+
+int hybrid_write_public_keys(FILE *output, const HybridKeys *keys,
+                             int include_identity)
+{
+    if (PEM_write_PUBKEY(output, keys->x448) != 1 ||
+        PEM_write_PUBKEY(output, keys->mlkem) != 1 ||
+        (include_identity != 0 &&
+         (PEM_write_PUBKEY(output, keys->ed448) != 1 ||
+          PEM_write_PUBKEY(output, keys->mldsa) != 1))) {
+        print_openssl_error("Cannot write hybrid public keys");
+        return 0;
+    }
+    return 1;
+}
+
+/* Writes an identity key pair as public PEM and NKPR v2, committed together. */
+static int write_identity_key_files(const HybridKeys *keys,
+                                    const char *public_path,
+                                    const char *private_path,
+                                    const unsigned char *password,
+                                    size_t password_len,
+                                    int replace)
+{
     AtomicFile public_file = {0};
     AtomicFile private_file = {0};
     BIO *private_bio = NULL;
     BUF_MEM *private_buffer = NULL;
     int success = 0;
 
-    keys.x448 = generate_key(X448_ALGORITHM_NAME);
-    keys.mlkem = generate_key(KEM_ALGORITHM_NAME);
-    if (keys.x448 == NULL || keys.mlkem == NULL) {
-        goto cleanup;
-    }
     private_bio = BIO_new(BIO_s_mem());
     if (private_bio == NULL) {
         print_openssl_error("Cannot create hybrid private-key memory BIO");
         goto cleanup;
     }
-    if (PEM_write_bio_PrivateKey(private_bio, keys.x448,
-                                 NULL, NULL, 0, NULL, NULL) != 1 ||
-        PEM_write_bio_PrivateKey(private_bio, keys.mlkem,
-                                 NULL, NULL, 0, NULL, NULL) != 1) {
-        print_openssl_error("Cannot serialize hybrid private keys");
+    if (!write_private_pem(private_bio, keys)) {
         goto cleanup;
     }
     if (BIO_get_mem_ptr(private_bio, &private_buffer) <= 0 ||
@@ -148,18 +204,15 @@ int hybrid_generate_keypair(const char *public_path,
         fprintf(stderr, file_message("Invalid serialized hybrid private-key length\n"));
         goto cleanup;
     }
-    if (!atomic_file_open(&public_file, public_path, 0644)) {
+    if (!atomic_file_open(&public_file, public_path, 0644) ||
+        !hybrid_write_public_keys(public_file.stream, keys, 1)) {
         goto cleanup;
     }
-    if (PEM_write_PUBKEY(public_file.stream, keys.x448) != 1 ||
-        PEM_write_PUBKEY(public_file.stream, keys.mlkem) != 1) {
-        print_openssl_error("Cannot write hybrid public keys");
-        goto cleanup;
-    }
-    if (!protected_private_key_stage(
+    if (!protected_private_key_stage_version(
             &private_file, private_path,
             (const unsigned char *)private_buffer->data,
-            private_buffer->length, password, password_len) ||
+            private_buffer->length, password, password_len,
+            NKPR_VERSION_IDENTITY) ||
         !(replace != 0
               ? atomic_file_commit_pair(&public_file, &private_file)
               : atomic_file_commit_pair_new(&public_file, &private_file))) {
@@ -174,6 +227,70 @@ cleanup:
         secure_mem_clear(private_buffer->data, private_buffer->max);
     }
     BIO_free(private_bio);
+    return success;
+}
+
+int hybrid_generate_keypair(const char *public_path,
+                            const char *private_path,
+                            const unsigned char *password,
+                            size_t password_len,
+                            int replace)
+{
+    HybridKeys keys = {0};
+    int success = 0;
+
+    keys.x448 = generate_key(X448_ALGORITHM_NAME);
+    keys.mlkem = generate_key(KEM_ALGORITHM_NAME);
+    keys.ed448 = generate_key(ED448_ALGORITHM_NAME);
+    keys.mldsa = generate_key(MLDSA_ALGORITHM_NAME);
+    if (keys.x448 == NULL || keys.mlkem == NULL ||
+        keys.ed448 == NULL || keys.mldsa == NULL) {
+        goto cleanup;
+    }
+    success = write_identity_key_files(&keys, public_path, private_path,
+                                       password, password_len, replace);
+
+cleanup:
+    hybrid_keys_cleanup(&keys);
+    return success;
+}
+
+int hybrid_upgrade_to_identity(const char *public_path,
+                               const char *private_path,
+                               const unsigned char *password,
+                               size_t password_len)
+{
+    HybridKeys keys = {0};
+    HybridKeys public_keys = {0};
+    int success = 0;
+
+    if (!hybrid_load_protected_private_keys(private_path, password,
+                                            password_len, &keys)) {
+        goto cleanup;
+    }
+    if (hybrid_keys_have_identity(&keys)) {
+        fprintf(stderr, file_message("This key is already a signing identity key\n"));
+        goto cleanup;
+    }
+    /* The public file must belong to this private key: never pair a
+     * private key with someone else's public key. */
+    if (!hybrid_load_public_keys(public_path, &public_keys) ||
+        hybrid_keys_have_identity(&public_keys) ||
+        EVP_PKEY_eq(public_keys.x448, keys.x448) != 1 ||
+        EVP_PKEY_eq(public_keys.mlkem, keys.mlkem) != 1) {
+        fprintf(stderr, file_message("The public key does not belong to this private key\n"));
+        goto cleanup;
+    }
+    keys.ed448 = generate_key(ED448_ALGORITHM_NAME);
+    keys.mldsa = generate_key(MLDSA_ALGORITHM_NAME);
+    if (keys.ed448 == NULL || keys.mldsa == NULL) {
+        goto cleanup;
+    }
+    success = write_identity_key_files(&keys, public_path, private_path,
+                                       password, password_len, 1);
+
+cleanup:
+    hybrid_keys_cleanup(&public_keys);
     hybrid_keys_cleanup(&keys);
     return success;
 }
@@ -190,17 +307,47 @@ static int reject_pem_password(char *buffer, int size,
     return -1;
 }
 
+static int validate_components(const HybridKeys *keys)
+{
+    if (!validate_key(keys->x448, X448_ALGORITHM_NAME,
+                      "First hybrid key component") ||
+        !validate_x448_public_encoding(keys->x448) ||
+        !validate_key(keys->mlkem, KEM_ALGORITHM_NAME,
+                      "Second hybrid key component")) {
+        return 0;
+    }
+    if (keys->ed448 == NULL && keys->mldsa == NULL) {
+        return 1;
+    }
+    if (!validate_key(keys->ed448, ED448_ALGORITHM_NAME,
+                      "Third identity key component") ||
+        !validate_key(keys->mldsa, MLDSA_ALGORITHM_NAME,
+                      "Fourth identity key component")) {
+        return 0;
+    }
+    if (!identity_ed448_key_is_valid(keys->ed448)) {
+        fprintf(stderr, file_message("Invalid Ed448 identity public key\n"));
+        return 0;
+    }
+    return 1;
+}
+
+/*
+ * expected_components: 2 or 4 for an NKPR container of known version, 0 for
+ * plaintext PEM, which may hold either a two- or a four-component key.
+ */
 static int parse_hybrid_private_keys(const unsigned char *pem,
                                      size_t pem_len,
                                      int decrypted,
+                                     unsigned int expected_components,
                                      HybridKeys *keys)
 {
     BIO *input = NULL;
     HybridKeys loaded = {0};
+    int four;
     int success = 0;
 
-    keys->x448 = NULL;
-    keys->mlkem = NULL;
+    hybrid_keys_reset(keys);
     if (pem == NULL || pem_len == 0U || pem_len > (size_t)INT_MAX) {
         fprintf(stderr, file_message("Invalid hybrid private-key PEM length\n"));
         goto cleanup;
@@ -215,7 +362,17 @@ static int parse_hybrid_private_keys(const unsigned char *pem,
         input, NULL, reject_pem_password, NULL);
     loaded.mlkem = PEM_read_bio_PrivateKey(
         input, NULL, reject_pem_password, NULL);
-    if (loaded.x448 == NULL || loaded.mlkem == NULL) {
+    four = loaded.x448 != NULL && loaded.mlkem != NULL &&
+           (expected_components == 4U ||
+            (expected_components == 0U && bio_has_more_content(input)));
+    if (four) {
+        loaded.ed448 = PEM_read_bio_PrivateKey(
+            input, NULL, reject_pem_password, NULL);
+        loaded.mldsa = PEM_read_bio_PrivateKey(
+            input, NULL, reject_pem_password, NULL);
+    }
+    if (loaded.x448 == NULL || loaded.mlkem == NULL ||
+        (four && (loaded.ed448 == NULL || loaded.mldsa == NULL))) {
         ERR_clear_error();
         /* Only decrypted NKPR contents point at the password; a plaintext
          * file that fails (a public key, any other file, damaged NKPR magic)
@@ -226,18 +383,13 @@ static int parse_hybrid_private_keys(const unsigned char *pem,
         fputc('\n', stderr);
         goto cleanup;
     }
-    if (!validate_key(loaded.x448, X448_ALGORITHM_NAME,
-                      "First hybrid key component") ||
-        !validate_x448_public_encoding(loaded.x448) ||
-        !validate_key(loaded.mlkem, KEM_ALGORITHM_NAME,
-                      "Second hybrid key component") ||
+    if (!validate_components(&loaded) ||
         !bio_remaining_is_whitespace(input)) {
         goto cleanup;
     }
 
     *keys = loaded;
-    loaded.x448 = NULL;
-    loaded.mlkem = NULL;
+    hybrid_keys_reset(&loaded);
     success = 1;
 
 cleanup:
@@ -246,21 +398,16 @@ cleanup:
     return success;
 }
 
-int hybrid_load_public_keys(const char *path, HybridKeys *keys)
+int hybrid_parse_public_keys(const unsigned char *pem,
+                             size_t pem_len,
+                             HybridKeys *keys)
 {
     BIO *input = NULL;
     HybridKeys loaded = {0};
-    unsigned char *pem = NULL;
-    size_t pem_len = 0U;
     int success = 0;
 
-    keys->x448 = NULL;
-    keys->mlkem = NULL;
-    if (!file_read_regular(path, MAX_PUBLIC_KEY_FILE_SIZE,
-                           &pem, &pem_len)) {
-        goto cleanup;
-    }
-    if (pem_len > (size_t)INT_MAX) {
+    hybrid_keys_reset(keys);
+    if (pem == NULL || pem_len > (size_t)INT_MAX) {
         fprintf(stderr, file_message("Invalid hybrid public-key PEM length\n"));
         goto cleanup;
     }
@@ -276,23 +423,42 @@ int hybrid_load_public_keys(const char *path, HybridKeys *keys)
         print_openssl_error("Cannot parse both hybrid key components");
         goto cleanup;
     }
-    if (!validate_key(loaded.x448, X448_ALGORITHM_NAME,
-                      "First hybrid key component") ||
-        !validate_x448_public_encoding(loaded.x448) ||
-        !validate_key(loaded.mlkem, KEM_ALGORITHM_NAME,
-                      "Second hybrid key component") ||
+    if (bio_has_more_content(input)) {
+        loaded.ed448 = PEM_read_bio_PUBKEY(input, NULL, reject_pem_password,
+                                           NULL);
+        loaded.mldsa = PEM_read_bio_PUBKEY(input, NULL, reject_pem_password,
+                                           NULL);
+        if (loaded.ed448 == NULL || loaded.mldsa == NULL) {
+            print_openssl_error("Cannot parse the identity key components");
+            goto cleanup;
+        }
+    }
+    if (!validate_components(&loaded) ||
         !bio_remaining_is_whitespace(input)) {
         goto cleanup;
     }
     *keys = loaded;
-    loaded.x448 = NULL;
-    loaded.mlkem = NULL;
+    hybrid_keys_reset(&loaded);
     success = 1;
 
 cleanup:
     BIO_free(input);
-    OPENSSL_free(pem);
     hybrid_keys_cleanup(&loaded);
+    return success;
+}
+
+int hybrid_load_public_keys(const char *path, HybridKeys *keys)
+{
+    unsigned char *pem = NULL;
+    size_t pem_len = 0U;
+    int success = 0;
+
+    hybrid_keys_reset(keys);
+    if (file_read_regular(path, MAX_PUBLIC_KEY_FILE_SIZE,
+                          &pem, &pem_len)) {
+        success = hybrid_parse_public_keys(pem, pem_len, keys);
+    }
+    OPENSSL_free(pem);
     return success;
 }
 
@@ -302,13 +468,12 @@ int hybrid_load_private_keys(const char *path, HybridKeys *keys)
     size_t pem_len = 0U;
     int success = 0;
 
-    keys->x448 = NULL;
-    keys->mlkem = NULL;
+    hybrid_keys_reset(keys);
     if (!file_read_sensitive(path, MAX_PRIVATE_KEY_FILE_SIZE,
                              &pem, &pem_len)) {
         goto cleanup;
     }
-    success = parse_hybrid_private_keys(pem, pem_len, 0, keys);
+    success = parse_hybrid_private_keys(pem, pem_len, 0, 0U, keys);
     if (success && !x448_private_key_is_usable(keys->x448)) {
         hybrid_keys_cleanup(keys);
         success = 0;
@@ -319,6 +484,11 @@ cleanup:
     return success;
 }
 
+static unsigned int nkpr_components(unsigned int version)
+{
+    return version == NKPR_VERSION_IDENTITY ? 4U : 2U;
+}
+
 int hybrid_load_protected_private_keys(
     const char *path,
     const unsigned char *password,
@@ -327,15 +497,16 @@ int hybrid_load_protected_private_keys(
 {
     unsigned char *pem = NULL;
     size_t pem_len = 0U;
+    unsigned int version = 0U;
     int success = 0;
 
-    keys->x448 = NULL;
-    keys->mlkem = NULL;
-    if (!protected_private_key_read(path, password, password_len,
-                                    &pem, &pem_len)) {
+    hybrid_keys_reset(keys);
+    if (!protected_private_key_read_version(path, password, password_len,
+                                            &pem, &pem_len, &version)) {
         goto cleanup;
     }
-    success = parse_hybrid_private_keys(pem, pem_len, 1, keys);
+    success = parse_hybrid_private_keys(pem, pem_len, 1,
+                                        nkpr_components(version), keys);
     if (success && !x448_private_key_is_usable(keys->x448)) {
         hybrid_keys_cleanup(keys);
         success = 0;
@@ -389,10 +560,10 @@ int hybrid_load_decryption_keys(
     unsigned char *pem = NULL;
     size_t contents_len = 0U;
     size_t pem_len = 0U;
+    unsigned int version = 0U;
     int loaded = 0;
 
-    keys->x448 = NULL;
-    keys->mlkem = NULL;
+    hybrid_keys_reset(keys);
     if (!file_read_sensitive(path, NKPR_MAX_CONTAINER_SIZE,
                              &contents, &contents_len)) {
         goto cleanup;
@@ -402,14 +573,16 @@ int hybrid_load_decryption_keys(
             fprintf(stderr, file_message("A password is required for this private key\n"));
             goto cleanup;
         }
-        loaded = protected_private_key_decode(contents, contents_len,
-                                              password, password_len,
-                                              &pem, &pem_len) &&
-                 parse_hybrid_private_keys(pem, pem_len, 1, keys);
+        loaded = protected_private_key_decode_version(
+                     contents, contents_len, password, password_len,
+                     &pem, &pem_len, &version) &&
+                 parse_hybrid_private_keys(pem, pem_len, 1,
+                                           nkpr_components(version), keys);
     } else if (contents_len > MAX_PRIVATE_KEY_FILE_SIZE) {
         fprintf(stderr, file_message("Sensitive input exceeds the size limit\n"));
     } else {
-        loaded = parse_hybrid_private_keys(contents, contents_len, 0, keys);
+        loaded = parse_hybrid_private_keys(contents, contents_len, 0, 0U,
+                                           keys);
     }
 
 cleanup:

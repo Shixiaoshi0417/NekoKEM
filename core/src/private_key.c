@@ -26,6 +26,7 @@ typedef struct {
     uint32_t parallelism;
     uint32_t argon2_version;
     uint64_t ciphertext_len;
+    unsigned int version;
 } NkprHeader;
 
 static int checked_size_add(size_t left, size_t right, size_t *result)
@@ -88,10 +89,11 @@ static uint64_t get_u64_be(const unsigned char *input)
 
 static void nkpr_header_encode(
     unsigned char output[NKPR_HEADER_SIZE],
-    uint64_t ciphertext_len)
+    uint64_t ciphertext_len,
+    unsigned int version)
 {
     memcpy(output, NKPR_MAGIC, 4U);
-    output[4] = NKPR_VERSION;
+    output[4] = (unsigned char)version;
     output[5] = NKPR_KDF_ID_ARGON2ID;
     output[6] = NKPR_CIPHER_ID_AES256_GCM;
     output[7] = NKPR_FLAGS;
@@ -116,7 +118,7 @@ static int nkpr_header_decode_internal(
         }
         return 0;
     }
-    if (input[4] != NKPR_VERSION ||
+    if ((input[4] != NKPR_VERSION && input[4] != NKPR_VERSION_IDENTITY) ||
         input[5] != NKPR_KDF_ID_ARGON2ID ||
         input[6] != NKPR_CIPHER_ID_AES256_GCM ||
         input[7] != NKPR_FLAGS) {
@@ -126,6 +128,7 @@ static int nkpr_header_decode_internal(
         return 0;
     }
 
+    header->version = input[4];
     header->memory_kib = get_u32_be(input + 8U);
     header->iterations = get_u32_be(input + 12U);
     header->parallelism = get_u32_be(input + 16U);
@@ -428,6 +431,19 @@ int protected_private_key_stage(
     const unsigned char *password,
     size_t password_len)
 {
+    return protected_private_key_stage_version(
+        output, path, pem, pem_len, password, password_len, NKPR_VERSION);
+}
+
+int protected_private_key_stage_version(
+    AtomicFile *output,
+    const char *path,
+    const unsigned char *pem,
+    size_t pem_len,
+    const unsigned char *password,
+    size_t password_len,
+    unsigned int version)
+{
     unsigned char header[NKPR_HEADER_SIZE] = {0};
     unsigned char salt[NKPR_SALT_SIZE] = {0};
     unsigned char nonce[NKPR_NONCE_SIZE] = {0};
@@ -439,7 +455,8 @@ int protected_private_key_stage(
     if (output == NULL || path == NULL || pem == NULL || pem_len == 0U ||
         pem_len > NKPR_MAX_PEM_SIZE || pem_len > (size_t)INT_MAX ||
         password == NULL || password_len == 0U ||
-        password_len > NKPR_MAX_PASSWORD_SIZE) {
+        password_len > NKPR_MAX_PASSWORD_SIZE ||
+        (version != NKPR_VERSION && version != NKPR_VERSION_IDENTITY)) {
         fprintf(stderr, file_message("Invalid hybrid private-key PEM data\n"));
         goto cleanup;
     }
@@ -451,7 +468,7 @@ int protected_private_key_stage(
     if (!derive_protection_key(password, password_len, salt, key)) {
         goto cleanup;
     }
-    nkpr_header_encode(header, (uint64_t)pem_len);
+    nkpr_header_encode(header, (uint64_t)pem_len, version);
     ciphertext = OPENSSL_malloc(pem_len);
     if (ciphertext == NULL) {
         print_openssl_error("Cannot allocate private-key ciphertext");
@@ -491,11 +508,24 @@ int protected_private_key_write(
     const unsigned char *password,
     size_t password_len)
 {
+    return protected_private_key_write_version(path, pem, pem_len, password,
+                                               password_len, NKPR_VERSION);
+}
+
+int protected_private_key_write_version(
+    const char *path,
+    const unsigned char *pem,
+    size_t pem_len,
+    const unsigned char *password,
+    size_t password_len,
+    unsigned int version)
+{
     AtomicFile output = {0};
     int success = 0;
 
-    if (!protected_private_key_stage(&output, path, pem, pem_len,
-                                     password, password_len) ||
+    if (!protected_private_key_stage_version(&output, path, pem, pem_len,
+                                             password, password_len,
+                                             version) ||
         !atomic_file_commit(&output)) {
         goto cleanup;
     }
@@ -513,21 +543,36 @@ int protected_private_key_read(
     unsigned char **pem,
     size_t *pem_len)
 {
+    unsigned int version = 0U;
+
+    return protected_private_key_read_version(path, password, password_len,
+                                              pem, pem_len, &version);
+}
+
+int protected_private_key_read_version(
+    const char *path,
+    const unsigned char *password,
+    size_t password_len,
+    unsigned char **pem,
+    size_t *pem_len,
+    unsigned int *version)
+{
     unsigned char *container = NULL;
     size_t container_len = 0U;
     int success = 0;
 
-    if (pem == NULL || pem_len == NULL) {
+    if (pem == NULL || pem_len == NULL || version == NULL) {
         fprintf(stderr, file_message("Invalid protected private-key output request\n"));
         return 0;
     }
     *pem = NULL;
     *pem_len = 0U;
+    *version = 0U;
     if (file_read_sensitive(path, NKPR_MAX_CONTAINER_SIZE,
                             &container, &container_len)) {
-        success = protected_private_key_decode(container, container_len,
-                                               password, password_len,
-                                               pem, pem_len);
+        success = protected_private_key_decode_version(
+            container, container_len, password, password_len,
+            pem, pem_len, version);
     }
     secure_free(container, container_len);
     return success;
@@ -541,6 +586,22 @@ int protected_private_key_decode(
     unsigned char **pem,
     size_t *pem_len)
 {
+    unsigned int version = 0U;
+
+    return protected_private_key_decode_version(
+        container, container_len, password, password_len,
+        pem, pem_len, &version);
+}
+
+int protected_private_key_decode_version(
+    const unsigned char *container,
+    size_t container_len,
+    const unsigned char *password,
+    size_t password_len,
+    unsigned char **pem,
+    size_t *pem_len,
+    unsigned int *version)
+{
     unsigned char *plaintext = NULL;
     unsigned char key[32] = {0};
     NkprHeader header;
@@ -553,12 +614,14 @@ int protected_private_key_decode(
     size_t plaintext_len = 0U;
     int success = 0;
 
-    if (pem == NULL || pem_len == NULL || container == NULL) {
+    if (pem == NULL || pem_len == NULL || container == NULL ||
+        version == NULL) {
         fprintf(stderr, file_message("Invalid protected private-key output request\n"));
         return 0;
     }
     *pem = NULL;
     *pem_len = 0U;
+    *version = 0U;
     if (!nkpr_container_decode_internal(container, container_len,
                                         &header, 0)) {
         fputs(file_message("Private-key password is incorrect or NKPR data is corrupted"), stderr);
@@ -588,6 +651,7 @@ int protected_private_key_decode(
 
     *pem = plaintext;
     *pem_len = plaintext_len;
+    *version = header.version;
     plaintext = NULL;
     success = 1;
 

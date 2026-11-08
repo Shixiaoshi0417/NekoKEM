@@ -60,6 +60,8 @@ struct ContactImport{
     #[serde(default)] key_text:Zeroizing<String>,
     #[serde(default)] paste:bool,
     #[serde(default)] note:String,
+    // The full fingerprint the user checked before upgrading a legacy contact.
+    #[serde(default)] confirm_upgrade:String,
 }
 fn allowed_navigation(scheme:&str,host:Option<&str>,port:Option<u16>)->bool {
     (scheme=="tauri"&&host==Some("localhost")&&port.is_none()) ||
@@ -90,7 +92,7 @@ async fn list_contacts()->Result<Contacts,Failure>{
 async fn save_contact(contact:ContactImport,state:State<'_,Arc<Backend>>,app:tauri::AppHandle)->Result<Contact,Failure>{
     contact_job(state,app,move|store|{
         let source=if contact.paste{Source::Text(&contact.key_text)}else{Source::Path(&contact.key_path)};
-        store.save(source,&contact.note)
+        store.save_confirmed(source,&contact.note,&contact.confirm_upgrade)
     }).await
 }
 #[tauri::command]

@@ -44,21 +44,22 @@ test -s keys/private.key.enc
 test ! -e keys/private.key
 test "$(stat -c %a keys/private.key.enc)" = 600
 test "$(dd if=keys/private.key.enc bs=1 count=4 status=none)" = NKPR
-./nekokem encrypt hybrid plaintext.bin encrypted/valid.nkem \
-    keys/public.key >/dev/null
+printf '%s\n' "$key_password" |
+    ./nekokem encrypt hybrid plaintext.bin encrypted/valid.nkem \
+        keys/public.key >/dev/null
 printf '%s\n' "$key_password" |
     ./nekokem decrypt hybrid encrypted/valid.nkem decrypted.bin \
         keys/private.key.enc >/dev/null
 cmp plaintext.bin decrypted.bin
 
-if ./nekokem encrypt hybrid missing-input.bin encrypted/missing.nkem \
+if ./nekokem encrypt hybrid --unsigned missing-input.bin encrypted/missing.nkem \
     keys/public.key >/dev/null 2>&1; then
     echo "Missing plaintext was accepted" >&2
     exit 1
 fi
 test ! -e encrypted/missing.nkem
 
-if ./nekokem encrypt hybrid plaintext.bin missing/output.nkem \
+if ./nekokem encrypt hybrid --unsigned plaintext.bin missing/output.nkem \
     keys/public.key >/dev/null 2>&1; then
     echo "Invalid output path was accepted" >&2
     exit 1

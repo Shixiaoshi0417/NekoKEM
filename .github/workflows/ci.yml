@@ -141,7 +141,7 @@ jobs:
           make -C linux fuzz-build \
             FUZZ_LDFLAGS="-fsanitize=undefined -L$LIBRARY_PATH"
           status=0
-          for format in nkem nkpr decrypt; do
+          for format in nkem nkpr decrypt identity; do
             if ! python3 .github/scripts/run_fuzz_smoke.py \
               --seeds "core/fuzz/seeds/$format" \
               --target "core/fuzz/bin/fuzz_$format" \
@@ -524,7 +524,7 @@ jobs:
             $ancestor = $ancestor.Parent
           }
           try {
-            foreach ($name in @('openssl_version', 'hybrid_kdf', 'gcm_limit', 'aes_stream', 'parser', 'multi_recipient', 'key_safety', 'windows_core', 'console')) {
+            foreach ($name in @('openssl_version', 'hybrid_kdf', 'gcm_limit', 'aes_stream', 'parser', 'multi_recipient', 'signature', 'payload_hash', 'key_safety', 'windows_core', 'console')) {
               $testDirectory = Join-Path $work $name
               New-Item -ItemType Directory -Path $testDirectory | Out-Null
               Push-Location $testDirectory
@@ -549,7 +549,7 @@ jobs:
             if ($LASTEXITCODE -ne 0) { throw 'Native before-and-after throughput measurement failed' }
             $return = Join-Path $env:RUNNER_TEMP 'windows-fixtures'
             New-Item -ItemType Directory -Path $return | Out-Null
-            foreach ($name in @('binary','empty','windows-fingerprint.txt','windows-public.key','windows-private.enc','binary.windows.nkem','empty.windows.nkem')) {
+            foreach ($name in @('binary','empty','linux-private.enc','windows-legacy.key','windows-legacy-fingerprint.txt','binary.windows.nkem','empty.windows.nkem')) {
               Copy-Item (Join-Path $interop $name) $return
             }
           } finally { Remove-Item $work -Recurse -Force }
@@ -869,9 +869,9 @@ jobs:
           path: |
             ${{ runner.temp }}/macos-fixtures/binary
             ${{ runner.temp }}/macos-fixtures/empty
-            ${{ runner.temp }}/macos-fixtures/macos-public.key
-            ${{ runner.temp }}/macos-fixtures/macos-private.enc
-            ${{ runner.temp }}/macos-fixtures/macos-fingerprint.txt
+            ${{ runner.temp }}/macos-fixtures/linux-private.enc
+            ${{ runner.temp }}/macos-fixtures/macos-legacy.key
+            ${{ runner.temp }}/macos-fixtures/macos-legacy-fingerprint.txt
             ${{ runner.temp }}/macos-fixtures/*.macos.nkem
           retention-days: 14
           if-no-files-found: error
@@ -927,7 +927,7 @@ jobs:
         run: |
           python3 desktop/scripts/package-macos-gui.py \
             --bundle-dir desktop/src-tauri/target/aarch64-apple-darwin/release/bundle \
-            --output "$RUNNER_TEMP/macos-gui" --version 4.4.0 --source-sha "$GITHUB_SHA"
+            --output "$RUNNER_TEMP/macos-gui" --version 5.0.0 --source-sha "$GITHUB_SHA"
       - name: Verify the actual native macOS window launches
         run: python3 desktop/tests/launch_macos.py desktop/src-tauri/target/aarch64-apple-darwin/release/bundle/macos/NekoKEM.app --log "$RUNNER_TEMP/macos-gui/startup.log"
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4

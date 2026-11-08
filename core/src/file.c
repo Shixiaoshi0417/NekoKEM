@@ -434,6 +434,152 @@ int file_output_spares_keys(const char *output_path,
     return 1;
 }
 
+/* The last path component, after the final separator. */
+static const char *path_final_component(const char *path, size_t *parent_length)
+{
+    const char *final = path;
+    const char *cursor;
+
+    for (cursor = path; *cursor != '\0'; ++cursor) {
+#ifdef _WIN32
+        if (*cursor == '/' || *cursor == '\\' || *cursor == ':') {
+#else
+        if (*cursor == '/') {
+#endif
+            final = cursor + 1;
+        }
+    }
+    *parent_length = (size_t)(final - path);
+    return final;
+}
+
+/* Windows ignores trailing dots and spaces; Windows and macOS volumes
+ * usually ignore ASCII case. Comparing loosely only rejects more paths. */
+static int final_components_match(const char *first, const char *second)
+{
+    size_t first_length = strlen(first);
+    size_t second_length = strlen(second);
+    size_t index;
+
+#ifdef _WIN32
+    while (first_length > 0U && (first[first_length - 1U] == '.' ||
+                                 first[first_length - 1U] == ' ')) {
+        --first_length;
+    }
+    while (second_length > 0U && (second[second_length - 1U] == '.' ||
+                                  second[second_length - 1U] == ' ')) {
+        --second_length;
+    }
+#endif
+    if (first_length != second_length) {
+        return 0;
+    }
+    for (index = 0U; index < first_length; ++index) {
+        unsigned char a = (unsigned char)first[index];
+        unsigned char b = (unsigned char)second[index];
+#if defined(_WIN32) || defined(__APPLE__)
+        if (a >= 'A' && a <= 'Z') a = (unsigned char)(a - 'A' + 'a');
+        if (b >= 'A' && b <= 'Z') b = (unsigned char)(b - 'A' + 'a');
+#endif
+        if (a != b) {
+            return 0;
+        }
+    }
+    return 1;
+}
+
+static char *parent_directory(const char *path, size_t parent_length)
+{
+    char *parent;
+
+    if (parent_length == 0U) {
+        parent = malloc(2U);
+        if (parent != NULL) {
+            memcpy(parent, ".", 2U);
+        }
+        return parent;
+    }
+    parent = malloc(parent_length + 2U);
+    if (parent == NULL) {
+        return NULL;
+    }
+    memcpy(parent, path, parent_length);
+    /* Keep the separator so "/" and "C:\" stay roots; add "." after it. */
+    parent[parent_length] = '.';
+    parent[parent_length + 1U] = '\0';
+    return parent;
+}
+
+int file_paths_may_alias(const char *first, const char *second, int *same)
+{
+    const char *first_name;
+    const char *second_name;
+    size_t first_parent_length;
+    size_t second_parent_length;
+    char *first_parent = NULL;
+    char *second_parent = NULL;
+    int first_exists = 0;
+    int second_exists = 0;
+    int success = 0;
+
+    if (first == NULL || second == NULL || same == NULL) {
+        errno = EINVAL;
+        return 0;
+    }
+    *same = 0;
+    if (strcmp(first, second) == 0) {
+        *same = 1;
+        return 1;
+    }
+    if (!file_paths_are_same_file(first, second, same)) {
+        return 0;
+    }
+    if (*same != 0) {
+        return 1;
+    }
+#ifndef _WIN32
+    {
+        /* A symbolic link to the other file also counts as that file. */
+        struct stat first_target;
+        struct stat second_target;
+
+        if (stat(first, &first_target) == 0 &&
+            stat(second, &second_target) == 0 &&
+            first_target.st_dev == second_target.st_dev &&
+            first_target.st_ino == second_target.st_ino) {
+            *same = 1;
+            return 1;
+        }
+    }
+#endif
+    if (!file_path_exists(first, &first_exists) ||
+        !file_path_exists(second, &second_exists)) {
+        return 0;
+    }
+    if (first_exists != 0 && second_exists != 0) {
+        return 1;
+    }
+    /* A path not created yet is the same entry when both name the same
+     * final component in the same directory, however they are spelled. */
+    first_name = path_final_component(first, &first_parent_length);
+    second_name = path_final_component(second, &second_parent_length);
+    if (!final_components_match(first_name, second_name)) {
+        return 1;
+    }
+    first_parent = parent_directory(first, first_parent_length);
+    second_parent = parent_directory(second, second_parent_length);
+    if (first_parent == NULL || second_parent == NULL) {
+        errno = ENOMEM;
+        goto cleanup;
+    }
+    success = file_paths_are_same_file(first_parent, second_parent, same);
+
+cleanup:
+    free(first_parent);
+    free(second_parent);
+    return success;
+}
+
 #ifndef _WIN32
 int ensure_directory(const char *path, mode_t mode)
 {

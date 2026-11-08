@@ -36,12 +36,29 @@ v4_seed valid-v4-two 2 0
 v4_seed valid-v4-data 2 1
 v4_seed valid-v4-max 64 0
 
+# Structurally valid NKEM v5: v4's layout plus the 9048-byte signature block
+# length at offset 12 and the zero signature block after the payload tag.
+v5_seed()
+{
+    printf '4e4b454d05050020%04x068823580000%016x200c104000000000' "$2" "$3" |
+        hex_to_binary > "$nkem_dir/$1"
+    dd if=/dev/zero bs=1 count=$((32 + $2 * 1672 + 64 + 12 + $3 + 16 + 9048)) \
+        status=none >> "$nkem_dir/$1"
+}
+
+v5_seed valid-v5 1 0
+v5_seed valid-v5-data 2 1
+v5_seed valid-v5-max 64 0
+
 # Structurally valid NKPR with one synthetic ciphertext byte.
 printf '%s' \
     '4e4b5052010101000001000000000003000000040000001300200c100000000000000001' |
     hex_to_binary > "$nkpr_dir/valid-nkpr"
 dd if=/dev/zero bs=1 count=61 status=none \
     >> "$nkpr_dir/valid-nkpr"
+# NKPR v2 (identity key) differs only in its version byte.
+{ printf 'NKPR'; printf '\002'; dd if="$nkpr_dir/valid-nkpr" bs=1 skip=5 \
+    status=none; } > "$nkpr_dir/valid-nkpr-v2"
 
 dd if="$nkem_dir/valid-v3" of="$nkem_dir/truncated-magic" \
     bs=1 count=3 status=none
@@ -54,6 +71,9 @@ dd if="$nkem_dir/valid-v4-two" of="$nkem_dir/truncated-v4-entry" \
     bs=1 count=2000 status=none
 dd if="$nkem_dir/valid-v4-two" of="$nkem_dir/truncated-v4-mac" \
     bs=1 count=3440 status=none
+# NKEM v5 cut inside the signature block.
+dd if="$nkem_dir/valid-v5" of="$nkem_dir/truncated-v5-block" \
+    bs=1 count=6000 status=none
 
 dd if="$nkpr_dir/valid-nkpr" of="$nkpr_dir/truncated-magic" \
     bs=1 count=3 status=none

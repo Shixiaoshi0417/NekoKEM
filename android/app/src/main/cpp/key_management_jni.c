@@ -197,3 +197,74 @@ Java_com_shixiaoshi0417_nekokem_nativecore_NativeBridge_nativeDeletePrivateKeyUn
     managed_utf_path_release(env, &path);
     return (jint)result;
 }
+
+/* 1 for a valid four-component identity public key that verifies signatures. */
+JNIEXPORT jboolean JNICALL
+Java_com_shixiaoshi0417_nekokem_nativecore_NativeBridge_nativePublicKeyCanVerify(
+    JNIEnv *env,
+    jobject bridge,
+    jstring public_key_path)
+{
+    ManagedUtfPath public_path = {0};
+    jboolean result = JNI_FALSE;
+
+    (void)bridge;
+    if (managed_utf_path_acquire(env, public_key_path, &public_path) ==
+            MANAGED_JNI_SUCCESS &&
+        nekokem_public_key_can_verify(public_path.value) == 1) {
+        result = JNI_TRUE;
+    }
+    managed_utf_path_release(env, &public_path);
+    return result;
+}
+
+/* The X448 + ML-KEM-1024 fingerprint NekoKEM 4.x shows, for either key kind. */
+JNIEXPORT jstring JNICALL
+Java_com_shixiaoshi0417_nekokem_nativecore_NativeBridge_nativePublicKeyLegacyFingerprint(
+    JNIEnv *env,
+    jobject bridge,
+    jstring public_key_path)
+{
+    ManagedUtfPath public_path = {0};
+    char fingerprint[NEKOKEM_FINGERPRINT_STRING_SIZE] = {0};
+    jstring result = NULL;
+
+    (void)bridge;
+    if (managed_utf_path_acquire(env, public_key_path, &public_path) ==
+            MANAGED_JNI_SUCCESS &&
+        nekokem_public_key_legacy_fingerprint(
+            public_path.value, fingerprint, sizeof(fingerprint)) == 1) {
+        result = (*env)->NewStringUTF(env, fingerprint);
+    }
+    OPENSSL_cleanse(fingerprint, sizeof(fingerprint));
+    managed_utf_path_release(env, &public_path);
+    return result;
+}
+
+/* Writes only the two encryption components, readable by NekoKEM <= 4.4. */
+JNIEXPORT jint JNICALL
+Java_com_shixiaoshi0417_nekokem_nativecore_NativeBridge_nativeExportLegacyPublicKey(
+    JNIEnv *env,
+    jobject bridge,
+    jstring public_key_path,
+    jstring output_path)
+{
+    ManagedUtfPath public_path = {0};
+    ManagedUtfPath output = {0};
+    int result;
+
+    (void)bridge;
+    result = managed_utf_path_acquire(env, public_key_path, &public_path);
+    if (result == MANAGED_JNI_SUCCESS) {
+        result = managed_utf_path_acquire(env, output_path, &output);
+    }
+    if (result == MANAGED_JNI_SUCCESS) {
+        result = nekokem_export_legacy_public_key(public_path.value,
+                                                  output.value) == 1
+                     ? MANAGED_JNI_SUCCESS
+                     : MANAGED_JNI_CORE_ERROR;
+    }
+    managed_utf_path_release(env, &output);
+    managed_utf_path_release(env, &public_path);
+    return (jint)result;
+}

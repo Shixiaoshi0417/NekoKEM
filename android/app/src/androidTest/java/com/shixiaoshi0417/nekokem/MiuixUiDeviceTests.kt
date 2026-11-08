@@ -10,6 +10,7 @@ import android.os.Build
 import android.os.SystemClock
 import android.view.accessibility.AccessibilityNodeInfo
 import com.shixiaoshi0417.nekokem.i18n.AppLanguages
+import com.shixiaoshi0417.nekokem.ui.SignatureSettingsStore
 import com.shixiaoshi0417.nekokem.ui.UiStyle
 import com.shixiaoshi0417.nekokem.ui.UiStyles
 import java.io.File
@@ -35,6 +36,9 @@ internal fun runMiuixUiTests(instrumentation: Instrumentation, screenshotPrefix:
     // No stored choice, as after installation.
     check(context.getSharedPreferences("interface_style", Context.MODE_PRIVATE).edit().clear().commit())
     check(UiStyles.selection(context) == UiStyle.MIUIX) { "MIUIX is not the default interface style" }
+    // Signing is on after installation.
+    check(context.getSharedPreferences("signature_settings", Context.MODE_PRIVATE).edit().clear().commit())
+    check(!SignatureSettingsStore.read(context).unsignedEncryption) { "Unsigned encryption is on by default" }
     instrumentation.runOnMainSync { check(AppLanguages.setSelection(context, "en")) }
     var activity: Activity? = null
     fun find(root: AccessibilityNodeInfo?, predicate: (AccessibilityNodeInfo) -> Boolean): AccessibilityNodeInfo? {
@@ -80,22 +84,44 @@ internal fun runMiuixUiTests(instrumentation: Instrumentation, screenshotPrefix:
             SystemClock.sleep(100)
         }
     }
+    fun reveal(value: String) {
+        // On small screens the row can sit below the fold or under the floating bar.
+        // A lazy list drops rows scrolled past, so look back up once the end is reached.
+        for (action in listOf(AccessibilityNodeInfo.ACTION_SCROLL_FORWARD, AccessibilityNodeInfo.ACTION_SCROLL_BACKWARD)) {
+            repeat(6) {
+                if (exact(value) != null) return
+                val scrollable = find(automation.rootInActiveWindow) { it.isScrollable } ?: return
+                if (!scrollable.performAction(action)) return@repeat
+                instrumentation.waitForIdleSync()
+                SystemClock.sleep(300)
+            }
+        }
+    }
     fun click(value: String) {
-        await("missing $value") { exact(value) != null }
-        var target = checkNotNull(exact(value))
+        // Keep the node the wait found; a recomposition can drop it before a second lookup.
+        var found: AccessibilityNodeInfo? = null
+        await("missing $value") { reveal(value); found = exact(value); found != null }
+        var target = checkNotNull(found)
         while (!target.isClickable) target = checkNotNull(target.parent) { "$value is not clickable" }
         check(target.performAction(AccessibilityNodeInfo.ACTION_CLICK))
         instrumentation.waitForIdleSync()
     }
-    fun reveal(value: String) {
-        // On small screens the row can sit below the fold or under the floating bar.
-        repeat(6) {
-            if (exact(value) != null) return
-            val scrollable = find(automation.rootInActiveWindow) { it.isScrollable } ?: return
-            scrollable.performAction(AccessibilityNodeInfo.ACTION_SCROLL_FORWARD)
-            instrumentation.waitForIdleSync()
-            SystemClock.sleep(300)
+    // A dropdown that closes again before its menu is read is opened once more.
+    fun choose(title: String, option: String) {
+        repeat(3) {
+            click(title)
+            val deadline = SystemClock.uptimeMillis() + 3_000L
+            while (SystemClock.uptimeMillis() < deadline) {
+                if (exact(option) != null) {
+                    click(option)
+                    return
+                }
+                instrumentation.waitForIdleSync()
+                SystemClock.sleep(100)
+            }
         }
+        runCatching { capture("timeout") }
+        error("MIUIX: $title did not offer $option")
     }
     fun secureWindowShown(): Boolean {
         val dump = automation.executeShellCommand("dumpsys window windows").let { descriptor ->
@@ -153,14 +179,72 @@ internal fun runMiuixUiTests(instrumentation: Instrumentation, screenshotPrefix:
         }
         await("back to Files") { exact(string(R.string.navigation_files)) != null }
 
+        // Turning signing off needs the red warning; Cancel keeps signing on.
+        clickNavigationTab(instrumentation, string(R.string.tab_settings))
+        reveal(string(R.string.settings_unsigned_title))
+        click(string(R.string.settings_unsigned_title))
+        await("unsigned warning") { exact(string(R.string.unsigned_confirm_title)) != null }
+        capture("unsigned-warning")
+        click(string(R.string.action_cancel))
+        await("unsigned warning closed") { exact(string(R.string.unsigned_confirm_title)) == null }
+        check(!SignatureSettingsStore.read(context).unsignedEncryption) { "Cancel turned signing off" }
+        click(string(R.string.settings_unsigned_title))
+        click(string(R.string.action_turn_off_signing))
+        await("unsigned encryption stored") { SignatureSettingsStore.read(context).unsignedEncryption }
+        await("settings red warning") { reveal(string(R.string.unsigned_warning)); exact(string(R.string.unsigned_warning)) != null }
+        capture("settings-unsigned")
+        clickNavigationTab(instrumentation, string(R.string.tab_files))
+        await("Files red warning") { reveal(string(R.string.unsigned_warning)); exact(string(R.string.unsigned_warning)) != null }
+        capture("files-unsigned")
+
         // MIUIX settings: the dropdown switches to Material at once.
         clickNavigationTab(instrumentation, string(R.string.tab_settings))
-        click(string(R.string.settings_ui_style_title))
-        click(string(R.string.settings_ui_style_material))
+        choose(string(R.string.settings_ui_style_title), string(R.string.settings_ui_style_material))
         await("Material style stored") { UiStyles.selection(context) == UiStyle.MATERIAL }
         // The Material shell opens on Files; its settings picker switches back to MIUIX.
         await("Material Files page") { exact(string(R.string.navigation_files)) != null }
+        await("Material Files red warning") { reveal(string(R.string.unsigned_warning)); exact(string(R.string.unsigned_warning)) != null }
         capture("material-files")
+        clickNavigationTab(instrumentation, string(R.string.tab_settings))
+        // Turning signing back on never asks.
+        reveal(string(R.string.settings_unsigned_title))
+        capture("material-settings-unsigned")
+        click(string(R.string.settings_unsigned_title))
+        await("signing back on") { !SignatureSettingsStore.read(context).unsignedEncryption }
+        // The row toggles from the value it last drew, so wait for the redraw before toggling again.
+        await("Material switch redrawn off") {
+            // A window left over from the MIUIX shell can still hold a checked copy of
+            // the row, so look at every copy on screen and refresh each before reading.
+            reveal(string(R.string.settings_unsigned_title))
+            val roots = listOfNotNull(automation.rootInActiveWindow) +
+                runCatching { automation.windows.mapNotNull { it.root } }.getOrDefault(emptyList())
+            val title = string(R.string.settings_unsigned_title)
+            roots.any { root ->
+                val rows = mutableListOf<AccessibilityNodeInfo>()
+                fun collect(node: AccessibilityNodeInfo?) {
+                    if (node == null) return
+                    if (node.text?.toString() == title || node.contentDescription?.toString() == title) rows += node
+                    for (index in 0 until node.childCount) collect(node.getChild(index))
+                }
+                collect(root)
+                rows.any { match ->
+                    var row: AccessibilityNodeInfo? = match
+                    while (row != null && !row.isCheckable) row = row.parent
+                    row != null && row.refresh() && !row.isChecked
+                }
+            }
+        }
+        check(exact(string(R.string.unsigned_confirm_title)) == null) { "Turning signing on asked for confirmation" }
+        click(string(R.string.settings_unsigned_title))
+        await("Material unsigned warning") { exact(string(R.string.unsigned_confirm_title)) != null }
+        capture("material-unsigned-warning")
+        click(string(R.string.action_cancel))
+        await("Material unsigned warning closed") { exact(string(R.string.unsigned_confirm_title)) == null }
+        check(!SignatureSettingsStore.read(context).unsignedEncryption) { "Material Cancel turned signing off" }
+        instrumentation.runOnMainSync {
+            (checkNotNull(activity) as androidx.activity.ComponentActivity).onBackPressedDispatcher.onBackPressed()
+        }
+        await("Material Files page again") { exact(string(R.string.navigation_files)) != null }
         clickNavigationTab(instrumentation, string(R.string.tab_settings))
         click(string(R.string.settings_ui_style_title))
         click(string(R.string.settings_ui_style_miuix))
@@ -173,6 +257,7 @@ internal fun runMiuixUiTests(instrumentation: Instrumentation, screenshotPrefix:
         }
         automation.serviceInfo = priorServiceInfo
         useMaterialStyle(context)
+        context.getSharedPreferences("signature_settings", Context.MODE_PRIVATE).edit().clear().commit()
     }
     // Below Android 13 the language is stored by the App; it must not leak into later phases.
     if (Build.VERSION.SDK_INT < 33) check(AppLanguages.selection(context) == priorLanguage)

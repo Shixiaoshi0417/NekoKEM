@@ -59,6 +59,11 @@ if [[ -f "$repo_root/core/src/nekokem_v4.c" ]]; then
     core+=(nekokem_v4 file_v4)
     tests+=(multi_recipient)
 fi
+# NKEM v5 sources likewise exist only from 5.0 on.
+if [[ -f "$repo_root/core/src/nekokem_v5.c" ]]; then
+    core+=(nekokem_v5 identity payload_hash)
+    tests+=(signature payload_hash)
+fi
 if [[ -f "$repo_root/core/tests/key_safety_tests.c" ]]; then
     tests+=(key_safety)
 fi

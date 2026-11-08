@@ -43,6 +43,7 @@ import com.shixiaoshi0417.nekokem.keys.PublicKeyContact
 import com.shixiaoshi0417.nekokem.keys.PublicKeyContacts
 import com.shixiaoshi0417.nekokem.keys.PublicKeyContactsState
 import com.shixiaoshi0417.nekokem.nativecore.NativeBridge
+import top.yukonga.miuix.kmp.theme.MiuixTheme
 
 @Composable
 fun PublicKeyContactsPage(
@@ -184,6 +185,11 @@ private fun ContactIdentity(contact: PublicKeyContact) {
     Text(contact.label, style = MaterialTheme.typography.titleMediumEmphasized)
     Text(stringResource(R.string.key_file_line, contact.displayName), style = MaterialTheme.typography.bodyMedium)
     Text(stringResource(R.string.key_fingerprint_line, contact.fingerprint), style = MaterialTheme.typography.bodySmall)
+    Text(
+        stringResource(if (contact.canVerify) R.string.contact_verifies else R.string.contact_legacy),
+        style = MaterialTheme.typography.labelMedium,
+        color = if (contact.canVerify) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+    )
 }
 
 @Composable
@@ -240,11 +246,13 @@ fun PublicKeyContactNoteDialog(
     initialNote: String,
     editing: Boolean,
     duplicate: Boolean = false,
+    upgrades: PublicKeyContact? = null,
     onSave: (String) -> Unit,
     onDismiss: () -> Unit,
 ) {
     var note by remember(fingerprint) { mutableStateOf(initialNote) }
-    val valid = PublicKeyContacts.validNote(note)
+    var checked by remember(fingerprint) { mutableStateOf(false) }
+    val valid = PublicKeyContacts.validNote(note) && (upgrades == null || checked)
     AppAlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(stringResource(if (editing) R.string.contact_edit_title else R.string.contact_save_title)) },
@@ -253,6 +261,23 @@ fun PublicKeyContactNoteDialog(
                 Text(stringResource(R.string.key_file_line, displayName))
                 Text(stringResource(R.string.key_fingerprint_line, fingerprint), style = MaterialTheme.typography.bodySmall)
                 if (duplicate) Text(stringResource(R.string.contact_duplicate))
+                if (upgrades != null) {
+                    // Anyone with the old key can attach signing keys to it, so
+                    // the new fingerprint must be checked with the owner first.
+                    val danger = if (isMiuixStyle()) MiuixTheme.colorScheme.error else MaterialTheme.colorScheme.error
+                    Text(stringResource(R.string.contact_upgrade_warning, upgrades.label), color = danger)
+                    Row(
+                        Modifier.fillMaxWidth().toggleable(
+                            value = checked,
+                            role = Role.Checkbox,
+                            onValueChange = { checked = it },
+                        ),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Checkbox(checked = checked, onCheckedChange = null)
+                        Text(stringResource(R.string.contact_upgrade_confirm), modifier = Modifier.padding(start = 8.dp))
+                    }
+                }
                 if (isMiuixStyle()) {
                     top.yukonga.miuix.kmp.basic.TextField(
                         value = note,

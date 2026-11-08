@@ -54,6 +54,12 @@ fun publicKeyExportRequest(): SaveDocumentRequest = SaveDocumentRequest(
     mimeType = mimeTypeForFilename(PUBLIC_KEY_EXPORT_NAME),
 )
 
+/** The two-component public key for NekoKEM 4.x recipients. */
+fun legacyPublicKeyExportRequest(): SaveDocumentRequest = SaveDocumentRequest(
+    displayName = LEGACY_PUBLIC_KEY_EXPORT_NAME,
+    mimeType = mimeTypeForFilename(LEGACY_PUBLIC_KEY_EXPORT_NAME),
+)
+
 fun encryptedPrivateKeyExportRequest(): SaveDocumentRequest = SaveDocumentRequest(
     displayName = PRIVATE_KEY_EXPORT_NAME,
     mimeType = BINARY_MIME_TYPE,
@@ -99,6 +105,7 @@ private fun safeDocumentName(inputName: String, defaultName: String): String {
 
 internal const val BINARY_MIME_TYPE = "application/octet-stream"
 private const val PUBLIC_KEY_EXPORT_NAME = "public.key"
+private const val LEGACY_PUBLIC_KEY_EXPORT_NAME = "public-legacy.key"
 private const val PRIVATE_KEY_EXPORT_NAME = "private.nkpr"
 private const val NKEM_EXTENSION = ".nkem"
 private const val DECRYPTED_PREFIX = "decrypted_"

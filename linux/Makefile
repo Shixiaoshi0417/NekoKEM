@@ -5,7 +5,7 @@ CPPFLAGS = -D_POSIX_C_SOURCE=200809L -D_FORTIFY_SOURCE=3 \
 CFLAGS = -std=c17 -O2 -Wall -Wextra -Wpedantic -Wconversion -Wshadow \
 	-Wformat=2 -Wstrict-prototypes -Werror -fstack-protector-strong -fPIE
 LDFLAGS = -pie
-LDLIBS = -lcrypto
+LDLIBS = -lcrypto -pthread
 AFL_CC ?= afl-clang-fast
 FUZZ_CPPFLAGS = -D_POSIX_C_SOURCE=200809L -D_FORTIFY_SOURCE=3
 FUZZ_CFLAGS = -std=c17 -O1 -g -Wall -Wextra -Wpedantic -Wconversion \
@@ -18,9 +18,10 @@ TARGET = nekokem
 CORE_LIBRARY = libnekokem_core.a
 CORE_SOURCES = ../core/src/nekokem.c \
 	../core/src/key_management.c \
-	../core/src/nekokem_v3.c ../core/src/nekokem_v4.c ../core/src/kem.c ../core/src/hybrid.c \
-	../core/src/aes.c ../core/src/file.c ../core/src/file_v3.c ../core/src/file_v4.c \
-	../core/src/secure_mem.c ../core/src/private_key.c
+	../core/src/nekokem_v3.c ../core/src/nekokem_v4.c ../core/src/nekokem_v5.c \
+	../core/src/identity.c ../core/src/kem.c ../core/src/hybrid.c \
+	../core/src/aes.c ../core/src/payload_hash.c ../core/src/file.c ../core/src/file_v3.c \
+	../core/src/file_v4.c ../core/src/secure_mem.c ../core/src/private_key.c
 CLI_SOURCES = src/main.c src/cli.c src/i18n.c
 SOURCES = $(CLI_SOURCES) $(CORE_SOURCES)
 CORE_OBJECTS = $(CORE_SOURCES:.c=.o)
@@ -32,7 +33,7 @@ DEPS = $(OBJECTS:.o=.d)
 	fuzz-build test-key-management test-progress test-progress-large \
 	test-file-security test-version-rejection test-gcm-limit test-aes-stream \
 	test-hybrid-kdf test-asan test-input-boundaries test-pem-interaction test-openssl \
-	test-multi-recipient test-key-safety
+	test-multi-recipient test-signature test-key-safety test-payload-hash
 
 all: $(TARGET)
 
@@ -175,8 +176,13 @@ fuzz-build: fuzz-seeds
 	$(AFL_CC) $(FUZZ_CPPFLAGS) -I../core/include -I../core/src $(FUZZ_CFLAGS) \
 		../core/fuzz/fuzz_decrypt_seeds.c $(CORE_SOURCES) $(FUZZ_LDFLAGS) $(LDLIBS) \
 		-o ../core/fuzz/bin/fuzz_decrypt_seeds
-	rm -rf ../core/fuzz/seeds/decrypt ../core/fuzz/bin/decrypt-*
-	../core/fuzz/bin/fuzz_decrypt_seeds ../core/fuzz/bin ../core/fuzz/seeds/decrypt
+	$(AFL_CC) $(FUZZ_CPPFLAGS) -I../core/include -I../core/src $(FUZZ_CFLAGS) \
+		../core/fuzz/fuzz_identity.c $(CORE_SOURCES) $(FUZZ_LDFLAGS) $(LDLIBS) \
+		-o ../core/fuzz/bin/fuzz_identity
+	rm -rf ../core/fuzz/seeds/decrypt ../core/fuzz/seeds/identity \
+		../core/fuzz/bin/decrypt-*
+	../core/fuzz/bin/fuzz_decrypt_seeds ../core/fuzz/bin ../core/fuzz/seeds/decrypt \
+		../core/fuzz/seeds/identity
 
 
 test-key-management: $(CORE_LIBRARY)
@@ -231,6 +237,38 @@ test-multi-recipient:
 	ASAN_OPTIONS=detect_leaks=1:halt_on_error=1 \
 		UBSAN_OPTIONS=halt_on_error=1:print_stacktrace=1 "$$multi_binary"
 
+test-signature:
+	@set -eu; \
+	signature_binary=$$(mktemp /tmp/nekokem-signature-tests.XXXXXX); \
+	cleanup_signature() { rm -f "$$signature_binary"; }; \
+	trap cleanup_signature EXIT INT TERM; \
+	$(CC) $(CPPFLAGS) $(CFLAGS) -O1 -g -fno-omit-frame-pointer \
+		-fsanitize=address,undefined -fno-sanitize-recover=undefined \
+		$(LDFLAGS) ../core/tests/signature_tests.c $(CORE_SOURCES) \
+		$(LDLIBS) -fsanitize=address,undefined -o "$$signature_binary"; \
+	ASAN_OPTIONS=detect_leaks=1:halt_on_error=1 \
+		UBSAN_OPTIONS=halt_on_error=1:print_stacktrace=1 "$$signature_binary"
+
+test-payload-hash:
+	@set -eu; \
+	hash_binary=$$(mktemp /tmp/nekokem-payload-hash-tests.XXXXXX); \
+	cleanup_hash() { rm -f "$$hash_binary"; }; \
+	trap cleanup_hash EXIT INT TERM; \
+	$(CC) $(CPPFLAGS) $(CFLAGS) -O1 -g -fno-omit-frame-pointer \
+		-fsanitize=address,undefined -fno-sanitize-recover=undefined \
+		-DNEKOKEM_TEST_FAULT_INJECTION \
+		$(LDFLAGS) ../core/tests/payload_hash_tests.c ../core/src/payload_hash.c \
+		../core/src/file.c ../core/src/file_v3.c ../core/src/secure_mem.c \
+		$(LDLIBS) -fsanitize=address,undefined -o "$$hash_binary"; \
+	ASAN_OPTIONS=detect_leaks=1:halt_on_error=1 \
+		UBSAN_OPTIONS=halt_on_error=1:print_stacktrace=1 "$$hash_binary"; \
+	$(CC) $(CPPFLAGS) $(CFLAGS) -O1 -g -fno-omit-frame-pointer -fsanitize=thread \
+		-DNEKOKEM_TEST_FAULT_INJECTION \
+		$(LDFLAGS) ../core/tests/payload_hash_tests.c ../core/src/payload_hash.c \
+		../core/src/file.c ../core/src/file_v3.c ../core/src/secure_mem.c \
+		$(LDLIBS) -fsanitize=thread -o "$$hash_binary"; \
+	TSAN_OPTIONS=halt_on_error=1 "$$hash_binary"
+
 test-key-safety:
 	@set -eu; \
 	safety_binary=$$(mktemp /tmp/nekokem-key-safety-tests.XXXXXX); \
@@ -261,7 +299,7 @@ test-progress test-progress-large: $(CORE_LIBRARY)
 
 test: $(TARGET) test-openssl analyze test-ubsan test-parser test-file-security test-gcm-limit test-aes-stream \
 	test-key-management test-version-rejection test-progress test-hybrid-kdf test-input-boundaries \
-	test-asan test-pem-interaction test-i18n test-multi-recipient test-key-safety test-interrupts \
+	test-asan test-pem-interaction test-i18n test-multi-recipient test-signature test-key-safety test-payload-hash test-interrupts \
 	test-cli-audit test-crypto-audit
 	@set -eu; \
 	test_dir=$$(mktemp -d); \
@@ -299,6 +337,7 @@ test: $(TARGET) test-openssl analyze test-ubsan test-parser test-file-security t
 			"$$test_dir/before-replace.pub" \
 			"$$test_dir/replace-warning.txt" \
 			"$$test_dir/multi-output.txt" \
+			"$$test_dir/signed-output.txt" \
 			"$$test_dir/multi-decrypted.txt" \
 			"$$test_dir/encrypted/tampered.nkem" \
 			"$$test_dir/encrypted/interactive.txt.nkem" \
@@ -329,10 +368,19 @@ test: $(TARGET) test-openssl analyze test-ubsan test-parser test-file-security t
 		echo "Protected private key contains plaintext PEM" >&2; \
 		exit 1; \
 	fi; \
-	./nekokem encrypt hybrid test.txt encrypted/hybrid.nkem keys/public.key; \
 	printf '%s\n' "$$key_password" | \
-		./nekokem decrypt hybrid encrypted/hybrid.nkem \
-			hybrid-output.txt keys/private.key.enc; \
+		./nekokem --lang en encrypt hybrid test.txt encrypted/hybrid.nkem \
+			keys/public.key > signed-output.txt; \
+	grep -F 'Encrypted and signed NKEM v5 for 1 recipient(s)' \
+		signed-output.txt >/dev/null; \
+	test "$$(dd if=encrypted/hybrid.nkem bs=1 skip=4 count=1 \
+		status=none | od -An -tu1 | tr -d ' ')" = 5; \
+	printf '%s\n' "$$key_password" | \
+		./nekokem --lang en decrypt hybrid --trust keys/public.key \
+			--require-trusted encrypted/hybrid.nkem \
+			hybrid-output.txt keys/private.key.enc > signed-output.txt; \
+	grep -F 'Signature: valid, signed by trusted key keys/public.key' \
+		signed-output.txt >/dev/null; \
 	sha256sum test.txt hybrid-output.txt; \
 	cmp test.txt hybrid-output.txt; \
 	cp keys/public.key keys-before.pub; \
@@ -408,7 +456,7 @@ test: $(TARGET) test-openssl analyze test-ubsan test-parser test-file-security t
 	mv keys/private.key.enc correct-private.key.enc; \
 	printf '%s\n%s\n' "$$key_password" "$$key_password" | \
 		./nekokem keygen hybrid; \
-	./nekokem encrypt hybrid test.txt encrypted/multi.nkem \
+	./nekokem encrypt hybrid --unsigned test.txt encrypted/multi.nkem \
 		first-public.key keys/public.key > multi-output.txt; \
 	grep -F 'NKEM v4 for 2 recipients' multi-output.txt >/dev/null; \
 	test "$$(dd if=encrypted/multi.nkem bs=1 skip=4 count=1 \
@@ -420,7 +468,7 @@ test: $(TARGET) test-openssl analyze test-ubsan test-parser test-file-security t
 		cmp test.txt multi-decrypted.txt; \
 		rm -f multi-decrypted.txt; \
 	done; \
-	if ./nekokem encrypt hybrid test.txt encrypted/duplicate.nkem \
+	if ./nekokem encrypt hybrid --unsigned test.txt encrypted/duplicate.nkem \
 		keys/public.key keys/public.key; then \
 		echo "Duplicate recipient public key was accepted" >&2; \
 		exit 1; \
@@ -481,7 +529,8 @@ test: $(TARGET) test-openssl analyze test-ubsan test-parser test-file-security t
 	mkdir plaintext; \
 	cp test.txt plaintext/interactive.txt; \
 	{ printf '2\n2\n'; cat keys/public.key; \
-		printf '%s\n5\n' "$$test_dir/plaintext/interactive.txt"; \
+		printf '%s\n%s\n5\n' "$$test_dir/plaintext/interactive.txt" \
+			"$$interactive_password"; \
 	} | ./nekokem >/dev/null; \
 	test -d encrypted; \
 	test "$$(stat -c %a encrypted)" = 700; \
@@ -535,7 +584,7 @@ test: $(TARGET) test-openssl analyze test-ubsan test-parser test-file-security t
 
 clean:
 	rm -f $(TARGET) $(CORE_LIBRARY) $(OBJECTS) $(DEPS)
-	rm -f ../core/fuzz/bin/fuzz_nkem ../core/fuzz/bin/fuzz_nkpr
+	rm -f ../core/fuzz/bin/fuzz_nkem ../core/fuzz/bin/fuzz_nkpr ../core/fuzz/bin/fuzz_identity
 
 -include $(DEPS)
 

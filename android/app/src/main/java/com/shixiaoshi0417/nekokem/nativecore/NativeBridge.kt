@@ -19,8 +19,25 @@ object NativeBridge {
     const val RESULT_JAVA_EXCEPTION = -3
     const val RESULT_CANCELLED = -5
 
-    /** Core's NEKOKEM_MAX_RECIPIENTS: most recipients in one NKEM v4 file. */
+    /** Core's signature policy failures; no output was committed. */
+    const val RESULT_SIGNATURE_INVALID = -10
+    const val RESULT_SIGNATURE_REQUIRED = -11
+    const val RESULT_SIGNER_NOT_TRUSTED = -12
+
+    /** Core's NEKOKEM_SIGNATURE_* values, as reported by verified decryption. */
+    const val SIGNATURE_UNSIGNED = 0
+    const val SIGNATURE_TRUSTED = 1
+    const val SIGNATURE_VALID_UNTRUSTED = 2
+
+    /** Core's NEKOKEM_MAX_RECIPIENTS: most recipients in one NKEM v4/v5 file. */
     const val MAX_RECIPIENTS = 64
+
+    /**
+     * Core's NEKOKEM_MAX_TRUSTED_SIGNERS: most trusted signers (this device
+     * plus saved contacts) in one verified decryption. Separate from
+     * [MAX_RECIPIENTS], and above the 500 saved contacts plus this device.
+     */
+    const val MAX_TRUSTED_SIGNERS = 1024
 
     init {
         System.loadLibrary("nekokem_jni")
@@ -125,4 +142,57 @@ object NativeBridge {
     ): Int
 
     external fun nativePublicKeyFingerprint(publicKeyPath: String): String?
+
+    /**
+     * Adds Ed448 and ML-DSA-87 keys to a NekoKEM 4.x key pair. Its encryption
+     * keys, password and fingerprint for old files stay the same.
+     */
+    external fun nativeUpgradeToIdentityKeys(
+        publicKeyPath: String,
+        privateKeyPath: String,
+        password: ByteArray,
+    ): Int
+
+    /** True for a valid four-component identity key, which verifies signatures. */
+    external fun nativePublicKeyCanVerify(publicKeyPath: String): Boolean
+
+    /** The X448 + ML-KEM-1024 fingerprint that NekoKEM 4.x shows. */
+    external fun nativePublicKeyLegacyFingerprint(publicKeyPath: String): String?
+
+    /** Writes only the two encryption components, readable by NekoKEM 4.x. */
+    external fun nativeExportLegacyPublicKey(
+        publicKeyPath: String,
+        outputPath: String,
+    ): Int
+
+    /**
+     * Writes one NKEM v5 file for every key, signed with the identity private
+     * key at [signKeyPath]. Never falls back to an unsigned file.
+     */
+    external fun nativeEncryptFileSignedWithProgress(
+        inputPath: String,
+        outputPath: String,
+        publicKeyPaths: Array<String>,
+        signKeyPath: String,
+        password: ByteArray,
+        callback: NativeProgressCallback,
+    ): Int
+
+    /**
+     * Decrypts NKEM v3, v4 or v5 while Core enforces the signature policy.
+     * [report] receives {format, status, trusted index}; [signer] the v5
+     * signer's fingerprint. Returns a RESULT_* or RESULT_SIGNATURE_* code.
+     */
+    external fun nativeDecryptFileVerifiedWithProgress(
+        inputPath: String,
+        outputPath: String,
+        privateKeyPath: String,
+        password: ByteArray,
+        trustedPaths: Array<String>,
+        requireSignature: Boolean,
+        signerOutputPath: String?,
+        report: IntArray,
+        signer: Array<String?>,
+        callback: NativeProgressCallback,
+    ): Int
 }

@@ -41,7 +41,7 @@ class LanguageTests(unittest.TestCase):
                 self.assertEqual(0, r.returncode); self.assertIn(errors[tag], r.stderr)
                 self.assertNotIn(errors[tag], r.stdout)
                 r = self.cli('--lang', tag, '--version')
-                self.assertEqual((0, 'NekoKEM 4.4.0\n', ''), (r.returncode, r.stdout, r.stderr))
+                self.assertEqual((0, 'NekoKEM 5.0.0\n', ''), (r.returncode, r.stdout, r.stderr))
                 r = self.cli('--lang', tag, 'unknown')
                 self.assertEqual(1, r.returncode); self.assertIn(LABELS[tag], r.stderr); self.assertEqual('', r.stdout)
     def test_posix_regions_and_unsupported_fallback(self):
@@ -90,7 +90,7 @@ class LanguageTests(unittest.TestCase):
         messages = {'en':'Cannot open regular input file', 'zh-CN':'无法打开普通输入文件',
             'zh-TW':'一般輸入檔案開啟失敗', 'ja':'通常の入力ファイルを開くことができません', 'ko':'일반 입력 파일 열기에 실패했습니다'}
         for tag, text in messages.items():
-            r = self.cli('--lang',tag,'encrypt','hybrid',str(plaintext),'output.nkem','missing.key')
+            r = self.cli('--lang',tag,'encrypt','hybrid','--unsigned',str(plaintext),'output.nkem','missing.key')
             self.assertEqual(1,r.returncode); self.assertIn(text,r.stderr)
             self.assertFalse((self.root/'output.nkem').exists())
 
@@ -100,7 +100,8 @@ class LanguageTests(unittest.TestCase):
         self.assertEqual(0, generated.returncode, generated.stderr)
         protected = (self.root/'keys/private.key.enc').read_bytes()
         self.assertEqual(b'NKPR', protected[:4])
-        self.assertEqual(bytes([1,1,1,0]), protected[4:8])
+        # NKPR v2 holds the four identity components; KDF parameters are unchanged.
+        self.assertEqual(bytes([2,1,1,0]), protected[4:8])
         self.assertEqual((65536).to_bytes(4,'big'), protected[8:12])
         self.assertEqual(bytes([12,16]), protected[26:28])
         payload = bytes(range(256)) * 17
@@ -110,11 +111,12 @@ class LanguageTests(unittest.TestCase):
             fingerprint = self.cli('--lang',tag,input='4\n1\nkeys/public.key\n5\n')
             self.assertEqual(0,fingerprint.returncode)
             matched = re.findall(r'(?:[0-9A-F]{2}:){31}[0-9A-F]{2}',fingerprint.stdout)
-            self.assertEqual(1,len(matched)); fingerprints.append(matched[0])
-            encrypted = self.cli('--lang',tag,'encrypt','hybrid','input',tag+'.nkem','keys/public.key')
+            # An identity key shows its identity fingerprint, then the legacy one.
+            self.assertEqual(2,len(matched)); fingerprints.append(tuple(matched))
+            encrypted = self.cli('--lang',tag,'encrypt','hybrid','input',tag+'.nkem','keys/public.key',input=password+'\n')
             self.assertEqual(0,encrypted.returncode,encrypted.stderr)
             header=(self.root/(tag+'.nkem')).read_bytes()
-            self.assertEqual(b'NKEM',header[:4]); self.assertEqual(3,header[4])
+            self.assertEqual(b'NKEM',header[:4]); self.assertEqual(5,header[4])
             decrypted = self.cli('--lang',tag,'decrypt','hybrid',tag+'.nkem',tag+'.out','keys/private.key.enc',input=password+'\n')
             self.assertEqual(0,decrypted.returncode,decrypted.stderr)
             self.assertEqual(payload,(self.root/(tag+'.out')).read_bytes())
@@ -122,7 +124,7 @@ class LanguageTests(unittest.TestCase):
             self.assertEqual(1,wrong.returncode); self.assertFalse((self.root/(tag+'.wrong')).exists())
         self.assertEqual(1,len(set(fingerprints)))
         (self.root/'--lang').write_bytes(payload)
-        encrypted=self.cli('--lang','ja','encrypt','hybrid','--lang','--','keys/public.key')
+        encrypted=self.cli('--lang','ja','encrypt','hybrid','--lang','--','keys/public.key',input=password+'\n')
         self.assertEqual(0,encrypted.returncode,encrypted.stderr)
         decrypted=self.cli('--lang','ko','decrypt','hybrid','--','positional.out','keys/private.key.enc',input=password+'\n')
         self.assertEqual(0,decrypted.returncode,decrypted.stderr)

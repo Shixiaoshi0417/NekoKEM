@@ -99,6 +99,7 @@ internal fun runPublicKeyContactsTests(
     val secondCandidate = checkNotNull(workflow.stageTemporaryPublicKey(Uri.fromFile(secondPublic), "second.key").key)
     val second = checkNotNull(contacts.save(secondCandidate, "second recipient").contact)
     workflow.discardTemporaryPublicKey(secondCandidate)
+    testIdentityUpgradeNeedsConfirmation(contacts, workflow, recipient)
     val group = contacts.stageRecipients(listOf(second.id, contact.id))
     check(group.code == NativeBridge.RESULT_SUCCESS)
     check(group.keys.map { it.fingerprint } == listOf(second.fingerprint, contact.fingerprint))
@@ -248,6 +249,38 @@ private fun contactProgress(cancelled: Boolean) = object : CancellableProgressCa
     override fun isCancelled() = cancelled
 }
 private fun contactPassword() = "contact-device-test-password".toByteArray()
+/**
+ * An identity key replaces the same person's legacy contact only after the
+ * user checks the new fingerprint: anyone with the legacy key could attach
+ * their own signing keys to it.
+ */
+private fun testIdentityUpgradeNeedsConfirmation(contacts: PublicKeyContacts, workflow: SafFileWorkflow, directory: File) {
+    val identityPublic = File(directory, "upgrade-public.key")
+    val identityPrivate = File(directory, "upgrade-private.nkpr.enc")
+    val legacyPublic = File(directory, "upgrade-legacy.key")
+    generateContactTestKeypair(identityPublic, identityPrivate)
+    check(NativeBridge.nativeExportLegacyPublicKey(identityPublic.absolutePath, legacyPublic.absolutePath) ==
+        NativeBridge.RESULT_SUCCESS)
+    val before = contacts.readState().contacts.size
+    val legacyCandidate = checkNotNull(workflow.stageTemporaryPublicKey(Uri.fromFile(legacyPublic), "old.key").key)
+    check(contacts.upgradeTarget(legacyCandidate) == null)
+    val legacy = checkNotNull(contacts.save(legacyCandidate, "old key").contact)
+    workflow.discardTemporaryPublicKey(legacyCandidate)
+    check(!legacy.canVerify)
+
+    val identityCandidate = checkNotNull(workflow.stageTemporaryPublicKey(Uri.fromFile(identityPublic), "new.key").key)
+    check(contacts.upgradeTarget(identityCandidate) == legacy)
+    check(contacts.save(identityCandidate, "").code == PublicKeyContacts.RESULT_UPGRADE_UNCONFIRMED)
+    check(contacts.readState().contacts.contains(legacy))
+    val upgraded = checkNotNull(contacts.save(identityCandidate, "", upgradeConfirmed = true).contact)
+    workflow.discardTemporaryPublicKey(identityCandidate)
+    check(upgraded.canVerify && upgraded.note == "old key")
+    val state = contacts.readState().contacts
+    check(state.size == before + 1 && legacy !in state && upgraded in state)
+    check(contacts.delete(upgraded.id) == NativeBridge.RESULT_SUCCESS)
+    listOf(identityPublic, identityPrivate, legacyPublic).forEach { it.delete() }
+}
+
 internal fun generateContactTestKeypair(publicKey: File, privateKey: File) {
     val password = contactPassword()
     try {

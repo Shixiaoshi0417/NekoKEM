@@ -1,7 +1,7 @@
 <?xml version='1.0' encoding='utf-8'?>
 <resources>
     <string name="app_name">NekoKEM</string>
-    <string name="app_version">NekoKEM v4.4.0</string>
+    <string name="app_version">NekoKEM v5.0.0</string>
     <string name="navigation_files">檔案加密與解密</string>
     <string name="navigation_keys">金鑰管理</string>
     <string name="navigation_settings">設定</string>
@@ -181,6 +181,8 @@
     <string name="contact_note_hint">收件人名稱或其他說明</string>
     <string name="contact_note_limit">最多 %1$d 個字元</string>
     <string name="contact_duplicate">此公鑰已儲存在通訊錄，儲存將更新備註。</string>
+    <string name="contact_upgrade_warning">將把已儲存的舊版金鑰「%1$s」升級為這把簽署身分金鑰。任何擁有舊金鑰的人都能為它附上自己的簽署金鑰，請先透過可信管道與對方核對上方的完整新指紋再儲存。儲存後，以這把金鑰簽署的檔案會顯示為該聯絡人簽署。</string>
+    <string name="contact_upgrade_confirm">我已與對方核對新的完整指紋</string>
     <string name="contact_note_line">備註：%1$s</string>
     <string name="contact_saved">公鑰已儲存</string>
     <string name="contact_updated">備註已更新</string>
@@ -220,4 +222,45 @@
     <string name="miuix_keys_delete_title">刪除金鑰</string>
     <string name="settings_ui_style_miuix">MIUIX</string>
     <string name="settings_ui_style_material">Material 3 Expressive</string>
+    <string name="settings_signing_title">簽章</string>
+    <string name="settings_unsigned_title">不簽章加密（相容舊版）</string>
+    <string name="settings_unsigned_summary">關閉時：所有檔案都以你的身分金鑰簽章（NKEM v5）。僅在接收者使用 NekoKEM 4.x 或更早版本時開啟。</string>
+    <string name="unsigned_warning">接收者無法確認檔案來自你</string>
+    <string name="unsigned_confirm_title">確定關閉簽章嗎？</string>
+    <string name="unsigned_confirm_message">檔案將以無簽章的 NKEM v3/v4 格式儲存。接收者無法確認檔案來自你，任何取得其公開金鑰的人都能傳送看起來一樣的檔案。</string>
+    <string name="action_turn_off_signing">關閉簽章</string>
+    <string name="settings_require_signature_title">只接受已簽章檔案</string>
+    <string name="settings_require_signature_summary">解密時拒絕沒有簽章的 NKEM v3/v4 檔案，不會寫入輸出。</string>
+    <string name="sign_password_title">簽章檔案</string>
+    <string name="sign_password_message">請輸入私密金鑰密碼。檔案將以你的身分金鑰簽章，接收者可確認檔案來自你。</string>
+    <string name="completion_format">格式</string>
+    <string name="completion_format_value">NKEM v%1$d</string>
+    <string name="completion_signature">簽章</string>
+    <string name="completion_signer_fingerprint">簽章者指紋</string>
+    <string name="signature_signed">已以你的身分金鑰簽章</string>
+    <string name="signature_unsigned">未簽章</string>
+    <string name="signature_trusted_contact">有效 · 來自已儲存的聯絡人 %1$s</string>
+    <string name="signature_trusted_self">有效 · 來自本機的身分金鑰</string>
+    <string name="signature_untrusted">簽章有效，但簽章者不在通訊錄中。請先透過可信管道與傳送者核對此指紋，再信任該檔案。</string>
+    <string name="signature_none">未簽章 · 此 NKEM v3/v4 檔案無法確認傳送者</string>
+    <string name="error_reason_signing_key">簽章需要本機的身分金鑰。請在「金鑰」頁產生或升級金鑰，或在設定中開啟不簽章加密。</string>
+    <string name="error_reason_sign">無法簽章：私密金鑰密碼錯誤或無法讀取私密金鑰，未寫入任何內容。</string>
+    <string name="error_reason_signature_invalid">簽章無效：檔案已被修改或偽造，未寫入任何內容。</string>
+    <string name="error_reason_signature_required">此檔案未簽章，而設定為只接受已簽章檔案，未寫入任何內容。</string>
+    <string name="error_reason_signer_not_trusted">簽章者不在你信任的金鑰中，未寫入任何內容。</string>
+    <string name="error_reason_already_identity">此金鑰已可簽章，無需升級。</string>
+    <string name="error_reason_upgrade">無法升級金鑰：密碼錯誤或金鑰檔案不相符，檔案保持不變。</string>
+    <string name="key_identity_status">身分金鑰 · 可簽章和驗證簽章</string>
+    <string name="key_legacy_status">舊版金鑰 · 無法簽章。升級後即可簽章檔案。</string>
+    <string name="legacy_fingerprint_label">舊版指紋（NekoKEM 4.x 及更早版本）</string>
+    <string name="action_upgrade_key">升級金鑰</string>
+    <string name="action_export_legacy_public_key">匯出舊版公開金鑰</string>
+    <string name="operation_upgrade_key">升級金鑰</string>
+    <string name="operation_export_legacy_public_key">匯出舊版公開金鑰</string>
+    <string name="upgrade_password_title">升級為身分金鑰</string>
+    <string name="upgrade_password_message">為此 NekoKEM 4.x 金鑰對加入簽章金鑰。加密金鑰、密碼和舊檔案都保持不變。請輸入私密金鑰密碼，並先匯出兩個金鑰的備份。</string>
+    <string name="legacy_export_hint">供使用 NekoKEM 4.x 及更早版本的接收者使用，無法驗證簽章。</string>
+    <string name="contact_verifies">身分金鑰 · 可驗證簽章</string>
+    <string name="contact_legacy">舊版金鑰 · 無法驗證簽章</string>
+    <string name="error_settings_save">無法儲存設定，先前的設定仍然有效。</string>
 </resources>

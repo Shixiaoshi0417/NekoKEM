@@ -171,6 +171,8 @@ def profile_size(root, executable, environment, args, size_mib):
             encrypted = measure_cli(
                 executable, root, environment, args.timeout,
                 "encrypt", "hybrid", plain, cipher, public_key,
+                # NekoKEM 5 signs by default and unlocks the key to do so.
+                password=PASSWORD,
             )
             require_output(cipher)
             if cipher.stat().st_size <= expected_size:

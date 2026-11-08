@@ -149,9 +149,12 @@ sources=(
     core/src/key_management.c
     core/src/nekokem_v3.c
     core/src/nekokem_v4.c
+    core/src/nekokem_v5.c
+    core/src/identity.c
     core/src/kem.c
     core/src/hybrid.c
     core/src/aes.c
+    core/src/payload_hash.c
     core/src/file.c
     core/src/file_v3.c
     core/src/file_v4.c
@@ -244,16 +247,17 @@ if [[ "$build_tests" == 1 ]]; then
         export OPENSSL_CONF=/dev/null
         export OPENSSL_MODULES="$test_root/no-external-modules"
         export LD_LIBRARY_PATH="$test_root/no-shared-libraries"
-        test "$("${run_command[@]}" --version)" = "NekoKEM 4.4.0"
+        test "$("${run_command[@]}" --version)" = "NekoKEM 5.0.0"
         printf '%s\n%s\n' "$password" "$password" | \
             "${run_command[@]}" keygen
         test -s keys/public.key
         test -s keys/private.key.enc
         test ! -e keys/private.key
         test "$(dd if=keys/private.key.enc bs=1 count=4 status=none)" = NKPR
-        "${run_command[@]}" encrypt hybrid input.bin output.nkem keys/public.key
+        printf '%s\n' "$password" | \
+            "${run_command[@]}" encrypt hybrid input.bin output.nkem keys/public.key
         test "$(dd if=output.nkem bs=1 count=4 status=none)" = NKEM
-        test "$(od -An -tu1 -j4 -N1 output.nkem | tr -d ' ')" = 3
+        test "$(od -An -tu1 -j4 -N1 output.nkem | tr -d ' ')" = 5
         printf '%s\n' "$password" | \
             "${run_command[@]}" decrypt hybrid output.nkem recovered.bin \
                 keys/private.key.enc
@@ -261,7 +265,7 @@ if [[ "$build_tests" == 1 ]]; then
         sha256sum input.bin recovered.bin
     )
     unset password
-    printf 'Hybrid NKEM v3 smoke test passed (%s).\n' "$target_arch"
+    printf 'Signed NKEM v5 smoke test passed (%s).\n' "$target_arch"
 fi
 
 package_name="NekoKEM-linux-${target_arch}"

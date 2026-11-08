@@ -64,7 +64,7 @@ class InterruptTests(unittest.TestCase):
         cls.run_cli(['keygen'], PASSWORD * 2)
         with open(os.path.join(cls.directory, 'big.bin'), 'wb') as stream:
             stream.write(os.urandom(64 * 1024 * 1024))
-        cls.run_cli(['encrypt', 'hybrid', 'big.bin', 'big.nkem', 'keys/public.key'], b'')
+        cls.run_cli(['encrypt', 'hybrid', 'big.bin', 'big.nkem', 'keys/public.key'], PASSWORD)
 
     @classmethod
     def tearDownClass(cls):

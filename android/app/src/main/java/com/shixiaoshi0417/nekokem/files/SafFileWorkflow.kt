@@ -13,6 +13,7 @@ import com.shixiaoshi0417.nekokem.keys.PendingTemporaryPrivateKeyResult
 import com.shixiaoshi0417.nekokem.keys.PublicKeyExportTrace
 import com.shixiaoshi0417.nekokem.keys.PublicKeyFileRecord
 import com.shixiaoshi0417.nekokem.keys.PublicKeyImportTrace
+import com.shixiaoshi0417.nekokem.keys.SignatureReport
 import com.shixiaoshi0417.nekokem.keys.TemporaryPrivateKey
 import com.shixiaoshi0417.nekokem.keys.TemporaryPrivateKeyResult
 import com.shixiaoshi0417.nekokem.keys.TemporaryPublicKey
@@ -94,6 +95,9 @@ class PreparedEncryption internal constructor(
 ) {
     private var active = true
 
+    /** Whether the prepared file is a signed NKEM v5 file; shown in the result. */
+    var signed: Boolean = false
+
     @Synchronized
     internal fun consume(): File? {
         if (!active) {
@@ -107,6 +111,8 @@ class PreparedEncryption internal constructor(
 data class PreparedDecryptionResult(
     val code: Int,
     val prepared: PreparedDecryption?,
+    /** Core's signature report for a successful decryption. */
+    val signature: SignatureReport? = null,
 )
 
 class PreparedDecryption internal constructor(
@@ -114,6 +120,12 @@ class PreparedDecryption internal constructor(
     internal val workspace: File? = null,
 ) {
     private var active = true
+
+    /** Core's signature report, kept until the plaintext is saved. */
+    var signature: SignatureReport? = null
+
+    /** The trusted contact that signed, as the page names it. */
+    var signerLabel: String? = null
 
     @Synchronized
     internal fun consume(): File? {
@@ -220,15 +232,24 @@ class SafFileWorkflow(
         displayName = displaySafeName(queryDisplayName(uri), defaultSelectedFilename),
     )
 
+    /**
+     * With [signingPassword] the file is signed NKEM v5; without it, unsigned.
+     * Takes ownership of [signingPassword].
+     */
     fun prepareEncryption(
         source: Uri,
         progress: CancellableProgressCallback,
         temporaryKey: TemporaryPublicKey? = null,
-    ): PreparedEncryptionResult = prepareEncryptionWith(
-        source,
-        progress,
-        listOfNotNull(temporaryKey),
-    ) { input, output -> keyManager.encryptFile(input, output, temporaryKey, progress) }
+        signingPassword: ByteArray? = null,
+    ): PreparedEncryptionResult = try {
+        prepareEncryptionWith(
+            source,
+            progress,
+            listOfNotNull(temporaryKey),
+        ) { input, output -> keyManager.encryptFile(input, output, temporaryKey, progress, signingPassword?.copyOf()) }
+    } finally {
+        signingPassword?.fill(0)
+    }
 
     /**
      * Saved-contact recipients, in order: one keeps NKEM v3, several share one
@@ -238,11 +259,18 @@ class SafFileWorkflow(
         source: Uri,
         progress: CancellableProgressCallback,
         recipients: List<TemporaryPublicKey>,
-    ): PreparedEncryptionResult = prepareEncryptionWith(
-        source,
-        progress,
-        recipients,
-    ) { input, output -> keyManager.encryptFileForRecipients(input, output, recipients, progress) }
+        signingPassword: ByteArray? = null,
+    ): PreparedEncryptionResult = try {
+        prepareEncryptionWith(
+            source,
+            progress,
+            recipients,
+        ) { input, output ->
+            keyManager.encryptFileForRecipients(input, output, recipients, progress, signingPassword?.copyOf())
+        }
+    } finally {
+        signingPassword?.fill(0)
+    }
 
     private fun prepareEncryptionWith(
         source: Uri,
@@ -349,12 +377,15 @@ class SafFileWorkflow(
         password: ByteArray,
         progress: CancellableProgressCallback,
         temporaryKey: TemporaryPrivateKey? = null,
+        trustedKeys: List<TemporaryPublicKey> = emptyList(),
+        requireSignature: Boolean = false,
     ): PreparedDecryptionResult {
         var workspace: File? = null
         var stagedInput: File? = null
         var stagedOutput: File? = null
         var prepared: PreparedDecryption? = null
         var result = LocalKeyManager.RESULT_STORAGE_ERROR
+        var signature: SignatureReport? = null
 
         try {
             val directory = if (password.isEmpty()) null else createWorkspace()
@@ -371,13 +402,18 @@ class SafFileWorkflow(
                         progress,
                     )
                 ) {
-                    result = keyManager.decryptFile(
+                    // Core verifies the signature and decides the status.
+                    val verified = keyManager.decryptFileVerified(
                         stagedInput,
                         stagedOutput,
                         temporaryKey,
                         password,
                         progress,
+                        trustedKeys.map { it.file },
+                        requireSignature,
                     )
+                    result = verified.code
+                    signature = verified.signature
                     if (result == NativeBridge.RESULT_SUCCESS &&
                         progress.isCancelled()
                     ) {
@@ -400,8 +436,9 @@ class SafFileWorkflow(
                 removeWorkspace(workspace)
             }
             discardTemporaryPrivateKey(temporaryKey)
+            trustedKeys.forEach { discardTemporaryPublicKey(it) }
         }
-        return PreparedDecryptionResult(result, prepared)
+        return PreparedDecryptionResult(result, prepared, if (prepared != null) signature else null)
     }
 
     /**
@@ -692,6 +729,12 @@ class SafFileWorkflow(
             safOutput = safRecord,
         )
     }
+
+    /** The two-component public key that NekoKEM 4.x and earlier read. */
+    fun exportLegacyPublicKey(destination: Uri): Int =
+        exportKey(destination) { output ->
+            keyManager.exportLegacyPublicKey(output)
+        }
 
     fun exportEncryptedPrivateKey(destination: Uri): Int =
         exportKey(destination) { output ->

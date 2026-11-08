@@ -62,6 +62,7 @@ nekokem-keystore-password.enc
 /core/fuzz/bin/
 # Decryption fuzz seeds are generated with a fresh throwaway key per build.
 /core/fuzz/seeds/decrypt/
+/core/fuzz/seeds/identity/
 /core/fuzz/out/
 /core/fuzz/findings/
 /core/fuzz/crashes/
@@ -70,6 +71,7 @@ nekokem-keystore-password.enc
 /core/fuzz/seeds/nkem/valid-v3
 /core/fuzz/seeds/nkem/valid-v4
 /core/fuzz/seeds/nkem/valid-v4-*
+/core/fuzz/seeds/nkem/valid-v5*
 **/crash-*
 **/id:*
 **/benchmark/

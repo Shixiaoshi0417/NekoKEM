@@ -26,6 +26,14 @@
     (NKEM_X448_EPHEMERAL_PUBLIC_SIZE + NKEM_V3_KEM_CIPHERTEXT_SIZE + \
      NKEM_V4_FILE_KEY_SIZE + NKEM_TAG_SIZE)
 
+/* NKEM v5 signed container; see docs/NKEM-v5.md. Entries are v4's. */
+#define NKEM_V5_VERSION 5U
+#define NKEM_V5_ALGORITHM_ID 5U
+/* identity encoding (4291) || Ed448 (114) || ML-DSA-87 (4627) */
+#define NKEM_V5_SIGNATURE_PLAINTEXT_SIZE 9032U
+#define NKEM_V5_SIGNATURE_BLOCK_SIZE \
+    (NKEM_V5_SIGNATURE_PLAINTEXT_SIZE + NKEM_TAG_SIZE)
+
 /* SP 800-38D section 5.2.1.1: 2^39 - 256 bits = 2^36 - 32 bytes. */
 #define NKEM_GCM_MAX_DATA_SIZE ((UINT64_C(1) << 36) - UINT64_C(32))
 
@@ -47,6 +55,17 @@ typedef struct {
     uint8_t tag_len;
     uint8_t mac_len;
 } NkemV4Header;
+
+typedef struct {
+    uint16_t recipient_count;
+    uint16_t entry_len;
+    uint16_t signature_block_len;
+    uint64_t ciphertext_len;
+    uint8_t salt_len;
+    uint8_t nonce_len;
+    uint8_t tag_len;
+    uint8_t mac_len;
+} NkemV5Header;
 
 typedef struct {
     FILE *stream;
@@ -141,6 +160,13 @@ int file_delete_private_key_under_lock(const char *path);
  */
 int file_paths_are_same_file(const char *first, const char *second, int *same);
 /*
+ * Like file_paths_are_same_file, but also matches a path that does not exist
+ * yet when it names the same entry as the other path: the same final
+ * component (loosely compared) in the same directory. Returns 0 only when
+ * the check itself fails.
+ */
+int file_paths_may_alias(const char *first, const char *second, int *same);
+/*
  * Fails with a message when the output path names the same file as one of
  * the keys an operation uses, so a commit can never replace that key.
  */
@@ -194,6 +220,18 @@ uint64_t nkem_v4_metadata_size(uint16_t recipient_count);
 int nkem_v4_container_size_is_valid(const NkemV4Header *header,
                                     uint64_t actual_size);
 int nkem_v4_container_parse(const unsigned char *input, size_t input_len);
+
+void nkem_v5_header_encode(unsigned char output[NKEM_V4_HEADER_SIZE],
+                           uint16_t recipient_count,
+                           uint64_t ciphertext_len);
+int nkem_v5_header_decode(
+    const unsigned char input[NKEM_V4_HEADER_SIZE],
+    NkemV5Header *header);
+/* Header through payload nonce, as in v4: the payload AAD. */
+uint64_t nkem_v5_metadata_size(uint16_t recipient_count);
+int nkem_v5_container_size_is_valid(const NkemV5Header *header,
+                                    uint64_t actual_size);
+int nkem_v5_container_parse(const unsigned char *input, size_t input_len);
 
 
 #endif
