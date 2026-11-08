@@ -181,6 +181,8 @@
     <string name="contact_note_hint">수신자 이름 또는 설명</string>
     <string name="contact_note_limit">최대 %1$d자</string>
     <string name="contact_duplicate">이미 저장된 공개키입니다. 저장하면 메모가 갱신됩니다.</string>
+    <string name="contact_upgrade_warning">저장된 이전 형식 키 “%1$s”를 이 서명 신원 키로 업그레이드합니다. 이전 키를 가진 사람은 누구나 자신의 서명 키를 붙일 수 있으므로, 저장하기 전에 신뢰할 수 있는 경로로 상대와 위의 새 전체 지문을 확인하세요. 저장하면 이 키로 서명된 파일이 이 연락처의 서명으로 표시됩니다.</string>
+    <string name="contact_upgrade_confirm">상대와 새 전체 지문을 확인했습니다</string>
     <string name="contact_note_line">메모: %1$s</string>
     <string name="contact_saved">공개키를 저장했습니다</string>
     <string name="contact_updated">메모를 갱신했습니다</string>

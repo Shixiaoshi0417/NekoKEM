@@ -181,6 +181,8 @@
     <string name="contact_note_hint">受信者の名前や説明</string>
     <string name="contact_note_limit">最大 %1$d 文字</string>
     <string name="contact_duplicate">この公開鍵は保存済みです。保存するとメモを更新します。</string>
+    <string name="contact_upgrade_warning">保存済みの旧形式の鍵「%1$s」をこの署名用 ID 鍵にアップグレードします。旧い鍵を持つ人は誰でも自分の署名鍵を付け加えられるため、保存する前に信頼できる手段で相手と上の新しい完全なフィンガープリントを照合してください。保存後、この鍵で署名されたファイルはこの連絡先の署名として表示されます。</string>
+    <string name="contact_upgrade_confirm">新しい完全なフィンガープリントを相手と照合しました</string>
     <string name="contact_note_line">メモ：%1$s</string>
     <string name="contact_saved">公開鍵を保存しました</string>
     <string name="contact_updated">メモを更新しました</string>

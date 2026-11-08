@@ -181,6 +181,8 @@
     <string name="contact_note_hint">收件人名稱或其他說明</string>
     <string name="contact_note_limit">最多 %1$d 個字元</string>
     <string name="contact_duplicate">此公鑰已儲存在通訊錄，儲存將更新備註。</string>
+    <string name="contact_upgrade_warning">將把已儲存的舊版金鑰「%1$s」升級為這把簽署身分金鑰。任何擁有舊金鑰的人都能為它附上自己的簽署金鑰，請先透過可信管道與對方核對上方的完整新指紋再儲存。儲存後，以這把金鑰簽署的檔案會顯示為該聯絡人簽署。</string>
+    <string name="contact_upgrade_confirm">我已與對方核對新的完整指紋</string>
     <string name="contact_note_line">備註：%1$s</string>
     <string name="contact_saved">公鑰已儲存</string>
     <string name="contact_updated">備註已更新</string>

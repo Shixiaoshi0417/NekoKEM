@@ -11,10 +11,17 @@ pub struct Failure {
     pub code: &'static str,
     // Identifies the saved contact that already holds an imported public key.
     #[serde(skip_serializing_if="Option::is_none")] pub contact: Option<String>,
+    // The new identity fingerprint the user must check before an upgrade.
+    #[serde(skip_serializing_if="Option::is_none")] pub fingerprint: Option<String>,
 }
 impl Failure {
-    pub fn new(code: &'static str) -> Self { Self{code,contact:None} }
-    pub fn existing(contact: String) -> Self { Self{code:"contact-exists",contact:Some(contact)} }
+    pub fn new(code: &'static str) -> Self { Self{code,contact:None,fingerprint:None} }
+    pub fn existing(contact: String) -> Self { Self{code:"contact-exists",contact:Some(contact),fingerprint:None} }
+    /// An identity key would replace the legacy contact [contact]; anyone with
+    /// the legacy key could attach signing keys, so the user checks [fingerprint].
+    pub fn upgrade(contact: String, fingerprint: String) -> Self {
+        Self{code:"upgrade-unconfirmed",contact:Some(contact),fingerprint:Some(fingerprint)}
+    }
 }
 #[derive(Deserialize,PartialEq,Eq)]
 #[serde(rename_all="kebab-case")]

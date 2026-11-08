@@ -217,6 +217,7 @@ private fun NekoKEMRoute(
     // Checkboxes on the contacts page; applied only by an explicit action.
     var contactSelection by rememberSaveable { mutableStateOf<List<String>>(emptyList()) }
     var contactAwaitingSave by remember { mutableStateOf<TemporaryPublicKey?>(null) }
+    var contactUpgrades by remember { mutableStateOf<PublicKeyContact?>(null) }
     var contactToEdit by remember { mutableStateOf<PublicKeyContact?>(null) }
     var contactToDelete by remember { mutableStateOf<PublicKeyContact?>(null) }
     var showContactPicker by remember { mutableStateOf(false) }
@@ -618,8 +619,10 @@ private fun NekoKEMRoute(
                     val outcome = pageWork {
                         fileWorkflow.stageTemporaryPublicKey(uri, fileWorkflow.describe(uri).displayName)
                     }
-                    if (outcome.code == NativeBridge.RESULT_SUCCESS && outcome.key != null) {
-                        contactAwaitingSave = outcome.key
+                    val staged = outcome.key
+                    if (outcome.code == NativeBridge.RESULT_SUCCESS && staged != null) {
+                        contactUpgrades = pageWork { publicKeyContacts.upgradeTarget(staged) }
+                        contactAwaitingSave = staged
                     } else {
                         reportFailure(R.string.operation_save_contact, outcome.code)
                     }
@@ -1328,15 +1331,19 @@ private fun NekoKEMRoute(
             initialNote = existing?.note.orEmpty(),
             editing = false,
             duplicate = existing != null,
+            upgrades = contactUpgrades,
             onSave = { note ->
+                val upgradeConfirmed = contactUpgrades != null
                 contactAwaitingSave = null
+                contactUpgrades = null
                 runContactOperation(R.string.operation_save_contact, R.string.contact_saved) {
-                    try { publicKeyContacts.save(candidate, note).code }
+                    try { publicKeyContacts.save(candidate, note, upgradeConfirmed).code }
                     finally { fileWorkflow.discardTemporaryPublicKey(candidate) }
                 }
             },
             onDismiss = {
                 contactAwaitingSave = null
+                contactUpgrades = null
                 scope.launch { pageWork { fileWorkflow.discardTemporaryPublicKey(candidate) } }
             },
         )

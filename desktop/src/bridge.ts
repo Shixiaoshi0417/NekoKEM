@@ -11,7 +11,7 @@ export const MAX_RECIPIENTS=64;
 export interface Progress {id:string;processed:number;total:number}
 export interface Contact {id:string;fingerprint:string;name:string;note:string;canVerify:boolean;legacyFingerprint?:string}
 export interface ContactList {contacts:Contact[];unreadable:number}
-export interface ContactImport {keyPath:string;keyText:string;paste:boolean;note:string}
+export interface ContactImport {keyPath:string;keyText:string;paste:boolean;note:string;confirmUpgrade?:string}
 export const getSettings=()=>invoke<{language:string;selection:string;version:string}>('get_settings');
 export const setLanguage=(language:string)=>invoke<string>('set_language',{language});
 export const runOperation=(request:Request)=>invoke<Outcome>('run_operation',{request});

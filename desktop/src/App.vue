@@ -142,6 +142,8 @@ function resetFeedback() {
   recipients.value = [];
   failedContact.value = null;
   signerSaved.value = false;
+  if (upgradePrompt.value) upgradePrompt.value.request.keyText = '';
+  upgradePrompt.value = null;
   feedbackArea.value = 'form';
   successMessage.value = 'success';
 }
@@ -373,6 +375,7 @@ async function saveContact() {
     result.value = { output: null, fingerprint: contact.fingerprint };
     highlighted.value = contact.id;
   } catch (error) {
+    if (await askUpgrade(error, request, false)) return;
     failure.value = errorCode(error);
     highlighted.value = (error as { contact?: string })?.contact ?? null;
     if (failure.value === 'note-limit') invalidField.value = 'note';
@@ -384,6 +387,50 @@ async function saveContact() {
   await refreshContacts();
   await nextTick();
   contactList.value?.querySelector<HTMLElement>('.contact.highlighted')?.scrollIntoView?.({ block: 'nearest' });
+}
+// An identity key replacing a legacy contact waits for the user to check its
+// full fingerprint: anyone with the legacy key could attach signing keys.
+const upgradePrompt = ref<{ request: bridge.ContactImport; contact: string; fingerprint: string; fromSigner: boolean } | null>(null);
+const upgradeChecked = ref(false);
+const upgradeCancel = ref<HTMLButtonElement | null>(null);
+const upgradeName = computed(() => {
+  const contact = contacts.value.find(entry => entry.id === upgradePrompt.value?.contact);
+  return contact ? label(contact) : t('savedContact');
+});
+async function askUpgrade(error: unknown, request: bridge.ContactImport, fromSigner: boolean) {
+  const details = error as { code?: string; contact?: string; fingerprint?: string };
+  if (details?.code !== 'upgrade-unconfirmed' || !details.contact || !details.fingerprint) return false;
+  upgradePrompt.value = { request: { ...request }, contact: details.contact, fingerprint: details.fingerprint, fromSigner };
+  upgradeChecked.value = false;
+  await nextTick();
+  upgradeCancel.value?.focus();
+  return true;
+}
+async function confirmUpgrade(accept: boolean) {
+  const prompt = upgradePrompt.value;
+  upgradePrompt.value = null;
+  upgradeChecked.value = false;
+  if (!prompt) return;
+  if (!accept || locked.value) { prompt.request.keyText = ''; return; }
+  contactBusy.value = true;
+  failure.value = null;
+  try {
+    const contact = await bridge.saveContact({ ...prompt.request, confirmUpgrade: prompt.fingerprint });
+    if (prompt.fromSigner) signerSaved.value = true;
+    else {
+      contactForm.keyPath = '';
+      contactForm.note = '';
+      successMessage.value = 'contactSaved';
+      result.value = { output: null, fingerprint: contact.fingerprint };
+    }
+    highlighted.value = contact.id;
+  } catch (error) {
+    failure.value = errorCode(error);
+  } finally {
+    prompt.request.keyText = '';
+    contactBusy.value = false;
+  }
+  await refreshContacts();
 }
 // Saves the public key Core extracted from a valid signature. The user is
 // asked to compare the fingerprint first; later files then show as trusted.
@@ -397,6 +444,7 @@ async function saveSigner() {
     signerSaved.value = true;
     highlighted.value = contact.id;
   } catch (error) {
+    if (await askUpgrade(error, { keyPath: '', keyText: key, paste: true, note: '' }, true)) return;
     failure.value = errorCode(error);
     if (failure.value === 'contact-exists') { failure.value = null; signerSaved.value = true; }
   } finally { contactBusy.value = false; }
@@ -590,6 +638,13 @@ onUnmounted(() => unlisten?.());
           </div>
         </fieldset>
         <div v-if="busy" class="progress-block enter-feedback" role="status"><div class="progress-label"><span>{{ cancelling ? t('cancelling') : progress ? t('progress') : t('preparing') }}</span><strong v-if="percent !== null">{{ percent }}%</strong></div><div class="progress-track" role="progressbar" :aria-label="t('progress')" :aria-valuenow="percent ?? undefined" aria-valuemin="0" aria-valuemax="100" :aria-valuetext="percent === null ? t('preparing') : undefined"><div class="progress-fill" :class="{ indeterminate: percent === null }" :style="{ width: `${percent ?? 32}%` }"></div></div></div>
+        <div v-if="upgradePrompt" class="unsigned-confirm upgrade-confirm enter-feedback" role="alertdialog" aria-modal="false" aria-labelledby="upgrade-title" aria-describedby="upgrade-text" @keydown.esc.prevent="confirmUpgrade(false)">
+          <strong id="upgrade-title" class="danger-text">{{ t('upgradeTitle').replace('{name}', upgradeName) }}</strong>
+          <p id="upgrade-text" class="danger-text">{{ t('upgradeText') }}</p>
+          <textarea class="fingerprint upgrade-fingerprint" :value="upgradePrompt.fingerprint" readonly rows="3" :aria-label="t('fingerprint')"></textarea>
+          <label class="setting-row upgrade-check"><input v-model="upgradeChecked" type="checkbox" name="upgradeChecked"><span>{{ t('upgradeCheck') }}</span></label>
+          <div class="contact-actions"><button ref="upgradeCancel" type="button" class="secondary upgrade-cancel" @click="confirmUpgrade(false)">{{ t('cancel') }}</button><button type="button" class="danger upgrade-accept" :disabled="!upgradeChecked || locked" @click="confirmUpgrade(true)">{{ t('upgradeAccept') }}</button></div>
+        </div>
         <template v-if="feedbackArea === 'form'">
           <div v-if="overwriteOffered" class="replace-option enter-field"><label class="recipient-option" :class="{ selected: form.overwrite }"><input v-model="form.overwrite" type="checkbox" name="overwrite" aria-describedby="overwrite-hint">{{ t('overwriteOutput') }}</label><p id="overwrite-hint" class="hint warning">{{ t('overwriteOutputHint') }}</p></div>
           <div v-if="failure" id="operation-error" class="notice enter-feedback" :class="{ neutral: failure === 'cancelled' }" role="alert"><AppIcon :name="failure === 'cancelled' ? 'close' : 'alert'" /><div><span>{{ t(failure) }}</span><p v-if="failedContact" class="result-path failed-contact">{{ t('recipient') }}: {{ label(failedContact) }} · {{ failedContact.fingerprint }}</p></div></div>

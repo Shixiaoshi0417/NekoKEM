@@ -126,6 +126,12 @@ impl Store {
     }
 
     pub fn save(&self, source: Source<'_>, note: &str) -> Result<Contact, Failure> {
+        self.save_confirmed(source, note, "")
+    }
+
+    /// Like [save]; an identity key replaces a legacy contact only when
+    /// [confirmed] is its full fingerprint, which the user checked.
+    pub fn save_confirmed(&self, source: Source<'_>, note: &str, confirmed: &str) -> Result<Contact, Failure> {
         let note = clean_note(note)?;
         let (name, mut pasted, input) = match source {
             Source::Path(path) => (clean_name(file_name(path)), None, core::path(path)?),
@@ -135,7 +141,7 @@ impl Store {
                 (String::new(), Some(stage), input)
             }
         };
-        let result = self.import(&input, name, note);
+        let result = self.import(&input, name, note, confirmed);
         if pasted.as_mut().is_some_and(|stage| !stage.close()) { return Err(Failure::new("cleanup-error")); }
         result
     }
@@ -191,7 +197,7 @@ impl Store {
             .collect()
     }
 
-    fn import(&self, input: &CStr, name: String, note: String) -> Result<Contact, Failure> {
+    fn import(&self, input: &CStr, name: String, note: String, confirmed: &str) -> Result<Contact, Failure> {
         let fingerprint = core::fingerprint(input).ok_or_else(|| Failure::new("public-key-invalid"))?;
         let id = identity(&fingerprint).ok_or_else(|| Failure::new("public-key-invalid"))?;
         let can_verify = core::can_verify(input);
@@ -206,6 +212,9 @@ impl Store {
             if let Ok(record) = self.read(&legacy) { replaces = Some((legacy, record)); }
         } else if let Some(owner) = self.identity_with_legacy(&fingerprint)? {
             return Err(Failure::existing(owner));
+        }
+        if let Some((old, _)) = &replaces {
+            if confirmed != fingerprint { return Err(Failure::upgrade(old.clone(), fingerprint)); }
         }
         let (name, note) = match &replaces {
             Some((_, old)) => (if name.is_empty() { old.name.clone() } else { name }, if note.is_empty() { old.note.clone() } else { note }),
@@ -568,8 +577,17 @@ pub mod tests {
         assert_eq!(store.read(&old.id).unwrap().public_key.matches(BEGIN).count(), 2);
         assert!(store.signers().is_empty());
 
+        // Anyone with the legacy key could attach signing keys to it, so the
+        // upgrade waits for the user to check the new full fingerprint.
+        let alice_text = fs::read_to_string(&alice).unwrap();
+        let unconfirmed = store.save(Source::Text(&alice_text), "").err().unwrap();
+        assert_eq!((unconfirmed.code, unconfirmed.contact.as_deref(), unconfirmed.fingerprint.as_deref()),
+                   ("upgrade-unconfirmed", Some(old.id.as_str()), Some(alice_fingerprint.as_str())));
+        assert_eq!(code(store.save_confirmed(Source::Text(&alice_text), "", &legacy_fingerprint)), "upgrade-unconfirmed");
+        assert_eq!(record_names(&contacts), vec![format!("{}.json", old.id)]);
+
         // The upgraded key replaces it under the identity id and keeps the note.
-        let upgraded = store.save(Source::Text(&fs::read_to_string(&alice).unwrap()), "").unwrap();
+        let upgraded = store.save_confirmed(Source::Text(&alice_text), "", &alice_fingerprint).unwrap();
         assert_eq!((upgraded.fingerprint.as_str(), upgraded.note.as_str(), upgraded.name.as_str()), (alice_fingerprint.as_str(), "Alice", "alice-legacy.pub"));
         assert_eq!(upgraded.legacy_fingerprint.as_deref(), Some(legacy_fingerprint.as_str()));
         assert_eq!(record_names(&contacts), vec![format!("{}.json", upgraded.id)]);

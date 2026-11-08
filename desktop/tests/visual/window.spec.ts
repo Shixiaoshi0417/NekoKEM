@@ -63,7 +63,13 @@ test.beforeEach(async({page})=>{
     if(command==='cancel_operation')return Promise.resolve(true);
     if(command==='list_contacts')return Promise.resolve({contacts:contacts.map(contact=>({...contact})),unreadable:0});
     if(command==='save_contact'){
-     const value=args.contact as {keyPath:string;note:string};
+     const value=args.contact as {keyPath:string;note:string;confirmUpgrade?:string};
+     // An identity key for the legacy contact B waits for the fingerprint check.
+     if(value.keyPath.includes('upgrade')){
+      if(value.confirmUpgrade!==fingerprint('E5'))return Promise.reject({code:'upgrade-unconfirmed',contact:'b'.repeat(64),fingerprint:fingerprint('E5')});
+      const upgraded={id:'e'.repeat(64),fingerprint:fingerprint('E5'),name:'',note:'',canVerify:true,legacyFingerprint:fingerprint('B2')};
+      contacts=[...contacts.filter(contact=>contact.id!=='b'.repeat(64)),upgraded];return Promise.resolve(upgraded);
+     }
      const contact={id:'c'.repeat(64),fingerprint:fingerprint('C3'),name:value.keyPath.split(/[\\/]/).pop()!,note:value.note.trim(),canVerify:true};
      contacts=[...contacts,contact];return Promise.resolve(contact);
     }
@@ -308,6 +314,26 @@ test('several contacts selected on the contacts page share one encrypted file',a
  await page.locator('[name=contacts]').first().uncheck();
  await expect(page.locator('.format')).toContainText('NKEM v5');
  await expect(page.locator('.contact-preview code')).toHaveText(Array(32).fill('B2').join(':'));
+});
+
+test('upgrading a legacy contact waits for the new fingerprint check',async({page})=>{
+ await page.locator('.operation-tab').nth(4).click();
+ await page.locator('[name=contactKeyPath]').fill('C:\\Local\\bob-upgrade.key');
+ await page.locator('.primary').click();
+ const dialog=page.locator('.upgrade-confirm');
+ await expect(dialog).toHaveAttribute('role','alertdialog');
+ await expect(dialog).toContainText('任何拥有旧密钥的人都能给它附上自己的签名密钥');
+ await expect(page.locator('.upgrade-fingerprint')).toHaveValue(Array(32).fill('E5').join(':'));
+ await expect(page.locator('.upgrade-cancel')).toBeFocused();
+ await expect(page.locator('.upgrade-accept')).toBeDisabled();
+ expect(await page.locator('#upgrade-title').evaluate(element=>getComputedStyle(element).color)).toBe('rgb(179, 38, 30)');
+ await noHorizontalOverflow(page);
+ await page.screenshot({path:'test-results/desktop-contact-upgrade-confirm.png',fullPage:true,animations:'disabled'});
+ await page.locator('[name=upgradeChecked]').check();
+ await page.locator('.upgrade-accept').click();
+ await expect(dialog).toHaveCount(0);
+ await expect(page.locator('form .notice.success')).toBeVisible();
+ expect(await page.locator('.contact').count()).toBe(2);
 });
 
 test('signing settings warn in red and decryption reports the signer',async({page})=>{

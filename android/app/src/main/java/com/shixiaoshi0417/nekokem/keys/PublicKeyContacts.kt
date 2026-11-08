@@ -83,7 +83,35 @@ class PublicKeyContacts(
      * replaces the contact saved for its legacy fingerprint and keeps its
      * note, and a legacy key never adds a second entry beside its identity key.
      */
-    fun save(key: TemporaryPublicKey, note: String): PublicKeyContactResult = synchronized(lock) {
+    /**
+     * The legacy contact [key] would replace, or null. Anyone holding the
+     * legacy key can add their own signing keys to it, so such an upgrade
+     * is saved only after the user checks the new full fingerprint.
+     */
+    fun upgradeTarget(key: TemporaryPublicKey): PublicKeyContact? = synchronized(lock) {
+        var canonical: TemporaryPublicKey? = null
+        try {
+            if (!directory.exists()) return@synchronized null
+            canonical = verifiedSnapshot(key.file, key.fingerprint, key.displayName)
+            if (!keyManager.publicKeyCanVerify(canonical.file)) return@synchronized null
+            val legacy = checkNotNull(keyManager.publicKeyLegacyFingerprint(canonical.file))
+            readable(identity(legacy))?.contact?.takeIf { !it.canVerify }
+        } catch (_: Exception) {
+            null
+        } finally {
+            canonical?.file?.delete()
+        }
+    }
+
+    /**
+     * Saves [key]. Replacing a legacy contact with an identity key needs
+     * [upgradeConfirmed]: the user checked the new full fingerprint.
+     */
+    fun save(
+        key: TemporaryPublicKey,
+        note: String,
+        upgradeConfirmed: Boolean = false,
+    ): PublicKeyContactResult = synchronized(lock) {
         var canonical: TemporaryPublicKey? = null
         try {
             require(validNote(note))
@@ -102,6 +130,9 @@ class PublicKeyContacts(
                 }
             }
             val replaced = legacy?.let { readable(identity(it)) }
+            if (replaced != null && !upgradeConfirmed) {
+                return@synchronized PublicKeyContactResult(RESULT_UPGRADE_UNCONFIRMED)
+            }
             if (!target.exists() && replaced == null) {
                 check(checkNotNull(directory.listFiles()).count { it.name.endsWith(".json") } < MAX_CONTACTS)
             }
@@ -377,6 +408,9 @@ class PublicKeyContacts(
 
     companion object {
         const val MAX_NOTE_LENGTH = 512
+
+        /** An identity key would replace a legacy contact without the user's check. */
+        const val RESULT_UPGRADE_UNCONFIRMED = -40
         internal const val DIRECTORY_NAME = "public-key-contacts"
         private const val WORK_DIRECTORY_NAME = "nekokem-contact-work"
         /** With this device's own key, stays within NativeBridge.MAX_TRUSTED_SIGNERS. */
