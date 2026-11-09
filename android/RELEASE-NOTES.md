@@ -12,12 +12,14 @@
 - **旧密钥升级**：NekoKEM 4.x 的密钥对可就地升级为身份密钥，加密密钥、密码和旧文件都不变，旧版指纹仍会显示。身份密钥可导出只含加密部分的旧版公钥，供 4.x 接收方使用。CLI 命令为 `upgrade-key` 和 `export-legacy-public-key`。
 - **联系人**：同一个人的旧版公钥被身份公钥替换时仍是一个联系人，备注保留；联系人会标明能否验证签名。
 - **CLI**：`decrypt` 新增 `--trust <公钥>`（可多次）、`--require-signature`、`--require-trusted` 和 `--save-signer <路径>`，并显示签名状态和签名者指纹；`encrypt` 新增 `--sign-key <私钥>`。
+- **检查更新**：Android 和桌面 GUI 可在设置中手动检查新版本，也会自动检查（默认开启，可在设置中关闭）。发现新版本时只提示并打开 GitHub 发布页，不会自动下载或安装。Linux GUI 包为此依赖 `curl`；CLI 不检查更新。
+- **签名更快**：签名覆盖的密文摘要改为按 1 MiB 分块的 SHA-512 树，多核设备上并行计算，大文件签名加密和验签解密的耗时接近未签名文件。
 
 ### 兼容性与升级
 
 - Android **5.0.0 / versionCode 15**，最低 API 26、目标 API 36，仅 arm64-v8a。沿用 v3.2.0/v3.3.0 签名，可直接覆盖升级；建议先备份公钥、加密 NKPR 私钥并验证密码。
 - 5.0.0 可解密 NKEM v3/v4/v5，读取 NKPR v1/v2 以及两段式或四段式公钥。**NekoKEM 4.x 及更早版本无法读取 NKEM v5、NKPR v2 或四段式公钥**：给仍在使用旧版的接收方发送文件时，请开启「不签名加密」，并让对方使用你导出的旧版公钥。
-- 升级旧密钥前请先导出两个密钥的备份。升级后的私钥是 NKPR v2，4.x 无法再读取它。
+- 升级旧密钥前请先导出两个密钥的备份。升级后的私钥是 NKPR v2，4.x 无法再读取它：4.x 会报告「私钥密码错误或 NKPR 数据损坏」，但这并不是密码问题，请改用 5.0.0 或更高版本。
 - 未签名的 NKEM v3/v4 仍不认证发送者。AES-GCM 不提供密钥承诺性。OpenSSL 固定为 4.0.3，Argon2id 保持 64 MiB、3 次迭代、并行度 4。
 
 ### 平台与验证边界
@@ -56,12 +58,14 @@ This release adds sender signatures. Android and every CLI/GUI application are *
 - **Upgrading old keys**: a NekoKEM 4.x key pair upgrades in place to an identity key. Its encryption keys, password and old files stay the same, and its legacy fingerprint is still shown. An identity key can export a legacy public key with only the encryption components for 4.x recipients. The CLI commands are `upgrade-key` and `export-legacy-public-key`.
 - **Contacts**: replacing a person's legacy public key with their identity key keeps one contact and its note, and every contact shows whether it verifies signatures.
 - **CLI**: `decrypt` gains `--trust <public key>` (repeatable), `--require-signature`, `--require-trusted` and `--save-signer <path>`, and shows the signature status and signer fingerprint; `encrypt` gains `--sign-key <private key>`.
+- **Update checks**: Android and the desktop GUI can check for a new version from Settings and also check automatically (on by default, can be turned off in Settings). A new version is only announced with a link to its GitHub release page; nothing is downloaded or installed. Linux GUI packages now depend on `curl` for this; the CLI does not check for updates.
+- **Faster signing**: the ciphertext digest that the signature covers is a SHA-512 tree over 1 MiB leaves, hashed in parallel on multi-core devices, so signed encryption and verified decryption of large files take close to the time of unsigned ones.
 
 ### Compatibility and upgrading
 
 - Android **5.0.0 / versionCode 15**, minimum API 26, target API 36, arm64-v8a only. The v3.2.0/v3.3.0 signer is retained for in-place updates. Back up public and encrypted NKPR private keys and verify the password first.
 - 5.0.0 decrypts NKEM v3/v4/v5 and reads NKPR v1/v2 and two- or four-component public keys. **NekoKEM 4.x and earlier cannot read NKEM v5, NKPR v2 or four-component public keys**: for recipients still on an old version, turn on Encrypt without signing and have them use your exported legacy public key.
-- Export a backup of both keys before upgrading an old key. The upgraded private key is NKPR v2, which 4.x can no longer read.
+- Export a backup of both keys before upgrading an old key. The upgraded private key is NKPR v2, which 4.x can no longer read: 4.x reports "Private-key password is incorrect or NKPR data is corrupted", but the password is not the problem; use 5.0.0 or later.
 - Unsigned NKEM v3/v4 still does not authenticate senders. AES-GCM provides no key commitment. OpenSSL stays pinned to 4.0.3 and Argon2id remains 64 MiB, three iterations, parallelism four.
 
 ### Platform and validation boundaries
