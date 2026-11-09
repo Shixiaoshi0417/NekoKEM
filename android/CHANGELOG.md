@@ -4,9 +4,10 @@
 
 - 全平台 5.0.0，Core 5.0，Android versionCode 15；沿用既有签名，可覆盖升级。
 - 加密默认生成带签名的 NKEM v5，加密前输入私钥密码；解密结果显示格式、签名状态和签名者指纹，本机密钥和已保存的身份联系人为可信签名者。
-- 设置新增「不签名加密（兼容旧版）」（默认关闭，开启需确认红色警告）和「只接受已签名文件」；密钥页可升级 4.x 密钥并导出旧版公钥。完整双语说明见 [v5.0.0](../release/v5.0.0.md)。
+- 设置新增「不签名加密（兼容旧版）」（默认关闭，开启需确认红色警告）和「只接受已签名文件」；密钥页可升级 4.x 密钥并导出旧版公钥。
+- 新增手动与自动检查更新（默认开启，可关闭），只提示并打开发布页；签名改用并行分块哈希，大文件更快。完整双语说明见 [v5.0.0](../release/v5.0.0.md)。
 
-Android 5.0.0 / versionCode 15 retains the existing signer. Encryption writes signed NKEM v5 by default after asking for the private key password; decryption shows the format, signature status and signer fingerprint, trusting this device's key and saved identity contacts. Settings add Encrypt without signing (legacy compatible), off by default behind a red warning, and Accept only signed files; the Keys page upgrades a 4.x key and exports the legacy public key. See the [bilingual notes](../release/v5.0.0.md).
+Android 5.0.0 / versionCode 15 retains the existing signer. Encryption writes signed NKEM v5 by default after asking for the private key password; decryption shows the format, signature status and signer fingerprint, trusting this device's key and saved identity contacts. Settings add Encrypt without signing (legacy compatible), off by default behind a red warning, and Accept only signed files; the Keys page upgrades a 4.x key and exports the legacy public key. Settings can check for updates by hand or automatically (on by default, can be turned off); a new version only links to its release page. Signing hashes large files in parallel. See the [bilingual notes](../release/v5.0.0.md).
 
 ## 4.4.0
 
