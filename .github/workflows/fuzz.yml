@@ -1,0 +1,117 @@
+name: Fuzz
+
+# Long AFL++ sessions against the same harnesses that CI fuzzes for 15
+# seconds. Each target runs in its own job for FUZZ_SECONDS; any crash, hang,
+# sanitizer report or incomplete run fails the job, and the samples are kept
+# as an artifact for 30 days.
+
+on:
+  schedule:
+    # Sundays 18:00 UTC.
+    - cron: "0 18 * * 0"
+  workflow_dispatch:
+    inputs:
+      seconds:
+        description: Fuzzing time per target in seconds (60 to 18000)
+        required: false
+        default: "3600"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: fuzz-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  fuzz:
+    name: Fuzz ${{ matrix.target }}
+    runs-on: ubuntu-24.04
+    # Up to five hours of fuzzing plus the OpenSSL and harness builds.
+    timeout-minutes: 330
+    strategy:
+      fail-fast: false
+      matrix:
+        target: [nkem, nkpr, decrypt, identity]
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+
+      - name: Choose the fuzzing time
+        env:
+          REQUESTED: ${{ inputs.seconds }}
+        run: |
+          set -Eeuo pipefail
+          seconds="${REQUESTED:-3600}"
+          if ! [[ "$seconds" =~ ^[0-9]+$ ]] || (( seconds < 60 || seconds > 18000 )); then
+            echo "seconds must be a whole number from 60 to 18000, got '$seconds'" >&2
+            exit 1
+          fi
+          echo "FUZZ_SECONDS=$seconds" >> "$GITHUB_ENV"
+
+      - name: Install Linux build tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends \
+            afl++ build-essential ca-certificates curl perl
+
+      - name: Build OpenSSL 4.0.3
+        env:
+          OPENSSL_VERSION: "4.0.3"
+          OPENSSL_SHA256: 325b5c806167c13b40b1ffeadfe0248197c00eccc4cf123ec1e28d2d2fd216d9
+        run: |
+          set -Eeuo pipefail
+          build_root="$RUNNER_TEMP/openssl-build"
+          install_root="$RUNNER_TEMP/openssl-$OPENSSL_VERSION"
+          archive="$build_root/openssl-$OPENSSL_VERSION.tar.gz"
+          source_dir="$build_root/source"
+
+          mkdir -p "$build_root" "$source_dir"
+          curl --fail --location --silent --show-error --proto '=https' \
+            --tlsv1.2 --retry 3 \
+            --output "$archive" \
+            "https://github.com/openssl/openssl/releases/download/openssl-$OPENSSL_VERSION/openssl-$OPENSSL_VERSION.tar.gz"
+          printf '%s  %s\n' "$OPENSSL_SHA256" "$archive" | sha256sum -c -
+          tar --extract --gzip --file "$archive" \
+            --directory "$source_dir" --strip-components=1 --no-same-owner
+
+          cd "$source_dir"
+          perl ./Configure linux-x86_64 \
+            no-shared no-module no-dso no-tests no-apps no-docs \
+            no-sock no-zlib no-zstd \
+            --prefix="$install_root" --openssldir=/etc/ssl --libdir=lib
+          make --silent -j"$(nproc)"
+          make --silent install_dev
+
+      - name: Fuzz ${{ matrix.target }}
+        env:
+          AFL_I_DONT_CARE_ABOUT_MISSING_CRASHES: "1"
+          AFL_NO_UI: "1"
+          AFL_SKIP_CPUFREQ: "1"
+          CPATH: ${{ runner.temp }}/openssl-4.0.3/include
+          LIBRARY_PATH: ${{ runner.temp }}/openssl-4.0.3/lib
+          TARGET: ${{ matrix.target }}
+        run: |
+          set -Eeuo pipefail
+          make -C linux fuzz-build \
+            FUZZ_LDFLAGS="-fsanitize=undefined -L$LIBRARY_PATH"
+          python3 .github/scripts/run_fuzz_smoke.py \
+            --seconds "$FUZZ_SECONDS" \
+            --wall-timeout "$((FUZZ_SECONDS + 600))" \
+            --seeds "core/fuzz/seeds/$TARGET" \
+            --target "core/fuzz/bin/fuzz_$TARGET" \
+            --output "$RUNNER_TEMP/fuzz-$TARGET"
+
+      - name: Archive fuzz results with original AFL filenames
+        if: always()
+        run: python3 .github/scripts/archive_fuzz_results.py "$RUNNER_TEMP"
+
+      - name: Preserve fuzz logs, statistics and samples
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: fuzz-${{ matrix.target }}-results
+          path: ${{ runner.temp }}/parser-fuzz-results.tar.gz
+          if-no-files-found: warn
+          retention-days: 30
