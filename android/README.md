@@ -23,7 +23,7 @@ README 图标仅使用专用圆角展示图，Android launcher 继续使用现�
 
 - Kotlin 2.4.21（AGP 内置 Kotlin）、Jetpack Compose 1.12、Material 3 Expressive（`material3` 1.5.0-beta01）
 - MIUIX（`top.yukonga.miuix.kmp` 0.9.4：`miuix-ui`、`miuix-icons`、`miuix-preference`、`miuix-blur`）
-- Android Gradle Plugin 9.4.1、Gradle 9.6.1（Kotlin DSL）、JDK 17 编译目标；运行 JVM 单元测试需要 JDK 21（miuix 以 Java 21 字节码发布）
+- Android Gradle Plugin 9.5.1、Gradle 9.9.0（Kotlin DSL）、JDK 17 编译目标；运行 JVM 单元测试需要 JDK 21（miuix 以 Java 21 字节码发布）
 - Android SDK Platform 37.0、Build Tools 36.0.0（`compileSdk 37`、`minSdk 26`、`targetSdk 36`）
 - Android NDK r28c（`28.2.13676358`）、CMake、C17
 - 仅 `arm64-v8a`

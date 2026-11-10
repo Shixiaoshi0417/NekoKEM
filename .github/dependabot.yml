@@ -1,0 +1,61 @@
+# Weekly dependency updates. Security updates are raised as soon as an
+# advisory is published, independent of this schedule (enable "Dependabot
+# security updates" in the repository settings).
+#
+# Each ecosystem gets one grouped pull request for minor and patch updates so
+# that a week of upgrades runs the full CI matrix once; major updates stay
+# separate because they usually need code changes.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "chore(ci)"
+    groups:
+      actions:
+        patterns: ["*"]
+
+  - package-ecosystem: gradle
+    directory: /android
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "chore(android)"
+    groups:
+      android-minor:
+        update-types: [minor, patch]
+
+  - package-ecosystem: npm
+    directory: /desktop
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "chore(desktop)"
+    groups:
+      npm-minor:
+        update-types: [minor, patch]
+
+  - package-ecosystem: cargo
+    directory: /desktop/src-tauri
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "chore(desktop)"
+    groups:
+      cargo-minor:
+        update-types: [minor, patch]
+    ignore:
+      # Tauri 2 pins the GTK 0.18 stack, so glib stays on 0.18.x until Tauri
+      # moves (RUSTSEC-2024-0429 is unreachable from NekoKEM).
+      - dependency-name: glib
+        update-types: [version-update:semver-major, version-update:semver-minor]
