@@ -393,6 +393,9 @@ private fun LazyListScope.keysPage(state: NekoKEMUiState, actions: NekoKEMAction
         if (state.fingerprint != null && state.privateKeyExists && !state.canSign) {
             Action(R.string.action_upgrade_key, canRun, actions.onUpgradeKey)
         }
+        if (state.fingerprint != null) {
+            Action(R.string.action_show_fingerprint_qr, !state.running, actions.onShowFingerprintQr)
+        }
     }
     section(R.string.miuix_keys_transfer_title, key = "transfer") {
         Action(R.string.action_import_public_key, canRun, actions.onImportPublicKey)
@@ -486,7 +489,8 @@ private fun LazyListScope.contactsPage(
                 title = contact.label,
                 summary = stringResource(R.string.key_file_line, contact.displayName) + "\n" +
                     stringResource(R.string.key_fingerprint_line, contact.fingerprint) + "\n" +
-                    stringResource(if (contact.canVerify) R.string.contact_verifies else R.string.contact_legacy),
+                    stringResource(if (contact.canVerify) R.string.contact_verifies else R.string.contact_legacy) +
+                    if (contact.verified) "\n" + stringResource(R.string.contact_verified) else "",
             )
             FlowRow(
                 modifier = Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, bottom = 16.dp),
@@ -498,6 +502,11 @@ private fun LazyListScope.contactsPage(
                     onClick = { onUse(contact) },
                     enabled = state.nativeConnected && !state.running,
                     colors = ButtonDefaults.textButtonColorsPrimary(),
+                )
+                TextButton(
+                    text = stringResource(R.string.action_scan_fingerprint),
+                    onClick = { actions.onScanContact(contact) },
+                    enabled = !state.running,
                 )
                 TextButton(
                     text = stringResource(R.string.action_edit_contact_note),

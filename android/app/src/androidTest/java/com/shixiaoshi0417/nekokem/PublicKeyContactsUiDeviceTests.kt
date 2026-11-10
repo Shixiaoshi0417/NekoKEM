@@ -14,6 +14,7 @@ import com.shixiaoshi0417.nekokem.files.SafFileWorkflow
 import com.shixiaoshi0417.nekokem.i18n.AppLanguages
 import com.shixiaoshi0417.nekokem.keys.LocalKeyManager
 import com.shixiaoshi0417.nekokem.keys.PublicKeyContacts
+import com.shixiaoshi0417.nekokem.nativecore.NativeBridge
 import java.io.File
 
 /** Exercise actual Compose navigation, remark editing, selection and Activity recreation. */
@@ -30,6 +31,7 @@ internal fun runPublicKeyContactsUiTests(instrumentation: Instrumentation) {
     val privateKey = File(root, "private.nkpr")
     var activity: Activity? = null
     var savedId: String? = null
+    var generatedDeviceKey = false
     val priorLanguage = AppLanguages.selection(context)
     // On the API 35 emulator no scroll event from Compose reached UiAutomation, and its
     // cached nodes kept an old child list after the page scrolled: a failure dump
@@ -146,12 +148,34 @@ internal fun runPublicKeyContactsUiTests(instrumentation: Instrumentation) {
         val contact = try { checkNotNull(contacts.save(key, "CI recipient").contact) }
         finally { workflow.discardTemporaryPublicKey(key) }
         savedId = contact.id
+        // A matching scan marks the contact; a stale fingerprint marks nothing.
+        check(contacts.setVerified(contact.id, "00" + contact.fingerprint.drop(2), true).code != NativeBridge.RESULT_SUCCESS)
+        check(!contacts.readState().contacts.single { it.id == contact.id }.verified)
+        check(contacts.setVerified(contact.id, contact.fingerprint, true).code == NativeBridge.RESULT_SUCCESS)
+        check(contacts.readState().contacts.single { it.id == contact.id }.verified)
+        // The fingerprint QR code needs this device's own key.
+        if (manager.readState().fingerprint == null) {
+            val password = "fingerprint-qr-device-test".toByteArray()
+            try { check(manager.generateKeypair(password) == NativeBridge.RESULT_SUCCESS) } finally { password.fill(0) }
+            generatedDeviceKey = true
+        }
         instrumentation.runOnMainSync { AppLanguages.setSelection(context, "en") }
         activity = instrumentation.startActivitySync(Intent(context, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
         instrumentation.waitForIdleSync()
         openContacts()
         awaitText("CI recipient")
         awaitText(contact.fingerprint)
+        awaitText(checkNotNull(activity).getString(R.string.contact_verified))
+        awaitText(checkNotNull(activity).getString(R.string.action_scan_fingerprint))
+        capture("contacts-verified")
+        // Keys shows this device's fingerprint as a QR code.
+        clickNavigationTab(instrumentation, checkNotNull(activity).getString(R.string.tab_keys))
+        openDialog(checkNotNull(activity).getString(R.string.action_show_fingerprint_qr))
+        awaitText(checkNotNull(activity).getString(R.string.fingerprint_qr_hint))
+        SystemClock.sleep(500)
+        capture("keys-fingerprint-qr")
+        click(checkNotNull(activity).getString(R.string.action_close))
+        openContacts()
         openDialog(checkNotNull(activity).getString(R.string.action_edit_contact_note))
         val editorDeadline = SystemClock.uptimeMillis() + 10000
         var editor: AccessibilityNodeInfo? = null
@@ -245,6 +269,7 @@ internal fun runPublicKeyContactsUiTests(instrumentation: Instrumentation) {
         throw error
     } finally {
         savedId?.let { if (contacts.readState().contacts.any { contact -> contact.id == it }) contacts.delete(it) }
+        if (generatedDeviceKey) manager.deleteKeypair()
         instrumentation.runOnMainSync {
             activity?.finish()
             AppLanguages.setSelection(context, priorLanguage)

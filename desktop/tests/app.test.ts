@@ -3,6 +3,7 @@ import { afterEach,beforeEach,describe,expect,it,vi } from 'vitest';
 import App from '../src/App.vue';
 import * as bridge from '../src/bridge';
 import { catalog, translate } from '../src/i18n';
+import { fingerprintPayload, fingerprintQr, isFingerprint } from '../src/qr';
 vi.mock('../src/bridge',()=>({checkUpdate:vi.fn(),openReleasePage:vi.fn(),updatePreferences:vi.fn(),saveUpdatePreferences:vi.fn(),getSettings:vi.fn(),setLanguage:vi.fn(),runOperation:vi.fn(),cancelOperation:vi.fn(),closeApp:vi.fn(),onProgress:vi.fn(),chooseOpen:vi.fn(),chooseSave:vi.fn(),listContacts:vi.fn(),saveContact:vi.fn(),updateContactNote:vi.fn(),deleteContact:vi.fn(),MAX_RECIPIENTS:64}));
 enableAutoUnmount(afterEach);
 // The backend's update preferences, which outlive the incognito WebView.
@@ -634,3 +635,25 @@ describe('Update checks',()=>{
  });
 });
 
+describe('Fingerprint QR code',()=>{
+ const fingerprint=Array.from({length:32},(_,index)=>((index*37+11)&255).toString(16).toUpperCase().padStart(2,'0')).join(':');
+ it('encodes only the upper-case fingerprint in a version 4 code',()=>{
+  expect(fingerprintPayload(fingerprint)).toBe('NEKOKEM-FP1:'+fingerprint.replaceAll(':',''));
+  expect(fingerprintQr(fingerprint).size).toBe(33);
+  expect(isFingerprint(fingerprint.toLowerCase())).toBe(false);
+  expect(()=>fingerprintPayload('AA:BB')).toThrow();
+ });
+ it('shows the fingerprint result as a QR code and closes it with Escape',async()=>{
+  vi.mocked(bridge.runOperation).mockResolvedValue({output:null,fingerprint});
+  const app=await ready();await app.findAll('nav button')[3]!.trigger('click');
+  await app.get('[name=keyPath]').setValue('alice.pub');await app.get('form').trigger('submit');await flushPromises();
+  await app.get('.show-qr').trigger('click');await flushPromises();
+  const dialog=app.get('.qr-dialog');
+  expect(dialog.attributes('role')).toBe('dialog');
+  expect(dialog.findAll('.qr-fingerprint span').map(line=>line.text()).join(':')).toBe(fingerprint);
+  expect(dialog.get('.fingerprint-qr path').attributes('d')).toMatch(/^M\d+ \d+h1v1h-1z/);
+  expect(document.activeElement).toBe(dialog.get('.close-qr').element);
+  await dialog.trigger('keydown',{key:'Escape'});await flushPromises();
+  expect(app.find('.qr-dialog').exists()).toBe(false);
+ });
+});

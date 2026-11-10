@@ -276,4 +276,23 @@
     <string name="action_later">後で</string>
     <string name="action_ignore_version">このバージョンをスキップ</string>
     <string name="error_open_release">リリースページを開けるアプリがありません</string>
+    <string name="action_show_fingerprint_qr">フィンガープリントの QR コードを表示</string>
+    <string name="fingerprint_qr_title">フィンガープリントの QR コード</string>
+    <string name="fingerprint_qr_description">この端末の公開鍵フィンガープリントの QR コード</string>
+    <string name="fingerprint_qr_hint">あなたの公開鍵を保存した連絡先は、NekoKEM でこのコードを読み取り、その鍵があなたのものか確認できます。コードに含まれるのはフィンガープリントだけで、鍵は含まれません。</string>
+    <string name="action_scan_fingerprint">読み取って照合</string>
+    <string name="fingerprint_scan_title">フィンガープリントを読み取る</string>
+    <string name="fingerprint_scan_hint">「%1$s」が NekoKEM の「鍵」ページに表示するフィンガープリントの QR コードを読み取ってください。</string>
+    <string name="fingerprint_scan_permission_denied">読み取りにはカメラが必要です。システム設定でカメラへのアクセスを許可するか、完全なフィンガープリントを相手と目で照合してください。</string>
+    <string name="fingerprint_scan_match_title">フィンガープリントが一致しました</string>
+    <string name="fingerprint_scan_match">読み取ったフィンガープリントは「%1$s」に保存されたものと一致します。この連絡先を照合済みにしました。</string>
+    <string name="fingerprint_scan_mismatch_title">フィンガープリントが一致しません</string>
+    <string name="fingerprint_scan_mismatch">読み取ったフィンガープリントは「%1$s」に保存されたものと異なります。相手と原因を確認するまで、この連絡先とその署名付きファイルを信頼しないでください。以前の照合済み表示は解除されました。</string>
+    <string name="fingerprint_scan_saved_line">保存済み: %1$s</string>
+    <string name="fingerprint_scan_scanned_line">読み取り: %1$s</string>
+    <string name="fingerprint_scan_invalid_title">NekoKEM のフィンガープリントコードではありません</string>
+    <string name="fingerprint_scan_invalid">この QR コードには NekoKEM のフィンガープリントが含まれていません。相手に「鍵」ページでフィンガープリントの QR コードを表示してもらってください。</string>
+    <string name="action_scan_again">もう一度読み取る</string>
+    <string name="contact_verified">フィンガープリントを読み取りで照合済み</string>
+    <string name="operation_verify_contact">連絡先の照合</string>
 </resources>

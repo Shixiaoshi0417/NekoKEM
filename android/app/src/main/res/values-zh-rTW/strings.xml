@@ -276,4 +276,23 @@
     <string name="action_later">稍後</string>
     <string name="action_ignore_version">略過此版本</string>
     <string name="error_open_release">沒有可開啟發布頁面的應用程式</string>
+    <string name="action_show_fingerprint_qr">顯示指紋 QR 碼</string>
+    <string name="fingerprint_qr_title">指紋 QR 碼</string>
+    <string name="fingerprint_qr_description">本機公鑰指紋的 QR 碼</string>
+    <string name="fingerprint_qr_hint">已儲存你公鑰的聯絡人可以在 NekoKEM 中掃描此碼，確認那把公鑰確實屬於你。QR 碼只包含指紋，不包含金鑰。</string>
+    <string name="action_scan_fingerprint">掃碼核對</string>
+    <string name="fingerprint_scan_title">掃描指紋</string>
+    <string name="fingerprint_scan_hint">請掃描「%1$s」在 NekoKEM「金鑰」頁顯示的指紋 QR 碼。</string>
+    <string name="fingerprint_scan_permission_denied">掃碼需要使用相機。請在系統設定中允許相機權限，或與對方逐字核對完整指紋。</string>
+    <string name="fingerprint_scan_match_title">指紋一致</string>
+    <string name="fingerprint_scan_match">掃描到的指紋與「%1$s」儲存的指紋一致，該聯絡人已標記為已核對。</string>
+    <string name="fingerprint_scan_mismatch_title">指紋不一致</string>
+    <string name="fingerprint_scan_mismatch">掃描到的指紋與「%1$s」儲存的指紋不同。在與對方查明原因之前，請不要信任該聯絡人及其簽章的檔案。先前的核對標記已清除。</string>
+    <string name="fingerprint_scan_saved_line">已儲存：%1$s</string>
+    <string name="fingerprint_scan_scanned_line">掃描到：%1$s</string>
+    <string name="fingerprint_scan_invalid_title">不是 NekoKEM 指紋 QR 碼</string>
+    <string name="fingerprint_scan_invalid">這個 QR 碼不包含 NekoKEM 指紋。請讓對方開啟「金鑰」頁並顯示指紋 QR 碼。</string>
+    <string name="action_scan_again">重新掃描</string>
+    <string name="contact_verified">已掃碼核對指紋</string>
+    <string name="operation_verify_contact">核對聯絡人</string>
 </resources>

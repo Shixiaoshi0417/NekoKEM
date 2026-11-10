@@ -291,4 +291,23 @@
     <string name="action_later">Later</string>
     <string name="action_ignore_version">Skip this version</string>
     <string name="error_open_release">No app can open the release page</string>
+    <string name="action_show_fingerprint_qr">Show fingerprint QR code</string>
+    <string name="fingerprint_qr_title">Fingerprint QR code</string>
+    <string name="fingerprint_qr_description">QR code of this device’s public-key fingerprint</string>
+    <string name="fingerprint_qr_hint">A contact who saved your public key can scan this code in NekoKEM to check that it is yours. The code holds only the fingerprint, not the key.</string>
+    <string name="action_scan_fingerprint">Scan to verify</string>
+    <string name="fingerprint_scan_title">Scan fingerprint</string>
+    <string name="fingerprint_scan_hint">Scan the fingerprint QR code that “%1$s” shows under Keys in NekoKEM.</string>
+    <string name="fingerprint_scan_permission_denied">Scanning needs the camera. Allow camera access in the system settings, or compare the full fingerprint with the owner by eye.</string>
+    <string name="fingerprint_scan_match_title">Fingerprint matches</string>
+    <string name="fingerprint_scan_match">The scanned fingerprint is the one saved for “%1$s”. The contact is now marked as verified.</string>
+    <string name="fingerprint_scan_mismatch_title">Fingerprint does not match</string>
+    <string name="fingerprint_scan_mismatch">The scanned fingerprint is not the one saved for “%1$s”. Do not rely on this contact or on files it signs until you have found out why with the owner. Any earlier verification was removed.</string>
+    <string name="fingerprint_scan_saved_line">Saved: %1$s</string>
+    <string name="fingerprint_scan_scanned_line">Scanned: %1$s</string>
+    <string name="fingerprint_scan_invalid_title">Not a NekoKEM fingerprint code</string>
+    <string name="fingerprint_scan_invalid">This QR code does not hold a NekoKEM fingerprint. Ask the owner to open Keys and show the fingerprint QR code.</string>
+    <string name="action_scan_again">Scan again</string>
+    <string name="contact_verified">Fingerprint verified by scan</string>
+    <string name="operation_verify_contact">Verify contact</string>
 </resources>

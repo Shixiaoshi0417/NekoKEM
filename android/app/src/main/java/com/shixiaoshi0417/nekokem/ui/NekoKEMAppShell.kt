@@ -160,6 +160,8 @@ data class NekoKEMActions(
     val onRequireSignatureChange: (Boolean) -> Unit = {},
     val onCheckUpdate: () -> Unit = {},
     val onAutoUpdateChange: (Boolean) -> Unit = {},
+    val onShowFingerprintQr: () -> Unit = {},
+    val onScanContact: (PublicKeyContact) -> Unit = {},
 )
 
 internal enum class AppDestination(
@@ -611,6 +613,14 @@ private fun KeyManagementPage(
             }
         }
         Spacer(modifier = Modifier.height(16.dp))
+        if (state.fingerprint != null) {
+            ActionButton(
+                labelResource = R.string.action_show_fingerprint_qr,
+                enabled = !state.running,
+                onClick = actions.onShowFingerprintQr,
+                emphasis = ActionEmphasis.TONAL,
+            )
+        }
         ActionButton(
             labelResource = R.string.action_generate_keypair,
             enabled = canRun,

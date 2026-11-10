@@ -480,11 +480,19 @@ This target builds with `afl-clang-fast` and UBSan:
 
 All three harnesses accept an `argv[1]` file path. The two parser harnesses reject inputs above 2 MiB and do not execute decapsulation, Argon2id, AES-GCM, or plaintext output; their seeds in `core/fuzz/seeds/` are zero-filled structural samples without passwords, private keys, or real sensitive data, and several truncated samples are included. Seeds for `fuzz_decrypt` are generated at every build: a throwaway plaintext-PEM test key and genuine v3, empty v3 and two-recipient v4 containers for it, so mutations reach trial decryption, the MAC and payload authentication. The key protects nothing and is never committed. See `core/fuzz/README.md` for AFL commands.
 
+CI fuzzes each harness for 15 seconds on every pull request. The [Fuzz workflow](.github/workflows/fuzz.yml) runs each of the four harnesses for an hour every Sunday at 18:00 UTC (or by hand from the Actions tab for 60–18000 seconds); a crash, hang or UBSan report fails it, and the AFL output is kept for 30 days.
+
 ## Update checks
 
 Android and the desktop GUI can check for a newer release: Check for updates is on the About page (Android) or the Settings page (desktop). Automatic checks are on by default, run at most once a day at launch, and can be turned off in Settings. A newer release is only announced by its version number; Go to download opens the GitHub release page, where you download and verify it as the release notes describe. The App never downloads or installs anything itself. Skip this version keeps automatic checks quiet about that version.
 
 A check sends one HTTPS GET to the fixed address `https://api.github.com/repos/Shixiaoshi0417/NekoKEM/releases/latest`, with no keys, fingerprints, files or settings. A response over 1 MiB, a draft or pre-release, or an unexpected version format counts as a failure, and the release page address is built from the version number rather than taken from the response. GitHub sees the request's IP address and time. Android adds the INTERNET permission for this and uses the system HTTPS stack; the desktop backend runs the system curl (Windows `System32\curl.exe`, macOS/Linux `/usr/bin/curl`), and the frontend still cannot make network requests. The CLI does not check for updates.
+
+## Fingerprint QR codes
+
+Trust in a v5 signature rests on comparing the identity fingerprint with its owner. Instead of reading 64 hexadecimal digits aloud, the Android Keys page and the desktop fingerprint result can show a **fingerprint QR code**, and every Android contact has **Scan to verify**: scanning the owner's code marks the contact "Fingerprint verified by scan" when it matches the saved fingerprint, and shows a red warning and removes any earlier mark when it does not.
+
+The code holds `NEKOKEM-FP1:` and the 64 upper-case hexadecimal digits of the fingerprint. It carries no key, so a scan only checks a saved contact and can never add or replace one. Android adds the `CAMERA` permission for scanning, asks for it only when a scan starts, and analyses frames in memory without storing them; ZXing draws and reads the codes and CameraX supplies the frames, without Google Play services. The desktop GUI only shows codes and never uses a camera. The mark is stored in the Android contact record; 5.0.0 ignores it, and editing the note in 5.0.0 drops it.
 
 ## Security boundaries
 

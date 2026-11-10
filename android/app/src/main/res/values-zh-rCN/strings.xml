@@ -290,4 +290,23 @@
     <string name="action_later">稍后</string>
     <string name="action_ignore_version">忽略此版本</string>
     <string name="error_open_release">没有可打开发布页面的应用</string>
+    <string name="action_show_fingerprint_qr">显示指纹二维码</string>
+    <string name="fingerprint_qr_title">指纹二维码</string>
+    <string name="fingerprint_qr_description">本机公钥指纹的二维码</string>
+    <string name="fingerprint_qr_hint">已保存你公钥的联系人可以在 NekoKEM 中扫描此码，确认那把公钥确实属于你。二维码只包含指纹，不包含密钥。</string>
+    <string name="action_scan_fingerprint">扫码核对</string>
+    <string name="fingerprint_scan_title">扫描指纹</string>
+    <string name="fingerprint_scan_hint">请扫描“%1$s”在 NekoKEM「密钥」页显示的指纹二维码。</string>
+    <string name="fingerprint_scan_permission_denied">扫码需要使用相机。请在系统设置中允许相机权限，或与对方逐字核对完整指纹。</string>
+    <string name="fingerprint_scan_match_title">指纹一致</string>
+    <string name="fingerprint_scan_match">扫描到的指纹与“%1$s”保存的指纹一致，该联系人已标记为已核对。</string>
+    <string name="fingerprint_scan_mismatch_title">指纹不一致</string>
+    <string name="fingerprint_scan_mismatch">扫描到的指纹与“%1$s”保存的指纹不同。在与对方查明原因之前，请不要信任该联系人及其签名的文件。之前的核对标记已清除。</string>
+    <string name="fingerprint_scan_saved_line">已保存：%1$s</string>
+    <string name="fingerprint_scan_scanned_line">扫描到：%1$s</string>
+    <string name="fingerprint_scan_invalid_title">不是 NekoKEM 指纹二维码</string>
+    <string name="fingerprint_scan_invalid">这个二维码不包含 NekoKEM 指纹。请让对方打开「密钥」页并显示指纹二维码。</string>
+    <string name="action_scan_again">重新扫描</string>
+    <string name="contact_verified">已扫码核对指纹</string>
+    <string name="operation_verify_contact">核对联系人</string>
 </resources>

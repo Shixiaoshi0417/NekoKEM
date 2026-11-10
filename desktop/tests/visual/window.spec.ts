@@ -414,3 +414,26 @@ test('update check offers a newer release in all five languages and fits the min
  await page.screenshot({path:'test-results/desktop-update-settings.png',fullPage:true,animations:'disabled'});
 });
 
+
+test('a fingerprint is shown as a QR code an Android contact can scan',async({page})=>{
+ const fingerprint=Array.from({length:32},(_,index)=>((index*37+11)&255).toString(16).toUpperCase().padStart(2,'0')).join(':');
+ await page.locator('.operation-tab').nth(3).click();
+ await page.locator('[name=keyPath]').fill('C:\\Local\\public.key');
+ await page.locator('.primary').click();
+ await harness(page,'complete',fingerprint);
+ await page.locator('.show-qr').click();
+ const dialog=page.getByRole('dialog');
+ await expect(dialog).toContainText(translate('qrTitle','zh-CN'));
+ await expect(dialog.locator('.qr-fingerprint span')).toHaveText([fingerprint.slice(0,47),fingerprint.slice(48)]);
+ await expect(dialog.locator('.close-qr')).toBeFocused();
+ const qr=await dialog.locator('.fingerprint-qr').boundingBox();
+ expect(qr!.width).toBeGreaterThanOrEqual(200);
+ await noHorizontalOverflow(page);
+ await page.screenshot({path:'test-results/desktop-fingerprint-qr.png',fullPage:true,animations:'disabled'});
+ await page.keyboard.press('Escape');
+ await expect(page.getByRole('dialog')).toHaveCount(0);
+ await page.setViewportSize({width:720,height:560});
+ await page.locator('.show-qr').click();
+ await noHorizontalOverflow(page);
+ await page.screenshot({path:'test-results/desktop-minimum-fingerprint-qr.png',fullPage:true,animations:'disabled'});
+});

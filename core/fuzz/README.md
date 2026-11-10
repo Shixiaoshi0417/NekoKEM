@@ -66,7 +66,8 @@ CI fuzzes each harness for 15 seconds on every pull request. The
 [Fuzz workflow](../../.github/workflows/fuzz.yml) runs every harness for an
 hour each Sunday at 18:00 UTC, in four parallel jobs, under UBSan. It can
 also be started by hand from the Actions tab with 60 to 18000 seconds per
-harness. A crash, hang, sanitizer report or incomplete run fails the job; the
+harness, and a pull request that changes the workflow runs it for one minute
+per harness. A crash, hang, sanitizer report or incomplete run fails the job; the
 AFL output, including any samples, is kept as the `fuzz-<target>-results`
 artifact for 30 days. Reproduce a sample locally with
 `core/fuzz/bin/fuzz_<target> <sample>` after `make -C linux fuzz-build`.

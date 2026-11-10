@@ -2,6 +2,7 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, onUnmounted, reactive, ref, watch } from 'vue';
 import * as bridge from './bridge';
 import AppIcon from './components/AppIcon.vue';
+import { fingerprintQr, isFingerprint } from './qr';
 import { languageNames, translate, errorCode, type Language, type Message } from './i18n';
 
 type View = 'keygen' | 'encrypt' | 'decrypt' | 'fingerprint' | 'contacts' | 'settings';
@@ -70,6 +71,15 @@ watch(() => [update.auto, update.lastCheck, update.ignored], async () => {
 const checkingUpdate = ref(false);
 const updateNotice = ref<Message | null>(null);
 const availableVersion = ref('');
+// The fingerprint shown as a QR code for an Android contact to scan.
+const qrFingerprint = ref('');
+const qrClose = ref<HTMLButtonElement | null>(null);
+const qrCode = computed(() => qrFingerprint.value ? fingerprintQr(qrFingerprint.value) : null);
+async function showQr(fingerprint: string) {
+  qrFingerprint.value = fingerprint;
+  await nextTick();
+  qrClose.value?.focus();
+}
 const updateLater = ref<HTMLButtonElement | null>(null);
 async function checkForUpdate(manual: boolean) {
   if (checkingUpdate.value) return;
@@ -694,6 +704,7 @@ onUnmounted(() => unlisten?.());
           <div v-if="overwriteOffered" class="replace-option enter-field"><label class="recipient-option" :class="{ selected: form.overwrite }"><input v-model="form.overwrite" type="checkbox" name="overwrite" aria-describedby="overwrite-hint">{{ t('overwriteOutput') }}</label><p id="overwrite-hint" class="hint warning">{{ t('overwriteOutputHint') }}</p></div>
           <div v-if="failure" id="operation-error" class="notice enter-feedback" :class="{ neutral: failure === 'cancelled' }" role="alert"><AppIcon :name="failure === 'cancelled' ? 'close' : 'alert'" /><div><span>{{ t(failure) }}</span><p v-if="failedContact" class="result-path failed-contact">{{ t('recipient') }}: {{ label(failedContact) }} · {{ failedContact.fingerprint }}</p></div></div>
           <div v-if="result" class="notice success enter-feedback" role="status"><AppIcon name="check" /><div><strong :class="{ 'danger-text': successMessage === 'encryptedUnsigned' }">{{ t(successMessage) }}</strong><p v-if="result.output" class="result-path">{{ result.output }}</p><p v-if="recipients.length" class="result-path">{{ recipients.length > 1 ? t('recipients') : t('recipient') }}: {{ recipients.map(label).join(', ') }}</p><textarea v-if="result.fingerprint" class="fingerprint" :value="result.fingerprint" readonly rows="3" :aria-label="t('fingerprint')"></textarea>
+            <button v-if="result.fingerprint && isFingerprint(result.fingerprint)" type="button" class="secondary show-qr" @click="showQr(result.fingerprint)">{{ t('showQr') }}</button>
             <template v-if="result.legacyFingerprint && result.legacyFingerprint !== result.fingerprint"><p class="result-path legacy-label">{{ t('legacyFingerprint') }}</p><textarea class="fingerprint legacy-fingerprint" :value="result.legacyFingerprint" readonly rows="3" :aria-label="t('legacyFingerprint')"></textarea></template>
             <p v-if="result.canVerify === false" class="hint warning legacy-key">{{ t('legacyKeyHint') }}</p></div></div>
           <div v-if="result?.signature" class="notice signature enter-feedback" :class="result.signature.status" role="status"><AppIcon :name="result.signature.status === 'unsigned' ? 'alert' : 'shield'" /><div>
@@ -751,6 +762,16 @@ onUnmounted(() => unlisten?.());
         </ul>
       </section>
       <section class="storage-note"><AppIcon name="shield" /><div><strong>{{ t('storage') }}</strong><p>{{ t('storageHint') }}</p></div></section>
+      <div v-if="qrCode" class="update-backdrop">
+        <div class="card update-dialog qr-dialog enter-feedback" role="dialog" aria-modal="true" aria-labelledby="qr-title" aria-describedby="qr-text" @keydown.esc.prevent="qrFingerprint = ''">
+          <strong id="qr-title">{{ t('qrTitle') }}</strong>
+          <!-- Black on white in both themes, with a four-module quiet zone, so cameras read it. -->
+          <svg class="fingerprint-qr" :viewBox="`-4 -4 ${qrCode.size + 8} ${qrCode.size + 8}`" shape-rendering="crispEdges" role="img" :aria-label="t('qrTitle')"><rect x="-4" y="-4" :width="qrCode.size + 8" :height="qrCode.size + 8" fill="#fff" /><path :d="qrCode.path" fill="#000" /></svg>
+          <code class="qr-fingerprint"><span>{{ qrFingerprint.slice(0, 47) }}</span><span>{{ qrFingerprint.slice(48) }}</span></code>
+          <p id="qr-text">{{ t('qrHint') }}</p>
+          <div class="contact-actions"><span class="spacer"></span><button ref="qrClose" type="button" class="secondary close-qr" @click="qrFingerprint = ''">{{ t('close') }}</button></div>
+        </div>
+      </div>
       <div v-if="availableVersion" class="update-backdrop">
         <div class="card update-dialog enter-feedback" role="dialog" aria-modal="true" aria-labelledby="update-title" aria-describedby="update-text" @keydown.esc.prevent="availableVersion = ''">
           <strong id="update-title">{{ updateTitle }}</strong>

@@ -476,11 +476,19 @@ make -C linux fuzz-build
 
 三个 harness 都接受一个 `argv[1]` 文件路径。两个解析器 harness 拒绝超过 2 MiB 的输入，不执行密钥解封装、Argon2id、AES-GCM 或明文写出；`core/fuzz/seeds/` 中的解析器样本只是零填充的结构样本，不含密码、私钥或真实敏感数据，同时提供多个截断样本。`fuzz_decrypt` 的种子在每次构建时生成：一把一次性的明文 PEM 测试密钥，以及用它加密的真实 v3、空 v3 和双接收方 v4 容器，因此变异能深入试解密、MAC 和载荷认证路径；该密钥不保护任何数据，也不会提交到仓库。具体 AFL 命令见 `core/fuzz/README.md`。
 
+CI 在每个 PR 上对每个 harness 只跑 15 秒；[Fuzz workflow](.github/workflows/fuzz.yml) 每周日 18:00 UTC 对四个 harness 各跑一小时（也可在 Actions 页面手动运行 60–18000 秒），发现崩溃、挂起或 UBSan 报告即失败，AFL 输出保留 30 天。
+
 ## 检查更新
 
 Android 和桌面 GUI 可以检查是否有新版本：「关于」页（Android）或「设置」页（桌面）有「检查更新」按钮；自动检查默认开启，启动时每天最多检查一次，可在设置中关闭。发现新版本时只提示版本号，「前往下载」打开 GitHub Release 页面，由用户自己下载并按发布说明校验，App 不会自动下载或安装任何内容。可以「忽略此版本」，之后自动检查不再提示该版本。
 
 检查只向固定地址 `https://api.github.com/repos/Shixiaoshi0417/NekoKEM/releases/latest` 发送一次 HTTPS GET，不附带密钥、指纹、文件或设置信息；响应超过 1 MiB、不是正式版本或版本号格式不符时视为失败，发布页地址由版本号拼出，不取自响应。GitHub 能看到请求的 IP 地址和时间。Android 为此增加了 INTERNET 权限，用系统 HTTPS；桌面由后端调用系统 curl（Windows `System32\curl.exe`，macOS/Linux `/usr/bin/curl`），前端仍无法发起网络请求。CLI 不检查更新。
+
+## 指纹二维码
+
+v5 的签名信任取决于你是否与对方核对过身份指纹。为了不再逐字比对 64 位十六进制，Android「密钥」页和桌面端的指纹结果都可以显示**指纹二维码**；Android 公钥通讯录里每位联系人都有「扫码核对」：扫描对方显示的二维码，与该联系人保存的指纹一致就标记为「已扫码核对指纹」，不一致会红字警告并清除之前的标记。
+
+二维码内容是 `NEKOKEM-FP1:` 加 64 位大写十六进制指纹，只包含指纹，不包含公钥，因此扫码只能核对已保存的联系人，不能添加或替换密钥。Android 为扫码增加了 `CAMERA` 权限，只在点击「扫码核对」时申请，相机画面只在内存中识别、不保存；二维码由 ZXing 生成和识别，相机画面来自 CameraX，不依赖 Google Play 服务。桌面端只显示二维码，不使用摄像头。核对标记保存在 Android 联系人记录中，5.0.0 会忽略它，在 5.0.0 中修改备注会丢失该标记。
 
 ## 安全边界
 

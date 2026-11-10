@@ -263,3 +263,8 @@ select[aria-invalid=true] { border-color: #bd6650; background: #fffaf8; }
 .update-dialog p { margin: 10px 0 18px; line-height: 1.7; color: var(--muted); }
 .update-dialog .spacer { flex: 1; }
 
+.qr-dialog { width: min(420px, 100%); }
+.fingerprint-qr { display: block; width: min(260px, 100%); height: auto; margin: 16px auto 12px; border-radius: 12px; }
+.qr-fingerprint { display: block; font-size: 12px; line-height: 1.6; text-align: center; }
+.qr-fingerprint span { display: block; overflow-wrap: anywhere; }
+.show-qr { margin-top: 10px; }

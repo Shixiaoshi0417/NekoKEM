@@ -276,4 +276,23 @@
     <string name="action_later">나중에</string>
     <string name="action_ignore_version">이 버전 건너뛰기</string>
     <string name="error_open_release">릴리스 페이지를 열 앱이 없습니다</string>
+    <string name="action_show_fingerprint_qr">지문 QR 코드 표시</string>
+    <string name="fingerprint_qr_title">지문 QR 코드</string>
+    <string name="fingerprint_qr_description">이 기기 공개 키 지문의 QR 코드</string>
+    <string name="fingerprint_qr_hint">내 공개 키를 저장한 연락처는 NekoKEM에서 이 코드를 스캔해 그 키가 내 것인지 확인할 수 있습니다. 코드에는 키가 아니라 지문만 들어 있습니다.</string>
+    <string name="action_scan_fingerprint">스캔해서 확인</string>
+    <string name="fingerprint_scan_title">지문 스캔</string>
+    <string name="fingerprint_scan_hint">“%1$s”이(가) NekoKEM의 키 페이지에 표시하는 지문 QR 코드를 스캔하세요.</string>
+    <string name="fingerprint_scan_permission_denied">스캔하려면 카메라가 필요합니다. 시스템 설정에서 카메라 접근을 허용하거나, 상대와 전체 지문을 눈으로 비교하세요.</string>
+    <string name="fingerprint_scan_match_title">지문 일치</string>
+    <string name="fingerprint_scan_match">스캔한 지문이 “%1$s”에 저장된 지문과 같습니다. 이 연락처를 확인됨으로 표시했습니다.</string>
+    <string name="fingerprint_scan_mismatch_title">지문 불일치</string>
+    <string name="fingerprint_scan_mismatch">스캔한 지문이 “%1$s”에 저장된 지문과 다릅니다. 상대와 원인을 확인하기 전까지 이 연락처와 그 서명 파일을 신뢰하지 마세요. 이전 확인 표시는 지워졌습니다.</string>
+    <string name="fingerprint_scan_saved_line">저장됨: %1$s</string>
+    <string name="fingerprint_scan_scanned_line">스캔됨: %1$s</string>
+    <string name="fingerprint_scan_invalid_title">NekoKEM 지문 코드가 아님</string>
+    <string name="fingerprint_scan_invalid">이 QR 코드에는 NekoKEM 지문이 없습니다. 상대에게 키 페이지에서 지문 QR 코드를 표시해 달라고 하세요.</string>
+    <string name="action_scan_again">다시 스캔</string>
+    <string name="contact_verified">스캔으로 지문 확인됨</string>
+    <string name="operation_verify_contact">연락처 확인</string>
 </resources>

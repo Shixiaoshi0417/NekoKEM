@@ -134,6 +134,10 @@ const messages={
  'signature-required':['This file is not signed, and Settings accept only signed files. Nothing was written.','此文件未签名，而设置为只接受已签名文件，未写入任何内容。','此檔案未簽章，而設定為只接受已簽章檔案，未寫入任何內容。','このファイルは署名されておらず、設定で署名済みファイルのみ受け入れています。何も書き込んでいません。','이 파일은 서명되지 않았고 설정에서 서명된 파일만 받습니다. 아무것도 쓰지 않았습니다.'],
  'signer-not-trusted':['The signer is not one of your trusted keys. Nothing was written.','签名者不在你信任的密钥中，未写入任何内容。','簽章者不在你信任的金鑰中，未寫入任何內容。','署名者は信頼済みの鍵ではありません。何も書き込んでいません。','서명자가 신뢰하는 키가 아닙니다. 아무것도 쓰지 않았습니다.'],
  'already-identity':['This key can already sign; there is nothing to upgrade.','此密钥已可签名，无需升级。','此金鑰已可簽章，無需升級。','この鍵は既に署名できます。アップグレードは不要です。','이 키는 이미 서명할 수 있어 업그레이드할 필요가 없습니다.'],
+ showQr:['Show fingerprint QR code','显示指纹二维码','顯示指紋 QR 碼','指紋の QR コードを表示','지문 QR 코드 표시'],
+ qrTitle:['Fingerprint QR code','指纹二维码','指紋 QR 碼','指紋の QR コード','지문 QR 코드'],
+ qrHint:['A contact can scan this code with “Scan to verify” in NekoKEM for Android to check that the key they saved has this fingerprint. The code holds only the fingerprint, not the key.','联系人可以在 NekoKEM Android 中用「扫码核对」扫描此码，确认其保存的公钥就是这个指纹。二维码只包含指纹，不包含密钥。','聯絡人可以在 NekoKEM Android 中用「掃碼核對」掃描此碼，確認其儲存的公開金鑰就是這個指紋。QR 碼只包含指紋，不包含金鑰。','連絡先は Android 版 NekoKEM の「読み取って照合」でこのコードを読み取り、保存した鍵がこの指紋か確認できます。コードに含まれるのは指紋だけで、鍵は含まれません。','연락처는 Android용 NekoKEM의 “스캔해서 확인”으로 이 코드를 스캔해 저장한 키가 이 지문인지 확인할 수 있습니다. 코드에는 키가 아니라 지문만 들어 있습니다.'],
+ close:['Close','关闭','關閉','閉じる','닫기'],
 } as const;
 export type Message=keyof typeof messages;
 export const catalog:Readonly<Record<Message,readonly string[]>>=messages;

@@ -151,6 +151,12 @@ fun PublicKeyContactsPage(
                             emphasis = ActionEmphasis.TONAL,
                         )
                         ExpressiveButton(
+                            text = stringResource(R.string.action_scan_fingerprint),
+                            onClick = { actions.onScanContact(contact) },
+                            enabled = !state.running,
+                            emphasis = ActionEmphasis.TONAL,
+                        )
+                        ExpressiveButton(
                             text = stringResource(R.string.action_edit_contact_note),
                             onClick = { actions.onEditContact(contact) },
                             enabled = !state.running,
@@ -190,6 +196,13 @@ private fun ContactIdentity(contact: PublicKeyContact) {
         style = MaterialTheme.typography.labelMedium,
         color = if (contact.canVerify) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
     )
+    if (contact.verified) {
+        Text(
+            stringResource(R.string.contact_verified),
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.primary,
+        )
+    }
 }
 
 @Composable

@@ -18,6 +18,8 @@ data class PublicKeyContact(
     val note: String,
     /** The 4.x fingerprint of an identity key; null for a legacy key. */
     val legacyFingerprint: String? = null,
+    /** The owner's fingerprint QR code was scanned and matched this record. */
+    val verified: Boolean = false,
 ) {
     /** Identity keys verify signatures; files this contact signs are trusted. */
     val canVerify: Boolean get() = legacyFingerprint != null
@@ -130,6 +132,9 @@ class PublicKeyContacts(
                 }
             }
             val replaced = legacy?.let { readable(identity(it)) }
+            // Importing the same key again keeps its verification; a new or
+            // upgraded key starts unverified, since its fingerprint is new.
+            val sameKey = if (target.exists()) readable(id)?.contact else null
             if (replaced != null && !upgradeConfirmed) {
                 return@synchronized PublicKeyContactResult(RESULT_UPGRADE_UNCONFIRMED)
             }
@@ -142,6 +147,7 @@ class PublicKeyContacts(
                 safeName(key.displayName),
                 note.trim().ifEmpty { replaced?.contact?.note.orEmpty() },
                 legacy,
+                verified = sameKey?.fingerprint == key.fingerprint && sameKey.verified,
             )
             writeRecord(Record(contact, readPrivateFile(canonical.file, MAX_PUBLIC_KEY_BYTES)))
             if (replaced != null) {
@@ -167,6 +173,27 @@ class PublicKeyContacts(
             val record = readRecord(id)
             val updated = record.copy(contact = record.contact.copy(note = note.trim()))
             writeRecord(updated)
+            PublicKeyContactResult(NativeBridge.RESULT_SUCCESS, updated.contact)
+        } catch (_: IllegalArgumentException) {
+            PublicKeyContactResult(NativeBridge.RESULT_INVALID_ARGUMENT)
+        } catch (_: Exception) {
+            PublicKeyContactResult(LocalKeyManager.RESULT_STORAGE_ERROR)
+        }
+    }
+
+    /**
+     * Records the result of scanning the owner's fingerprint QR code: a match
+     * marks the contact verified, a mismatch clears any earlier verification.
+     * [fingerprint] must still be the saved one, so a record replaced since
+     * the scan started is never marked.
+     */
+    fun setVerified(id: String, fingerprint: String, verified: Boolean): PublicKeyContactResult = synchronized(lock) {
+        try {
+            requirePrivateDirectory(directory)
+            val record = readRecord(id)
+            require(record.contact.fingerprint == fingerprint)
+            val updated = record.copy(contact = record.contact.copy(verified = verified))
+            if (record.contact.verified != verified) writeRecord(updated)
             PublicKeyContactResult(NativeBridge.RESULT_SUCCESS, updated.contact)
         } catch (_: IllegalArgumentException) {
             PublicKeyContactResult(NativeBridge.RESULT_INVALID_ARGUMENT)
@@ -316,7 +343,9 @@ class PublicKeyContacts(
         val legacy = if (json.has("legacyFingerprint")) json.get("legacyFingerprint") as String else null
         val components = key.toString(Charsets.US_ASCII).split("-----BEGIN PUBLIC KEY-----").size - 1
         check(if (legacy == null) components == 2 else components == 4 && identity(legacy) != id)
-        return Record(PublicKeyContact(id, fingerprint, name, note, legacy), key)
+        // Absent before fingerprint scanning; 5.0.0 ignores it and drops it on rewrite.
+        val verified = if (json.has("verified")) json.get("verified") as Boolean else false
+        return Record(PublicKeyContact(id, fingerprint, name, note, legacy, verified), key)
     }
 
     private fun writeRecord(record: Record) {
@@ -330,6 +359,7 @@ class PublicKeyContacts(
             .put("note", contact.note)
             .put("publicKey", Base64.encodeToString(record.publicKey, Base64.NO_WRAP))
             .apply { contact.legacyFingerprint?.let { put("legacyFingerprint", it) } }
+            .apply { if (contact.verified) put("verified", true) }
             .toString().toByteArray(Charsets.UTF_8)
         check(encoded.size <= MAX_RECORD_BYTES)
         val candidate = File.createTempFile(".contact-", ".tmp", directory)

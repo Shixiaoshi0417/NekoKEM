@@ -168,6 +168,12 @@ dependencies {
     implementation("top.yukonga.miuix.kmp:miuix-icons-android:0.9.4")
     implementation("top.yukonga.miuix.kmp:miuix-preference-android:0.9.4")
     implementation("top.yukonga.miuix.kmp:miuix-blur-android:0.9.4")
+    // Fingerprint QR codes: ZXing draws and reads them; CameraX supplies the
+    // camera frames for scanning. Neither needs Google Play services.
+    implementation("com.google.zxing:core:3.5.4")
+    implementation("androidx.camera:camera-camera2:1.6.2")
+    implementation("androidx.camera:camera-lifecycle:1.6.2")
+    implementation("androidx.camera:camera-view:1.6.2")
 
     debugImplementation("androidx.compose.ui:ui-tooling")
 }

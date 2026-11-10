@@ -75,6 +75,11 @@ import com.shixiaoshi0417.nekokem.ui.SinglePasswordDialog
 import com.shixiaoshi0417.nekokem.ui.PublicKeyContactPicker
 import com.shixiaoshi0417.nekokem.ui.PublicKeyContactNoteDialog
 import com.shixiaoshi0417.nekokem.ui.DeletePublicKeyContactDialog
+import com.shixiaoshi0417.nekokem.ui.FingerprintQrDialog
+import com.shixiaoshi0417.nekokem.ui.FingerprintScanOutcome
+import com.shixiaoshi0417.nekokem.ui.FingerprintScanResultDialog
+import com.shixiaoshi0417.nekokem.ui.FingerprintScanner
+import com.shixiaoshi0417.nekokem.ui.fingerprintScanOutcome
 import com.shixiaoshi0417.nekokem.ui.runWithUiBusyReset
 import com.shixiaoshi0417.nekokem.ui.theme.NekoKEMTheme
 import com.shixiaoshi0417.nekokem.update.ReleaseInfo
@@ -228,6 +233,9 @@ private fun NekoKEMRoute(
     var contactUpgrades by remember { mutableStateOf<PublicKeyContact?>(null) }
     var contactToEdit by remember { mutableStateOf<PublicKeyContact?>(null) }
     var contactToDelete by remember { mutableStateOf<PublicKeyContact?>(null) }
+    var showFingerprintQr by remember { mutableStateOf(false) }
+    var contactToScan by remember { mutableStateOf<PublicKeyContact?>(null) }
+    var scanResult by remember { mutableStateOf<Pair<PublicKeyContact, FingerprintScanOutcome>?>(null) }
     var showContactPicker by remember { mutableStateOf(false) }
     val selectedContacts = selectedContactIds.mapNotNull { id -> contactsState.contacts.firstOrNull { it.id == id } }
     val selectedContactId = selectedContactIds.singleOrNull()
@@ -1378,6 +1386,50 @@ private fun NekoKEMRoute(
         )
     }
 
+    if (showFingerprintQr) {
+        val fingerprint = keyState.fingerprint
+        if (fingerprint == null) {
+            showFingerprintQr = false
+        } else {
+            FingerprintQrDialog(fingerprint, onDismiss = { showFingerprintQr = false })
+        }
+    }
+
+    contactToScan?.let { contact ->
+        FingerprintScanner(
+            contact,
+            onResult = { text ->
+                contactToScan = null
+                val outcome = fingerprintScanOutcome(text, contact)
+                scanResult = contact to outcome
+                if (outcome != FingerprintScanOutcome.NotNekoKEM) {
+                    val matched = outcome == FingerprintScanOutcome.Match
+                    scope.launch {
+                        val code = pageWork { publicKeyContacts.setVerified(contact.id, contact.fingerprint, matched).code }
+                        if (code != NativeBridge.RESULT_SUCCESS) {
+                            scanResult = null
+                            reportFailure(R.string.operation_verify_contact, code)
+                        }
+                        refreshState()
+                    }
+                }
+            },
+            onDismiss = { contactToScan = null },
+        )
+    }
+
+    scanResult?.let { (contact, outcome) ->
+        FingerprintScanResultDialog(
+            contact,
+            outcome,
+            onRetry = {
+                scanResult = null
+                contactToScan = contact
+            },
+            onDismiss = { scanResult = null },
+        )
+    }
+
     contactToDelete?.let { contact ->
         DeletePublicKeyContactDialog(
             contact,
@@ -1832,6 +1884,8 @@ private fun NekoKEMRoute(
             },
             onEditContact = { contactToEdit = it },
             onDeleteContact = { contactToDelete = it },
+            onShowFingerprintQr = { showFingerprintQr = true },
+            onScanContact = { contactToScan = it },
             onToggleContactSelection = { contact ->
                 contactSelection = when {
                     contact.id in contactSelection -> contactSelection - contact.id
