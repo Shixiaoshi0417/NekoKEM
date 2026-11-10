@@ -14,7 +14,7 @@
     <string name="not_available">不可用</string>
     <string name="about_description">由可复用 NekoKEM C17 Core 与 OpenSSL EVP 提供密码能力的实验性后量子混合文件加密工具。</string>
 
-    <string name="private_key_exists">私钥：✓ 已存在</string>
+    <string name="private_key_exists">私钥：已存在</string>
     <string name="private_key_not_found">私钥：未找到</string>
     <string name="fingerprint_label">SHA-256 公钥指纹</string>
     <string name="selected_file_label">已选择文件</string>
@@ -307,7 +307,18 @@
     <string name="fingerprint_scan_invalid_title">不是 NekoKEM 指纹二维码</string>
     <string name="fingerprint_scan_invalid">这个二维码不包含 NekoKEM 指纹。请让对方打开「密钥」页并显示指纹二维码。</string>
     <string name="action_scan_again">重新扫描</string>
-    <string name="contact_verified">已扫码核对指纹</string>
+    <string name="contact_verified">已核对指纹</string>
+    <string name="contact_unverified">未核对指纹</string>
+    <string name="action_mark_verified">标记为已核对</string>
+    <string name="action_unmark_verified">清除核对标记</string>
+    <string name="contact_verify_title">核对指纹</string>
+    <string name="contact_verify_hint">请对照 %1$s 在其设备「密钥」页看到的指纹，或扫描对方的指纹二维码。每一位都一致时，再标记为已核对。</string>
+    <string name="contact_unverified_title">联系人未核对</string>
+    <string name="contact_unverified_message">%1$s 的指纹尚未核对。如果公钥在传给你的途中被替换，用它加密的文件可能会被别人打开。建议先与对方核对指纹，也可以仍然继续。</string>
+    <string name="contact_name_separator">、</string>
+    <string name="action_use_anyway">仍然使用</string>
+    <string name="action_open_contact">查看详情</string>
+    <string name="action_back_to_contacts">全部联系人</string>
     <string name="operation_verify_contact">核对联系人</string>
     <string name="fingerprint_scan_camera_unavailable">未找到可用的相机，此设备无法扫码。请改为与对方逐字核对完整指纹。</string>
 </resources>

@@ -11,7 +11,7 @@
     <string name="openssl_version">OpenSSL バージョン：%1$s</string>
     <string name="not_available">利用できません</string>
     <string name="about_description">再利用可能な NekoKEM C17 Core と OpenSSL EVP を使用した、実験的な耐量子ハイブリッドファイル暗号化ツールです。</string>
-    <string name="private_key_exists">秘密鍵：✓ あり</string>
+    <string name="private_key_exists">秘密鍵：あり</string>
     <string name="private_key_not_found">秘密鍵：見つかりません</string>
     <string name="fingerprint_label">SHA-256 公開鍵フィンガープリント</string>
     <string name="selected_file_label">選択したファイル</string>
@@ -293,7 +293,18 @@
     <string name="fingerprint_scan_invalid_title">NekoKEM のフィンガープリントコードではありません</string>
     <string name="fingerprint_scan_invalid">この QR コードには NekoKEM のフィンガープリントが含まれていません。相手に「鍵」ページでフィンガープリントの QR コードを表示してもらってください。</string>
     <string name="action_scan_again">もう一度読み取る</string>
-    <string name="contact_verified">フィンガープリントを読み取りで照合済み</string>
+    <string name="contact_verified">フィンガープリント照合済み</string>
+    <string name="contact_unverified">フィンガープリント未照合</string>
+    <string name="action_mark_verified">照合済みにする</string>
+    <string name="action_unmark_verified">照合済みを解除</string>
+    <string name="contact_verify_title">フィンガープリントを照合</string>
+    <string name="contact_verify_hint">上のフィンガープリントを、%1$s の端末の「鍵」ページに表示されるものと比べるか、相手のフィンガープリント QR コードを読み取ってください。すべての文字が一致した場合にのみ照合済みにしてください。</string>
+    <string name="contact_unverified_title">未照合の連絡先</string>
+    <string name="contact_unverified_message">%1$s のフィンガープリントは照合されていません。公開鍵が途中ですり替えられていると、その鍵で暗号化したファイルを他人が開けます。先に相手とフィンガープリントを照合するか、このまま続けてください。</string>
+    <string name="contact_name_separator">、</string>
+    <string name="action_use_anyway">このまま使用</string>
+    <string name="action_open_contact">詳細を開く</string>
+    <string name="action_back_to_contacts">すべての連絡先</string>
     <string name="operation_verify_contact">連絡先の照合</string>
     <string name="fingerprint_scan_camera_unavailable">使用できるカメラが見つからないため、この端末では読み取れません。代わりに完全なフィンガープリントを相手と目で照合してください。</string>
 </resources>

@@ -11,7 +11,7 @@
     <string name="openssl_version">OpenSSL 版本：%1$s</string>
     <string name="not_available">無法使用</string>
     <string name="about_description">使用可重用的 NekoKEM C17 Core 與 OpenSSL EVP 提供密碼學功能的實驗性後量子混合檔案加密工具。</string>
-    <string name="private_key_exists">私鑰：✓ 已存在</string>
+    <string name="private_key_exists">私鑰：已存在</string>
     <string name="private_key_not_found">私鑰：找不到</string>
     <string name="fingerprint_label">SHA-256 公鑰指紋</string>
     <string name="selected_file_label">已選取檔案</string>
@@ -293,7 +293,18 @@
     <string name="fingerprint_scan_invalid_title">不是 NekoKEM 指紋 QR 碼</string>
     <string name="fingerprint_scan_invalid">這個 QR 碼不包含 NekoKEM 指紋。請讓對方開啟「金鑰」頁並顯示指紋 QR 碼。</string>
     <string name="action_scan_again">重新掃描</string>
-    <string name="contact_verified">已掃碼核對指紋</string>
+    <string name="contact_verified">已核對指紋</string>
+    <string name="contact_unverified">未核對指紋</string>
+    <string name="action_mark_verified">標記為已核對</string>
+    <string name="action_unmark_verified">清除核對標記</string>
+    <string name="contact_verify_title">核對指紋</string>
+    <string name="contact_verify_hint">請對照 %1$s 在其裝置「金鑰」頁看到的指紋，或掃描對方的指紋 QR 碼。每一位都一致時，再標記為已核對。</string>
+    <string name="contact_unverified_title">聯絡人未核對</string>
+    <string name="contact_unverified_message">%1$s 的指紋尚未核對。如果公鑰在傳給你的途中被替換，用它加密的檔案可能會被別人開啟。建議先與對方核對指紋，也可以仍然繼續。</string>
+    <string name="contact_name_separator">、</string>
+    <string name="action_use_anyway">仍然使用</string>
+    <string name="action_open_contact">查看詳情</string>
+    <string name="action_back_to_contacts">全部聯絡人</string>
     <string name="operation_verify_contact">核對聯絡人</string>
     <string name="fingerprint_scan_camera_unavailable">找不到可用的相機，此裝置無法掃碼。請改為與對方逐字核對完整指紋。</string>
 </resources>

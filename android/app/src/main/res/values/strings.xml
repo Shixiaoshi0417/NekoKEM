@@ -14,7 +14,7 @@
     <string name="not_available">Not available</string>
     <string name="about_description">Experimental post-quantum hybrid file encryption powered by the reusable NekoKEM C17 Core and OpenSSL EVP.</string>
 
-    <string name="private_key_exists">Private key: ✓ Exists</string>
+    <string name="private_key_exists">Private key: Exists</string>
     <string name="private_key_not_found">Private key: Not found</string>
     <string name="fingerprint_label">SHA-256 public-key fingerprint</string>
     <string name="selected_file_label">Selected file</string>
@@ -308,7 +308,18 @@
     <string name="fingerprint_scan_invalid_title">Not a NekoKEM fingerprint code</string>
     <string name="fingerprint_scan_invalid">This QR code does not hold a NekoKEM fingerprint. Ask the owner to open Keys and show the fingerprint QR code.</string>
     <string name="action_scan_again">Scan again</string>
-    <string name="contact_verified">Fingerprint verified by scan</string>
+    <string name="contact_verified">Fingerprint verified</string>
+    <string name="contact_unverified">Fingerprint not verified</string>
+    <string name="action_mark_verified">Mark as Verified</string>
+    <string name="action_unmark_verified">Clear Verification</string>
+    <string name="contact_verify_title">Verify Fingerprint</string>
+    <string name="contact_verify_hint">Compare the fingerprint above with the one %1$s sees on the Keys page of their device, or scan their fingerprint QR code. Mark the contact as verified only when every character matches.</string>
+    <string name="contact_unverified_title">Unverified contact</string>
+    <string name="contact_unverified_message">The fingerprint of %1$s has not been verified. If a public key was replaced on its way to you, someone else can open the files you encrypt with it. Compare the fingerprint with the owner first, or continue anyway.</string>
+    <string name="contact_name_separator">", "</string>
+    <string name="action_use_anyway">Use Anyway</string>
+    <string name="action_open_contact">Open details</string>
+    <string name="action_back_to_contacts">All Contacts</string>
     <string name="operation_verify_contact">Verify contact</string>
     <string name="fingerprint_scan_camera_unavailable">No usable camera was found, so this device cannot scan. Compare the full fingerprint with the owner by eye instead.</string>
 </resources>

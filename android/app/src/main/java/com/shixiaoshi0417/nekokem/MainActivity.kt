@@ -73,6 +73,7 @@ import com.shixiaoshi0417.nekokem.ui.OperationProgressDialog
 import com.shixiaoshi0417.nekokem.ui.OperationResultDetail
 import com.shixiaoshi0417.nekokem.ui.SinglePasswordDialog
 import com.shixiaoshi0417.nekokem.ui.PublicKeyContactPicker
+import com.shixiaoshi0417.nekokem.ui.UnverifiedContactDialog
 import com.shixiaoshi0417.nekokem.ui.PublicKeyContactNoteDialog
 import com.shixiaoshi0417.nekokem.ui.DeletePublicKeyContactDialog
 import com.shixiaoshi0417.nekokem.ui.FingerprintQrDialog
@@ -237,6 +238,8 @@ private fun NekoKEMRoute(
     var contactToScan by remember { mutableStateOf<PublicKeyContact?>(null) }
     var scanResult by remember { mutableStateOf<Pair<PublicKeyContact, FingerprintScanOutcome>?>(null) }
     var showContactPicker by remember { mutableStateOf(false) }
+    // Using a contact whose fingerprint was never verified asks first.
+    var unverifiedUse by remember { mutableStateOf<Pair<List<PublicKeyContact>, () -> Unit>?>(null) }
     val selectedContacts = selectedContactIds.mapNotNull { id -> contactsState.contacts.firstOrNull { it.id == id } }
     val selectedContactId = selectedContactIds.singleOrNull()
     val selectedContact = if (selectedContactId != null) selectedContacts.firstOrNull() else null
@@ -380,6 +383,21 @@ private fun NekoKEMRoute(
             if (failed == null) reason
             else reason + "\n" + context.getString(R.string.contact_failed_recipient, failed.label),
         )
+    }
+
+    fun selectContact(contact: PublicKeyContact) {
+        val previous = temporaryPublicKey
+        temporaryPublicKey = null
+        selectedContactIds = listOf(contact.id)
+        transitionInputSelection(InputSelectionEvent.KEY_SELECTION_CHANGED)
+        scope.launch { pageWork { fileWorkflow.discardTemporaryPublicKey(previous) } }
+        showSnackbar(R.string.contact_selected)
+    }
+
+    /** Runs [proceed] now if every contact is verified, otherwise after the warning. */
+    fun confirmVerified(contacts: List<PublicKeyContact>, proceed: () -> Unit) {
+        val unverified = contacts.filterNot { it.verified }
+        if (unverified.isEmpty()) proceed() else unverifiedUse = unverified to proceed
     }
 
     fun runContactOperation(@StringRes operation: Int, @StringRes success: Int, action: () -> Int) {
@@ -1443,18 +1461,24 @@ private fun NekoKEMRoute(
         )
     }
 
+    unverifiedUse?.let { (contacts, proceed) ->
+        UnverifiedContactDialog(
+            contacts,
+            onConfirm = {
+                unverifiedUse = null
+                proceed()
+            },
+            onDismiss = { unverifiedUse = null },
+        )
+    }
+
     if (showContactPicker) {
         PublicKeyContactPicker(
             state = contactsState,
             selectedId = selectedContactId,
             onSelect = { contact ->
                 showContactPicker = false
-                val previous = temporaryPublicKey
-                temporaryPublicKey = null
-                selectedContactIds = listOf(contact.id)
-                transitionInputSelection(InputSelectionEvent.KEY_SELECTION_CHANGED)
-                scope.launch { pageWork { fileWorkflow.discardTemporaryPublicKey(previous) } }
-                showSnackbar(R.string.contact_selected)
+                confirmVerified(listOf(contact)) { selectContact(contact) }
             },
             onImport = {
                 showContactPicker = false
@@ -1874,13 +1898,11 @@ private fun NekoKEMRoute(
             },
             onImportContact = { importContactLauncher.launch(arrayOf(ANY_MIME_TYPE)) },
             onChooseContact = { showContactPicker = true },
-            onSelectContact = { contact ->
-                val previous = temporaryPublicKey
-                temporaryPublicKey = null
-                selectedContactIds = listOf(contact.id)
-                transitionInputSelection(InputSelectionEvent.KEY_SELECTION_CHANGED)
-                scope.launch { pageWork { fileWorkflow.discardTemporaryPublicKey(previous) } }
-                showSnackbar(R.string.contact_selected)
+            onSelectContact = { contact, onSelected ->
+                confirmVerified(listOf(contact)) {
+                    selectContact(contact)
+                    onSelected()
+                }
             },
             onEditContact = { contactToEdit = it },
             onDeleteContact = { contactToDelete = it },
@@ -1894,17 +1916,27 @@ private fun NekoKEMRoute(
                 }
             },
             onClearContactSelection = { contactSelection = emptyList() },
-            onEncryptForSelectedContacts = {
+            onEncryptForSelectedContacts = { onSelected ->
                 // Only contacts still listed are applied; the choice stays explicit.
-                val ids = contactSelection.filter { id -> contactsState.contacts.any { it.id == id } }
-                if (ids.isNotEmpty()) {
-                    val previous = temporaryPublicKey
-                    temporaryPublicKey = null
-                    selectedContactIds = ids
-                    transitionInputSelection(InputSelectionEvent.KEY_SELECTION_CHANGED)
-                    scope.launch { pageWork { fileWorkflow.discardTemporaryPublicKey(previous) } }
-                    showSnackbar(if (ids.size > 1) R.string.contact_recipients_selected else R.string.contact_selected)
+                val chosen = contactSelection.mapNotNull { id -> contactsState.contacts.firstOrNull { it.id == id } }
+                if (chosen.isNotEmpty()) {
+                    confirmVerified(chosen) {
+                        val ids = chosen.map { it.id }
+                        val previous = temporaryPublicKey
+                        temporaryPublicKey = null
+                        selectedContactIds = ids
+                        transitionInputSelection(InputSelectionEvent.KEY_SELECTION_CHANGED)
+                        scope.launch { pageWork { fileWorkflow.discardTemporaryPublicKey(previous) } }
+                        showSnackbar(if (ids.size > 1) R.string.contact_recipients_selected else R.string.contact_selected)
+                        onSelected()
+                    }
                 }
+            },
+            onSetContactVerified = { contact, verified ->
+                runContactOperation(
+                    R.string.operation_verify_contact,
+                    if (verified) R.string.contact_verified else R.string.contact_unverified,
+                ) { publicKeyContacts.setVerified(contact.id, contact.fingerprint, verified).code }
             },
             onUiStyleChange = onUiStyleChange,
             onUpgradeKey = { passwordPrompt = PasswordPrompt.UPGRADE_KEY },

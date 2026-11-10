@@ -146,12 +146,14 @@ data class NekoKEMActions(
     val onDecrypt: () -> Unit,
     val onImportContact: () -> Unit,
     val onChooseContact: () -> Unit,
-    val onSelectContact: (PublicKeyContact) -> Unit,
+    /** Uses one saved contact; [onSelected] runs once it is chosen, after any unverified-key warning. */
+    val onSelectContact: (contact: PublicKeyContact, onSelected: () -> Unit) -> Unit,
     val onEditContact: (PublicKeyContact) -> Unit,
     val onDeleteContact: (PublicKeyContact) -> Unit,
     val onToggleContactSelection: (PublicKeyContact) -> Unit = {},
     val onClearContactSelection: () -> Unit = {},
-    val onEncryptForSelectedContacts: () -> Unit = {},
+    val onEncryptForSelectedContacts: (onSelected: () -> Unit) -> Unit = {},
+    val onSetContactVerified: (PublicKeyContact, Boolean) -> Unit = { _, _ -> },
     val onUiStyleChange: (UiStyle) -> Unit = {},
     val onUpgradeKey: () -> Unit = {},
     val onExportLegacyPublicKey: () -> Unit = {},
@@ -323,14 +325,16 @@ fun NekoKEMAppShell(
                                 state,
                                 actions,
                                 onUse = { contact ->
-                                    actions.onSelectContact(contact)
-                                    animateNavigation = true
-                                    destination = AppDestination.FILES
+                                    actions.onSelectContact(contact) {
+                                        animateNavigation = true
+                                        destination = AppDestination.FILES
+                                    }
                                 },
                                 onEncryptSelected = {
-                                    actions.onEncryptForSelectedContacts()
-                                    animateNavigation = true
-                                    destination = AppDestination.FILES
+                                    actions.onEncryptForSelectedContacts {
+                                        animateNavigation = true
+                                        destination = AppDestination.FILES
+                                    }
                                 },
                             )
                             AppDestination.SETTINGS -> SettingsPage(state, actions)

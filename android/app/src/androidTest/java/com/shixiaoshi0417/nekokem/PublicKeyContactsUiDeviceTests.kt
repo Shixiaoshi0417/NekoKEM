@@ -119,6 +119,27 @@ internal fun runPublicKeyContactsUiTests(instrumentation: Instrumentation) {
         }
         error("Contact dialog did not open: $value")
     }
+    // A contact card merges its texts into one clickable node; open it by its label.
+    fun openContact(label: String) {
+        awaitText(label)
+        val deadline = SystemClock.uptimeMillis() + 30000
+        while (true) {
+            var card = text(label)
+            while (card != null && !card.isClickable) card = fresh(card.parent)
+            if (card != null && card.performAction(AccessibilityNodeInfo.ACTION_CLICK)) break
+            check(SystemClock.uptimeMillis() < deadline) { "Contact card did not open: $label" }
+            instrumentation.waitForIdleSync()
+            SystemClock.sleep(100)
+        }
+        instrumentation.waitForIdleSync()
+        awaitText(checkNotNull(activity).getString(R.string.contact_verify_title))
+    }
+    fun awaitVerified(id: String, verified: Boolean) {
+        val deadline = SystemClock.uptimeMillis() + 10000
+        while (contacts.readState().contacts.single { it.id == id }.verified != verified &&
+            SystemClock.uptimeMillis() < deadline) SystemClock.sleep(100)
+        check(contacts.readState().contacts.single { it.id == id }.verified == verified)
+    }
     fun recreate() {
         val monitor = instrumentation.addMonitor(MainActivity::class.java.name, null, false)
         try {
@@ -164,10 +185,24 @@ internal fun runPublicKeyContactsUiTests(instrumentation: Instrumentation) {
         instrumentation.waitForIdleSync()
         openContacts()
         awaitText("CI recipient")
+        capture("contacts-list")
+        openContact("CI recipient")
         awaitText(contact.fingerprint)
         awaitText(checkNotNull(activity).getString(R.string.contact_verified))
         awaitText(checkNotNull(activity).getString(R.string.action_scan_fingerprint))
         capture("contacts-verified")
+        // Clearing the mark makes the next use of the contact ask first.
+        click(checkNotNull(activity).getString(R.string.action_unmark_verified))
+        awaitVerified(contact.id, false)
+        awaitText(checkNotNull(activity).getString(R.string.contact_unverified))
+        openDialog(checkNotNull(activity).getString(R.string.action_use_contact))
+        awaitText(checkNotNull(activity).getString(R.string.contact_unverified_title))
+        capture("contacts-unverified-warning")
+        click(checkNotNull(activity).getString(R.string.action_cancel))
+        check(contacts.readState().contacts.single { it.id == contact.id }.verified.not())
+        click(checkNotNull(activity).getString(R.string.action_mark_verified))
+        awaitVerified(contact.id, true)
+        awaitText(checkNotNull(activity).getString(R.string.action_unmark_verified))
         openDialog(checkNotNull(activity).getString(R.string.action_edit_contact_note))
         val editorDeadline = SystemClock.uptimeMillis() + 10000
         var editor: AccessibilityNodeInfo? = null
@@ -230,6 +265,7 @@ internal fun runPublicKeyContactsUiTests(instrumentation: Instrumentation) {
         val clearedDeadline = SystemClock.uptimeMillis() + 10000
         while (text(encryptSelected) != null && SystemClock.uptimeMillis() < clearedDeadline) SystemClock.sleep(100)
         check(text(encryptSelected) == null) { "Contact selection was not cleared" }
+        openContact(editedNote)
         openDialog(checkNotNull(activity).getString(R.string.action_delete))
         awaitText(checkNotNull(activity).getString(R.string.contact_delete_title))
         click(checkNotNull(activity).getString(R.string.action_delete))

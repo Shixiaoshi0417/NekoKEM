@@ -9,7 +9,6 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -43,7 +42,9 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.state.ToggleableState
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.shixiaoshi0417.nekokem.R
 import com.shixiaoshi0417.nekokem.i18n.AppLanguages
@@ -58,6 +59,8 @@ import top.yukonga.miuix.kmp.basic.Card
 import top.yukonga.miuix.kmp.basic.Checkbox
 import top.yukonga.miuix.kmp.basic.FloatingNavigationBar
 import top.yukonga.miuix.kmp.basic.FloatingNavigationBarItem
+import top.yukonga.miuix.kmp.basic.Icon
+import top.yukonga.miuix.kmp.basic.IconButton
 import top.yukonga.miuix.kmp.basic.MiuixScrollBehavior
 import top.yukonga.miuix.kmp.basic.NavigationItem
 import top.yukonga.miuix.kmp.basic.Scaffold
@@ -68,6 +71,7 @@ import top.yukonga.miuix.kmp.basic.TopAppBar
 import top.yukonga.miuix.kmp.blur.layerBackdrop
 import top.yukonga.miuix.kmp.blur.rememberLayerBackdrop
 import top.yukonga.miuix.kmp.icon.MiuixIcons
+import top.yukonga.miuix.kmp.icon.extended.Back
 import top.yukonga.miuix.kmp.icon.extended.Contacts
 import top.yukonga.miuix.kmp.icon.extended.File
 import top.yukonga.miuix.kmp.icon.extended.Info
@@ -77,6 +81,7 @@ import top.yukonga.miuix.kmp.preference.ArrowPreference
 import top.yukonga.miuix.kmp.preference.OverlayDropdownPreference
 import top.yukonga.miuix.kmp.preference.SwitchPreference
 import top.yukonga.miuix.kmp.theme.MiuixTheme
+import top.yukonga.miuix.kmp.utils.PressFeedbackType
 import top.yukonga.miuix.kmp.utils.overScrollVertical
 
 /** miuix-blur's backdrop, blur and lens all need RuntimeShader. */
@@ -154,19 +159,32 @@ internal fun MiuixAppShell(
                 when (destination) {
                     AppDestination.FILES -> MiuixPage(title, bottom) { filesPage(state, actions) }
                     AppDestination.KEYS -> MiuixPage(title, bottom) { keysPage(state, actions) }
-                    AppDestination.CONTACTS -> MiuixPage(title, bottom) {
-                        contactsPage(
-                            state,
-                            actions,
-                            onUse = { contact ->
-                                actions.onSelectContact(contact)
-                                destination = AppDestination.FILES
-                            },
-                            onEncryptSelected = {
-                                actions.onEncryptForSelectedContacts()
-                                destination = AppDestination.FILES
-                            },
-                        )
+                    AppDestination.CONTACTS -> {
+                        // A small card per contact; tapping it opens the contact's own page.
+                        var openId by rememberSaveable { mutableStateOf<String?>(null) }
+                        val open = openId?.let { id -> state.contactsState.contacts.firstOrNull { it.id == id } }
+                        BackHandler(enabled = open != null) { openId = null }
+                        val onUse = { contact: PublicKeyContact ->
+                            actions.onSelectContact(contact) { destination = AppDestination.FILES }
+                        }
+                        key(open?.id) {
+                            if (open != null) {
+                                MiuixPage(open.label, bottom, onBack = { openId = null }) {
+                                    contactDetailPage(open, state, actions, onUse)
+                                }
+                            } else {
+                                MiuixPage(title, bottom) {
+                                    contactsPage(
+                                        state,
+                                        actions,
+                                        onOpen = { openId = it.id },
+                                        onEncryptSelected = {
+                                            actions.onEncryptForSelectedContacts { destination = AppDestination.FILES }
+                                        },
+                                    )
+                                }
+                            }
+                        }
                     }
                     AppDestination.SETTINGS -> MiuixSettingsPage(title, bottom, state, actions)
                     AppDestination.ABOUT -> MiuixPage(title, bottom) { aboutPage(state, actions) }
@@ -181,11 +199,22 @@ internal fun MiuixAppShell(
 private fun MiuixPage(
     title: String,
     bottomPadding: androidx.compose.ui.unit.Dp,
+    onBack: (() -> Unit)? = null,
     content: LazyListScope.() -> Unit,
 ) {
     val scrollBehavior = MiuixScrollBehavior()
     Column(Modifier.fillMaxSize().background(MiuixTheme.colorScheme.surface)) {
-        TopAppBar(title = title, scrollBehavior = scrollBehavior)
+        TopAppBar(
+            title = title,
+            scrollBehavior = scrollBehavior,
+            navigationIcon = {
+                if (onBack != null) {
+                    IconButton(onClick = onBack, modifier = Modifier.padding(start = 16.dp)) {
+                        Icon(MiuixIcons.Back, contentDescription = stringResource(R.string.action_back_to_contacts))
+                    }
+                }
+            },
+        )
         LazyColumn(
             modifier = Modifier
                 .weight(1f)
@@ -426,7 +455,7 @@ private fun LazyListScope.keysPage(state: NekoKEMUiState, actions: NekoKEMAction
 private fun LazyListScope.contactsPage(
     state: NekoKEMUiState,
     actions: NekoKEMActions,
-    onUse: (PublicKeyContact) -> Unit,
+    onOpen: (PublicKeyContact) -> Unit,
     onEncryptSelected: () -> Unit,
 ) {
     val selected = state.contactSelection
@@ -460,67 +489,104 @@ private fun LazyListScope.contactsPage(
         val checked = contact.id in selected
         val canToggle = !state.running && (checked || !atLimit)
         val selectLabel = stringResource(R.string.contact_select_recipient)
-        Card(modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp).padding(bottom = 12.dp)) {
+        Card(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp).padding(bottom = 12.dp),
+            pressFeedbackType = PressFeedbackType.Sink,
+            onClick = { onOpen(contact) },
+        ) {
             Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .toggleable(
-                        value = checked,
-                        enabled = canToggle,
-                        role = Role.Checkbox,
-                        onValueChange = { actions.onToggleContactSelection(contact) },
-                    )
-                    .semantics { contentDescription = "$selectLabel · ${contact.label}" }
-                    .padding(start = 16.dp, top = 16.dp, end = 16.dp),
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 14.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Checkbox(
                     state = ToggleableState(checked),
-                    onClick = null,
+                    onClick = { actions.onToggleContactSelection(contact) },
                     enabled = canToggle,
+                    modifier = Modifier.semantics { contentDescription = "$selectLabel · ${contact.label}" },
                 )
-                Text(
-                    text = selectLabel,
-                    modifier = Modifier.padding(start = 12.dp),
-                    style = MiuixTheme.textStyles.body2,
-                )
-            }
-            BasicComponent(
-                title = contact.label,
-                summary = stringResource(R.string.key_file_line, contact.displayName) + "\n" +
-                    stringResource(R.string.key_fingerprint_line, contact.fingerprint) + "\n" +
-                    stringResource(if (contact.canVerify) R.string.contact_verifies else R.string.contact_legacy) +
-                    if (contact.verified) "\n" + stringResource(R.string.contact_verified) else "",
-            )
-            FlowRow(
-                modifier = Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, bottom = 16.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                TextButton(
-                    text = stringResource(R.string.action_use_contact),
-                    onClick = { onUse(contact) },
-                    enabled = state.nativeConnected && !state.running,
-                    colors = ButtonDefaults.textButtonColorsPrimary(),
-                )
-                TextButton(
-                    text = stringResource(R.string.action_scan_fingerprint),
-                    onClick = { actions.onScanContact(contact) },
-                    enabled = !state.running,
-                )
-                TextButton(
-                    text = stringResource(R.string.action_edit_contact_note),
-                    onClick = { actions.onEditContact(contact) },
-                    enabled = !state.running,
-                )
-                TextButton(
-                    text = stringResource(R.string.action_delete),
-                    onClick = { actions.onDeleteContact(contact) },
-                    enabled = !state.running,
-                    colors = ButtonDefaults.textButtonColors(textColor = MiuixTheme.colorScheme.error),
-                )
+                Column(Modifier.weight(1f).padding(horizontal = 12.dp)) {
+                    Text(
+                        text = contact.label,
+                        style = MiuixTheme.textStyles.headline1,
+                        fontWeight = FontWeight.Medium,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    Text(
+                        text = shortFingerprint(contact.fingerprint),
+                        style = MiuixTheme.textStyles.body2,
+                        fontFamily = FontFamily.Monospace,
+                        color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                        maxLines = 1,
+                    )
+                }
+                VerificationBadge(contact.verified)
             }
         }
+    }
+}
+
+/** One contact: identity, Signal-style fingerprint verification, then its actions. */
+private fun LazyListScope.contactDetailPage(
+    contact: PublicKeyContact,
+    state: NekoKEMUiState,
+    actions: NekoKEMActions,
+    onUse: (PublicKeyContact) -> Unit,
+) {
+    val checked = contact.id in state.contactSelection
+    val canToggle = !state.running && (checked || state.contactSelection.size < NativeBridge.MAX_RECIPIENTS)
+    section(key = "identity") {
+        BasicComponent(
+            title = contact.label,
+            summary = stringResource(R.string.key_file_line, contact.displayName) + "\n" +
+                stringResource(if (contact.canVerify) R.string.contact_verifies else R.string.contact_legacy),
+            endActions = { VerificationBadge(contact.verified, size = 40.dp, described = false) },
+        )
+        BasicComponent(
+            title = stringResource(if (contact.verified) R.string.contact_verified else R.string.contact_unverified),
+            titleColor = BasicComponentDefaults.titleColor(
+                color = if (contact.verified) VerifiedGreen else MiuixTheme.colorScheme.error,
+            ),
+        )
+    }
+    section(titleResource = R.string.contact_verify_title, key = "verify") {
+        FingerprintGrid(
+            contact.fingerprint,
+            Modifier.fillMaxWidth().padding(top = 20.dp, bottom = 4.dp),
+            color = MiuixTheme.colorScheme.onSurface,
+        )
+        BasicComponent(summary = stringResource(R.string.contact_verify_hint, contact.label))
+        Action(R.string.action_scan_fingerprint, !state.running, { actions.onScanContact(contact) })
+        if (state.fingerprint != null) {
+            Action(R.string.action_show_fingerprint_qr, true, actions.onShowFingerprintQr)
+        }
+        Action(
+            if (contact.verified) R.string.action_unmark_verified else R.string.action_mark_verified,
+            !state.running,
+            { actions.onSetContactVerified(contact, !contact.verified) },
+        )
+    }
+    section(key = "use") {
+        val selectLabel = stringResource(R.string.contact_select_recipient)
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .toggleable(
+                    value = checked,
+                    enabled = canToggle,
+                    role = Role.Checkbox,
+                    onValueChange = { actions.onToggleContactSelection(contact) },
+                )
+                .semantics { contentDescription = "$selectLabel · ${contact.label}" }
+                .padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Checkbox(state = ToggleableState(checked), onClick = null, enabled = canToggle)
+            Text(text = selectLabel, modifier = Modifier.padding(start = 12.dp), style = MiuixTheme.textStyles.body1)
+        }
+        Action(R.string.action_use_contact, state.nativeConnected && !state.running, { onUse(contact) })
+        Action(R.string.action_edit_contact_note, !state.running, { actions.onEditContact(contact) })
+        Action(R.string.action_delete, !state.running, { actions.onDeleteContact(contact) }, destructive = true)
     }
 }
 

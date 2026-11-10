@@ -1,5 +1,20 @@
 package com.shixiaoshi0417.nekokem.ui
 
+import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.layout.size
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.StrokeJoin
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
@@ -52,9 +67,17 @@ fun PublicKeyContactsPage(
     onUse: (PublicKeyContact) -> Unit,
     onEncryptSelected: () -> Unit,
 ) {
+    // A small card per contact; tapping it opens the contact's own page.
+    var openId by rememberSaveable { mutableStateOf<String?>(null) }
+    val open = openId?.let { id -> state.contactsState.contacts.firstOrNull { it.id == id } }
+    BackHandler(enabled = open != null) { openId = null }
+    if (open != null) {
+        PublicKeyContactDetail(open, state, actions, onUse, onBack = { openId = null })
+        return
+    }
     val selected = state.contactSelection
     val atLimit = selected.size >= NativeBridge.MAX_RECIPIENTS
-    LazyColumn(contentPadding = PaddingValues(20.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+    LazyColumn(contentPadding = PaddingValues(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         item {
             Text(stringResource(R.string.contact_description), style = MaterialTheme.typography.bodyMedium)
         }
@@ -110,6 +133,7 @@ fun PublicKeyContactsPage(
         }
         items(state.contactsState.contacts, key = { it.id }) { contact ->
             val checked = contact.id in selected
+            val canToggle = !state.running && (checked || !atLimit)
             val selectLabel = stringResource(R.string.contact_select_recipient)
             // A chosen recipient's card rounds further and gains an outline.
             val corner by animateDpAsState(
@@ -118,6 +142,7 @@ fun PublicKeyContactsPage(
                 label = "contactCorner",
             )
             Card(
+                onClick = { openId = contact.id },
                 modifier = Modifier.fillMaxWidth().animateItem(),
                 shape = RoundedCornerShape(corner),
                 colors = CardDefaults.cardColors(
@@ -125,22 +150,135 @@ fun PublicKeyContactsPage(
                 ),
                 border = if (checked) BorderStroke(2.dp, MaterialTheme.colorScheme.primary) else null,
             ) {
+                Row(
+                    Modifier.fillMaxWidth().padding(start = 4.dp, end = 16.dp, top = 8.dp, bottom = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Checkbox(
+                        checked = checked,
+                        onCheckedChange = { actions.onToggleContactSelection(contact) },
+                        enabled = canToggle,
+                        modifier = Modifier.semantics { contentDescription = "$selectLabel · ${contact.label}" },
+                    )
+                    Column(Modifier.weight(1f).padding(horizontal = 4.dp)) {
+                        Text(
+                            contact.label,
+                            style = MaterialTheme.typography.titleMediumEmphasized,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                        Text(
+                            shortFingerprint(contact.fingerprint),
+                            style = MaterialTheme.typography.bodySmall,
+                            fontFamily = FontFamily.Monospace,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
+                        )
+                    }
+                    VerificationBadge(contact.verified)
+                }
+            }
+        }
+    }
+}
+
+/** One contact: identity, Signal-style fingerprint verification, then its actions. */
+@Composable
+private fun PublicKeyContactDetail(
+    contact: PublicKeyContact,
+    state: NekoKEMUiState,
+    actions: NekoKEMActions,
+    onUse: (PublicKeyContact) -> Unit,
+    onBack: () -> Unit,
+) {
+    val checked = contact.id in state.contactSelection
+    val canToggle = !state.running && (checked || state.contactSelection.size < NativeBridge.MAX_RECIPIENTS)
+    val cardColors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh)
+    LazyColumn(contentPadding = PaddingValues(20.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+        item {
+            ExpressiveButton(
+                text = stringResource(R.string.action_back_to_contacts),
+                onClick = onBack,
+                emphasis = ActionEmphasis.TEXT,
+            )
+        }
+        item {
+            Card(Modifier.fillMaxWidth(), shape = MaterialTheme.shapes.extraLarge, colors = cardColors) {
+                Row(Modifier.padding(20.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Text(contact.label, style = MaterialTheme.typography.headlineSmallEmphasized)
+                        Text(stringResource(R.string.key_file_line, contact.displayName), style = MaterialTheme.typography.bodyMedium)
+                        Text(
+                            stringResource(if (contact.canVerify) R.string.contact_verifies else R.string.contact_legacy),
+                            style = MaterialTheme.typography.labelMedium,
+                            color = if (contact.canVerify) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        Text(
+                            stringResource(if (contact.verified) R.string.contact_verified else R.string.contact_unverified),
+                            style = MaterialTheme.typography.labelLarge,
+                            color = if (contact.verified) VerifiedGreen else MaterialTheme.colorScheme.error,
+                        )
+                    }
+                    VerificationBadge(contact.verified, size = 44.dp, described = false)
+                }
+            }
+        }
+        item {
+            Card(Modifier.fillMaxWidth(), shape = MaterialTheme.shapes.extraLarge, colors = cardColors) {
+                Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Text(stringResource(R.string.contact_verify_title), style = MaterialTheme.typography.titleMediumEmphasized)
+                    FingerprintGrid(contact.fingerprint, Modifier.fillMaxWidth())
+                    Text(
+                        stringResource(R.string.contact_verify_hint, contact.label),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    FlowRow(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        ExpressiveButton(
+                            text = stringResource(R.string.action_scan_fingerprint),
+                            onClick = { actions.onScanContact(contact) },
+                            enabled = !state.running,
+                            emphasis = ActionEmphasis.TONAL,
+                        )
+                        if (state.fingerprint != null) {
+                            ExpressiveButton(
+                                text = stringResource(R.string.action_show_fingerprint_qr),
+                                onClick = actions.onShowFingerprintQr,
+                                emphasis = ActionEmphasis.OUTLINED,
+                            )
+                        }
+                    }
+                    ExpressiveButton(
+                        text = stringResource(if (contact.verified) R.string.action_unmark_verified else R.string.action_mark_verified),
+                        onClick = { actions.onSetContactVerified(contact, !contact.verified) },
+                        enabled = !state.running,
+                        emphasis = if (contact.verified) ActionEmphasis.OUTLINED else ActionEmphasis.FILLED,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                }
+            }
+        }
+        item {
+            Card(Modifier.fillMaxWidth(), shape = MaterialTheme.shapes.extraLarge, colors = cardColors) {
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    val selectLabel = stringResource(R.string.contact_select_recipient)
                     Row(
                         Modifier.fillMaxWidth().toggleable(
                             value = checked,
-                            enabled = !state.running && (checked || !atLimit),
+                            enabled = canToggle,
                             role = Role.Checkbox,
                             onValueChange = { actions.onToggleContactSelection(contact) },
                         ).semantics { contentDescription = "$selectLabel · ${contact.label}" },
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        Checkbox(checked = checked, onCheckedChange = null, enabled = !state.running && (checked || !atLimit))
+                        Checkbox(checked = checked, onCheckedChange = null, enabled = canToggle)
                         Text(selectLabel, style = MaterialTheme.typography.labelLarge, modifier = Modifier.padding(start = 8.dp))
                     }
-                    ContactIdentity(contact)
                     FlowRow(
-                        modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
+                        modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                         verticalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
@@ -148,12 +286,6 @@ fun PublicKeyContactsPage(
                             text = stringResource(R.string.action_use_contact),
                             onClick = { onUse(contact) },
                             enabled = state.nativeConnected && !state.running,
-                            emphasis = ActionEmphasis.TONAL,
-                        )
-                        ExpressiveButton(
-                            text = stringResource(R.string.action_scan_fingerprint),
-                            onClick = { actions.onScanContact(contact) },
-                            enabled = !state.running,
                             emphasis = ActionEmphasis.TONAL,
                         )
                         ExpressiveButton(
@@ -173,6 +305,65 @@ fun PublicKeyContactsPage(
             }
         }
     }
+}
+
+/** Green for a contact whose fingerprint the user has verified. */
+internal val VerifiedGreen = Color(0xFF1E8E3E)
+
+/**
+ * The verification mark at the end of a contact card: a white tick in a green
+ * circle once verified, a white cross in a red circle until then.
+ */
+@Composable
+internal fun VerificationBadge(
+    verified: Boolean,
+    modifier: Modifier = Modifier,
+    size: Dp = 28.dp,
+    // Off where a text label beside the mark already says the same.
+    described: Boolean = true,
+) {
+    val red = if (isMiuixStyle()) MiuixTheme.colorScheme.error else MaterialTheme.colorScheme.error
+    val description = stringResource(if (verified) R.string.contact_verified else R.string.contact_unverified)
+    Canvas(modifier.size(size).semantics { if (described) contentDescription = description }) {
+        val side = this.size.minDimension
+        drawCircle(if (verified) VerifiedGreen else red)
+        val stroke = Stroke(width = side * 0.11f, cap = StrokeCap.Round, join = StrokeJoin.Round)
+        if (verified) {
+            val tick = Path().apply {
+                moveTo(side * 0.28f, side * 0.52f)
+                lineTo(side * 0.44f, side * 0.67f)
+                lineTo(side * 0.73f, side * 0.37f)
+            }
+            drawPath(tick, Color.White, style = stroke)
+        } else {
+            drawLine(Color.White, Offset(side * 0.35f, side * 0.35f), Offset(side * 0.65f, side * 0.65f), stroke.width, StrokeCap.Round)
+            drawLine(Color.White, Offset(side * 0.65f, side * 0.35f), Offset(side * 0.35f, side * 0.65f), stroke.width, StrokeCap.Round)
+        }
+    }
+}
+
+/** The fingerprint as four rows of four 4-digit groups, like Signal's safety number. */
+@Composable
+internal fun FingerprintGrid(fingerprint: String, modifier: Modifier = Modifier, color: Color = Color.Unspecified) {
+    Column(
+        modifier.clearAndSetSemantics { contentDescription = fingerprint },
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        fingerprintRows(fingerprint).forEach { row ->
+            Text(row, color = color, fontFamily = FontFamily.Monospace, fontSize = 18.sp, letterSpacing = 1.sp)
+        }
+    }
+}
+
+internal fun fingerprintRows(fingerprint: String): List<String> =
+    fingerprint.replace(":", "").chunked(4).chunked(4).map { it.joinToString(" ") }
+
+/** First and last four bytes, enough to tell contacts apart at a glance. */
+internal fun shortFingerprint(fingerprint: String): String {
+    val pairs = fingerprint.split(':')
+    if (pairs.size <= 8) return fingerprint
+    return pairs.take(4).joinToString(":") + " … " + pairs.takeLast(4).joinToString(":")
 }
 
 @Composable
@@ -196,11 +387,13 @@ private fun ContactIdentity(contact: PublicKeyContact) {
         style = MaterialTheme.typography.labelMedium,
         color = if (contact.canVerify) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
     )
-    if (contact.verified) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        VerificationBadge(contact.verified, size = 16.dp, described = false)
         Text(
-            stringResource(R.string.contact_verified),
+            stringResource(if (contact.verified) R.string.contact_verified else R.string.contact_unverified),
             style = MaterialTheme.typography.labelMedium,
-            color = MaterialTheme.colorScheme.primary,
+            color = if (contact.verified) VerifiedGreen else MaterialTheme.colorScheme.error,
+            modifier = Modifier.padding(start = 6.dp),
         )
     }
 }
@@ -341,6 +534,30 @@ fun DeletePublicKeyContactDialog(contact: PublicKeyContact, onConfirm: () -> Uni
             }
         },
         confirmButton = { DialogButton(stringResource(R.string.action_delete), onClick = onConfirm) },
+        dismissButton = { DialogButton(stringResource(R.string.action_cancel), onClick = onDismiss) },
+    )
+}
+
+/**
+ * Asked before an unverified contact's key is used: a key replaced on its way
+ * to the user would let someone else open what is encrypted with it.
+ */
+@Composable
+fun UnverifiedContactDialog(contacts: List<PublicKeyContact>, onConfirm: () -> Unit, onDismiss: () -> Unit) {
+    val danger = if (isMiuixStyle()) MiuixTheme.colorScheme.error else MaterialTheme.colorScheme.error
+    val names = contacts.joinToString(stringResource(R.string.contact_name_separator)) { "“${it.label}”" }
+    AppAlertDialog(
+        onDismissRequest = onDismiss,
+        icon = { VerificationBadge(false, size = 32.dp, described = false) },
+        title = { Text(stringResource(R.string.contact_unverified_title)) },
+        text = {
+            Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text(stringResource(R.string.contact_unverified_message, names), color = danger)
+            }
+        },
+        confirmButton = {
+            DialogButton(stringResource(R.string.action_use_anyway), onClick = onConfirm, destructive = true)
+        },
         dismissButton = { DialogButton(stringResource(R.string.action_cancel), onClick = onDismiss) },
     )
 }
