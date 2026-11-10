@@ -1,5 +1,6 @@
 package com.shixiaoshi0417.nekokem
 
+import android.accessibilityservice.AccessibilityServiceInfo
 import android.app.Activity
 import android.app.Instrumentation
 import android.content.Intent
@@ -10,6 +11,7 @@ import android.os.Bundle
 import android.os.SystemClock
 import android.system.Os
 import android.view.accessibility.AccessibilityNodeInfo
+import android.view.accessibility.AccessibilityWindowInfo
 import com.shixiaoshi0417.nekokem.files.SafFileWorkflow
 import com.shixiaoshi0417.nekokem.i18n.AppLanguages
 import com.shixiaoshi0417.nekokem.keys.LocalKeyManager
@@ -38,14 +40,29 @@ internal fun runPublicKeyContactsUiTests(instrumentation: Instrumentation) {
     // lacked buttons the screenshot showed. Refresh every node from the app before
     // trusting it; refresh() fails for a node that no longer exists.
     fun fresh(node: AccessibilityNodeInfo?): AccessibilityNodeInfo? = node?.takeIf { it.refresh() }
+    // Android 8 can keep reporting a closed dialog as the active window. Search the
+    // topmost application window on screen instead: an open dialog when there is one,
+    // otherwise the activity.
+    val automation = instrumentation.uiAutomation
+    val priorServiceInfo = automation.serviceInfo
+    automation.serviceInfo = automation.serviceInfo.apply {
+        flags = flags or AccessibilityServiceInfo.FLAG_RETRIEVE_INTERACTIVE_WINDOWS
+    }
+    fun roots(): List<AccessibilityNodeInfo> = runCatching {
+        automation.windows
+            .filter { it.type == AccessibilityWindowInfo.TYPE_APPLICATION }
+            .sortedByDescending { it.layer }
+            .mapNotNull { it.root }
+    }.getOrDefault(emptyList()).ifEmpty { listOfNotNull(automation.rootInActiveWindow) }
+    fun screen(): AccessibilityNodeInfo? = roots().firstOrNull()
     fun find(root: AccessibilityNodeInfo?, predicate: (AccessibilityNodeInfo) -> Boolean): AccessibilityNodeInfo? {
         val node = fresh(root) ?: return null
         if (predicate(node)) return node
         for (index in 0 until node.childCount) find(node.getChild(index), predicate)?.let { return it }
         return null
     }
-    fun text(value: String): AccessibilityNodeInfo? = find(instrumentation.uiAutomation.rootInActiveWindow) {
-        it.text?.toString()?.contains(value) == true || it.contentDescription?.toString() == value
+    fun text(value: String): AccessibilityNodeInfo? = roots().firstNotNullOfOrNull { root ->
+        find(root) { it.text?.toString()?.contains(value) == true || it.contentDescription?.toString() == value }
     }
     fun layout(node: AccessibilityNodeInfo): String = buildString {
         for (index in 0 until node.childCount) {
@@ -55,7 +72,7 @@ internal fun runPublicKeyContactsUiTests(instrumentation: Instrumentation) {
     }
     // Three steps forward, three back: reaches content on either side of the viewport.
     fun scroll(step: Int) {
-        val scrollable = find(instrumentation.uiAutomation.rootInActiveWindow) { it.isScrollable } ?: return
+        val scrollable = roots().firstNotNullOfOrNull { root -> find(root) { it.isScrollable } } ?: return
         val action = if ((step / 3) % 2 == 0)
             AccessibilityNodeInfo.ACTION_SCROLL_FORWARD else AccessibilityNodeInfo.ACTION_SCROLL_BACKWARD
         // Compose offers only the directions it can still scroll.
@@ -91,8 +108,8 @@ internal fun runPublicKeyContactsUiTests(instrumentation: Instrumentation) {
         val deadline = SystemClock.uptimeMillis() + 30000
         var attempts = 0
         while (true) {
-            var target = find(instrumentation.uiAutomation.rootInActiveWindow) {
-                it.text?.toString() == value || it.contentDescription?.toString() == value
+            var target = roots().firstNotNullOfOrNull { root ->
+                find(root) { it.text?.toString() == value || it.contentDescription?.toString() == value }
             }
             var observed = if (target == null) "not in tree" else "label found"
             while (target != null && !target.isClickable) target = fresh(target.parent)
@@ -109,11 +126,11 @@ internal fun runPublicKeyContactsUiTests(instrumentation: Instrumentation) {
         instrumentation.waitForIdleSync()
     }
     fun openDialog(value: String) {
-        val previousWindow = checkNotNull(instrumentation.uiAutomation.rootInActiveWindow).windowId
+        val previousWindow = checkNotNull(screen()).windowId
         click(value)
         val deadline = SystemClock.uptimeMillis() + 10000
         while (SystemClock.uptimeMillis() < deadline) {
-            val current = instrumentation.uiAutomation.rootInActiveWindow
+            val current = screen()
             if (current != null && current.windowId != previousWindow) return
             SystemClock.sleep(100)
         }
@@ -207,7 +224,7 @@ internal fun runPublicKeyContactsUiTests(instrumentation: Instrumentation) {
         val editorDeadline = SystemClock.uptimeMillis() + 10000
         var editor: AccessibilityNodeInfo? = null
         while (editor == null && SystemClock.uptimeMillis() < editorDeadline) {
-            editor = find(instrumentation.uiAutomation.rootInActiveWindow) { it.isEditable }
+            editor = find(screen()) { it.isEditable }
             if (editor == null) {
                 instrumentation.waitForIdleSync()
                 SystemClock.sleep(100)
@@ -299,13 +316,14 @@ internal fun runPublicKeyContactsUiTests(instrumentation: Instrumentation) {
                     .append('\n')
                 for (index in 0 until node.childCount) dump(node.getChild(index), depth + 1)
             }
-            dump(instrumentation.uiAutomation.rootInActiveWindow, 0)
+            dump(screen(), 0)
             File(context.cacheDir, "i18n-screens/contacts-failure.txt").writeText(tree.toString())
         }
         throw error
     } finally {
         savedId?.let { if (contacts.readState().contacts.any { contact -> contact.id == it }) contacts.delete(it) }
         if (generatedDeviceKey) manager.deleteKeypair()
+        automation.serviceInfo = priorServiceInfo
         instrumentation.runOnMainSync {
             activity?.finish()
             AppLanguages.setSelection(context, priorLanguage)
