@@ -375,7 +375,7 @@ The header is followed by:
 
 The complete `header || salt || nonce` is AES-GCM AAD. The reader strictly validates the version, algorithms, parameters, lengths, and GCM tag. An incorrect password or any change to authenticated fields or ciphertext causes failure, with one public private-key unlock error for wrong passwords and damaged containers. Decryption buffers always stay in memory, including data produced before tag verification, and are cleared on failure.
 
-NKPR's AES-GCM is not key-committing: it does not guarantee that only one password or protection key can authenticate a container, or that different protection keys yield the same plaintext. This documents the existing format's boundary without changing NKPR or its cryptographic parameters.
+NKPR's AES-GCM is not key-committing: it does not guarantee that only one password or protection key can authenticate a container, or that different protection keys yield the same plaintext. This documents the existing format's boundary without changing NKPR or its cryptographic parameters. NKEM v4/v5 commit to the file key through the header HMAC-SHA512 and are not affected; the assessment of every AES-GCM use and a draft NKPR v3 design are in [Key commitment](docs/key-commitment.md).
 
 ## NKEM v3 hybrid file format
 
