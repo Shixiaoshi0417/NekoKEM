@@ -168,14 +168,6 @@ internal fun runPublicKeyContactsUiTests(instrumentation: Instrumentation) {
         awaitText(checkNotNull(activity).getString(R.string.contact_verified))
         awaitText(checkNotNull(activity).getString(R.string.action_scan_fingerprint))
         capture("contacts-verified")
-        // Keys shows this device's fingerprint as a QR code.
-        clickNavigationTab(instrumentation, checkNotNull(activity).getString(R.string.tab_keys))
-        openDialog(checkNotNull(activity).getString(R.string.action_show_fingerprint_qr))
-        awaitText(checkNotNull(activity).getString(R.string.fingerprint_qr_hint))
-        SystemClock.sleep(500)
-        capture("keys-fingerprint-qr")
-        click(checkNotNull(activity).getString(R.string.action_close))
-        openContacts()
         openDialog(checkNotNull(activity).getString(R.string.action_edit_contact_note))
         val editorDeadline = SystemClock.uptimeMillis() + 10000
         var editor: AccessibilityNodeInfo? = null
@@ -247,6 +239,14 @@ internal fun runPublicKeyContactsUiTests(instrumentation: Instrumentation) {
         awaitText(checkNotNull(activity).getString(R.string.contact_unavailable))
         click(checkNotNull(activity).getString(R.string.action_restore_default_public_key))
         awaitText(checkNotNull(activity).getString(R.string.key_source_app_default))
+        // Keys shows this device's fingerprint as a QR code. This runs last: Android 8 can
+        // keep reporting a closed dialog as the active window, hiding the page behind it.
+        clickNavigationTab(instrumentation, checkNotNull(activity).getString(R.string.tab_keys))
+        openDialog(checkNotNull(activity).getString(R.string.action_show_fingerprint_qr))
+        awaitText(checkNotNull(activity).getString(R.string.fingerprint_qr_hint))
+        SystemClock.sleep(500)
+        capture("keys-fingerprint-qr")
+        click(checkNotNull(activity).getString(R.string.action_close))
     } catch (error: Throwable) {
         runCatching {
             capture("contacts-failure")
