@@ -309,4 +309,5 @@
     <string name="action_scan_again">重新扫描</string>
     <string name="contact_verified">已扫码核对指纹</string>
     <string name="operation_verify_contact">核对联系人</string>
+    <string name="fingerprint_scan_camera_unavailable">未找到可用的相机，此设备无法扫码。请改为与对方逐字核对完整指纹。</string>
 </resources>

@@ -139,16 +139,23 @@ fun FingerprintScanner(contact: PublicKeyContact, onResult: (String) -> Unit, on
         )
     }
     var denied by remember { mutableStateOf(false) }
+    var unavailable by remember { mutableStateOf(false) }
     val permission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { result ->
         granted = result
         denied = !result
     }
     LaunchedEffect(Unit) { if (!granted) permission.launch(Manifest.permission.CAMERA) }
-    if (denied) {
+    if (denied || unavailable) {
         AppAlertDialog(
             onDismissRequest = onDismiss,
             title = { Text(stringResource(R.string.fingerprint_scan_title)) },
-            text = { Text(stringResource(R.string.fingerprint_scan_permission_denied)) },
+            text = {
+                Text(
+                    stringResource(
+                        if (denied) R.string.fingerprint_scan_permission_denied else R.string.fingerprint_scan_camera_unavailable,
+                    ),
+                )
+            },
             confirmButton = { DialogButton(stringResource(R.string.action_close), onClick = onDismiss) },
         )
         return
@@ -159,7 +166,7 @@ fun FingerprintScanner(contact: PublicKeyContact, onResult: (String) -> Unit, on
         properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false),
     ) {
         Box(Modifier.fillMaxSize().background(Color.Black)) {
-            CameraPreview(onResult)
+            CameraPreview(onResult, onUnavailable = { unavailable = true })
             Box(
                 Modifier
                     .align(Alignment.Center)
@@ -184,14 +191,17 @@ fun FingerprintScanner(contact: PublicKeyContact, onResult: (String) -> Unit, on
 }
 
 @Composable
-private fun CameraPreview(onResult: (String) -> Unit) {
+private fun CameraPreview(onResult: (String) -> Unit, onUnavailable: () -> Unit) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
     val currentOnResult by rememberUpdatedState(onResult)
+    val currentOnUnavailable by rememberUpdatedState(onUnavailable)
     val previewView = remember { PreviewView(context) }
     DisposableEffect(lifecycleOwner) {
         val executor = Executors.newSingleThreadExecutor()
         val done = AtomicBoolean(false)
+        // Set on the main thread before the listener below can run there again.
+        var disposed = false
         val providerFuture = ProcessCameraProvider.getInstance(context)
         var provider: ProcessCameraProvider? = null
         val analysis = ImageAnalysis.Builder()
@@ -206,15 +216,20 @@ private fun CameraPreview(onResult: (String) -> Unit) {
                 }
             }
         providerFuture.addListener({
-            val ready = providerFuture.get()
-            provider = ready
-            val preview = Preview.Builder().build().also { it.surfaceProvider = previewView.surfaceProvider }
-            runCatching {
+            // A scanner closed while CameraX was starting never opens the camera.
+            if (disposed) return@addListener
+            // No usable camera, or CameraX failed to start: report it instead of crashing.
+            val bound = runCatching {
+                val ready = providerFuture.get()
+                provider = ready
+                val preview = Preview.Builder().build().also { it.surfaceProvider = previewView.surfaceProvider }
                 ready.unbindAll()
                 ready.bindToLifecycle(lifecycleOwner, CameraSelector.DEFAULT_BACK_CAMERA, preview, analysis)
             }
+            if (bound.isFailure) currentOnUnavailable()
         }, ContextCompat.getMainExecutor(context))
         onDispose {
+            disposed = true
             done.set(true)
             analysis.clearAnalyzer()
             provider?.unbindAll()

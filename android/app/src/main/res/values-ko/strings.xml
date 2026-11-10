@@ -295,4 +295,5 @@
     <string name="action_scan_again">다시 스캔</string>
     <string name="contact_verified">스캔으로 지문 확인됨</string>
     <string name="operation_verify_contact">연락처 확인</string>
+    <string name="fingerprint_scan_camera_unavailable">사용할 수 있는 카메라가 없어 이 기기에서는 스캔할 수 없습니다. 대신 상대와 전체 지문을 눈으로 비교하세요.</string>
 </resources>
