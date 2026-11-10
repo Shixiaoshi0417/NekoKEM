@@ -15,7 +15,7 @@ class ContactFingerprintFormatTest {
     }
 
     @Test fun shortFormKeepsBothEnds() {
-        assertEquals("00:08:10:18 … E0:E8:F0:F8", shortFingerprint(fingerprint))
-        assertEquals("AB:CD", shortFingerprint("AB:CD"))
+        assertEquals("0008 1018 … F0F8", shortFingerprint(fingerprint))
+        assertEquals("ABCD", shortFingerprint("AB:CD"))
     }
 }

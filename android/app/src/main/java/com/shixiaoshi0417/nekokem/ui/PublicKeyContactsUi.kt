@@ -361,11 +361,11 @@ internal fun FingerprintGrid(fingerprint: String, modifier: Modifier = Modifier,
 internal fun fingerprintRows(fingerprint: String): List<String> =
     fingerprint.replace(":", "").chunked(4).chunked(4).map { it.joinToString(" ") }
 
-/** First and last four bytes, enough to tell contacts apart at a glance. */
+/** The grid's first two groups and last group, enough to tell contacts apart at a glance. */
 internal fun shortFingerprint(fingerprint: String): String {
-    val pairs = fingerprint.split(':')
-    if (pairs.size <= 8) return fingerprint
-    return pairs.take(4).joinToString(":") + " … " + pairs.takeLast(4).joinToString(":")
+    val groups = fingerprint.replace(":", "").chunked(4)
+    if (groups.size <= 3) return groups.joinToString(" ")
+    return groups.take(2).joinToString(" ") + " … " + groups.last()
 }
 
 @Composable
