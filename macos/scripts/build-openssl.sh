@@ -75,7 +75,7 @@ import sys
 prefix = Path(sys.argv[1])
 for name in ['lib/libcrypto.a', 'include/openssl/evp.h', 'LICENSE.txt']:
     assert (prefix/name).is_file() and (prefix/name).stat().st_size, name
-assert re.search(r'^#\s*define OPENSSL_VERSION_STR "4\.0\.3"',
+assert re.search(r'^#\s*define OPENSSL_VERSION_STR "4\.1\.0"',
                  (prefix/'include/openssl/opensslv.h').read_text(), re.M)
 arches = subprocess.check_output(['xcrun', 'lipo', '-archs', str(prefix/'lib/libcrypto.a')], text=True).strip()
 assert arches == 'arm64', f'OpenSSL is not native arm64: {arches}'

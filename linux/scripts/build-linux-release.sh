@@ -131,7 +131,7 @@ if [[ ! -s "$openssl_library" || ! -f "$openssl_prefix/include/openssl/evp.h" ]]
     printf 'Static OpenSSL build did not produce the expected files\n' >&2
     exit 1
 fi
-if ! grep -Eq '^# *define OPENSSL_VERSION_STR "4\.0\.3"' \
+if ! grep -Eq '^# *define OPENSSL_VERSION_STR "4\.1\.0"' \
     "$openssl_prefix/include/openssl/opensslv.h"; then
     printf 'OpenSSL headers must match pinned version %s\n' "$OPENSSL_VERSION" >&2
     exit 1

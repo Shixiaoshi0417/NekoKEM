@@ -75,7 +75,7 @@ import sys
 prefix=Path(sys.argv[1])
 for name in ['lib/libcrypto.a','include/openssl/evp.h','LICENSE.txt']:
     assert (prefix/name).is_file() and (prefix/name).stat().st_size, name
-assert re.search(r'^#\s*define OPENSSL_VERSION_STR "4\.0\.3"',
+assert re.search(r'^#\s*define OPENSSL_VERSION_STR "4\.1\.0"',
                  (prefix/'include/openssl/opensslv.h').read_text(), re.M)
 machines=set(re.findall(r'Machine:\s+(.+)',subprocess.check_output(
     ['readelf','-h',str(prefix/'lib/libcrypto.a')],text=True)))

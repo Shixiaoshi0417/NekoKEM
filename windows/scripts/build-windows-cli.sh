@@ -42,7 +42,7 @@ fi
     echo 'Prebuilt OpenSSL configuration/compiler mismatch' >&2
     exit 1
 }
-grep -Eq '^# *define OPENSSL_VERSION_STR "4\.0\.3"' "$prefix/include/openssl/opensslv.h"
+grep -Eq '^# *define OPENSSL_VERSION_STR "4\.1\.0"' "$prefix/include/openssl/opensslv.h"
 cp "$prefix/LICENSE.txt" "$output/OPENSSL-LICENSE.txt"
 flags=(-std=c17 -O2 -Wall -Wextra -Wpedantic -Wconversion -Wshadow -Wformat=2 \
        -Wstrict-prototypes -Werror -fstack-protector-strong -D_FORTIFY_SOURCE=3 \
