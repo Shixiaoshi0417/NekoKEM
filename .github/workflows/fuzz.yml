@@ -9,6 +9,10 @@ on:
   schedule:
     # Sundays 18:00 UTC.
     - cron: "0 18 * * 0"
+  # A change to this workflow is checked with a one-minute run per target.
+  pull_request:
+    paths:
+      - .github/workflows/fuzz.yml
   workflow_dispatch:
     inputs:
       seconds:
@@ -21,7 +25,7 @@ permissions:
 
 concurrency:
   group: fuzz-${{ github.ref }}
-  cancel-in-progress: false
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   fuzz:
@@ -40,10 +44,15 @@ jobs:
 
       - name: Choose the fuzzing time
         env:
+          EVENT: ${{ github.event_name }}
           REQUESTED: ${{ inputs.seconds }}
         run: |
           set -Eeuo pipefail
-          seconds="${REQUESTED:-3600}"
+          if [[ "$EVENT" == pull_request ]]; then
+            seconds=60
+          else
+            seconds="${REQUESTED:-3600}"
+          fi
           if ! [[ "$seconds" =~ ^[0-9]+$ ]] || (( seconds < 60 || seconds > 18000 )); then
             echo "seconds must be a whole number from 60 to 18000, got '$seconds'" >&2
             exit 1
