@@ -6,10 +6,15 @@ import android.app.Instrumentation
 import android.content.Context
 import android.content.Intent
 import android.graphics.Bitmap
+import android.net.Uri
 import android.os.Build
 import android.os.SystemClock
 import android.view.accessibility.AccessibilityNodeInfo
+import com.shixiaoshi0417.nekokem.files.SafFileWorkflow
 import com.shixiaoshi0417.nekokem.i18n.AppLanguages
+import com.shixiaoshi0417.nekokem.keys.LocalKeyManager
+import com.shixiaoshi0417.nekokem.keys.PublicKeyContacts
+import com.shixiaoshi0417.nekokem.nativecore.NativeBridge
 import com.shixiaoshi0417.nekokem.ui.SignatureSettingsStore
 import com.shixiaoshi0417.nekokem.update.Releases
 import com.shixiaoshi0417.nekokem.update.UpdateSettingsStore
@@ -61,6 +66,11 @@ internal fun runMiuixUiTests(instrumentation: Instrumentation, screenshotPrefix:
         return roots.firstNotNullOfOrNull { root ->
             find(root) { it.text?.toString() == value || it.contentDescription?.toString() == value }
         }
+    }
+    fun containing(value: String): AccessibilityNodeInfo? {
+        val roots = listOfNotNull(automation.rootInActiveWindow) +
+            runCatching { automation.windows.mapNotNull { it.root } }.getOrDefault(emptyList())
+        return roots.firstNotNullOfOrNull { root -> find(root) { it.text?.toString()?.contains(value) == true } }
     }
     fun string(resource: Int) = checkNotNull(activity).getString(resource)
     fun capture(name: String) {
@@ -146,7 +156,22 @@ internal fun runMiuixUiTests(instrumentation: Instrumentation, screenshotPrefix:
                 )
         } >= 2
     }
+    // Two saved contacts, one verified, show the small cards and the detail page.
+    val contacts = PublicKeyContacts(context, LocalKeyManager(context))
+    val savedContacts = mutableListOf<String>()
     try {
+        val keyDir = File.createTempFile("ci-miuix-contacts-", ".tmp", context.cacheDir).apply { check(delete() && mkdir()) }
+        try {
+            val workflow = SafFileWorkflow(context, LocalKeyManager(context))
+            for ((note, verified) in listOf("Alice" to true, "Bob" to false)) {
+                val publicKey = File(keyDir, "$note.key")
+                generateContactTestKeypair(publicKey, File(keyDir, "$note.nkpr"))
+                val key = checkNotNull(workflow.stageTemporaryPublicKey(Uri.fromFile(publicKey), "$note.key").key)
+                val contact = try { checkNotNull(contacts.save(key, note).contact) } finally { workflow.discardTemporaryPublicKey(key) }
+                savedContacts += contact.id
+                if (verified) check(contacts.setVerified(contact.id, contact.fingerprint, true).code == NativeBridge.RESULT_SUCCESS)
+            }
+        } finally { keyDir.deleteRecursively() }
         activity = instrumentation.startActivitySync(
             Intent(context, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
         )
@@ -177,6 +202,20 @@ internal fun runMiuixUiTests(instrumentation: Instrumentation, screenshotPrefix:
             clickNavigationTab(instrumentation, string(tab))
             await("page ${string(title)}") { exact(string(title)) != null }
             capture(string(tab).lowercase())
+            if (tab == R.string.tab_contacts) {
+                // A card opens the contact's page; back returns to the list.
+                var card: AccessibilityNodeInfo? = null
+                await("contact card") { card = containing("Alice"); card != null }
+                var target = checkNotNull(card)
+                while (!target.isClickable) target = checkNotNull(target.parent) { "Contact card is not clickable" }
+                check(target.performAction(AccessibilityNodeInfo.ACTION_CLICK))
+                await("contact page") { exact(string(R.string.contact_verify_title)) != null }
+                capture("contact-detail")
+                instrumentation.runOnMainSync {
+                    (checkNotNull(activity) as androidx.activity.ComponentActivity).onBackPressedDispatcher.onBackPressed()
+                }
+                await("contact list again") { exact(string(title)) != null }
+            }
         }
         // About checks on demand; skipping the version is remembered.
         click(string(R.string.action_check_update))
@@ -283,6 +322,7 @@ internal fun runMiuixUiTests(instrumentation: Instrumentation, screenshotPrefix:
             AppLanguages.setSelection(context, priorLanguage)
         }
         automation.serviceInfo = priorServiceInfo
+        savedContacts.forEach { contacts.delete(it) }
         useMaterialStyle(context)
         context.getSharedPreferences("signature_settings", Context.MODE_PRIVATE).edit().clear().commit()
         quietUpdateChecks(context)

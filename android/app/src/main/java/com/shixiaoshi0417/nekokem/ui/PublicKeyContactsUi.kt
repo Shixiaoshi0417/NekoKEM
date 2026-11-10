@@ -310,6 +310,9 @@ private fun PublicKeyContactDetail(
 /** Green for a contact whose fingerprint the user has verified. */
 internal val VerifiedGreen = Color(0xFF1E8E3E)
 
+/** Red for one that is not; fixed, since dark themes turn the error color pink. */
+internal val UnverifiedRed = Color(0xFFD93025)
+
 /**
  * The verification mark at the end of a contact card: a white tick in a green
  * circle once verified, a white cross in a red circle until then.
@@ -322,11 +325,10 @@ internal fun VerificationBadge(
     // Off where a text label beside the mark already says the same.
     described: Boolean = true,
 ) {
-    val red = if (isMiuixStyle()) MiuixTheme.colorScheme.error else MaterialTheme.colorScheme.error
     val description = stringResource(if (verified) R.string.contact_verified else R.string.contact_unverified)
     Canvas(modifier.size(size).semantics { if (described) contentDescription = description }) {
         val side = this.size.minDimension
-        drawCircle(if (verified) VerifiedGreen else red)
+        drawCircle(if (verified) VerifiedGreen else UnverifiedRed)
         val stroke = Stroke(width = side * 0.11f, cap = StrokeCap.Round, join = StrokeJoin.Round)
         if (verified) {
             val tick = Path().apply {
