@@ -67,7 +67,7 @@ check changes no application, Core or container version.
 ## Toolchain version policy
 
 CI and Release explicitly select Rust `1.99.0`, Node.js `24.21.0` and Python
-`3.13.16`. OpenSSL remains `4.0.3`, Android build-tools remain `35.0.0`, and their
+`3.13.16`. OpenSSL remains `4.1.0`, Android build-tools remain `35.0.0`, and their
 existing checksum/SDK checks stay in place. Publish uses exactly build-tools
 `35.0.0` even when a runner also has a newer version. The Publish token is
 available only to the publication step. Windows OpenSSL caches are saved only
@@ -171,7 +171,7 @@ v5.0.0 includes the following native macOS packages in CI and Release:
 
 Builds use native Apple Silicon and set a macOS 11.0 deployment target. The actual
 native CI runner is `macos-15`; the target does not establish compatibility on
-macOS 11.0 hardware or every M-series generation. OpenSSL 4.0.3 is statically
+macOS 11.0 hardware or every M-series generation. OpenSSL 4.1.0 is statically
 linked with arm64 assembly acceleration; macOS system libraries/frameworks remain
 runtime dependencies. The GUI uses system WKWebView without a WebView2 loader.
 
@@ -203,7 +203,7 @@ CI and Release produce, for each `x86_64`/`aarch64` architecture:
 
 The GUI uses system GTK3, WebKitGTK 4.1 and glibc 2.39 or newer; the portable archive
 does not bundle these runtimes. This differs from the existing fully static CLI
-archives, whose build path is retained. Core uses pinned static PIC OpenSSL 4.0.3
+archives, whose build path is retained. Core uses pinned static PIC OpenSSL 4.1.0
 with assembly/threads and hidden symbols to isolate it from system WebKit TLS.
 Native ELF architecture, PIE/full RELRO/nonexecutable stack, no RPATH/TEXTREL or
 OpenSSL dynamic exports, licenses, unchanged icons and hashes remain Release

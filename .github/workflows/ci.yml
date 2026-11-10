@@ -47,10 +47,10 @@ jobs:
       - name: Test atomic performance report saving
         run: python3 scripts/test_profile_reports.py -v
 
-      - name: Build OpenSSL 4.0.3
+      - name: Build OpenSSL 4.1.0
         env:
-          OPENSSL_VERSION: "4.0.3"
-          OPENSSL_SHA256: 325b5c806167c13b40b1ffeadfe0248197c00eccc4cf123ec1e28d2d2fd216d9
+          OPENSSL_VERSION: "4.1.0"
+          OPENSSL_SHA256: 50c17baf54cb008f6ce42d50deb4b28050a1aad711636cabd4b241c7e90cc2fd
         run: |
           set -Eeuo pipefail
           build_root="$RUNNER_TEMP/openssl-build"
@@ -77,14 +77,14 @@ jobs:
 
       - name: Run complete Linux test suite
         env:
-          CPATH: ${{ runner.temp }}/openssl-4.0.3/include
-          LIBRARY_PATH: ${{ runner.temp }}/openssl-4.0.3/lib
+          CPATH: ${{ runner.temp }}/openssl-4.1.0/include
+          LIBRARY_PATH: ${{ runner.temp }}/openssl-4.1.0/lib
         run: make -C linux test
 
       - name: Verify build-only release mode preserves the Linux binary
         run: |
           set -Eeuo pipefail
-          export NEKOKEM_OPENSSL_PREFIX="$RUNNER_TEMP/openssl-4.0.3"
+          export NEKOKEM_OPENSSL_PREFIX="$RUNNER_TEMP/openssl-4.1.0"
           for mode in 1 0; do
             NEKOKEM_BUILD_TESTS="$mode" bash linux/scripts/build-linux-release.sh \
               x86_64 "$RUNNER_TEMP/release-mode-$mode"
@@ -94,8 +94,8 @@ jobs:
 
       - name: Compare Linux throughput against the PR base
         env:
-          CPATH: ${{ runner.temp }}/openssl-4.0.3/include
-          LIBRARY_PATH: ${{ runner.temp }}/openssl-4.0.3/lib
+          CPATH: ${{ runner.temp }}/openssl-4.1.0/include
+          LIBRARY_PATH: ${{ runner.temp }}/openssl-4.1.0/lib
         run: |
           set -Eeuo pipefail
           # Both builds use the same runner, pinned OpenSSL and hardened flags.
@@ -134,8 +134,8 @@ jobs:
           AFL_I_DONT_CARE_ABOUT_MISSING_CRASHES: "1"
           AFL_NO_UI: "1"
           AFL_SKIP_CPUFREQ: "1"
-          CPATH: ${{ runner.temp }}/openssl-4.0.3/include
-          LIBRARY_PATH: ${{ runner.temp }}/openssl-4.0.3/lib
+          CPATH: ${{ runner.temp }}/openssl-4.1.0/include
+          LIBRARY_PATH: ${{ runner.temp }}/openssl-4.1.0/lib
         run: |
           set -Eeuo pipefail
           make -C linux fuzz-build \
@@ -208,7 +208,7 @@ jobs:
         with:
           cache-read-only: ${{ github.event_name == 'pull_request' }}
 
-      - name: Build OpenSSL 4.0.3 for Android arm64
+      - name: Build OpenSSL 4.1.0 for Android arm64
         working-directory: android
         env:
           JOBS: "2"
@@ -477,8 +477,8 @@ jobs:
         id: openssl-cache
         with:
           path: ${{ runner.temp }}/windows-openssl
-          key: windows-ucrt64-openssl-4.0.3-${{ steps.compiler.outputs.version }}-${{ hashFiles('windows/scripts/build-windows-cli.sh') }}
-          restore-keys: windows-ucrt64-openssl-4.0.3-${{ steps.compiler.outputs.version }}-
+          key: windows-ucrt64-openssl-4.1.0-${{ steps.compiler.outputs.version }}-${{ hashFiles('windows/scripts/build-windows-cli.sh') }}
+          restore-keys: windows-ucrt64-openssl-4.1.0-${{ steps.compiler.outputs.version }}-
       - name: Build native x64 EXE with pinned OpenSSL and verify PE mitigations
         shell: msys2 {0}
         run: |
@@ -699,8 +699,8 @@ jobs:
         id: openssl-cache
         with:
           path: ${{ runner.temp }}/windows-openssl
-          key: windows-ucrt64-openssl-4.0.3-${{ steps.compiler.outputs.version }}-${{ hashFiles('windows/scripts/build-windows-cli.sh') }}
-          restore-keys: windows-ucrt64-openssl-4.0.3-${{ steps.compiler.outputs.version }}-
+          key: windows-ucrt64-openssl-4.1.0-${{ steps.compiler.outputs.version }}-${{ hashFiles('windows/scripts/build-windows-cli.sh') }}
+          restore-keys: windows-ucrt64-openssl-4.1.0-${{ steps.compiler.outputs.version }}-
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
         with:
           workspaces: desktop/src-tauri
@@ -795,7 +795,7 @@ jobs:
           $loaderHash = (Get-FileHash "$root/WebView2Loader.dll" -Algorithm SHA256).Hash.ToLowerInvariant()
           "$hash  nekokem-gui.exe","$loaderHash  WebView2Loader.dll" | Set-Content "$root/SHA256SUMS.txt"
           $version = (Get-Content desktop/src-tauri/tauri.conf.json -Raw | ConvertFrom-Json).version
-          @{ source_sha=$env:GITHUB_SHA; run_id=$env:GITHUB_RUN_ID; version=$version; exe_sha256=$hash; platform='windows-x86_64'; compiler_version='${{ steps.compiler.outputs.version }}'; openssl_version='4.0.3'; authenticode_signed=$false; apk_signing_material_used=$false } | ConvertTo-Json | Set-Content "$root/build-metadata.json"
+          @{ source_sha=$env:GITHUB_SHA; run_id=$env:GITHUB_RUN_ID; version=$version; exe_sha256=$hash; platform='windows-x86_64'; compiler_version='${{ steps.compiler.outputs.version }}'; openssl_version='4.1.0'; authenticode_signed=$false; apk_signing_material_used=$false } | ConvertTo-Json | Set-Content "$root/build-metadata.json"
           Compress-Archive -Path "$root/*" -DestinationPath "$env:RUNNER_TEMP/NekoKEM-Windows-GUI.zip"
           Remove-Item $env:TEMP -Recurse -Force
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
@@ -838,7 +838,7 @@ jobs:
       - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
         with:
           path: ${{ runner.temp }}/macos-openssl
-          key: macos-arm64-openssl-4.0.3-${{ steps.compiler.outputs.identity }}-${{ hashFiles('macos/scripts/build-openssl.sh') }}
+          key: macos-arm64-openssl-4.1.0-${{ steps.compiler.outputs.identity }}-${{ hashFiles('macos/scripts/build-openssl.sh') }}
       - name: Build and test native arm64 CLI with ASan and UBSan
         run: bash macos/scripts/build-macos-cli.sh "$RUNNER_TEMP/macos-cli"
       - name: Verify build-only mode preserves the release binary and package
@@ -905,7 +905,7 @@ jobs:
       - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
         with:
           path: ${{ runner.temp }}/macos-openssl
-          key: macos-arm64-openssl-4.0.3-${{ steps.compiler.outputs.identity }}-${{ hashFiles('macos/scripts/build-openssl.sh') }}
+          key: macos-arm64-openssl-4.1.0-${{ steps.compiler.outputs.identity }}-${{ hashFiles('macos/scripts/build-openssl.sh') }}
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
         with:
           workspaces: desktop/src-tauri
@@ -991,7 +991,7 @@ jobs:
       - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
         with:
           path: ${{ runner.temp }}/linux-gui-openssl
-          key: linux-gui-${{ matrix.arch }}-openssl-4.0.3-${{ steps.compiler.outputs.identity }}-${{ hashFiles('desktop/scripts/build-linux-openssl.sh') }}
+          key: linux-gui-${{ matrix.arch }}-openssl-4.1.0-${{ steps.compiler.outputs.identity }}-${{ hashFiles('desktop/scripts/build-linux-openssl.sh') }}
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
         with:
           workspaces: desktop/src-tauri

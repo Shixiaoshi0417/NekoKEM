@@ -2,8 +2,8 @@
 set -Eeuo pipefail
 IFS=$'\n\t'
 
-readonly OPENSSL_VERSION="4.0.3"
-readonly OPENSSL_SHA256="325b5c806167c13b40b1ffeadfe0248197c00eccc4cf123ec1e28d2d2fd216d9"
+readonly OPENSSL_VERSION="4.1.0"
+readonly OPENSSL_SHA256="50c17baf54cb008f6ce42d50deb4b28050a1aad711636cabd4b241c7e90cc2fd"
 readonly OPENSSL_URL="https://github.com/openssl/openssl/releases/download/openssl-${OPENSSL_VERSION}/openssl-${OPENSSL_VERSION}.tar.gz"
 build_tests=${NEKOKEM_BUILD_TESTS:-1}
 if [[ "$build_tests" != 0 && "$build_tests" != 1 ]]; then

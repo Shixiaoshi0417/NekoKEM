@@ -127,7 +127,7 @@ failure handling and scrubbing of pasted key text.
 ## Windows build
 
 Use Node 24, Rust with `x86_64-pc-windows-gnu` target, MSYS2 UCRT64 GCC and the
-pinned static OpenSSL 4.0.3 prefix created by `windows/scripts/build-windows-cli.sh`.
+pinned static OpenSSL 4.1.0 prefix created by `windows/scripts/build-windows-cli.sh`.
 The GNU target intentionally matches the existing tested C17 Windows ABI/toolchain.
 
 ```powershell
@@ -151,7 +151,7 @@ WebView2 SDK crate and its Microsoft Authenticode signature before packaging.
 ## Apple Silicon macOS build
 
 Build on an arm64 Mac with Xcode Command Line Tools, Node 24 and Rust stable.
-The macOS helper builds the pinned static OpenSSL 4.0.3 prefix and checks its
+The macOS helper builds the pinned static OpenSSL 4.1.0 prefix and checks its
 official source checksum, compiler/SDK manifest, runtime and Argon2 thread support.
 GUI builds reuse that prefix. OpenSSL and project licenses enter the app before
 its resources are sealed and signed.
@@ -258,7 +258,7 @@ python3 desktop/scripts/package-linux-gui.py \
   --openssl-prefix "$NEKOKEM_OPENSSL_PREFIX" --source-sha "$(git rev-parse HEAD)"
 ```
 
-The helper verifies the official OpenSSL 4.0.3 source checksum and builds native
+The helper verifies the official OpenSSL 4.1.0 source checksum and builds native
 static PIC libcrypto with assembly/threads, Fortify and stack protection. Core and
 OpenSSL symbols stay hidden from WebKit's dynamic TLS libraries. Packaging checks
 ELF PIE/full RELRO/nonexecutable stack, dependencies, licenses, the unchanged PNG

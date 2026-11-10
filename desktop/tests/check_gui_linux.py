@@ -39,13 +39,13 @@ def verify(binary, architecture, prefix):
     glibc = max((tuple(map(int, match.split('.'))) for match in re.findall(r'GLIBC_([0-9.]+)', versions)), default=(0, 0))
     assert glibc <= (2, 39), f'Build exceeds the tested Ubuntu 24.04 glibc baseline: {glibc}'
     manifest = json.loads((prefix/'nekokem-build-manifest.json').read_text())
-    assert manifest['architecture'] == architecture and manifest['openssl_version'] == '4.0.3'
+    assert manifest['architecture'] == architecture and manifest['openssl_version'] == '4.1.0'
     assert '-fPIC' in manifest['cflags'] and '-O3' in manifest['cflags']
     return {
         'architecture': architecture, 'target': architecture+'-unknown-linux-gnu',
         'version': '5.0.0', 'tested_distribution': 'Ubuntu 24.04',
         'required_glibc': '.'.join(map(str, glibc)),
-        'openssl_version': '4.0.3', 'openssl_source_sha256': manifest['openssl_source_sha256'],
+        'openssl_version': '4.1.0', 'openssl_source_sha256': manifest['openssl_source_sha256'],
         'openssl_dynamic_exports': 0, 'core_dynamic_exports': 0,
         'exe_sha256': hashlib.sha256(binary.read_bytes()).hexdigest(),
         'elf_dependencies': libraries, 'pie': True, 'full_relro': True,

@@ -256,7 +256,7 @@ ML-DSA-87 signature = ML-DSA-87.Sign(sender ML-DSA key, M,
 
 Ed448 is the RFC 8032 Ed448 variant with a context string, not Ed448ph.
 ML-DSA-87 uses the pure (non-prehash) FIPS 204 interface with OpenSSL's
-default hedged randomness. Both come from OpenSSL 4.0.3 through EVP.
+default hedged randomness. Both come from OpenSSL 4.1.0 through EVP.
 
 ```text
 encrypted signature block || signature block tag =

@@ -2,7 +2,7 @@
 
 v5.0.0 面向 M 系列 Mac 的原生 `arm64` 架构，提供 CLI 和 Rust + Tauri 2 + Vue 3 + TypeScript GUI。不提供 Intel/Rosetta 构建。从 [v5.0.0 Release](https://github.com/Shixiaoshi0417/NekoKEM/releases/tag/v5.0.0) 下载 CLI、GUI ZIP 或 DMG，先用顶层 `SHA256SUMS.txt` 校验归档，再校验包内文件。
 
-构建使用 macOS 11.0 deployment target；实际原生 CI 运行于 GitHub `macos-15` arm64 runner。deployment target 不等于 macOS 11.0 实机验证，也不承诺不同代 M 系列芯片具有相同性能。两种应用静态链接固定 OpenSSL 4.0.3，并保留其 arm64 汇编加速；运行不需要 Homebrew OpenSSL dylib，但仍依赖 macOS 系统库与框架。GUI 使用系统 WKWebView，不需要 WebView2 Runtime 或 `WebView2Loader.dll`。
+构建使用 macOS 11.0 deployment target；实际原生 CI 运行于 GitHub `macos-15` arm64 runner。deployment target 不等于 macOS 11.0 实机验证，也不承诺不同代 M 系列芯片具有相同性能。两种应用静态链接固定 OpenSSL 4.1.0，并保留其 arm64 汇编加速；运行不需要 Homebrew OpenSSL dylib，但仍依赖 macOS 系统库与框架。GUI 使用系统 WKWebView，不需要 WebView2 Runtime 或 `WebView2Loader.dll`。
 
 ## 构建与产物
 
@@ -53,7 +53,7 @@ Core 4.0 新增 NKEM v4 多接收方容器；NKEM v3、NKPR v1、密码算法、
 
 v5.0.0 targets native `arm64` M-series Macs with a CLI and Rust + Tauri 2 + Vue 3 + TypeScript GUI. Intel/Rosetta builds are not provided. Download the CLI, GUI ZIP or DMG from the [v5.0.0 Release](https://github.com/Shixiaoshi0417/NekoKEM/releases/tag/v5.0.0), verify the archive against the top-level `SHA256SUMS.txt`, then check its internal files.
 
-Builds set a macOS 11.0 deployment target; actual native CI uses GitHub's `macos-15` arm64 runner. The deployment target does not establish physical macOS 11.0 compatibility or identical performance across M-series generations. Both applications statically link pinned OpenSSL 4.0.3 with arm64 assembly acceleration retained. They require no Homebrew OpenSSL dylib but still depend on macOS system libraries/frameworks. The GUI uses system WKWebView, with no WebView2 Runtime or `WebView2Loader.dll` requirement.
+Builds set a macOS 11.0 deployment target; actual native CI uses GitHub's `macos-15` arm64 runner. The deployment target does not establish physical macOS 11.0 compatibility or identical performance across M-series generations. Both applications statically link pinned OpenSSL 4.1.0 with arm64 assembly acceleration retained. They require no Homebrew OpenSSL dylib but still depend on macOS system libraries/frameworks. The GUI uses system WKWebView, with no WebView2 Runtime or `WebView2Loader.dll` requirement.
 
 ## Building and packages
 

@@ -122,8 +122,8 @@ root, repo, cc = Path(sys.argv[1]), Path(sys.argv[2]), sys.argv[3]
 metadata = {
     'source_sha': os.environ.get('GITHUB_SHA') or subprocess.check_output(['git', '-C', str(repo), 'rev-parse', 'HEAD'], text=True).strip(),
     'run_id': os.environ.get('GITHUB_RUN_ID'), 'platform': 'macos-arm64',
-    'version': '5.0.0', 'minimum_macos': '11.0', 'openssl_version': '4.0.3',
-    'openssl_source_sha256': '325b5c806167c13b40b1ffeadfe0248197c00eccc4cf123ec1e28d2d2fd216d9',
+    'version': '5.0.0', 'minimum_macos': '11.0', 'openssl_version': '4.1.0',
+    'openssl_source_sha256': '50c17baf54cb008f6ce42d50deb4b28050a1aad711636cabd4b241c7e90cc2fd',
     'compiler': subprocess.check_output([cc, '--version'], text=True).splitlines()[0],
     'sdk_version': subprocess.check_output(['xcrun', '--sdk', 'macosx', '--show-sdk-version'], text=True).strip(),
     'signing': 'ad-hoc', 'developer_id_signed': False, 'notarized': False,

@@ -27,7 +27,7 @@ README 图标仅使用专用圆角展示图，Android launcher 继续使用现�
 - Android SDK Platform 37.0、Build Tools 36.0.0（`compileSdk 37`、`minSdk 26`、`targetSdk 36`）
 - Android NDK r28c（`28.2.13676358`）、CMake、C17
 - 仅 `arm64-v8a`
-- Android arm64 OpenSSL 4.0.3 静态 `libcrypto.a`
+- Android arm64 OpenSSL 4.1.0 静态 `libcrypto.a`
 
 不使用 Android 系统 OpenSSL。可复现构建脚本位于
 `scripts/build-openssl-android.sh`。

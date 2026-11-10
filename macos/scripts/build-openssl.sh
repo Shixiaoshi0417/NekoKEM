@@ -2,8 +2,8 @@
 # Native Apple Silicon dependency used by both the CLI and Tauri application.
 set -Eeuo pipefail
 
-readonly OPENSSL_VERSION=4.0.3
-readonly OPENSSL_SHA256=325b5c806167c13b40b1ffeadfe0248197c00eccc4cf123ec1e28d2d2fd216d9
+readonly OPENSSL_VERSION=4.1.0
+readonly OPENSSL_SHA256=50c17baf54cb008f6ce42d50deb4b28050a1aad711636cabd4b241c7e90cc2fd
 readonly MINIMUM_MACOS=11.0
 if [[ $# != 1 || $(uname -s) != Darwin || $(uname -m) != arm64 ]]; then
     printf 'Usage: %s <prefix> (native macOS arm64 only)\n' "$0" >&2
@@ -31,8 +31,8 @@ import json
 from pathlib import Path
 import sys
 Path(sys.argv[1]).write_text(json.dumps({
-    'openssl_version': '4.0.3',
-    'openssl_source_sha256': '325b5c806167c13b40b1ffeadfe0248197c00eccc4cf123ec1e28d2d2fd216d9',
+    'openssl_version': '4.1.0',
+    'openssl_source_sha256': '50c17baf54cb008f6ce42d50deb4b28050a1aad711636cabd4b241c7e90cc2fd',
     'target': 'darwin64-arm64-cc', 'minimum_macos': '11.0',
     'compiler': sys.argv[2], 'sdk_version': sys.argv[3],
     'configure': ['no-shared', 'no-module', 'no-dso', 'no-tests', 'no-apps',
@@ -79,5 +79,5 @@ assert re.search(r'^#\s*define OPENSSL_VERSION_STR "4\.0\.3"',
                  (prefix/'include/openssl/opensslv.h').read_text(), re.M)
 arches = subprocess.check_output(['xcrun', 'lipo', '-archs', str(prefix/'lib/libcrypto.a')], text=True).strip()
 assert arches == 'arm64', f'OpenSSL is not native arm64: {arches}'
-print('Pinned static OpenSSL 4.0.3 arm64 and configuration verified')
+print('Pinned static OpenSSL 4.1.0 arm64 and configuration verified')
 PY

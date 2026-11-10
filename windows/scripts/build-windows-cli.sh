@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # Run in MSYS2 UCRT64. Produces a native x64 EXE with static OpenSSL/runtime.
 set -Eeuo pipefail
-readonly OPENSSL_VERSION=4.0.3
-readonly OPENSSL_SHA256=325b5c806167c13b40b1ffeadfe0248197c00eccc4cf123ec1e28d2d2fd216d9
+readonly OPENSSL_VERSION=4.1.0
+readonly OPENSSL_SHA256=50c17baf54cb008f6ce42d50deb4b28050a1aad711636cabd4b241c7e90cc2fd
 build_tests=${NEKOKEM_BUILD_TESTS:-1}
 if [[ "$build_tests" != 0 && "$build_tests" != 1 ]]; then
     printf 'NEKOKEM_BUILD_TESTS must be 0 or 1\n' >&2
@@ -107,7 +107,7 @@ if version is None: raise SystemExit('Windows CLI reported an invalid applicatio
 metadata={'source_sha':os.environ.get('GITHUB_SHA') or subprocess.check_output(['git','rev-parse','HEAD'],text=True).strip(),
           'run_id':os.environ.get('GITHUB_RUN_ID'), 'platform':'windows-x86_64',
           'version':version.group(1),
-          'openssl_version':'4.0.3', 'compiler':subprocess.check_output(['gcc','--version'],text=True).splitlines()[0],
+          'openssl_version':'4.1.0', 'compiler':subprocess.check_output(['gcc','--version'],text=True).splitlines()[0],
           'authenticode_signed':False, 'apk_signing_material_used':False,
           'exe_sha256':hashlib.sha256((root/'nekokem.exe').read_bytes()).hexdigest()}
 (root/'build-metadata.json').write_text(json.dumps(metadata,indent=2)+'\n')

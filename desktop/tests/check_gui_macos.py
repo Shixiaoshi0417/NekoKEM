@@ -54,7 +54,7 @@ def verify(app, expected_version, expected_source):
         "source_sha": expected_source,
         "target": "aarch64-apple-darwin",
         "minimum_macos": "11.0",
-        "openssl": "4.0.3-static",
+        "openssl": "4.1.0-static",
         "app_executable_sha256": hashlib.sha256(executable.read_bytes()).hexdigest(),
         "icon_sha256": hashlib.sha256(icon.read_bytes()).hexdigest(),
         "openssl_license_sha256": hashlib.sha256(openssl_license.read_bytes()).hexdigest(),

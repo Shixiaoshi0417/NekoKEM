@@ -447,8 +447,8 @@ mod tests {
         const OPENSSL_VERSION: c_int = 0;
         let version = unsafe { OpenSSL_version(OPENSSL_VERSION) };
         assert!(!version.is_null());
-        assert!(unsafe { CStr::from_ptr(version) }.to_bytes().starts_with(b"OpenSSL 4.0.3 "),
-                "GUI linked runtime does not match pinned OpenSSL 4.0.3");
+        assert!(unsafe { CStr::from_ptr(version) }.to_bytes().starts_with(b"OpenSSL 4.1.0 "),
+                "GUI linked runtime does not match pinned OpenSSL 4.1.0");
     }
     fn request(kind:Kind)->Request {Request{id:"test-job".into(),input:String::new(),output:String::new(),key_path:String::new(),public_path:String::new(),private_path:String::new(),password:Zeroizing::new(String::new()),confirmation:Zeroizing::new(String::new()),key_text:Zeroizing::new(String::new()),paste:false,replace:false,overwrite:false,contacts:Vec::new(),
         // Signing has its own tests; the others check one behaviour of all formats.

@@ -2,8 +2,8 @@
 # Native, position-independent static dependency for the Linux desktop only.
 set -Eeuo pipefail
 
-readonly openssl_version=4.0.3
-readonly openssl_sha256=325b5c806167c13b40b1ffeadfe0248197c00eccc4cf123ec1e28d2d2fd216d9
+readonly openssl_version=4.1.0
+readonly openssl_sha256=50c17baf54cb008f6ce42d50deb4b28050a1aad711636cabd4b241c7e90cc2fd
 if [[ $# != 2 || $(uname -s) != Linux ]]; then
     printf 'Usage: %s <x86_64|aarch64> <prefix> (native Linux only)\n' "$0" >&2
     exit 2
@@ -33,8 +33,8 @@ import json
 from pathlib import Path
 import sys
 Path(sys.argv[1]).write_text(json.dumps({
-    'openssl_version': '4.0.3',
-    'openssl_source_sha256': '325b5c806167c13b40b1ffeadfe0248197c00eccc4cf123ec1e28d2d2fd216d9',
+    'openssl_version': '4.1.0',
+    'openssl_source_sha256': '50c17baf54cb008f6ce42d50deb4b28050a1aad711636cabd4b241c7e90cc2fd',
     'architecture': sys.argv[2], 'target': sys.argv[3],
     'compiler': sys.argv[4], 'libc': sys.argv[5],
     'configure': ['no-shared', 'no-module', 'no-dso', 'no-tests', 'no-apps',
