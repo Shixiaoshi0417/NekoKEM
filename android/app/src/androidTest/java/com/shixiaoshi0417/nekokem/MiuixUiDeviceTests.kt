@@ -199,7 +199,6 @@ internal fun runMiuixUiTests(instrumentation: Instrumentation, screenshotPrefix:
             R.string.tab_keys to R.string.navigation_keys,
             R.string.tab_contacts to R.string.navigation_contacts,
             R.string.tab_settings to R.string.navigation_settings,
-            R.string.tab_about to R.string.navigation_about,
         )
         for ((tab, title) in pages) {
             clickNavigationTab(instrumentation, string(tab))
@@ -220,6 +219,10 @@ internal fun runMiuixUiTests(instrumentation: Instrumentation, screenshotPrefix:
                 await("contact list again") { exact(string(title)) != null }
             }
         }
+        // About is opened from the end of Settings, not from the bar.
+        click(string(R.string.tab_about))
+        await("About page") { reveal(string(R.string.action_check_update)); exact(string(R.string.action_check_update)) != null }
+        capture("about")
         // About checks on demand; skipping the version is remembered.
         click(string(R.string.action_check_update))
         await("manual update prompt") { exact(updateTitle) != null }
@@ -265,7 +268,8 @@ internal fun runMiuixUiTests(instrumentation: Instrumentation, screenshotPrefix:
         // The Material shell opens on Files; its settings picker switches back to MIUIX.
         await("Material Files page") { exact(string(R.string.navigation_files)) != null }
         // Material About checks on demand too.
-        clickNavigationTab(instrumentation, string(R.string.tab_about))
+        clickNavigationTab(instrumentation, string(R.string.tab_settings))
+        click(string(R.string.tab_about))
         click(string(R.string.action_check_update))
         await("Material update prompt") { exact(updateTitle) != null }
         capture("material-update-available")

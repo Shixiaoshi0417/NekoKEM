@@ -4,6 +4,11 @@ import android.app.Activity
 import android.os.Build
 import androidx.activity.BackEventCompat
 import androidx.activity.compose.PredictiveBackHandler
+import androidx.compose.foundation.clickable
+import androidx.compose.material3.IconButton
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.activity.compose.BackHandler
 import androidx.annotation.StringRes
 import androidx.compose.animation.core.Animatable
 import androidx.compose.foundation.Image
@@ -179,6 +184,13 @@ internal enum class AppDestination(
     ABOUT(R.string.navigation_about, R.string.tab_about),
 }
 
+/** The bottom bar's tabs; About is reached from Settings. */
+internal val BarDestinations = AppDestination.entries - AppDestination.ABOUT
+
+/** The tab that stays highlighted while a page reached from it is open. */
+internal val AppDestination.barTab: AppDestination
+    get() = if (this == AppDestination.ABOUT) AppDestination.SETTINGS else this
+
 private val AppDestination.selectedIcon: ImageVector
     get() = when (this) {
         AppDestination.FILES -> Icons.Filled.Home
@@ -188,14 +200,10 @@ private val AppDestination.selectedIcon: ImageVector
         AppDestination.ABOUT -> Icons.Filled.Info
     }
 
+// Solid icons in both states, so the bar shows as much white as possible; the
+// pill indicator marks the selected tab.
 private val AppDestination.unselectedIcon: ImageVector
-    get() = when (this) {
-        AppDestination.FILES -> Icons.Outlined.Home
-        AppDestination.KEYS -> Icons.Outlined.Lock
-        AppDestination.CONTACTS -> Icons.Outlined.Person
-        AppDestination.SETTINGS -> Icons.Outlined.Settings
-        AppDestination.ABOUT -> Icons.Outlined.Info
-    }
+    get() = selectedIcon
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterial3ExpressiveApi::class)
 @Composable
@@ -219,8 +227,9 @@ fun NekoKEMAppShell(
     val backProgress = remember { Animatable(0f) }
     var backEdge by remember { mutableIntStateOf(BackEventCompat.EDGE_LEFT) }
     val previewingFiles by remember { derivedStateOf { backProgress.value > 0f } }
+    // About goes back to Settings, where it is opened from.
     PredictiveBackHandler(
-        enabled = destination != AppDestination.FILES && !state.running,
+        enabled = destination != AppDestination.FILES && destination != AppDestination.ABOUT && !state.running,
     ) { events ->
         try {
             events.collect { event ->
@@ -238,10 +247,28 @@ fun NekoKEMAppShell(
         }
     }
 
+    BackHandler(enabled = destination == AppDestination.ABOUT && !state.running) {
+        animateNavigation = true
+        destination = AppDestination.SETTINGS
+    }
+
     Scaffold(
         topBar = {
             TopAppBar(
                 expandedHeight = (64f * fontScale).dp,
+                navigationIcon = {
+                    if (destination == AppDestination.ABOUT) {
+                        IconButton(onClick = {
+                            animateNavigation = true
+                            destination = AppDestination.SETTINGS
+                        }) {
+                            Icon(
+                                Icons.AutoMirrored.Filled.ArrowBack,
+                                contentDescription = stringResource(R.string.tab_settings),
+                            )
+                        }
+                    }
+                },
                 title = {
                     Text(
                         text = stringResource(destination.titleResource),
@@ -254,8 +281,8 @@ fun NekoKEMAppShell(
         // selected tab's icon fills and sits in a pill indicator.
         bottomBar = {
             ShortNavigationBar(containerColor = MaterialTheme.colorScheme.surfaceContainer) {
-                AppDestination.entries.forEach { item ->
-                    val selected = destination == item
+                BarDestinations.forEach { item ->
+                    val selected = destination.barTab == item
                     ShortNavigationBarItem(
                         selected = selected,
                         enabled = !state.running,
@@ -339,7 +366,10 @@ fun NekoKEMAppShell(
                                     }
                                 },
                             )
-                            AppDestination.SETTINGS -> SettingsPage(state, actions)
+                            AppDestination.SETTINGS -> SettingsPage(state, actions) {
+                                animateNavigation = true
+                                destination = AppDestination.ABOUT
+                            }
                             AppDestination.ABOUT -> AboutPage(state, actions)
                         }
                     }
@@ -719,7 +749,7 @@ private fun KeyManagementPage(
 }
 
 @Composable
-private fun SettingsPage(state: NekoKEMUiState, actions: NekoKEMActions) {
+private fun SettingsPage(state: NekoKEMUiState, actions: NekoKEMActions, onOpenAbout: () -> Unit) {
     val running = state.running
     val uiStyle = state.uiStyle
     val onUiStyleChange = actions.onUiStyleChange
@@ -877,6 +907,20 @@ private fun SettingsPage(state: NekoKEMUiState, actions: NekoKEMActions) {
                 running = false,
                 onCheckedChange = actions.onAutoUpdateChange,
             )
+        }
+        SectionCard(modifier = Modifier.padding(top = 24.dp)) {
+            Row(
+                Modifier.fillMaxWidth().clickable(enabled = !state.running, onClick = onOpenAbout)
+                    .padding(horizontal = 20.dp, vertical = 18.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    stringResource(R.string.tab_about),
+                    style = MaterialTheme.typography.titleMedium,
+                    modifier = Modifier.weight(1f),
+                )
+                Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null)
+            }
         }
     }
 }

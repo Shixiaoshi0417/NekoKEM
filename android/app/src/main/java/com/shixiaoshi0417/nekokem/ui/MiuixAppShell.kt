@@ -35,6 +35,11 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
@@ -76,11 +81,7 @@ import top.yukonga.miuix.kmp.blur.rememberLayerBackdrop
 import top.yukonga.miuix.kmp.icon.MiuixIcons
 import top.yukonga.miuix.kmp.icon.extended.Add
 import top.yukonga.miuix.kmp.icon.extended.Back
-import top.yukonga.miuix.kmp.icon.extended.Contacts
-import top.yukonga.miuix.kmp.icon.extended.File
-import top.yukonga.miuix.kmp.icon.extended.Info
-import top.yukonga.miuix.kmp.icon.extended.Lock
-import top.yukonga.miuix.kmp.icon.extended.Settings
+import top.yukonga.miuix.kmp.icon.extended.NotesFill
 import top.yukonga.miuix.kmp.preference.ArrowPreference
 import top.yukonga.miuix.kmp.preference.OverlayDropdownPreference
 import top.yukonga.miuix.kmp.preference.SwitchPreference
@@ -91,13 +92,15 @@ import top.yukonga.miuix.kmp.utils.overScrollVertical
 /** miuix-blur's backdrop, blur and lens all need RuntimeShader. */
 private val liquidGlassSupported = Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU
 
+// Solid icons, so the floating bar shows as much white as possible. MIUIX's
+// icon set is outlined apart from a few, so the rest come from Material.
 private val AppDestination.icon: ImageVector
     get() = when (this) {
-        AppDestination.FILES -> MiuixIcons.File
-        AppDestination.KEYS -> MiuixIcons.Lock
-        AppDestination.CONTACTS -> MiuixIcons.Contacts
-        AppDestination.SETTINGS -> MiuixIcons.Settings
-        AppDestination.ABOUT -> MiuixIcons.Info
+        AppDestination.FILES -> MiuixIcons.NotesFill
+        AppDestination.KEYS -> Icons.Filled.Lock
+        AppDestination.CONTACTS -> Icons.Filled.Person
+        AppDestination.SETTINGS -> Icons.Filled.Settings
+        AppDestination.ABOUT -> Icons.Filled.Info
     }
 
 /**
@@ -114,8 +117,9 @@ internal fun MiuixAppShell(
 ) {
     var destination by rememberSaveable { mutableStateOf(AppDestination.FILES) }
     // Back from another tab returns to Files; Files leaves to the system.
+    // About goes back to Settings, where it is opened from.
     BackHandler(enabled = destination != AppDestination.FILES && !state.running) {
-        destination = AppDestination.FILES
+        destination = if (destination == AppDestination.ABOUT) AppDestination.SETTINGS else AppDestination.FILES
     }
     val surface = MiuixTheme.colorScheme.surface
     val backdrop = if (liquidGlassSupported) {
@@ -126,7 +130,7 @@ internal fun MiuixAppShell(
     } else {
         null
     }
-    val items = AppDestination.entries.map {
+    val items = BarDestinations.map {
         NavigationItem(label = stringResource(it.tabResource), icon = it.icon)
     }
     Scaffold(
@@ -134,8 +138,8 @@ internal fun MiuixAppShell(
             if (backdrop != null) {
                 LiquidGlassNavigationBar(
                     items = items,
-                    selectedIndex = destination.ordinal,
-                    onItemClick = { destination = AppDestination.entries[it] },
+                    selectedIndex = BarDestinations.indexOf(destination.barTab),
+                    onItemClick = { destination = BarDestinations[it] },
                     backdrop = backdrop,
                     isBlurActive = true,
                 )
@@ -143,8 +147,8 @@ internal fun MiuixAppShell(
                 FloatingNavigationBar {
                     items.forEachIndexed { index, item ->
                         FloatingNavigationBarItem(
-                            selected = destination.ordinal == index,
-                            onClick = { destination = AppDestination.entries[index] },
+                            selected = destination.barTab == BarDestinations[index],
+                            onClick = { destination = BarDestinations[index] },
                             icon = item.icon,
                             label = item.label,
                             // The floating bar draws icons only; name each tab for accessibility.
@@ -210,8 +214,15 @@ internal fun MiuixAppShell(
                             }
                         }
                     }
-                    AppDestination.SETTINGS -> MiuixSettingsPage(title, bottom, state, actions)
-                    AppDestination.ABOUT -> MiuixPage(title, bottom) { aboutPage(state, actions) }
+                    AppDestination.SETTINGS -> MiuixSettingsPage(title, bottom, state, actions) {
+                        destination = AppDestination.ABOUT
+                    }
+                    AppDestination.ABOUT -> MiuixPage(
+                        title,
+                        bottom,
+                        onBack = { destination = AppDestination.SETTINGS },
+                        backDescription = stringResource(R.string.tab_settings),
+                    ) { aboutPage(state, actions) }
                 }
             }
         }
@@ -224,6 +235,7 @@ private fun MiuixPage(
     title: String,
     bottomPadding: androidx.compose.ui.unit.Dp,
     onBack: (() -> Unit)? = null,
+    backDescription: String? = null,
     content: LazyListScope.() -> Unit,
 ) {
     val scrollBehavior = MiuixScrollBehavior()
@@ -234,7 +246,7 @@ private fun MiuixPage(
             navigationIcon = {
                 if (onBack != null) {
                     IconButton(onClick = onBack, modifier = Modifier.padding(start = 16.dp)) {
-                        Icon(MiuixIcons.Back, contentDescription = stringResource(R.string.action_back_to_contacts))
+                        Icon(MiuixIcons.Back, contentDescription = backDescription ?: stringResource(R.string.action_back_to_contacts))
                     }
                 }
             },
@@ -682,6 +694,7 @@ private fun MiuixSettingsPage(
     bottomPadding: androidx.compose.ui.unit.Dp,
     state: NekoKEMUiState,
     actions: NekoKEMActions,
+    onOpenAbout: () -> Unit,
 ) {
     val context = LocalContext.current
     var languageSaveFailed by remember { mutableStateOf(false) }
@@ -769,6 +782,11 @@ private fun MiuixSettingsPage(
             BasicComponent(
                 title = stringResource(R.string.settings_version_title),
                 summary = stringResource(R.string.app_version),
+            )
+            ArrowPreference(
+                title = stringResource(R.string.tab_about),
+                enabled = !state.running,
+                onClick = onOpenAbout,
             )
         }
     }
