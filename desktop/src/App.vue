@@ -609,15 +609,15 @@ onUnmounted(() => unlisten?.());
       <div class="brand"><img src="/icon.png" alt=""><span>NekoKEM<small>v{{ version }}</small></span></div>
       <nav ref="navigation" :aria-label="t('navigation')">
         <button v-for="(tab, index) in tabs" :key="tab" class="operation-tab" :class="{ active: operation === tab }" :aria-current="operation === tab ? 'page' : undefined" :disabled="locked || !loaded" @click="switchTab(tab)" @keydown="navigate($event, index)">
-          <AppIcon :name="tab" /><span class="nav-label">{{ t(tab) }}</span><span class="nav-number" aria-hidden="true">0{{ index + 1 }}</span>
+          <AppIcon :name="tab" /><span class="nav-label">{{ t(tab) }}</span>
         </button>
-        <button class="exit-button" :disabled="locked || !loaded" @click="exit"><AppIcon name="exit" /><span class="nav-label">{{ t('exit') }}</span><span class="nav-number" aria-hidden="true">07</span></button>
+        <button class="exit-button" :disabled="locked || !loaded" @click="exit"><AppIcon name="exit" /><span class="nav-label">{{ t('exit') }}</span></button>
       </nav>
-      <div class="sidebar-bottom"><span class="local-dot" aria-hidden="true"></span><strong>{{ t('local') }}</strong><p>{{ t('localHint') }}</p></div>
+      <div class="sidebar-bottom"><strong>{{ t('local') }}</strong><p>{{ t('localHint') }}</p></div>
     </aside>
     <main>
-      <header><span class="eyebrow">NEKOKEM · DESKTOP</span><label class="language">{{ t('language') }}<select v-model="selectedLanguage" :disabled="locked || !loaded" @change="changeLanguage"><option v-for="(name, tag) in languageNames" :key="tag" :value="tag">{{ tag === 'system' ? t('system') : name }}</option></select></label></header>
-      <section :key="operation" class="page-title enter-page"><div class="title-icon"><AppIcon :name="operation" /></div><div><h1>{{ t(operation) }}</h1><p>{{ description }}</p></div></section>
+      <header><label class="language">{{ t('language') }}<select v-model="selectedLanguage" :disabled="locked || !loaded" @change="changeLanguage"><option v-for="(name, tag) in languageNames" :key="tag" :value="tag">{{ tag === 'system' ? t('system') : name }}</option></select></label></header>
+      <section :key="operation" class="page-title enter-page"><div><h1>{{ t(operation) }}</h1><p>{{ description }}</p></div></section>
       <section v-if="operation === 'settings'" class="card settings enter-page" :aria-label="t('settings')">
         <div class="setting">
           <label class="setting-row"><input type="checkbox" name="unsigned" :checked="settings.unsigned" :disabled="confirmingUnsigned" aria-describedby="unsigned-hint" @change="toggleUnsigned"><span><strong>{{ t('unsignedSetting') }}</strong><span id="unsigned-hint" class="hint" :class="{ 'danger-text': settings.unsigned }">{{ settings.unsigned ? t('unsignedWarning') : t('unsignedSettingHint') }}</span></span></label>
@@ -637,7 +637,7 @@ onUnmounted(() => unlisten?.());
         </div>
       </section>
       <form v-else ref="operationForm" class="card" :class="{ 'is-busy': busy }" novalidate @submit.prevent="start" @input="editField">
-        <div class="card-heading"><span class="step-label">{{ t('subtitle') }}</span><span class="status" :class="{ 'is-working': locked, 'is-complete': result }"><AppIcon v-if="result && !locked" name="check" /><i v-else :class="{ running: locked }" aria-hidden="true"></i>{{ status }}</span></div>
+        <div class="card-heading"><span class="step-label">{{ t('subtitle') }}</span><span class="status" :class="{ 'is-working': locked, 'is-complete': result }">{{ status }}</span></div>
         <fieldset :disabled="locked || !loaded">
           <!-- Only animate the new form's entry; never keep an outgoing secret-bearing form. -->
           <div :key="operation" class="form-content enter-form">
@@ -717,7 +717,7 @@ onUnmounted(() => unlisten?.());
             <button v-else-if="result.signature.signerKey" type="button" class="secondary save-signer" :disabled="locked" @click="saveSigner">{{ t('saveSigner') }}</button>
           </div></div>
         </template>
-        <footer class="actions"><span class="format"><span class="format-dot" aria-hidden="true"></span>{{ algorithms }}<span>{{ formatLabel }}</span></span><button v-if="busy && ['encrypt', 'decrypt'].includes(operation)" class="secondary" type="button" :disabled="cancelling || cancelPending" @click="cancel">{{ t('cancel') }}</button><button class="primary" type="submit" :disabled="locked || !loaded"><span class="spinner" v-if="busy || contactBusy" aria-hidden="true"></span>{{ busy || contactBusy ? t('working') : operation === 'contacts' ? t('saveContact') : operation === 'keygen' && keyMode === 'upgrade' ? t('upgradeKey') : operation === 'keygen' && keyMode === 'export' ? t('exportLegacy') : operation === 'keygen' && form.replace ? t('replaceKeysAction') : t(operation) }}<AppIcon v-if="!busy && !contactBusy" name="arrow" /></button></footer>
+        <footer class="actions"><span class="format">{{ algorithms }}<span>{{ formatLabel }}</span></span><button v-if="busy && ['encrypt', 'decrypt'].includes(operation)" class="secondary" type="button" :disabled="cancelling || cancelPending" @click="cancel">{{ t('cancel') }}</button><button class="primary" type="submit" :disabled="locked || !loaded"><span class="spinner" v-if="busy || contactBusy" aria-hidden="true"></span>{{ busy || contactBusy ? t('working') : operation === 'contacts' ? t('saveContact') : operation === 'keygen' && keyMode === 'upgrade' ? t('upgradeKey') : operation === 'keygen' && keyMode === 'export' ? t('exportLegacy') : operation === 'keygen' && form.replace ? t('replaceKeysAction') : t(operation) }}</button></footer>
       </form>
       <section v-if="operation === 'contacts'" ref="contactList" class="card contact-list enter-page" aria-labelledby="saved-contacts-title">
         <h2 id="saved-contacts-title">{{ t('savedContacts') }}<span class="count">{{ contacts.length }}</span></h2>
