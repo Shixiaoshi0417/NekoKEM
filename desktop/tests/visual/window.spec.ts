@@ -148,13 +148,14 @@ test('minimum native window fits all five languages and pasted-key layouts',asyn
  await page.screenshot({path:'test-results/desktop-minimum-decrypt.png',fullPage:true,animations:'disabled'});
 });
 
-test('the sidebar collapses to icons and remembers it',async({page})=>{
+test('the sidebar hides from the toolbar and remembers it',async({page})=>{
  await setLanguage(page,'en');
  const toggle=page.getByRole('button',{name:'Collapse sidebar'});
  await toggle.click();
  await expect(page.locator('.sidebar')).toHaveClass(/collapsed/);
- expect((await page.locator('.sidebar').boundingBox())!.width).toBe(56);
- await expect(page.getByRole('button',{name:'Encrypt file'})).toBeVisible();
+ await expect(page.locator('.sidebar')).toBeHidden();
+ await expect(page.getByRole('heading',{name:'Settings',level:1})).toBeVisible();
+ expect(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth)).toBe(true);
  await page.screenshot({path:'test-results/desktop-sidebar-collapsed.png',fullPage:true,animations:'disabled'});
  await page.reload();
  await expect(page.locator('.sidebar')).toHaveClass(/collapsed/);
