@@ -73,6 +73,15 @@ internal fun runMiuixUiTests(instrumentation: Instrumentation, screenshotPrefix:
         return roots.firstNotNullOfOrNull { root -> find(root) { it.text?.toString()?.contains(value) == true } }
     }
     fun string(resource: Int) = checkNotNull(activity).getString(resource)
+    // Drags the page by half a screen (down when [forward]) so long pages are captured whole.
+    fun scrollPage(forward: Boolean) {
+        val metrics = context.resources.displayMetrics
+        val x = metrics.widthPixels / 2
+        val (from, to) = if (forward) metrics.heightPixels * 3 / 4 to metrics.heightPixels / 4 else metrics.heightPixels / 4 to metrics.heightPixels * 3 / 4
+        instrumentation.uiAutomation.executeShellCommand("input swipe $x $from $x $to 600").close()
+        SystemClock.sleep(1000)
+        instrumentation.uiAutomation.waitForIdle(500, 5000)
+    }
     fun capture(name: String) {
         // Let the bar's spring and the page fade settle before the frame is taken.
         SystemClock.sleep(800)
@@ -206,6 +215,11 @@ internal fun runMiuixUiTests(instrumentation: Instrumentation, screenshotPrefix:
                 check(target.performAction(AccessibilityNodeInfo.ACTION_CLICK))
                 await("contact page") { exact(string(R.string.contact_verify_title)) != null }
                 capture("contact-detail")
+                // The whole page: two more half-screen steps.
+                scrollPage(true)
+                capture("contact-detail-2")
+                scrollPage(true)
+                capture("contact-detail-3")
                 instrumentation.runOnMainSync {
                     (checkNotNull(activity) as androidx.activity.ComponentActivity).onBackPressedDispatcher.onBackPressed()
                 }

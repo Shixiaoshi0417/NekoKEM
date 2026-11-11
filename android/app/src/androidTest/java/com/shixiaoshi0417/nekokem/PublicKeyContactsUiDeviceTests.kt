@@ -183,6 +183,15 @@ internal fun runPublicKeyContactsUiTests(instrumentation: Instrumentation) {
     fun openContacts() {
         clickNavigationTab(instrumentation, checkNotNull(activity).getString(R.string.tab_contacts))
     }
+    // Drags the page by half a screen (down when [forward]) so long pages are captured whole.
+    fun scrollPage(forward: Boolean) {
+        val metrics = context.resources.displayMetrics
+        val x = metrics.widthPixels / 2
+        val (from, to) = if (forward) metrics.heightPixels * 3 / 4 to metrics.heightPixels / 4 else metrics.heightPixels / 4 to metrics.heightPixels * 3 / 4
+        instrumentation.uiAutomation.executeShellCommand("input swipe $x $from $x $to 600").close()
+        SystemClock.sleep(1000)
+        instrumentation.uiAutomation.waitForIdle(500, 5000)
+    }
     fun capture(name: String) {
         val directory = File(context.cacheDir, "i18n-screens").apply { check(isDirectory || mkdir()) }
         val captured = checkNotNull(instrumentation.uiAutomation.takeScreenshot())
@@ -241,13 +250,18 @@ internal fun runPublicKeyContactsUiTests(instrumentation: Instrumentation) {
             SystemClock.uptimeMillis() < unpinDeadline) SystemClock.sleep(100)
         check(!contacts.readState().contacts.single { it.id == contact.id }.pinned)
         openContact("CI recipient")
-        SystemClock.sleep(800)
+        // Wait out the pin snackbar so the whole page is visible.
+        SystemClock.sleep(4500)
         instrumentation.uiAutomation.waitForIdle(500, 5000)
         capture("contacts-detail")
         awaitText(contact.fingerprint)
         awaitText(checkNotNull(activity).getString(R.string.contact_verified))
         awaitText(checkNotNull(activity).getString(R.string.action_scan_fingerprint))
         capture("contacts-verified")
+        // The rest of the page, then back to where the test continues.
+        scrollPage(true)
+        capture("contacts-detail-end")
+        scrollPage(false)
         // Clearing the mark makes the next use of the contact ask first.
         click(checkNotNull(activity).getString(R.string.action_unmark_verified))
         awaitVerified(contact.id, false)
