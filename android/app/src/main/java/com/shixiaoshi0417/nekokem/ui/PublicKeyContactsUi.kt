@@ -1,8 +1,9 @@
 package com.shixiaoshi0417.nekokem.ui
 
-import androidx.compose.ui.text.rememberTextMeasurer
+import androidx.compose.foundation.text.BasicText
+import androidx.compose.foundation.text.TextAutoSize
 import androidx.compose.ui.text.TextStyle
-import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.ui.text.style.TextAlign
 import com.shixiaoshi0417.nekokem.keys.TemporaryPublicKey
 import androidx.compose.ui.state.ToggleableState
 import androidx.activity.compose.BackHandler
@@ -417,18 +418,21 @@ internal fun VerifiedMark(verified: Boolean, color: Color, modifier: Modifier = 
 /** The fingerprint as four rows of four 4-digit groups, like Signal's safety number. */
 @Composable
 internal fun FingerprintGrid(fingerprint: String, modifier: Modifier = Modifier, color: Color = Color.Unspecified) {
-    val rows = fingerprintRows(fingerprint)
-    BoxWithConstraints(modifier.clearAndSetSemantics { contentDescription = fingerprint }, contentAlignment = Alignment.Center) {
-        // Keep each row of four groups on one line: shrink the text on narrow screens or large font scales.
-        val measurer = rememberTextMeasurer()
-        val base = TextStyle(fontFamily = FontFamily.Monospace, fontSize = 18.sp, letterSpacing = 1.sp)
-        val widest = rows.maxOfOrNull { measurer.measure(it, base, softWrap = false, maxLines = 1).size.width } ?: 1
-        val available = constraints.maxWidth.toFloat()
-        val size = (18f * minOf(1f, available * 0.97f / widest.coerceAtLeast(1))).coerceAtLeast(8f)
-        Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            rows.forEach { row ->
-                Text(row, color = color, fontFamily = FontFamily.Monospace, fontSize = size.sp, letterSpacing = 1.sp, maxLines = 1, softWrap = false)
-            }
+    Column(
+        modifier.clearAndSetSemantics { contentDescription = fingerprint },
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        // Each row of four groups stays on one line; the text shrinks on narrow screens or large font scales.
+        fingerprintRows(fingerprint).forEach { row ->
+            BasicText(
+                row,
+                style = TextStyle(color = color, fontFamily = FontFamily.Monospace, fontSize = 18.sp, letterSpacing = 1.sp, textAlign = TextAlign.Center),
+                maxLines = 1,
+                softWrap = false,
+                autoSize = TextAutoSize.StepBased(minFontSize = 8.sp, maxFontSize = 18.sp, stepSize = 0.5.sp),
+                modifier = Modifier.fillMaxWidth(),
+            )
         }
     }
 }
