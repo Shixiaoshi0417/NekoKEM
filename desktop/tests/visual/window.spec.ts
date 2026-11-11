@@ -159,7 +159,7 @@ test('the sidebar hides from the toolbar and remembers it',async({page})=>{
  await page.screenshot({path:'test-results/desktop-sidebar-collapsed.png',fullPage:true,animations:'disabled'});
  await page.reload();
  await expect(page.locator('.sidebar')).toHaveClass(/collapsed/);
- await page.locator('.sidebar-toggle').click();
+ await page.locator('.toolbar .sidebar-toggle').click();
  await expect(page.locator('.sidebar')).not.toHaveClass(/collapsed/);
 });
 

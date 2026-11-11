@@ -613,38 +613,54 @@ onUnmounted(() => unlisten?.());
 <template>
   <div class="shell">
     <aside class="sidebar" :class="{ collapsed: sidebarCollapsed }">
-      <div class="brand"><img src="/icon.png" alt=""><span class="brand-name">NekoKEM<small>v{{ version }}</small></span></div>
+      <div class="sidebar-head"><button type="button" class="sidebar-toggle" :aria-label="t(sidebarCollapsed ? 'expandSidebar' : 'collapseSidebar')" :title="t(sidebarCollapsed ? 'expandSidebar' : 'collapseSidebar')" :aria-expanded="!sidebarCollapsed" @click="toggleSidebar"><AppIcon name="sidebar" /></button></div>
+      <div class="brand"><img src="/icon.png" alt=""><span class="brand-name">NekoKEM</span><small>v{{ version }}</small></div>
       <nav ref="navigation" :aria-label="t('navigation')">
         <button v-for="(tab, index) in tabs" :key="tab" class="operation-tab" :class="{ active: operation === tab }" :aria-current="operation === tab ? 'page' : undefined" :title="sidebarCollapsed ? t(tab) : undefined" :disabled="locked || !loaded" @click="switchTab(tab)" @keydown="navigate($event, index)">
           <AppIcon :name="tab" /><span class="nav-label">{{ t(tab) }}</span>
         </button>
         <button class="exit-button" :title="sidebarCollapsed ? t('exit') : undefined" :disabled="locked || !loaded" @click="exit"><AppIcon name="exit" /><span class="nav-label">{{ t('exit') }}</span></button>
       </nav>
-      <div class="sidebar-bottom"><strong>{{ t('local') }}</strong><p>{{ t('localHint') }}</p></div>
     </aside>
     <main>
-      <header class="toolbar"><button type="button" class="sidebar-toggle" :aria-label="t(sidebarCollapsed ? 'expandSidebar' : 'collapseSidebar')" :title="t(sidebarCollapsed ? 'expandSidebar' : 'collapseSidebar')" :aria-expanded="!sidebarCollapsed" @click="toggleSidebar"><AppIcon name="sidebar" /></button><h1>{{ t(operation) }}</h1></header>
+      <header class="toolbar"><button v-if="sidebarCollapsed" type="button" class="sidebar-toggle" :aria-label="t('expandSidebar')" :title="t('expandSidebar')" :aria-expanded="false" @click="toggleSidebar"><AppIcon name="sidebar" /></button></header>
       <div class="content">
-      <section :key="operation" class="page-title enter-page"><p>{{ description }}</p></section>
+      <section :key="operation" class="page-title enter-page"><h1>{{ t(operation) }}</h1><p>{{ description }}</p></section>
       <section v-if="operation === 'settings'" class="card settings enter-page" :aria-label="t('settings')">
-        <div class="setting">
-          <label class="setting-row language-row"><strong>{{ t('language') }}</strong><select name="language" aria-describedby="language-hint" v-model="selectedLanguage" :disabled="locked || !loaded" @change="changeLanguage"><option v-for="(name, tag) in languageNames" :key="tag" :value="tag">{{ tag === 'system' ? t('system') : name }}</option></select></label><p id="language-hint" class="hint">{{ t('languageHint') }}</p>
-        </div>
-        <div class="setting">
-          <label class="setting-row"><input type="checkbox" role="switch" name="unsigned" :checked="settings.unsigned" :disabled="confirmingUnsigned" aria-describedby="unsigned-hint" @change="toggleUnsigned"><strong>{{ t('unsignedSetting') }}</strong></label><p id="unsigned-hint" class="hint" :class="{ 'danger-text': settings.unsigned }">{{ settings.unsigned ? t('unsignedWarning') : t('unsignedSettingHint') }}</p>
-          <div v-if="confirmingUnsigned" class="unsigned-confirm enter-feedback" role="alertdialog" aria-modal="false" aria-labelledby="unsigned-title" aria-describedby="unsigned-text" @keydown.esc.prevent="confirmUnsigned(false)">
-            <strong id="unsigned-title" class="danger-text">{{ t('unsignedConfirmTitle') }}</strong>
-            <p id="unsigned-text" class="danger-text">{{ t('unsignedConfirmText') }}</p>
-            <div class="contact-actions"><button ref="unsignedCancel" type="button" class="secondary unsigned-cancel" @click="confirmUnsigned(false)">{{ t('cancel') }}</button><button type="button" class="danger unsigned-accept" @click="confirmUnsigned(true)">{{ t('unsignedConfirm') }}</button></div>
+        <h2 class="section-title">{{ t('settingsGeneral') }}</h2>
+        <div class="group">
+          <div class="setting">
+            <div class="setting-text"><strong id="language-title">{{ t('language') }}</strong><p id="language-hint" class="hint">{{ t('languageHint') }}</p></div>
+            <select name="language" aria-labelledby="language-title" aria-describedby="language-hint" v-model="selectedLanguage" :disabled="locked || !loaded" @change="changeLanguage"><option v-for="(name, tag) in languageNames" :key="tag" :value="tag">{{ tag === 'system' ? t('system') : name }}</option></select>
           </div>
         </div>
-        <div class="setting">
-          <label class="setting-row"><input v-model="settings.requireSignature" type="checkbox" role="switch" name="requireSignature" aria-describedby="require-hint"><strong>{{ t('requireSignature') }}</strong></label><p id="require-hint" class="hint">{{ t('requireSignatureHint') }}</p>
+        <h2 class="section-title">{{ t('settingsSigning') }}</h2>
+        <div class="group">
+          <div class="setting">
+            <div class="setting-text"><label for="setting-unsigned"><strong>{{ t('unsignedSetting') }}</strong></label><p id="unsigned-hint" class="hint" :class="{ 'danger-text': settings.unsigned }">{{ settings.unsigned ? t('unsignedWarning') : t('unsignedSettingHint') }}</p></div>
+            <input id="setting-unsigned" type="checkbox" role="switch" name="unsigned" :checked="settings.unsigned" :disabled="confirmingUnsigned" aria-describedby="unsigned-hint" @change="toggleUnsigned">
+            <div v-if="confirmingUnsigned" class="unsigned-confirm enter-feedback" role="alertdialog" aria-modal="false" aria-labelledby="unsigned-title" aria-describedby="unsigned-text" @keydown.esc.prevent="confirmUnsigned(false)">
+              <strong id="unsigned-title" class="danger-text">{{ t('unsignedConfirmTitle') }}</strong>
+              <p id="unsigned-text" class="danger-text">{{ t('unsignedConfirmText') }}</p>
+              <div class="contact-actions"><button ref="unsignedCancel" type="button" class="secondary unsigned-cancel" @click="confirmUnsigned(false)">{{ t('cancel') }}</button><button type="button" class="danger unsigned-accept" @click="confirmUnsigned(true)">{{ t('unsignedConfirm') }}</button></div>
+            </div>
+          </div>
+          <div class="setting">
+            <div class="setting-text"><label for="setting-require"><strong>{{ t('requireSignature') }}</strong></label><p id="require-hint" class="hint">{{ t('requireSignatureHint') }}</p></div>
+            <input id="setting-require" v-model="settings.requireSignature" type="checkbox" role="switch" name="requireSignature" aria-describedby="require-hint">
+          </div>
         </div>
-        <div class="setting update-setting">
-          <label class="setting-row"><input v-model="update.auto" type="checkbox" role="switch" name="autoUpdate" aria-describedby="update-hint"><strong>{{ t('autoUpdate') }}</strong></label><p id="update-hint" class="hint">{{ t('autoUpdateHint') }}</p>
-          <div class="contact-actions"><button type="button" class="secondary check-update" :disabled="checkingUpdate" @click="checkForUpdate(true)">{{ checkingUpdate ? t('checkingUpdate') : t('checkUpdate') }}</button></div>
-          <p v-if="updateNotice" class="hint update-notice" role="status">{{ t(updateNotice) }}</p>
+        <h2 class="section-title">{{ t('settingsUpdates') }}</h2>
+        <div class="group">
+          <div class="setting update-setting">
+            <div class="setting-text"><label for="setting-update"><strong>{{ t('autoUpdate') }}</strong></label><p id="update-hint" class="hint">{{ t('autoUpdateHint') }}</p>
+              <p v-if="updateNotice" class="hint update-notice" role="status">{{ t(updateNotice) }}</p></div>
+            <input id="setting-update" v-model="update.auto" type="checkbox" role="switch" name="autoUpdate" aria-describedby="update-hint">
+          </div>
+          <div class="setting">
+            <div class="setting-text"><strong>{{ t('checkUpdate') }}</strong><p class="hint">v{{ version }}</p></div>
+            <button type="button" class="secondary check-update" :disabled="checkingUpdate" @click="checkForUpdate(true)">{{ checkingUpdate ? t('checkingUpdate') : t('checkUpdate') }}</button>
+          </div>
         </div>
       </section>
       <form v-else ref="operationForm" class="card" :class="{ 'is-busy': busy }" novalidate @submit.prevent="start" @input="editField">
