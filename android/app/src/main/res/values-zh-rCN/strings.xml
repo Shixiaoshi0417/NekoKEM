@@ -331,4 +331,8 @@
     <string name="contact_unpinned_done">已取消置顶</string>
     <string name="contact_archived_done">已归档联系人</string>
     <string name="contact_unarchived_done">已取消归档</string>
+    <string name="recipient_picker_title">选择公钥</string>
+    <string name="recipient_own_key">我的公钥</string>
+    <string name="recipient_other_file">其他公钥文件…</string>
+    <string name="recipient_count">%1$d / %2$d</string>
 </resources>

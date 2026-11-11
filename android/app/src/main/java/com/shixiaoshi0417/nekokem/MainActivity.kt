@@ -73,6 +73,7 @@ import com.shixiaoshi0417.nekokem.ui.OperationProgressDialog
 import com.shixiaoshi0417.nekokem.ui.OperationResultDetail
 import com.shixiaoshi0417.nekokem.ui.SinglePasswordDialog
 import com.shixiaoshi0417.nekokem.ui.PublicKeyContactPicker
+import com.shixiaoshi0417.nekokem.ui.RecipientPickerDialog
 import com.shixiaoshi0417.nekokem.ui.UnverifiedContactDialog
 import com.shixiaoshi0417.nekokem.ui.PublicKeyContactNoteDialog
 import com.shixiaoshi0417.nekokem.ui.DeletePublicKeyContactDialog
@@ -166,6 +167,14 @@ private enum class PendingKeyImport {
     PRIVATE_KEY,
 }
 
+/** The recipients ticked in Encrypt's dialog; [open] while it is shown. */
+private data class RecipientPick(
+    val own: Boolean = false,
+    val contactIds: List<String> = emptyList(),
+    val extras: List<TemporaryPublicKey> = emptyList(),
+    val open: Boolean = true,
+)
+
 private enum class PasswordPrompt {
     CHECK_PRIVATE_KEY,
     IMPORT_PRIVATE_KEY,
@@ -238,6 +247,8 @@ private fun NekoKEMRoute(
     var contactToScan by remember { mutableStateOf<PublicKeyContact?>(null) }
     var scanResult by remember { mutableStateOf<Pair<PublicKeyContact, FingerprintScanOutcome>?>(null) }
     var showContactPicker by remember { mutableStateOf(false) }
+    // What Encrypt's dialog has ticked; nothing is ticked for the user.
+    var recipientPick by remember { mutableStateOf<RecipientPick?>(null) }
     // Using a contact whose fingerprint was never verified asks first.
     var unverifiedUse by remember { mutableStateOf<Pair<List<PublicKeyContact>, () -> Unit>?>(null) }
     val selectedContacts = selectedContactIds.mapNotNull { id -> contactsState.contacts.firstOrNull { it.id == id } }
@@ -392,6 +403,12 @@ private fun NekoKEMRoute(
         transitionInputSelection(InputSelectionEvent.KEY_SELECTION_CHANGED)
         scope.launch { pageWork { fileWorkflow.discardTemporaryPublicKey(previous) } }
         showSnackbar(R.string.contact_selected)
+    }
+
+    fun cancelRecipientPick() {
+        val abandoned = recipientPick?.extras.orEmpty()
+        recipientPick = null
+        if (abandoned.isNotEmpty()) scope.launch { pageWork { abandoned.forEach { fileWorkflow.discardTemporaryPublicKey(it) } } }
     }
 
     /** Runs [proceed] now if every contact is verified, otherwise after the warning. */
@@ -911,40 +928,30 @@ private fun NekoKEMRoute(
 
     /** Signs with this device's identity key when [signingPassword] is given; takes ownership of it. */
     fun prepareEncryption(source: SelectedDocument, signingPassword: ByteArray?) {
-        val selectedKey = temporaryPublicKey
-        val contactIds = selectedContactIds
+        val pick = recipientPick
+        recipientPick = null
+        if (pick == null) {
+            signingPassword?.fill(0)
+            return
+        }
         val tracker = beginProgress(R.string.operation_encrypt_file)
         scope.launch {
-            var recipients = emptyList<TemporaryPublicKey>()
+            // One-off key files come after this device's key and before the contacts.
+            var recipients = pick.extras
             try {
-                if (contactIds.isNotEmpty()) {
+                if (pick.contactIds.isNotEmpty()) {
                     // Every selected contact is re-read and verified; one failure stops all.
-                    val staged = pageWork { publicKeyContacts.stageRecipients(contactIds) }
+                    val staged = pageWork { publicKeyContacts.stageRecipients(pick.contactIds) }
                     if (staged.code != NativeBridge.RESULT_SUCCESS || staged.keys.isEmpty()) {
                         reportRecipientFailure(staged.code, staged.failedId)
                         return@launch
                     }
-                    recipients = staged.keys
+                    recipients = pick.extras + staged.keys
                 }
+                val chosen = recipients
+                recipients = emptyList()
                 val outcome = pageWork {
-                    if (recipients.isNotEmpty()) {
-                        fileWorkflow.prepareEncryptionForRecipients(
-                            source.uri,
-                            tracker,
-                            recipients,
-                            signingPassword?.copyOf(),
-                        )
-                    } else {
-                        fileWorkflow.prepareEncryption(
-                            source.uri,
-                            tracker,
-                            selectedKey,
-                            signingPassword?.copyOf(),
-                        )
-                    }
-                }
-                if (temporaryPublicKey === selectedKey) {
-                    temporaryPublicKey = null
+                    fileWorkflow.prepareEncryptionForSelection(source.uri, tracker, pick.own, chosen, signingPassword?.copyOf())
                 }
                 val finalProgress = tracker.snapshot()
                 if (outcome.code == NativeBridge.RESULT_SUCCESS &&
@@ -976,13 +983,6 @@ private fun NekoKEMRoute(
                     }
                 }
             } catch (_: Exception) {
-                pageWork {
-                    fileWorkflow.discardTemporaryPublicKey(selectedKey)
-                    recipients.forEach { fileWorkflow.discardTemporaryPublicKey(it) }
-                }
-                if (temporaryPublicKey === selectedKey) {
-                    temporaryPublicKey = null
-                }
                 val abandoned = preparedEncryption
                 preparedEncryption = null
                 encryptionPreparationProgress = null
@@ -995,6 +995,9 @@ private fun NekoKEMRoute(
                 )
             } finally {
                 signingPassword?.fill(0)
+                // Snapshots not handed to the workflow (which deletes its own) are deleted here.
+                val leftover = recipients
+                if (leftover.isNotEmpty()) pageWork { leftover.forEach { fileWorkflow.discardTemporaryPublicKey(it) } }
                 endProgress(tracker)
             }
         }
@@ -1174,6 +1177,8 @@ private fun NekoKEMRoute(
                     val abandoned = pendingTemporaryPrivateKey
                     pendingTemporaryPrivateKey = null
                     scope.launch { pageWork { fileWorkflow.discardPendingTemporaryPrivateKey(abandoned) } }
+                } else if (prompt == PasswordPrompt.SIGN_ENCRYPTION) {
+                    cancelRecipientPick()
                 }
                 passwordPrompt = null
             },
@@ -1313,6 +1318,43 @@ private fun NekoKEMRoute(
         )
     }
 
+    recipientPick?.takeIf { it.open }?.let { pick ->
+        RecipientPickerDialog(
+            state = contactsState,
+            ownAvailable = keyState.fingerprint != null,
+            own = pick.own,
+            selected = pick.contactIds,
+            extras = pick.extras,
+            onToggleOwn = { recipientPick = pick.copy(own = !pick.own) },
+            onToggleContact = { contact ->
+                recipientPick = pick.copy(
+                    contactIds = if (contact.id in pick.contactIds) pick.contactIds - contact.id else pick.contactIds + contact.id,
+                )
+            },
+            onRemoveExtra = { key ->
+                recipientPick = pick.copy(extras = pick.extras - key)
+                scope.launch { pageWork { fileWorkflow.discardTemporaryPublicKey(key) } }
+            },
+            onAddFile = { selectTemporaryPublicKeyLauncher.launch(arrayOf(ANY_MIME_TYPE)) },
+            onConfirm = {
+                val chosen = pick.contactIds.mapNotNull { id -> contactsState.contacts.firstOrNull { it.id == id } }
+                confirmVerified(chosen) {
+                    val source = selectedDocument
+                    recipientPick = pick.copy(open = false)
+                    when {
+                        source == null -> {
+                            cancelRecipientPick()
+                            reportFailureReason(R.string.operation_encrypt_file, R.string.error_select_file_first)
+                        }
+                        signatureSettings.unsignedEncryption -> prepareEncryption(source, null)
+                        else -> passwordPrompt = PasswordPrompt.SIGN_ENCRYPTION
+                    }
+                }
+            },
+            onDismiss = { cancelRecipientPick() },
+        )
+    }
+
     publicKeyAwaitingConfirmation?.let { candidate ->
         AppAlertDialog(
             onDismissRequest = {
@@ -1337,16 +1379,13 @@ private fun NekoKEMRoute(
                     text = stringResource(R.string.action_use_key),
                     onClick = {
                         publicKeyAwaitingConfirmation = null
-                        val previous = temporaryPublicKey
-                        temporaryPublicKey = candidate
-                        selectedContactIds = emptyList()
-                        transitionInputSelection(
-                            InputSelectionEvent.KEY_SELECTION_CHANGED,
-                        )
-                        scope.launch { pageWork { fileWorkflow.discardTemporaryPublicKey(previous) } }
-                        showSnackbar(
-                            R.string.snackbar_temporary_public_key_selected,
-                        )
+                        // The confirmed file joins the recipients ticked in Encrypt's dialog.
+                        val pick = recipientPick
+                        if (pick == null || pick.extras.any { it.fingerprint == candidate.fingerprint }) {
+                            scope.launch { pageWork { fileWorkflow.discardTemporaryPublicKey(candidate) } }
+                        } else {
+                            recipientPick = pick.copy(extras = pick.extras + candidate)
+                        }
                     },
                 )
             },
@@ -1867,19 +1906,18 @@ private fun NekoKEMRoute(
                         R.string.operation_encrypt_file,
                         R.string.error_select_file_first,
                     )
-                    temporaryPublicKey == null &&
-                        selectedContactIds.isEmpty() &&
-                        keyState.fingerprint == null -> reportFailureReason(
-                        R.string.operation_encrypt_file,
-                        R.string.error_public_key_not_found,
-                    )
-                    signatureSettings.unsignedEncryption -> prepareEncryption(source, null)
                     // Signing needs this device's identity key pair.
-                    !keyState.privateKeyExists || !keyState.canSign -> reportFailure(
+                    !signatureSettings.unsignedEncryption && (!keyState.privateKeyExists || !keyState.canSign) -> reportFailure(
                         R.string.operation_encrypt_file,
                         LocalKeyManager.RESULT_SIGNING_KEY_LEGACY,
                     )
-                    else -> passwordPrompt = PasswordPrompt.SIGN_ENCRYPTION
+                    else -> {
+                        // Contacts the user chose on the contacts page start ticked; nothing else does.
+                        cancelRecipientPick()
+                        val preset = selectedContactIds.filter { id -> contactsState.contacts.any { it.id == id } }
+                        selectedContactIds = emptyList()
+                        recipientPick = RecipientPick(contactIds = preset)
+                    }
                 }
             },
             onDecrypt = {

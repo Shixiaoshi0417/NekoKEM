@@ -272,6 +272,25 @@ class SafFileWorkflow(
         signingPassword?.fill(0)
     }
 
+    /**
+     * The recipients ticked when encrypting: this device's own key when
+     * [includeOwn], then one-off key files, then saved contacts. Takes ownership
+     * of every snapshot and deletes it.
+     */
+    fun prepareEncryptionForSelection(
+        source: Uri,
+        progress: CancellableProgressCallback,
+        includeOwn: Boolean,
+        recipients: List<TemporaryPublicKey>,
+        signingPassword: ByteArray? = null,
+    ): PreparedEncryptionResult = try {
+        prepareEncryptionWith(source, progress, recipients) { input, output ->
+            keyManager.encryptFileForSelection(input, output, includeOwn, recipients, progress, signingPassword?.copyOf())
+        }
+    } finally {
+        signingPassword?.fill(0)
+    }
+
     private fun prepareEncryptionWith(
         source: Uri,
         progress: CancellableProgressCallback,

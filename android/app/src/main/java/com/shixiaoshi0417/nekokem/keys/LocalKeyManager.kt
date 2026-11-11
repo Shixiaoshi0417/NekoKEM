@@ -307,6 +307,46 @@ class LocalKeyManager internal constructor(
         signingPassword?.fill(0)
     }
 
+    /**
+     * Encrypts once for what the user ticked: this device's own public key
+     * (first, when [includeOwn]) and the given snapshots, which must keep the
+     * fingerprints confirmed when they were staged. A key listed twice, or
+     * nothing at all, is refused; no recipient is skipped or replaced.
+     */
+    fun encryptFileForSelection(
+        input: File,
+        output: File,
+        includeOwn: Boolean,
+        keys: List<TemporaryPublicKey>,
+        progress: NativeProgressCallback,
+        signingPassword: ByteArray? = null,
+    ): Int = try {
+        if (!includeOwn) {
+            encryptFileForRecipients(input, output, keys, progress, signingPassword?.copyOf())
+        } else {
+            val own = publicKeyFingerprint(publicKey)
+            val recipients = listOf(publicKey.absolutePath) + keys.map { it.file.absolutePath }
+            when {
+                own == null -> RESULT_STORAGE_ERROR
+                recipients.size > NativeBridge.MAX_RECIPIENTS ||
+                    (listOf(own) + keys.map { it.fingerprint }).toSet().size != recipients.size -> NativeBridge.RESULT_INVALID_ARGUMENT
+                keys.isEmpty() -> encryptFile(input, output, null, progress, signingPassword?.copyOf())
+                keys.any { publicKeyFingerprint(it.file) != it.fingerprint } -> RESULT_FINGERPRINT_MISMATCH
+                signingPassword != null -> encryptSigned(input, output, recipients.toTypedArray(), signingPassword, progress)
+                else -> NativeBridge.nativeEncryptFileMultiWithProgress(
+                    input.absolutePath,
+                    output.absolutePath,
+                    recipients.toTypedArray(),
+                    progress,
+                )
+            }
+        }
+    } catch (_: Exception) {
+        RESULT_STORAGE_ERROR
+    } finally {
+        signingPassword?.fill(0)
+    }
+
     /** Takes ownership of [password] and clears it before returning. */
     fun decryptFile(input: File, output: File, password: ByteArray): Int = try {
         if (password.isEmpty()) {

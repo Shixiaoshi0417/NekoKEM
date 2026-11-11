@@ -439,49 +439,7 @@ private fun FileOperationsPage(
             UnsignedWarningText(modifier = Modifier.padding(top = 12.dp))
         }
         Spacer(modifier = Modifier.height(24.dp))
-        val publicKeyActions: @Composable ColumnScope.() -> Unit = {
-            if (state.publicKeyRecipientCount > 0 &&
-                state.publicKeyRecipients.size < state.publicKeyRecipientCount
-            ) {
-                Text(stringResource(R.string.contact_unavailable), color = MaterialTheme.colorScheme.error)
-            }
-            CardAction(
-                labelResource = R.string.action_choose_contact,
-                enabled = canRun,
-                onClick = actions.onChooseContact,
-            )
-            CardAction(
-                labelResource = R.string.action_select_other_public_key,
-                enabled = canRun,
-                onClick = actions.onSelectTemporaryPublicKey,
-            )
-            if (state.publicKeyTemporary || state.publicKeyRecipientCount > 0) {
-                CardAction(
-                    labelResource = R.string.action_restore_default_public_key,
-                    enabled = !state.running,
-                    onClick = actions.onRestoreDefaultPublicKey,
-                    emphasis = ActionEmphasis.OUTLINED,
-                )
-            }
-        }
-        if (state.publicKeyRecipientCount > 1) {
-            RecipientsCard(
-                state.publicKeyRecipients,
-                state.publicKeyRecipientCount,
-                publicKeyActions,
-            )
-        } else {
-            KeySelectionCard(
-                titleResource = R.string.encryption_public_key_title,
-                temporary = state.publicKeyTemporary,
-                fileName = state.publicKeyFileName,
-                fingerprint = state.publicKeyFingerprint,
-                sourceResource = if (state.publicKeyContactId != null) R.string.key_source_contacts else null,
-                note = state.publicKeyNote,
-                actions = publicKeyActions,
-            )
-        }
-        Spacer(modifier = Modifier.height(16.dp))
+        // Public keys are chosen in the dialog that Encrypt opens.
         KeySelectionCard(
             titleResource = R.string.decryption_private_key_title,
             temporary = state.privateKeyTemporary,
@@ -502,43 +460,6 @@ private fun FileOperationsPage(
                 )
             }
         }
-    }
-}
-
-/** Several saved contacts sharing one NKEM v4 file; each is listed with its fingerprint. */
-@Composable
-private fun RecipientsCard(
-    recipients: List<PublicKeyContact>,
-    count: Int,
-    actions: @Composable ColumnScope.() -> Unit,
-) {
-    SectionCard {
-        Text(
-            text = stringResource(R.string.encryption_public_key_title),
-            style = MaterialTheme.typography.titleMediumEmphasized,
-        )
-        Text(
-            text = stringResource(
-                R.string.key_source_line,
-                stringResource(R.string.key_source_contacts_multiple, count),
-            ),
-            style = MaterialTheme.typography.bodyMedium,
-        )
-        recipients.forEach { contact ->
-            Column(modifier = Modifier.padding(top = 4.dp)) {
-                Text(contact.label, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium)
-                Text(
-                    stringResource(R.string.key_fingerprint_line, contact.fingerprint),
-                    style = MaterialTheme.typography.bodySmall,
-                )
-            }
-        }
-        Text(
-            text = stringResource(R.string.contact_recipients_hint),
-            style = MaterialTheme.typography.bodySmall,
-            modifier = Modifier.padding(top = 4.dp),
-        )
-        actions()
     }
 }
 

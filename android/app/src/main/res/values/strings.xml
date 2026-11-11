@@ -332,4 +332,8 @@
     <string name="contact_unpinned_done">Contact unpinned</string>
     <string name="contact_archived_done">Contact archived</string>
     <string name="contact_unarchived_done">Contact moved back from the archive</string>
+    <string name="recipient_picker_title">Choose Public Keys</string>
+    <string name="recipient_own_key">My public key</string>
+    <string name="recipient_other_file">Other Public Key File…</string>
+    <string name="recipient_count">%1$d / %2$d</string>
 </resources>

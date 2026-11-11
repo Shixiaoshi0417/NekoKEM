@@ -317,4 +317,8 @@
     <string name="contact_unpinned_done">고정을 해제했습니다</string>
     <string name="contact_archived_done">연락처를 보관했습니다</string>
     <string name="contact_unarchived_done">보관을 해제했습니다</string>
+    <string name="recipient_picker_title">공개 키 선택</string>
+    <string name="recipient_own_key">내 공개 키</string>
+    <string name="recipient_other_file">다른 공개 키 파일…</string>
+    <string name="recipient_count">%1$d / %2$d</string>
 </resources>

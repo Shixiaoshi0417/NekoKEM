@@ -317,4 +317,8 @@
     <string name="contact_unpinned_done">已取消置頂</string>
     <string name="contact_archived_done">已封存聯絡人</string>
     <string name="contact_unarchived_done">已取消封存</string>
+    <string name="recipient_picker_title">選擇公開金鑰</string>
+    <string name="recipient_own_key">我的公開金鑰</string>
+    <string name="recipient_other_file">其他公開金鑰檔案…</string>
+    <string name="recipient_count">%1$d / %2$d</string>
 </resources>

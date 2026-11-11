@@ -377,44 +377,6 @@ private fun LazyListScope.filesPage(state: NekoKEMUiState, actions: NekoKEMActio
             Action(R.string.action_clear_selection, !state.running, actions.onClearSelectedFile)
         }
     }
-    section(R.string.encryption_public_key_title, key = "public") {
-        if (state.publicKeyRecipientCount > 1) {
-            BasicComponent(
-                title = stringResource(
-                    R.string.key_source_line,
-                    stringResource(R.string.key_source_contacts_multiple, state.publicKeyRecipientCount),
-                ),
-                summary = stringResource(R.string.contact_recipients_hint),
-            )
-            state.publicKeyRecipients.forEach { contact ->
-                BasicComponent(
-                    title = contact.label,
-                    summary = stringResource(R.string.key_fingerprint_line, contact.fingerprint),
-                )
-            }
-        } else {
-            KeyDetails(
-                temporary = state.publicKeyTemporary,
-                fileName = state.publicKeyFileName,
-                fingerprint = state.publicKeyFingerprint,
-                sourceResource = if (state.publicKeyContactId != null) R.string.key_source_contacts else null,
-                note = state.publicKeyNote,
-            )
-        }
-        if (state.publicKeyRecipientCount > 0 &&
-            state.publicKeyRecipients.size < state.publicKeyRecipientCount
-        ) {
-            BasicComponent(
-                title = stringResource(R.string.contact_unavailable),
-                titleColor = BasicComponentDefaults.titleColor(color = MiuixTheme.colorScheme.error),
-            )
-        }
-        Action(R.string.action_choose_contact, canRun, actions.onChooseContact)
-        Action(R.string.action_select_other_public_key, canRun, actions.onSelectTemporaryPublicKey)
-        if (state.publicKeyTemporary || state.publicKeyRecipientCount > 0) {
-            Action(R.string.action_restore_default_public_key, !state.running, actions.onRestoreDefaultPublicKey)
-        }
-    }
     section(R.string.decryption_private_key_title, key = "private") {
         KeyDetails(
             temporary = state.privateKeyTemporary,

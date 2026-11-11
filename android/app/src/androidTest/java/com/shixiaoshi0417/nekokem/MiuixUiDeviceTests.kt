@@ -188,13 +188,6 @@ internal fun runMiuixUiTests(instrumentation: Instrumentation, screenshotPrefix:
         check(UpdateSettingsStore.read(context).lastCheckMillis > 0L) { "The automatic check was not recorded" }
         await("Files page") { exact(string(R.string.navigation_files)) != null }
         capture("files")
-        // Dialogs follow the style: the saved-key picker is a MIUIX dialog.
-        reveal(string(R.string.action_choose_contact))
-        click(string(R.string.action_choose_contact))
-        await("contact picker") { exact(string(R.string.action_cancel)) != null }
-        capture("dialog")
-        click(string(R.string.action_cancel))
-        await("contact picker closed") { exact(string(R.string.action_cancel)) == null }
         val pages = listOf(
             R.string.tab_keys to R.string.navigation_keys,
             R.string.tab_contacts to R.string.navigation_contacts,

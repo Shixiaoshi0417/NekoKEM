@@ -281,31 +281,11 @@ internal fun runPublicKeyContactsUiTests(instrumentation: Instrumentation) {
             SystemClock.uptimeMillis() < deadline) SystemClock.sleep(100)
         awaitText(editedNote)
         check(contacts.readState().contacts.single { it.id == contact.id }.note == editedNote)
+        // Using a contact opens Files; Encrypt's dialog then starts with it ticked.
         click(checkNotNull(activity).getString(R.string.action_use_contact))
-        awaitText(checkNotNull(activity).getString(R.string.key_source_contacts))
-        awaitText(editedNote)
-        // A selected radio item is deliberately not exposed as clickable by Compose.
-        // Exercise the picker by selecting this recipient from the default-key state.
-        click(checkNotNull(activity).getString(R.string.action_restore_default_public_key))
-        openDialog(checkNotNull(activity).getString(R.string.action_choose_contact))
-        awaitText(checkNotNull(activity).getString(R.string.contact_picker_title))
-        awaitText(contact.fingerprint)
-        val pickerDeadline = SystemClock.uptimeMillis() + 10000
-        var recipient: AccessibilityNodeInfo? = null
-        while (recipient == null && SystemClock.uptimeMillis() < pickerDeadline) {
-            var option = text(contact.fingerprint)
-            while (option != null && !option.isClickable) option = fresh(option.parent)
-            recipient = option
-            if (recipient == null) SystemClock.sleep(100)
-        }
-        check(checkNotNull(recipient) { "Saved recipient radio option is not clickable" }
-            .performAction(AccessibilityNodeInfo.ACTION_CLICK))
-        instrumentation.waitForIdleSync()
-        awaitText(checkNotNull(activity).getString(R.string.key_source_contacts))
-        awaitText(editedNote)
+        awaitText(checkNotNull(activity).getString(R.string.action_select_file))
         recreate()
-        awaitText(checkNotNull(activity).getString(R.string.key_source_contacts))
-        awaitText(editedNote)
+        awaitText(checkNotNull(activity).getString(R.string.action_select_file))
         capture("contacts-selected")
         // Checkboxes on the contacts page change nothing until the explicit action.
         openContacts()
@@ -314,8 +294,7 @@ internal fun runPublicKeyContactsUiTests(instrumentation: Instrumentation) {
         awaitText(checkNotNull(activity).getString(R.string.contact_recipients_hint))
         capture("contacts-multi-select")
         click(checkNotNull(activity).getString(R.string.action_encrypt_for_selected))
-        awaitText(checkNotNull(activity).getString(R.string.key_source_contacts))
-        awaitText(editedNote)
+        awaitText(checkNotNull(activity).getString(R.string.action_select_file))
         openContacts()
         click(checkNotNull(activity).getString(R.string.action_clear_selection))
         val encryptSelected = checkNotNull(activity).getString(R.string.action_encrypt_for_selected)
@@ -328,10 +307,6 @@ internal fun runPublicKeyContactsUiTests(instrumentation: Instrumentation) {
         click(checkNotNull(activity).getString(R.string.action_delete))
         awaitText(checkNotNull(activity).getString(R.string.contact_empty))
         check(contacts.stageForEncryption(contact.id).key == null)
-        clickNavigationTab(instrumentation, checkNotNull(activity).getString(R.string.tab_files))
-        awaitText(checkNotNull(activity).getString(R.string.contact_unavailable))
-        click(checkNotNull(activity).getString(R.string.action_restore_default_public_key))
-        awaitText(checkNotNull(activity).getString(R.string.key_source_app_default))
         // Keys shows this device's fingerprint as a QR code. This runs last: Android 8 can
         // keep reporting a closed dialog as the active window, hiding the page behind it.
         clickNavigationTab(instrumentation, checkNotNull(activity).getString(R.string.tab_keys))

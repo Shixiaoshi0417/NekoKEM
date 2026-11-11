@@ -1,5 +1,7 @@
 package com.shixiaoshi0417.nekokem.ui
 
+import com.shixiaoshi0417.nekokem.keys.TemporaryPublicKey
+import androidx.compose.ui.state.ToggleableState
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
@@ -521,6 +523,98 @@ fun PublicKeyContactPicker(
         },
         confirmButton = {
             DialogButton(stringResource(R.string.action_import_contact), onClick = onImport)
+        },
+        dismissButton = {
+            DialogButton(stringResource(R.string.action_cancel), onClick = onDismiss)
+        },
+    )
+}
+
+/** One tickable recipient: a check box, the name, a short detail, and the verified mark. */
+@Composable
+private fun RecipientOption(title: String, detail: String, mark: String?, checked: Boolean, enabled: Boolean, verified: Boolean, onToggle: () -> Unit) {
+    val miuix = isMiuixStyle()
+    val text = if (miuix) MiuixTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurface
+    val summary = if (miuix) MiuixTheme.colorScheme.onSurfaceVariantSummary else MaterialTheme.colorScheme.onSurfaceVariant
+    Row(
+        Modifier.fillMaxWidth().toggleable(value = checked, enabled = enabled, role = Role.Checkbox, onValueChange = { onToggle() })
+            .padding(vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        if (miuix) {
+            top.yukonga.miuix.kmp.basic.Checkbox(state = ToggleableState(checked), onClick = null, enabled = enabled)
+        } else {
+            Checkbox(checked = checked, onCheckedChange = null, enabled = enabled)
+        }
+        Column(Modifier.weight(1f).padding(start = 12.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(title, color = text, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
+                if (mark != null) Text(mark, color = summary, style = MaterialTheme.typography.labelSmall, modifier = Modifier.padding(start = 8.dp))
+            }
+            if (detail.isNotEmpty()) {
+                Text(detail, color = summary, style = MaterialTheme.typography.bodySmall, fontFamily = FontFamily.Monospace, maxLines = 1)
+            }
+        }
+        VerifiedMark(verified, text, Modifier.padding(start = 8.dp))
+    }
+}
+
+/**
+ * Asked when Encrypt is pressed: this device's own key first, then pinned
+ * contacts, then the rest, then one-off key files. Nothing is ticked for the
+ * user; the private key is the only default.
+ */
+@Composable
+fun RecipientPickerDialog(
+    state: PublicKeyContactsState,
+    ownAvailable: Boolean,
+    own: Boolean,
+    selected: List<String>,
+    extras: List<TemporaryPublicKey>,
+    onToggleOwn: () -> Unit,
+    onToggleContact: (PublicKeyContact) -> Unit,
+    onRemoveExtra: (TemporaryPublicKey) -> Unit,
+    onAddFile: () -> Unit,
+    onConfirm: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    val count = selected.size + extras.size + if (own) 1 else 0
+    val full = count >= NativeBridge.MAX_RECIPIENTS
+    val contacts = state.contacts.filterNot { it.archived }
+    AppAlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.recipient_picker_title)) },
+        text = {
+            Column {
+                ContactStorageStatus(state)
+                LazyColumn(Modifier.heightIn(max = 360.dp)) {
+                    if (ownAvailable) item(key = "own") {
+                        RecipientOption(stringResource(R.string.recipient_own_key), "", stringResource(R.string.key_source_app_default), own, own || !full, false, onToggleOwn)
+                    }
+                    items(contacts, key = { it.id }) { contact ->
+                        val checked = contact.id in selected
+                        RecipientOption(
+                            contact.label, shortFingerprint(contact.fingerprint),
+                            if (contact.pinned) stringResource(R.string.contact_pinned_label) else null,
+                            checked, checked || !full, contact.verified,
+                        ) { onToggleContact(contact) }
+                    }
+                    items(extras, key = { "file:" + it.fingerprint }) { key ->
+                        RecipientOption(key.displayName, shortFingerprint(key.fingerprint), null, true, true, false) { onRemoveExtra(key) }
+                    }
+                    item(key = "add") {
+                        DialogButton(stringResource(R.string.recipient_other_file), onClick = onAddFile, enabled = !full)
+                    }
+                }
+                Text(
+                    stringResource(R.string.recipient_count, count, NativeBridge.MAX_RECIPIENTS),
+                    style = MaterialTheme.typography.bodySmall,
+                    modifier = Modifier.padding(top = 8.dp),
+                )
+            }
+        },
+        confirmButton = {
+            DialogButton(stringResource(R.string.action_encrypt), onClick = onConfirm, enabled = count > 0)
         },
         dismissButton = {
             DialogButton(stringResource(R.string.action_cancel), onClick = onDismiss)
