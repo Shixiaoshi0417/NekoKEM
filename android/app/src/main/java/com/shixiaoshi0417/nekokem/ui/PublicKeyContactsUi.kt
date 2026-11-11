@@ -1,6 +1,7 @@
 package com.shixiaoshi0417.nekokem.ui
 
-import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.text.rememberTextMeasurer
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.foundation.layout.BoxWithConstraints
 import com.shixiaoshi0417.nekokem.keys.TemporaryPublicKey
 import androidx.compose.ui.state.ToggleableState
@@ -419,9 +420,11 @@ internal fun FingerprintGrid(fingerprint: String, modifier: Modifier = Modifier,
     val rows = fingerprintRows(fingerprint)
     BoxWithConstraints(modifier.clearAndSetSemantics { contentDescription = fingerprint }, contentAlignment = Alignment.Center) {
         // Keep each row of four groups on one line: shrink the text on narrow screens or large font scales.
-        val chars = rows.maxOfOrNull { it.length } ?: 1
-        val available = with(LocalDensity.current) { maxWidth.toSp().value }
-        val size = minOf(18f, (available / chars - 1f) / 0.62f).coerceAtLeast(8f)
+        val measurer = rememberTextMeasurer()
+        val base = TextStyle(fontFamily = FontFamily.Monospace, fontSize = 18.sp, letterSpacing = 1.sp)
+        val widest = rows.maxOfOrNull { measurer.measure(it, base, softWrap = false, maxLines = 1).size.width } ?: 1
+        val available = constraints.maxWidth.toFloat()
+        val size = (18f * minOf(1f, available * 0.97f / widest.coerceAtLeast(1))).coerceAtLeast(8f)
         Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(6.dp)) {
             rows.forEach { row ->
                 Text(row, color = color, fontFamily = FontFamily.Monospace, fontSize = size.sp, letterSpacing = 1.sp, maxLines = 1, softWrap = false)
