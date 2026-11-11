@@ -102,12 +102,12 @@ input[type=checkbox], input[type=radio] { accent-color: var(--accent); }
 }
 .brand { display: flex; align-items: center; gap: 12px; padding: 0 0 0 8px; font-size: 14px; font-weight: 600; letter-spacing: -.01em; }
 .brand-name { flex: 1; min-width: 0; }
-.sidebar-toggle { display: grid; place-items: center; width: 32px; height: 32px; flex: none; border-radius: 6px; color: var(--muted); }
+.sidebar-toggle { display: grid; place-items: center; width: 32px; height: 32px; flex: none; border-radius: 10px; color: var(--muted); }
 .sidebar-toggle:hover { background: var(--subtle); color: var(--text); }
-.brand img { width: 32px; height: 32px; border-radius: 6px; }
+.brand img { width: 32px; height: 32px; border-radius: 10px; }
 .brand small { display: block; font-size: 12px; font-weight: 400; color: var(--muted); letter-spacing: 0; }
 nav { display: flex; flex-direction: column; gap: 4px; }
-nav button { display: flex; gap: 8px; align-items: center; min-height: 32px; padding: 4px 8px; border-radius: 6px; text-align: left; color: var(--muted); }
+nav button { display: flex; gap: 8px; align-items: center; min-height: 32px; padding: 4px 8px; border-radius: 10px; text-align: left; color: var(--muted); }
 nav button.active { background: var(--hover); color: var(--text); font-weight: 500; }
 nav button.active .app-icon { color: var(--accent); }
 nav button:hover:not(:disabled):not(.active) { background: var(--subtle); color: var(--text); }
@@ -127,8 +127,8 @@ main { width: 100%; min-width: 0; max-width: 1024px; padding: 32px; }
 .page-title h1 { font-size: 22px; font-weight: 600; line-height: 1.3; letter-spacing: -.02em; margin: 0 0 4px; }
 .page-title p { color: var(--muted); margin: 0; }
 
-/* Cards: grouped boxes. */
-.card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 24px; box-shadow: var(--shadow); }
+/* Cards: grouped boxes, 16 px; controls 10 px; rows inside a 4 px inset 6 px. */
+.card { background: var(--surface); border: 1px solid var(--border); border-radius: 16px; padding: 24px; box-shadow: var(--shadow); }
 .card-heading { display: flex; justify-content: space-between; align-items: center; gap: 16px; padding-bottom: 16px; margin-bottom: 24px; border-bottom: 1px solid var(--border); }
 .step-label { color: var(--muted); font-size: 12px; }
 .status { display: flex; flex: none; align-items: center; gap: 8px; font-size: 12px; color: var(--muted); white-space: nowrap; }
@@ -138,12 +138,12 @@ main { width: 100%; min-width: 0; max-width: 1024px; padding: 32px; }
 fieldset { border: 0; padding: 0; margin: 0; min-width: 0; }
 fieldset:disabled .form-content { opacity: .6; }
 .field { display: flex; flex-direction: column; gap: 8px; font-weight: 500; margin-bottom: 16px; }
-.path-input { display: flex; min-height: 32px; border: 1px solid var(--border-strong); border-radius: 6px; background: var(--surface); }
+.path-input { display: flex; min-height: 32px; border: 1px solid var(--border-strong); border-radius: 10px; background: var(--surface); }
 .path-input:focus-within { border-color: var(--accent); }
-.path-input input { flex: 1; min-width: 0; border: 0; background: none; padding: 4px 12px; border-radius: 6px 0 0 6px; font-weight: 400; }
-.path-input button { flex: none; border-left: 1px solid var(--border); border-radius: 0 6px 6px 0; padding: 0 12px; font-weight: 400; color: var(--text); }
+.path-input input { flex: 1; min-width: 0; border: 0; background: none; padding: 4px 12px; border-radius: 10px 0 0 10px; font-weight: 400; }
+.path-input button { flex: none; border-left: 1px solid var(--border); border-radius: 0 10px 10px 0; padding: 0 12px; font-weight: 400; color: var(--text); }
 .path-input button:hover:not(:disabled) { background: var(--subtle); }
-.field > input, .field > textarea, .field > select { min-height: 32px; border: 1px solid var(--border-strong); background: var(--surface); padding: 4px 12px; border-radius: 6px; min-width: 0; max-width: 100%; font-weight: 400; resize: vertical; }
+.field > input, .field > textarea, .field > select { min-height: 32px; border: 1px solid var(--border-strong); background: var(--surface); padding: 4px 12px; border-radius: 10px; min-width: 0; max-width: 100%; font-weight: 400; resize: vertical; }
 .field > input:focus, .field > textarea:focus, .field > select:focus { border-color: var(--accent); }
 .field textarea { padding: 8px 12px; font-family: ui-monospace, "SF Mono", "Cascadia Mono", Consolas, "Microsoft YaHei", monospace; font-size: 12px; min-height: 96px; }
 input[aria-invalid=true], textarea[aria-invalid=true], select[aria-invalid=true], .path-input:has([aria-invalid=true]) { border-color: var(--error); }
@@ -165,17 +165,17 @@ fieldset:disabled .key-source label { cursor: default; }
 /* Buttons: push buttons; the default action is filled with the accent. */
 .actions { display: flex; align-items: center; justify-content: flex-end; gap: 8px; padding-top: 16px; margin-top: 8px; border-top: 1px solid var(--border); }
 .format { margin-right: auto; display: flex; flex-wrap: wrap; gap: 4px 8px; font-size: 12px; color: var(--muted); }
-.primary { display: flex; align-items: center; justify-content: center; gap: 8px; min-height: 32px; padding: 4px 16px; border-radius: 6px; background: var(--accent); color: var(--on-accent); font-weight: 500; white-space: nowrap; box-shadow: var(--shadow); }
+.primary { display: flex; align-items: center; justify-content: center; gap: 8px; min-height: 32px; padding: 4px 16px; border-radius: 10px; background: var(--accent); color: var(--on-accent); font-weight: 500; white-space: nowrap; box-shadow: var(--shadow); }
 .primary:hover:not(:disabled) { background: var(--accent-hover); }
 .spinner { width: 12px; height: 12px; border: 2px solid #ffffff60; border-top-color: #fff; border-radius: 50%; flex: none; }
-.secondary { min-height: 32px; padding: 4px 12px; border-radius: 6px; background: var(--surface); box-shadow: var(--raised); white-space: nowrap; }
+.secondary { min-height: 32px; padding: 4px 12px; border-radius: 10px; background: var(--surface); box-shadow: var(--raised); white-space: nowrap; }
 .secondary:hover:not(:disabled) { background: var(--subtle); }
-.text-button { min-height: 32px; padding: 4px 8px; border-radius: 6px; color: var(--accent); }
+.text-button { min-height: 32px; padding: 4px 8px; border-radius: 10px; color: var(--accent); }
 .text-button:hover:not(:disabled) { background: var(--subtle); }
 .text-button.delete-contact { color: var(--error); }
 .link-button { padding: 0 0 0 8px; color: var(--accent); font-size: 12px; }
 .link-button:hover:not(:disabled) { text-decoration: underline; }
-.danger { min-height: 32px; padding: 4px 12px; border-radius: 6px; background: var(--error); color: #fff; font-weight: 500; }
+.danger { min-height: 32px; padding: 4px 12px; border-radius: 10px; background: var(--error); color: #fff; font-weight: 500; }
 .danger:hover:not(:disabled) { background: var(--error-hover); }
 
 /* Notes and results */
@@ -183,7 +183,7 @@ fieldset:disabled .key-source label { cursor: default; }
 .storage-note > .app-icon { margin-top: 4px; }
 .storage-note strong { font-weight: 500; color: var(--text); }
 .storage-note p { margin: 4px 0 0; max-width: 640px; }
-.notice { display: flex; align-items: flex-start; gap: 12px; margin: 16px 0; padding: 12px 16px; border: 1px solid var(--error); border-radius: 10px; background: var(--error-bg); overflow-wrap: anywhere; }
+.notice { display: flex; align-items: flex-start; gap: 12px; margin: 16px 0; padding: 12px 16px; border: 1px solid var(--error); border-radius: 16px; background: var(--error-bg); overflow-wrap: anywhere; }
 .notice > .app-icon { margin-top: 4px; color: var(--error); }
 .notice > div { flex: 1; min-width: 0; }
 .notice.success, .notice.neutral { border-color: var(--border); background: var(--subtle); }
@@ -191,7 +191,7 @@ fieldset:disabled .key-source label { cursor: default; }
 .notice.neutral > .app-icon { color: var(--muted); }
 .notice.neutral { color: var(--muted); }
 .result-path { margin: 4px 0 0; overflow-wrap: anywhere; }
-.fingerprint { width: 100%; margin-top: 8px; padding: 8px 12px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface); font-family: ui-monospace, "SF Mono", "Cascadia Mono", Consolas, monospace; font-size: 12px; resize: none; }
+.fingerprint { width: 100%; margin-top: 8px; padding: 8px 12px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface); font-family: ui-monospace, "SF Mono", "Cascadia Mono", Consolas, monospace; font-size: 12px; resize: none; }
 .notice.signature.trusted, .notice.signature.untrusted { border-color: var(--border); background: var(--subtle); }
 .notice.signature.trusted > .app-icon { color: var(--accent); }
 .notice.signature.untrusted > .app-icon { color: var(--text); }
@@ -242,8 +242,8 @@ fieldset:disabled .key-source label { cursor: default; }
 .setting-row input[role=switch]:disabled { cursor: default; opacity: .5; }
 .upgrade-check { justify-content: flex-start; }
 .language-row { align-items: center; }
-.language-row select { flex: none; max-width: 180px; min-height: 28px; padding: 0 8px; border: 0; border-radius: 6px; background: var(--surface); box-shadow: var(--raised); color: var(--text); }
-.unsigned-confirm { margin: 12px 0 0; padding: 16px; border: 1px solid var(--error); border-radius: 10px; background: var(--error-bg); }
+.language-row select { flex: none; max-width: 180px; min-height: 28px; padding: 0 8px; border: 0; border-radius: 10px; background: var(--surface); box-shadow: var(--raised); color: var(--text); }
+.unsigned-confirm { margin: 12px 0 0; padding: 16px; border: 1px solid var(--error); border-radius: 16px; background: var(--error-bg); }
 .unsigned-confirm p { margin: 4px 0 12px; font-size: 12px; }
 .upgrade-confirm { margin: 16px 0 0; }
 .upgrade-confirm .upgrade-check { margin: 12px 0; }
@@ -256,8 +256,8 @@ fieldset:disabled .key-source label { cursor: default; }
 .contact-list .count { font-size: 12px; font-weight: 400; color: var(--muted); }
 .contact-list .notice { margin: 0 0 16px; }
 .contact-list .empty { margin: 0; }
-.contact-list ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; border: 1px solid var(--border); border-radius: 10px; background: var(--surface); overflow: hidden; }
-.selection-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin: 0 0 16px; padding: 8px 8px 8px 16px; border: 1px solid var(--border); border-radius: 10px; background: var(--subtle); }
+.contact-list ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; border: 1px solid var(--border); border-radius: 16px; background: var(--surface); overflow: hidden; }
+.selection-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin: 0 0 16px; padding: 8px 8px 8px 16px; border: 1px solid var(--border); border-radius: 16px; background: var(--subtle); }
 .selection-count { margin-right: auto; font-weight: 500; }
 .selection-limit { font-size: 12px; color: var(--muted); }
 .contact { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 8px 16px; padding: 12px 16px; }
@@ -272,7 +272,7 @@ fieldset:disabled .key-source label { cursor: default; }
 .contact-kind.legacy { color: var(--muted); }
 .contact-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 .contact-actions.editing { flex: 1 1 100%; }
-.contact-actions.editing input { flex: 1 1 224px; min-width: 0; min-height: 32px; padding: 4px 12px; border: 1px solid var(--border-strong); border-radius: 6px; background: var(--surface); }
+.contact-actions.editing input { flex: 1 1 224px; min-width: 0; min-height: 32px; padding: 4px 12px; border: 1px solid var(--border-strong); border-radius: 10px; background: var(--surface); }
 .contact-actions.confirming { flex: 1 1 100%; }
 .contact-actions.confirming span { flex: 1 1 224px; }
 
@@ -290,7 +290,7 @@ fieldset:disabled .key-source label { cursor: default; }
 .update-dialog p { margin: 8px 0 24px; color: var(--muted); }
 .update-dialog .spacer { flex: 1; }
 .qr-dialog { width: min(416px, 100%); }
-.fingerprint-qr { display: block; width: min(256px, 100%); height: auto; margin: 16px auto 12px; border-radius: 6px; }
+.fingerprint-qr { display: block; width: min(256px, 100%); height: auto; margin: 16px auto 12px; border-radius: 10px; }
 .qr-fingerprint { display: block; font-size: 12px; text-align: center; }
 .qr-fingerprint span { display: block; overflow-wrap: anywhere; }
 
