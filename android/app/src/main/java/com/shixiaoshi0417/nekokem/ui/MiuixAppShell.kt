@@ -590,22 +590,20 @@ private fun LazyListScope.contactDetailPage(
             endActions = { VerifiedMark(contact.verified, MiuixTheme.colorScheme.onSurface, size = 24.dp) },
         )
     }
-    section(titleResource = R.string.contact_verify_title, key = "verify") {
-        FingerprintGrid(
-            contact.fingerprint,
-            Modifier.fillMaxWidth().padding(top = 20.dp, bottom = 4.dp),
-            color = MiuixTheme.colorScheme.onSurface,
-        )
-        BasicComponent(summary = stringResource(R.string.contact_verify_hint, contact.label))
-        Action(R.string.action_scan_fingerprint, !state.running, { actions.onScanContact(contact) })
-        if (state.fingerprint != null) {
-            Action(R.string.action_show_fingerprint_qr, true, actions.onShowFingerprintQr)
+    item(key = "verify") {
+        Column {
+            SmallTitle(text = stringResource(R.string.contact_verify_title))
+            SafetyNumberCard(
+                fingerprint = contact.fingerprint,
+                verified = contact.verified,
+                enabled = !state.running,
+                container = MiuixTheme.colorScheme.primary,
+                content = MiuixTheme.colorScheme.onPrimary,
+                onScan = { actions.onScanContact(contact) },
+                onToggleVerified = { actions.onSetContactVerified(contact, !contact.verified) },
+                modifier = Modifier.padding(horizontal = 12.dp).padding(bottom = 12.dp),
+            )
         }
-        Action(
-            if (contact.verified) R.string.action_unmark_verified else R.string.action_mark_verified,
-            !state.running,
-            { actions.onSetContactVerified(contact, !contact.verified) },
-        )
     }
     section(key = "use") {
         val selectLabel = stringResource(R.string.contact_select_recipient)

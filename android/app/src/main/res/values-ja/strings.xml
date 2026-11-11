@@ -321,4 +321,5 @@
     <string name="recipient_own_key">自分の公開鍵</string>
     <string name="recipient_other_file">その他の公開鍵ファイル…</string>
     <string name="recipient_count">%1$d / %2$d</string>
+    <string name="action_share_fingerprint">フィンガープリントを共有</string>
 </resources>

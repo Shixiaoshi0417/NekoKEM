@@ -29,6 +29,14 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.unit.sp
+import androidx.compose.ui.draw.clip
+import androidx.compose.material3.Icon
+import androidx.compose.material.icons.filled.Share
+import androidx.compose.material.icons.Icons
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.clickable
+import android.content.Intent
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -107,6 +115,70 @@ fun FingerprintQrDialog(fingerprint: String, onDismiss: () -> Unit) {
         },
         confirmButton = { DialogButton(stringResource(R.string.action_close), onClick = onDismiss) },
     )
+}
+
+/**
+ * A contact's fingerprint laid out like Signal's safety number page: a
+ * coloured card with the code on white (tap it to scan the owner's device),
+ * the fingerprint in rows of four groups, and one button that marks the
+ * contact verified or clears it. The share button sends the fingerprint text.
+ */
+@Composable
+fun SafetyNumberCard(
+    fingerprint: String,
+    verified: Boolean,
+    enabled: Boolean,
+    container: Color,
+    content: Color,
+    onScan: () -> Unit,
+    onToggleVerified: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val context = LocalContext.current
+    val matrix = remember(fingerprint) { FingerprintQr.encode(fingerprint) }
+    val shareLabel = stringResource(R.string.action_share_fingerprint)
+    Column(
+        modifier.fillMaxWidth().clip(RoundedCornerShape(32.dp)).background(container).padding(horizontal = 24.dp, vertical = 20.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.CenterEnd) {
+            Icon(
+                Icons.Filled.Share,
+                contentDescription = shareLabel,
+                tint = content,
+                modifier = Modifier.clip(CircleShape).clickable {
+                    val send = Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT, fingerprint)
+                    context.startActivity(Intent.createChooser(send, shareLabel))
+                }.padding(8.dp).size(24.dp),
+            )
+        }
+        Column(
+            Modifier.widthIn(max = 240.dp).fillMaxWidth().clip(RoundedCornerShape(24.dp)).background(Color.White)
+                .clickable(enabled = enabled, onClick = onScan).padding(20.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            Canvas(Modifier.fillMaxWidth().aspectRatio(1f)) {
+                val cell = size.width / matrix.width
+                for (y in 0 until matrix.height) {
+                    for (x in 0 until matrix.width) {
+                        if (matrix[x, y]) drawRect(Color.Black, topLeft = Offset(x * cell, y * cell), size = Size(cell + 0.5f, cell + 0.5f))
+                    }
+                }
+            }
+            Text(stringResource(R.string.action_scan_fingerprint), color = Color(0xFF3C3C43), fontSize = 16.sp, modifier = Modifier.padding(top = 12.dp))
+        }
+        FingerprintGrid(fingerprint, Modifier.fillMaxWidth().padding(top = 28.dp, bottom = 28.dp), color = content)
+        Box(
+            Modifier.clip(CircleShape).background(Color.White).clickable(enabled = enabled, onClick = onToggleVerified)
+                .padding(horizontal = 32.dp, vertical = 14.dp),
+        ) {
+            Text(
+                stringResource(if (verified) R.string.action_unmark_verified else R.string.action_mark_verified),
+                color = Color(0xFF1C1C1E),
+                fontSize = 16.sp,
+            )
+        }
+    }
 }
 
 /** What scanning a contact's code found. */

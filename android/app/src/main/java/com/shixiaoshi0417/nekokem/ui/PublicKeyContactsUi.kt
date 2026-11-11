@@ -319,41 +319,17 @@ private fun PublicKeyContactDetail(
             }
         }
         item {
-            Card(Modifier.fillMaxWidth(), shape = MaterialTheme.shapes.extraLarge, colors = cardColors) {
-                Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Text(stringResource(R.string.contact_verify_title), style = MaterialTheme.typography.titleMediumEmphasized)
-                    FingerprintGrid(contact.fingerprint, Modifier.fillMaxWidth())
-                    Text(
-                        stringResource(R.string.contact_verify_hint, contact.label),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                    FlowRow(
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp),
-                    ) {
-                        ExpressiveButton(
-                            text = stringResource(R.string.action_scan_fingerprint),
-                            onClick = { actions.onScanContact(contact) },
-                            enabled = !state.running,
-                            emphasis = ActionEmphasis.TONAL,
-                        )
-                        if (state.fingerprint != null) {
-                            ExpressiveButton(
-                                text = stringResource(R.string.action_show_fingerprint_qr),
-                                onClick = actions.onShowFingerprintQr,
-                                emphasis = ActionEmphasis.OUTLINED,
-                            )
-                        }
-                    }
-                    ExpressiveButton(
-                        text = stringResource(if (contact.verified) R.string.action_unmark_verified else R.string.action_mark_verified),
-                        onClick = { actions.onSetContactVerified(contact, !contact.verified) },
-                        enabled = !state.running,
-                        emphasis = if (contact.verified) ActionEmphasis.OUTLINED else ActionEmphasis.FILLED,
-                        modifier = Modifier.fillMaxWidth(),
-                    )
-                }
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text(stringResource(R.string.contact_verify_title), style = MaterialTheme.typography.titleMediumEmphasized)
+                SafetyNumberCard(
+                    fingerprint = contact.fingerprint,
+                    verified = contact.verified,
+                    enabled = !state.running,
+                    container = MaterialTheme.colorScheme.primary,
+                    content = MaterialTheme.colorScheme.onPrimary,
+                    onScan = { actions.onScanContact(contact) },
+                    onToggleVerified = { actions.onSetContactVerified(contact, !contact.verified) },
+                )
             }
         }
         item {

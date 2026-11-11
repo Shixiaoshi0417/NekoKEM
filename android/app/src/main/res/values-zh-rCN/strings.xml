@@ -335,4 +335,5 @@
     <string name="recipient_own_key">我的公钥</string>
     <string name="recipient_other_file">其他公钥文件…</string>
     <string name="recipient_count">%1$d / %2$d</string>
+    <string name="action_share_fingerprint">分享指纹</string>
 </resources>
