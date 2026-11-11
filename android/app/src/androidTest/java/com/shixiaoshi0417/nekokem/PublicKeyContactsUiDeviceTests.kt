@@ -251,7 +251,7 @@ internal fun runPublicKeyContactsUiTests(instrumentation: Instrumentation) {
         // Clearing the mark makes the next use of the contact ask first.
         click(checkNotNull(activity).getString(R.string.action_unmark_verified))
         awaitVerified(contact.id, false)
-        awaitText(checkNotNull(activity).getString(R.string.contact_unverified))
+        awaitText(checkNotNull(activity).getString(R.string.action_mark_verified))
         openDialog(checkNotNull(activity).getString(R.string.action_use_contact))
         awaitText(checkNotNull(activity).getString(R.string.contact_unverified_title))
         capture("contacts-unverified-warning")

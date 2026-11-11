@@ -71,6 +71,10 @@ class AppState(private val scope: CoroutineScope, private val files: FileChooser
     // Encrypting asks for the recipients after the form is complete.
     var choosingRecipients by mutableStateOf(false); private set
     var ownSelected by mutableStateOf(false); private set
+    // Public key files added in the dialog for this file alone; ticked when added.
+    val otherKeys = mutableStateListOf<String>()
+    // Unverified contacts are encrypted to only after a second, warned press.
+    var unverifiedWarned by mutableStateOf(false); private set
     var sidebarOpen by mutableStateOf(true); private set
     var style by mutableStateOf(Style.Miuix); private set
     var keyMode by mutableStateOf(KeyMode.Generate); private set
@@ -101,6 +105,7 @@ class AppState(private val scope: CoroutineScope, private val files: FileChooser
     var highlighted by mutableStateOf<String?>(null); private set
     var recipients by mutableStateOf<List<Contact>>(emptyList()); private set
     var ownRecipient by mutableStateOf(false); private set
+    var otherRecipients by mutableStateOf<List<String>>(emptyList()); private set
     // The saved contact that made the last encryption fail, named beside the error.
     var failedContact by mutableStateOf<Contact?>(null); private set
     var upgradePrompt by mutableStateOf<UpgradePrompt?>(null); private set
@@ -121,7 +126,8 @@ class AppState(private val scope: CoroutineScope, private val files: FileChooser
     val passwordRequired get() = (view == View.Keygen && keyMode != KeyMode.Export) || view == View.Decrypt || signing
     val percent get() = progress?.takeIf { it.second > 0 }?.let { (it.first * 100 / it.second).toInt().coerceIn(0, 100) }
     val selectedContacts get() = selected.mapNotNull { id -> contacts.firstOrNull { it.id == id } }
-    val recipientCount get() = selected.size + if (ownSelected) 1 else 0
+    val recipientCount get() = selected.size + otherKeys.size + if (ownSelected) 1 else 0
+    val unverifiedChosen get() = selectedContacts.filter { !it.verified }
     val atRecipientLimit get() = recipientCount >= MAX_RECIPIENTS
     val signerContact get() = contacts.firstOrNull { it.id == result?.signature?.contact }
 
@@ -219,7 +225,7 @@ class AppState(private val scope: CoroutineScope, private val files: FileChooser
 
     private fun resetFeedback() {
         result = null; failure = null; invalidField = null; progress = null
-        recipients = emptyList(); ownRecipient = false; failedContact = null; signerSaved = false
+        recipients = emptyList(); ownRecipient = false; otherRecipients = emptyList(); failedContact = null; signerSaved = false
         upgradePrompt?.keyText?.let(::clear)
         upgradePrompt = null
         feedback = Feedback.Form; successMessage = "success"
@@ -232,7 +238,7 @@ class AppState(private val scope: CoroutineScope, private val files: FileChooser
         resetFeedback()
         editing = null; confirmingDelete = null; highlighted = null
         withdrawReplace(); withdrawOverwrite()
-        confirmingUnsigned = false; choosingRecipients = false; ownSelected = false
+        confirmingUnsigned = false; closeRecipientsNow()
         // Decryption uses a key file, by default the user's own private key.
         if (value == View.Decrypt || source == KeySource.Contact) source = KeySource.Path
         if (value == View.Decrypt) keyPath = signKeyPath
@@ -376,11 +382,13 @@ class AppState(private val scope: CoroutineScope, private val files: FileChooser
         resetFeedback()
         failure = validate()
         if (failure != null) return
-        if (view == View.Encrypt && !choosingRecipients) { ownSelected = false; choosingRecipients = true; return }
+        if (view == View.Encrypt && !choosingRecipients) { closeRecipientsNow(); choosingRecipients = true; return }
+        if (view == View.Encrypt && unverifiedChosen.isNotEmpty() && !unverifiedWarned) { unverifiedWarned = true; return }
         val encrypting = view == View.Encrypt
         val chosen = if (encrypting) selectedContacts else emptyList()
         val own = encrypting && ownSelected
-        choosingRecipients = false
+        val others = if (encrypting) otherKeys.toList() else emptyList()
+        closeRecipientsNow()
         jobId = UUID.randomUUID().toString()
         busy = true; cancelling = false
         val kind = kind
@@ -392,7 +400,7 @@ class AppState(private val scope: CoroutineScope, private val files: FileChooser
             publicPath = if (keys) publicPath else "", privatePath = if (keys) privatePath else "",
             password = if (passwordRequired) password.text else "", confirmation = if (kind == Kind.Keygen) confirmation.text else "",
             keyText = if (!keys && !exporting && !encrypting && source == KeySource.Paste) keyText.text else "",
-            paste = !keys && !exporting && !encrypting && source == KeySource.Paste, contacts = chosen.map { it.id },
+            paste = !keys && !exporting && !encrypting && source == KeySource.Paste, contacts = chosen.map { it.id }, keyPaths = others,
             replace = kind == Kind.Keygen && replaceOffered && replace,
             overwrite = kind in listOf(Kind.Encrypt, Kind.Decrypt, Kind.ExportLegacy) && overwriteOffered && overwrite,
             signKeyPath = if (signing) signKeyPath else "", unsigned = view == View.Encrypt && unsigned,
@@ -407,7 +415,7 @@ class AppState(private val scope: CoroutineScope, private val files: FileChooser
                 // The request is written on the worker thread, then the fields are cleared.
                 val outcome = native { Backend.run(request, ::reportProgress) }
                 result = outcome
-                recipients = chosen; ownRecipient = own
+                recipients = chosen; ownRecipient = own; otherRecipients = others
                 // Every encryption starts with nothing ticked.
                 if (encrypting) selected.clear()
                 // A new or upgraded key pair becomes the user's own keys.
@@ -610,6 +618,7 @@ class AppState(private val scope: CoroutineScope, private val files: FileChooser
     fun toggleContact(contact: Contact) {
         if (locked) return
         if (contact.id in selected) selected.remove(contact.id) else if (!atRecipientLimit) selected.add(contact.id)
+        unverifiedWarned = false
         edited("contacts")
     }
     fun encryptSelected() {
@@ -617,8 +626,33 @@ class AppState(private val scope: CoroutineScope, private val files: FileChooser
         switchTab(View.Encrypt)
     }
     fun clearSelection() { if (!locked) selected.clear() }
-    fun toggleOwn() { if (!locked && (ownSelected || !atRecipientLimit)) { ownSelected = !ownSelected; edited("contacts") } }
-    fun closeRecipients() { if (!locked) { choosingRecipients = false; ownSelected = false; invalidField = null; failure = null } }
+    fun toggleOwn() { if (!locked && (ownSelected || !atRecipientLimit)) { ownSelected = !ownSelected; unverifiedWarned = false; edited("contacts") } }
+    fun closeRecipients() { if (!locked) { closeRecipientsNow(); invalidField = null; failure = null } }
+    private fun closeRecipientsNow() { choosingRecipients = false; ownSelected = false; otherKeys.clear(); unverifiedWarned = false }
+    fun removeOtherKey(path: String) { if (!locked) otherKeys.remove(path) }
+    /** "Other public key file…": a one-off recipient for this file, never saved. */
+    fun addOtherKey() {
+        if (locked || atRecipientLimit) return
+        choosing = PathField.KeyPath
+        scope.launch {
+            try {
+                val value = files.open()
+                if (value != null && value != ownPublicKey && value !in otherKeys) { otherKeys.add(value); edited("contacts") }
+            } catch (error: Throwable) { failure = code(error) } finally { choosing = null }
+        }
+    }
+
+    fun toggleVerified(contact: Contact) {
+        if (locked) return
+        resetFeedback()
+        feedback = Feedback.List
+        contactBusy = true
+        scope.launch {
+            try { native { Backend.setVerified(contact.id, contact.fingerprint, !contact.verified) } } catch (error: Throwable) { failure = code(error) } finally { contactBusy = false }
+            refreshContacts()
+            closeIfRequested()
+        }
+    }
 
     fun togglePin(contact: Contact) {
         if (locked) return

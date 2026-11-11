@@ -48,6 +48,8 @@ pub struct Contact {
     #[serde(skip_serializing_if = "Option::is_none")] pub legacy_fingerprint: Option<String>,
     // Pinned contacts are listed first, as on Android.
     pub pinned: bool,
+    // The user compared this fingerprint with the key's owner.
+    pub verified: bool,
 }
 impl Contact {
     fn label(&self) -> &str { if self.note.is_empty() { &self.name } else { &self.note } }
@@ -71,6 +73,7 @@ struct Record {
     // Present exactly for identity keys; records from 4.x have neither.
     #[serde(default, skip_serializing_if = "Option::is_none")] legacy_fingerprint: Option<String>,
     #[serde(default, skip_serializing_if = "std::ops::Not::not")] pinned: bool,
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")] verified: bool,
 }
 impl Record {
     fn is_valid(&self, id: &str) -> bool {
@@ -88,7 +91,7 @@ impl Record {
     fn can_verify(&self) -> bool { self.legacy_fingerprint.is_some() }
     fn contact(&self, id: &str) -> Contact {
         Contact { id: id.into(), fingerprint: self.fingerprint.clone(), name: clean_name(&self.name), note: self.note.clone(),
-                  can_verify: self.can_verify(), legacy_fingerprint: self.legacy_fingerprint.clone(), pinned: self.pinned }
+                  can_verify: self.can_verify(), legacy_fingerprint: self.legacy_fingerprint.clone(), pinned: self.pinned, verified: self.verified }
     }
 }
 const BEGIN: &str = "-----BEGIN PUBLIC KEY-----";
@@ -162,6 +165,17 @@ impl Store {
         let _lock = self.lock()?;
         let mut record = self.read(checked(id)?)?;
         record.pinned = pinned;
+        self.write(id, &record)?;
+        Ok(record.contact(id))
+    }
+
+    /// Marks the fingerprint as compared with its owner. `fingerprint` must still
+    /// be the saved one, so a record replaced meanwhile is never marked.
+    pub fn set_verified(&self, id: &str, fingerprint: &str, verified: bool) -> Result<Contact, Failure> {
+        let _lock = self.lock()?;
+        let mut record = self.read(checked(id)?)?;
+        if record.fingerprint != fingerprint { return Err(Failure::new(MISMATCH)); }
+        record.verified = verified;
         self.write(id, &record)?;
         Ok(record.contact(id))
     }
@@ -259,8 +273,9 @@ impl Store {
                 .filter(|key| valid_public_key(key))
                 .ok_or_else(|| Failure::new("public-key-invalid"))?;
             // An upgraded key stays pinned like the legacy contact it replaces.
+            // Its fingerprint is new, so it starts unverified.
             let pinned = replaces.as_ref().is_some_and(|(_, old)| old.pinned);
-            let record = Record { version: RECORD_VERSION, fingerprint, name, note, public_key, legacy_fingerprint: legacy, pinned };
+            let record = Record { version: RECORD_VERSION, fingerprint, name, note, public_key, legacy_fingerprint: legacy, pinned, verified: false };
             if !record.is_valid(&id) { return Err(Failure::new("public-key-invalid")); }
             self.write(&id, &record)?;
             if let Some((old, _)) = &replaces { self.remove(old)?; }
@@ -592,6 +607,12 @@ pub mod tests {
         assert!(!store.set_pinned(&bob.id, false).unwrap().pinned);
         assert_eq!(order(), vec![("Alice".into(), false), ("Bob · laptop".into(), false)]);
         assert_eq!(code(store.set_pinned("../alice", true)), "invalid-request");
+        // Verification needs the saved fingerprint and survives pinning.
+        let fingerprint = store.list().unwrap().contacts[1].fingerprint.clone();
+        assert_eq!(code(store.set_verified(&bob.id, &"0".repeat(95), true)), MISMATCH);
+        assert!(store.set_verified(&bob.id, &fingerprint, true).unwrap().verified);
+        assert!(store.set_pinned(&bob.id, true).unwrap().verified);
+        assert!(!store.set_verified(&bob.id, &fingerprint, false).unwrap().verified);
     }
 
     #[test]

@@ -274,7 +274,7 @@ private fun MaterialContactCard(
                         maxLines = 1,
                     )
                 }
-                VerificationBadge(contact.verified)
+                VerifiedMark(contact.verified, MaterialTheme.colorScheme.onSurface, Modifier.padding(start = 8.dp))
             }
         }
     }
@@ -311,13 +311,8 @@ private fun PublicKeyContactDetail(
                             style = MaterialTheme.typography.labelMedium,
                             color = if (contact.canVerify) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
                         )
-                        Text(
-                            stringResource(if (contact.verified) R.string.contact_verified else R.string.contact_unverified),
-                            style = MaterialTheme.typography.labelLarge,
-                            color = if (contact.verified) VerifiedGreen else MaterialTheme.colorScheme.error,
-                        )
                     }
-                    VerificationBadge(contact.verified, size = 44.dp, described = false)
+                    VerifiedMark(contact.verified, MaterialTheme.colorScheme.onSurface, size = 24.dp)
                 }
             }
         }
@@ -405,40 +400,36 @@ private fun PublicKeyContactDetail(
     }
 }
 
-/** Green for a contact whose fingerprint the user has verified. */
-internal val VerifiedGreen = Color(0xFF1E8E3E)
-
-/** Red for one that is not; fixed, since dark themes turn the error color pink. */
+/** Red for warnings about contacts; fixed, since dark themes turn the error color pink. */
 internal val UnverifiedRed = Color(0xFFD93025)
 
 /**
- * The verification mark at the end of a contact card: a white tick in a green
- * circle once verified, a white cross in a red circle until then.
+ * Signal's mark for a verified contact: an outlined shield with a tick in the
+ * surrounding text color. Unverified contacts carry no mark.
  */
 @Composable
-internal fun VerificationBadge(
-    verified: Boolean,
-    modifier: Modifier = Modifier,
-    size: Dp = 28.dp,
-    // Off where a text label beside the mark already says the same.
-    described: Boolean = true,
-) {
-    val description = stringResource(if (verified) R.string.contact_verified else R.string.contact_unverified)
-    Canvas(modifier.size(size).semantics { if (described) contentDescription = description }) {
+internal fun VerifiedMark(verified: Boolean, color: Color, modifier: Modifier = Modifier, size: Dp = 18.dp) {
+    if (!verified) return
+    val description = stringResource(R.string.contact_verified)
+    Canvas(modifier.size(size).semantics { contentDescription = description }) {
         val side = this.size.minDimension
-        drawCircle(if (verified) VerifiedGreen else UnverifiedRed)
-        val stroke = Stroke(width = side * 0.11f, cap = StrokeCap.Round, join = StrokeJoin.Round)
-        if (verified) {
-            val tick = Path().apply {
-                moveTo(side * 0.28f, side * 0.52f)
-                lineTo(side * 0.44f, side * 0.67f)
-                lineTo(side * 0.73f, side * 0.37f)
-            }
-            drawPath(tick, Color.White, style = stroke)
-        } else {
-            drawLine(Color.White, Offset(side * 0.35f, side * 0.35f), Offset(side * 0.65f, side * 0.65f), stroke.width, StrokeCap.Round)
-            drawLine(Color.White, Offset(side * 0.65f, side * 0.35f), Offset(side * 0.35f, side * 0.65f), stroke.width, StrokeCap.Round)
+        val stroke = Stroke(width = side * 0.09f, cap = StrokeCap.Round, join = StrokeJoin.Round)
+        val shield = Path().apply {
+            moveTo(side * 0.5f, side * 0.07f)
+            lineTo(side * 0.85f, side * 0.2f)
+            lineTo(side * 0.85f, side * 0.46f)
+            cubicTo(side * 0.85f, side * 0.7f, side * 0.69f, side * 0.86f, side * 0.5f, side * 0.94f)
+            cubicTo(side * 0.31f, side * 0.86f, side * 0.15f, side * 0.7f, side * 0.15f, side * 0.46f)
+            lineTo(side * 0.15f, side * 0.2f)
+            close()
         }
+        drawPath(shield, color, style = stroke)
+        val tick = Path().apply {
+            moveTo(side * 0.34f, side * 0.5f)
+            lineTo(side * 0.46f, side * 0.62f)
+            lineTo(side * 0.67f, side * 0.39f)
+        }
+        drawPath(tick, color, style = stroke)
     }
 }
 
@@ -487,15 +478,6 @@ private fun ContactIdentity(contact: PublicKeyContact) {
         style = MaterialTheme.typography.labelMedium,
         color = if (contact.canVerify) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
     )
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        VerificationBadge(contact.verified, size = 16.dp, described = false)
-        Text(
-            stringResource(if (contact.verified) R.string.contact_verified else R.string.contact_unverified),
-            style = MaterialTheme.typography.labelMedium,
-            color = if (contact.verified) VerifiedGreen else MaterialTheme.colorScheme.error,
-            modifier = Modifier.padding(start = 6.dp),
-        )
-    }
 }
 
 @Composable
@@ -531,6 +513,7 @@ fun PublicKeyContactPicker(
                                 RadioButton(selected = selectedId == contact.id, onClick = null)
                             }
                             Column(Modifier.weight(1f)) { ContactIdentity(contact) }
+                            VerifiedMark(contact.verified, if (isMiuixStyle()) MiuixTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurface, Modifier.padding(start = 8.dp))
                         }
                     }
                 }
@@ -648,7 +631,6 @@ fun UnverifiedContactDialog(contacts: List<PublicKeyContact>, onConfirm: () -> U
     val names = contacts.joinToString(stringResource(R.string.contact_name_separator)) { "“${it.label}”" }
     AppAlertDialog(
         onDismissRequest = onDismiss,
-        icon = { VerificationBadge(false, size = 32.dp, described = false) },
         title = { Text(stringResource(R.string.contact_unverified_title)) },
         text = {
             Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(12.dp)) {

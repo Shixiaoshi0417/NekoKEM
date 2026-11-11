@@ -19,7 +19,7 @@ class OperationRequest(
     val input: String = "", val output: String = "", val keyPath: String = "",
     val publicPath: String = "", val privatePath: String = "",
     val password: CharSequence = "", val confirmation: CharSequence = "", val keyText: CharSequence = "",
-    val paste: Boolean = false, val contacts: List<String> = emptyList(),
+    val paste: Boolean = false, val contacts: List<String> = emptyList(), val keyPaths: List<String> = emptyList(),
     val replace: Boolean = false, val overwrite: Boolean = false,
     val signKeyPath: String = "", val unsigned: Boolean = false, val requireSignature: Boolean = false,
 )
@@ -29,7 +29,7 @@ data class Outcome(
     val output: String? = null, val fingerprint: String? = null, val recipients: List<String> = emptyList(),
     val format: Int? = null, val signature: Signature? = null, val legacyFingerprint: String? = null, val canVerify: Boolean? = null,
 )
-data class Contact(val id: String, val fingerprint: String, val name: String, val note: String, val canVerify: Boolean, val legacyFingerprint: String?, val pinned: Boolean = false)
+data class Contact(val id: String, val fingerprint: String, val name: String, val note: String, val canVerify: Boolean, val legacyFingerprint: String?, val pinned: Boolean = false, val verified: Boolean = false)
 data class ContactList(val contacts: List<Contact>, val unreadable: Int)
 data class Settings(val language: String, val selection: String, val version: String)
 sealed interface UpdateStatus {
@@ -66,6 +66,7 @@ object Backend {
                     field("password", request.password); field("confirmation", request.confirmation); field("keyText", request.keyText)
                     field("paste", request.paste)
                     arrayField("contacts") { request.contacts.forEach { value(it) } }
+                    arrayField("keyPaths") { request.keyPaths.forEach { value(it) } }
                     field("replace", request.replace); field("overwrite", request.overwrite)
                     field("signKeyPath", request.signKeyPath); field("unsigned", request.unsigned); field("requireSignature", request.requireSignature)
                 }
@@ -85,7 +86,7 @@ object Backend {
     }
 
     private fun contact(value: JsonElement): Contact = value.obj().let {
-        Contact(it.text("id") ?: "", it.text("fingerprint") ?: "", it.text("name") ?: "", it.text("note") ?: "", it.flag("canVerify") ?: false, it.text("legacyFingerprint"), it.flag("pinned") ?: false)
+        Contact(it.text("id") ?: "", it.text("fingerprint") ?: "", it.text("name") ?: "", it.text("note") ?: "", it.flag("canVerify") ?: false, it.text("legacyFingerprint"), it.flag("pinned") ?: false, it.flag("verified") ?: false)
     }
 
     fun contacts(): ContactList = Bridge.request { command("list_contacts") }.obj().let {
@@ -99,6 +100,7 @@ object Backend {
     fun updateNote(id: String, note: String): Contact = contact(Bridge.request { obj { field("update_contact_note") { field("id", id); field("note", note) } } })
 
     fun setPinned(id: String, pinned: Boolean): Contact = contact(Bridge.request { obj { field("set_contact_pinned") { field("id", id); field("pinned", pinned) } } })
+    fun setVerified(id: String, fingerprint: String, verified: Boolean): Contact = contact(Bridge.request { obj { field("set_contact_verified") { field("id", id); field("fingerprint", fingerprint); field("verified", verified) } } })
     fun deleteContact(id: String) { Bridge.request { obj { field("delete_contact") { field("id", id) } } } }
 
     fun checkUpdate(): UpdateStatus = try {

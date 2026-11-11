@@ -33,6 +33,11 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.StrokeJoin
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.material.icons.Icons
@@ -255,9 +260,30 @@ private fun FileFields(state: AppState) {
     }
 }
 
-/** One tickable recipient row: the user's own key or a saved contact. */
+
+/** As on Android and Signal: an outlined shield with a tick, in the text color, once the fingerprint was compared. Unverified keys have no mark. */
 @Composable
-private fun RecipientRow(title: String, detail: String, mark: String, checked: Boolean, enabled: Boolean, onToggle: () -> Unit) {
+private fun VerificationBadge(verified: Boolean, size: Dp = 20.dp) {
+    if (!verified) return
+    val color = LocalKit.current.colors().text
+    Canvas(Modifier.size(size)) {
+        val side = this.size.minDimension
+        val stroke = Stroke(width = side * 0.09f, cap = StrokeCap.Round, join = StrokeJoin.Round)
+        val shield = Path().apply {
+            moveTo(side * 0.5f, side * 0.07f); lineTo(side * 0.85f, side * 0.2f); lineTo(side * 0.85f, side * 0.46f)
+            cubicTo(side * 0.85f, side * 0.7f, side * 0.69f, side * 0.86f, side * 0.5f, side * 0.94f)
+            cubicTo(side * 0.31f, side * 0.86f, side * 0.15f, side * 0.7f, side * 0.15f, side * 0.46f)
+            lineTo(side * 0.15f, side * 0.2f); close()
+        }
+        drawPath(shield, color, style = stroke)
+        val tick = Path().apply { moveTo(side * 0.34f, side * 0.5f); lineTo(side * 0.46f, side * 0.62f); lineTo(side * 0.67f, side * 0.39f) }
+        drawPath(tick, color, style = stroke)
+    }
+}
+
+/** One tickable recipient row; [verified] puts the verification mark at its end. */
+@Composable
+private fun RecipientRow(title: String, detail: String, mark: String, checked: Boolean, enabled: Boolean, verified: Boolean?, onToggle: () -> Unit) {
     val kit = LocalKit.current
     Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).clickable(enabled = enabled, onClick = onToggle).padding(vertical = 8.dp, horizontal = 4.dp), verticalAlignment = Alignment.CenterVertically) {
         kit.Check(checked, enabled, title, null)
@@ -268,8 +294,11 @@ private fun RecipientRow(title: String, detail: String, mark: String, checked: B
             }
             if (detail.isNotEmpty()) kit.Text(detail, TextRole.Tiny, mono = true)
         }
+        if (verified == true) { Spacer(Modifier.width(12.dp)); VerificationBadge(true) }
     }
 }
+
+private fun fileName(path: String) = path.split('/', '\\').last()
 
 /** Asked when Encrypt is pressed: own key first, then pinned contacts, then the rest. Nothing is ticked for the user. */
 @Composable
@@ -279,23 +308,28 @@ private fun RecipientDialog(state: AppState) {
         if (!state.choosingRecipients) return@Dialog
         Column(Modifier.fillMaxWidth().heightIn(max = 360.dp).verticalScroll(rememberScrollState())) {
             if (state.ownPublicKey.isNotEmpty()) {
-                RecipientRow(state.t("myPublicKey"), state.ownPublicKey.split('/', '\\').last(), state.t("appDefault"), state.ownSelected,
-                    !state.locked && (state.ownSelected || !state.atRecipientLimit), state::toggleOwn)
+                RecipientRow(state.t("myPublicKey"), fileName(state.ownPublicKey), state.t("appDefault"), state.ownSelected,
+                    !state.locked && (state.ownSelected || !state.atRecipientLimit), null, state::toggleOwn)
             }
             for (contact in state.contacts) {
                 val chosen = contact.id in state.selected
                 RecipientRow(state.label(contact), contact.fingerprint.take(23), if (contact.pinned) state.t("pinnedMark") else "", chosen,
-                    !state.locked && (chosen || !state.atRecipientLimit)) { state.toggleContact(contact) }
+                    !state.locked && (chosen || !state.atRecipientLimit), contact.verified) { state.toggleContact(contact) }
             }
-            if (state.ownPublicKey.isEmpty() && state.contactsLoaded && state.contacts.isEmpty()) Hint(state.t("noContacts"))
+            for (path in state.otherKeys) RecipientRow(fileName(path), "", state.t("otherKeyFile"), true, !state.locked, false) { state.removeOtherKey(path) }
         }
+        kit.LinkButton(state.t("otherKeyFile"), enabled = !state.locked && !state.atRecipientLimit, modifier = Modifier.padding(top = 8.dp), onClick = state::addOtherKey)
         state.contactsFailure?.let { Hint(state.t(it), danger = true) }
         if (state.invalidField == "contacts") state.failure?.let { Hint(state.t(it), danger = true) }
+        val unverified = state.unverifiedChosen
+        if (state.unverifiedWarned && unverified.isNotEmpty()) Hint(state.t("unverifiedMessage").replace("{names}", unverified.joinToString(", ") { state.label(it) }), danger = true)
         Row(Modifier.fillMaxWidth().padding(top = 16.dp), verticalAlignment = Alignment.CenterVertically) {
             kit.Text("${state.recipientCount} / $MAX_RECIPIENTS", TextRole.Small, Modifier.weight(1f))
             kit.SecondaryButton(state.t("cancel"), onClick = state::closeRecipients)
             Spacer(Modifier.width(8.dp))
-            kit.PrimaryButton(state.t("encrypt"), enabled = state.editable && state.recipientCount > 0, onClick = state::submit)
+            val warned = state.unverifiedWarned && unverified.isNotEmpty()
+            if (warned) kit.DangerButton(state.t("encryptAnyway"), enabled = state.editable, onClick = state::submit)
+            else kit.PrimaryButton(state.t("encrypt"), enabled = state.editable && state.recipientCount > 0, onClick = state::submit)
         }
     }
 }
@@ -344,7 +378,7 @@ private fun FormFeedback(state: AppState) {
     val result = state.result ?: return
     Notice(state.t(state.successMessage), danger = state.successMessage == "encryptedUnsigned") {
         result.output?.let { Detail(it) }
-        val names = (if (state.ownRecipient) listOf(state.t("myPublicKey")) else emptyList()) + state.recipients.map(state::label)
+        val names = (if (state.ownRecipient) listOf(state.t("myPublicKey")) else emptyList()) + state.otherRecipients.map(::fileName) + state.recipients.map(state::label)
         if (names.isNotEmpty()) Detail("${state.t(if (names.size > 1) "recipients" else "recipient")}: ${names.joinToString(", ")}")
         result.fingerprint?.let { fingerprint ->
             Detail(fingerprint, mono = true)
@@ -429,6 +463,7 @@ private fun ContactRow(state: AppState, contact: Contact) {
                 Detail(contact.fingerprint, mono = true)
                 kit.Text(state.t(if (contact.canVerify) "contactVerifies" else "contactLegacy"), TextRole.Tiny, Modifier.padding(top = 4.dp), color = if (contact.canVerify) null else colors.danger)
             }
+            if (contact.verified) { Spacer(Modifier.width(12.dp)); VerificationBadge(true, 24.dp) }
         }
         Row(Modifier.fillMaxWidth().padding(top = 8.dp), horizontalArrangement = Arrangement.End, verticalAlignment = Alignment.CenterVertically) {
             when (contact.id) {
@@ -447,6 +482,8 @@ private fun ContactRow(state: AppState, contact: Contact) {
                 }
                 else -> {
                     kit.SecondaryButton(state.t("useContact"), enabled = !state.locked) { state.useContact(contact) }
+                    Spacer(Modifier.width(8.dp))
+                    kit.LinkButton(state.t(if (contact.verified) "unmarkVerified" else "markVerified"), enabled = !state.locked) { state.toggleVerified(contact) }
                     Spacer(Modifier.width(8.dp))
                     kit.LinkButton(state.t(if (contact.pinned) "unpinContact" else "pinContact"), enabled = !state.locked) { state.togglePin(contact) }
                     Spacer(Modifier.width(8.dp))

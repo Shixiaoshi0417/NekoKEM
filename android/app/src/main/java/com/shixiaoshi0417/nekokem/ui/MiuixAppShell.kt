@@ -605,7 +605,7 @@ private fun MiuixContactCard(
                         maxLines = 1,
                     )
                 }
-                VerificationBadge(contact.verified)
+                VerifiedMark(contact.verified, MiuixTheme.colorScheme.onSurface, Modifier.padding(start = 8.dp))
             }
         }
     }
@@ -625,13 +625,7 @@ private fun LazyListScope.contactDetailPage(
             title = contact.label,
             summary = stringResource(R.string.key_file_line, contact.displayName) + "\n" +
                 stringResource(if (contact.canVerify) R.string.contact_verifies else R.string.contact_legacy),
-            endActions = { VerificationBadge(contact.verified, size = 40.dp, described = false) },
-        )
-        BasicComponent(
-            title = stringResource(if (contact.verified) R.string.contact_verified else R.string.contact_unverified),
-            titleColor = BasicComponentDefaults.titleColor(
-                color = if (contact.verified) VerifiedGreen else MiuixTheme.colorScheme.error,
-            ),
+            endActions = { VerifiedMark(contact.verified, MiuixTheme.colorScheme.onSurface, size = 24.dp) },
         )
     }
     section(titleResource = R.string.contact_verify_title, key = "verify") {

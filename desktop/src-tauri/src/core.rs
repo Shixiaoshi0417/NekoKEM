@@ -47,6 +47,9 @@ pub struct Request {
     // encryption writes one NKEM v5 file for all of them; unsigned writes v3
     // for one and v4 for several. Never combined with another key source.
     #[serde(default)] pub contacts:Vec<String>,
+    // Encryption only: more public key files chosen for this file alone, after
+    // `key_path` (the user's own key) and before the contacts.
+    #[serde(default)] pub key_paths:Vec<String>,
     // Encryption: the sender's identity private key, opened with `password`.
     #[serde(default)] pub sign_key_path:String,
     // Encryption: the user turned on unsigned (legacy-compatible) output.
@@ -256,14 +259,19 @@ pub fn execute<F:Fn(u64,u64)>(backend:&Backend,request:Request,job:Arc<Job>,emit
     if !request.contacts.is_empty() && (request.kind!=Kind::Encrypt || request.paste || !request.key_text.is_empty()) {
         return Err(Failure::new("invalid-request"));
     }
+    if !request.key_paths.is_empty() && (request.kind!=Kind::Encrypt || request.paste || !request.key_text.is_empty()) {
+        return Err(Failure::new("invalid-request"));
+    }
     if request.replace && request.kind!=Kind::Keygen {return Err(Failure::new("invalid-request"));}
     if request.overwrite && !matches!(request.kind,Kind::Encrypt|Kind::Decrypt|Kind::ExportLegacy) {return Err(Failure::new("invalid-request"));}
     if (request.kind!=Kind::Encrypt && (request.unsigned || !request.sign_key_path.is_empty())) ||
         (request.kind==Kind::Encrypt && request.unsigned && !request.sign_key_path.is_empty()) ||
         (request.require_signature && request.kind!=Kind::Decrypt) {return Err(Failure::new("invalid-request"));}
-    if request.contacts.len()+usize::from(!request.contacts.is_empty() && !request.key_path.is_empty())>MAX_RECIPIENTS {return Err(Failure::new("recipient-limit"));}
+    if request.contacts.len()+request.key_paths.len()+usize::from(!request.key_path.is_empty())>MAX_RECIPIENTS {return Err(Failure::new("recipient-limit"));}
     let mut seen=std::collections::HashSet::new();
     if !request.contacts.iter().all(|id|seen.insert(id.as_str())) {return Err(Failure::new("invalid-request"));}
+    let mut seen=std::collections::HashSet::new();
+    if !std::iter::once(&request.key_path).filter(|key|!key.is_empty()).chain(&request.key_paths).all(|key|seen.insert(key.as_str())) {return Err(Failure::new("invalid-request"));}
     if request.kind==Kind::Keygen {
         if request.password.is_empty(){return Err(Failure::new("password-empty"));}
         if request.password.as_str()!=request.confirmation.as_str(){return Err(Failure::new("password-mismatch"));}
@@ -302,6 +310,9 @@ pub fn execute<F:Fn(u64,u64)>(backend:&Backend,request:Request,job:Arc<Job>,emit
             return Err(Failure::new("output-is-key"));
         }
     }
+    for key in &request.key_paths {
+        if same_file(&path(&request.output)?,&path(key)?)==Some(true) {return Err(Failure::new("output-is-key"));}
+    }
     // Saved contacts are re-read and re-validated by Core for every encryption.
     // A missing or damaged contact fails the whole operation and names that
     // contact; no recipient is ever skipped or replaced by another key.
@@ -314,7 +325,8 @@ pub fn execute<F:Fn(u64,u64)>(backend:&Backend,request:Request,job:Arc<Job>,emit
             staged.push(stage); recipients.push(fingerprint);
         }
     } else if request.paste {staged.push(Staged::new(&request.key_text)?);}
-    let mut keys=if staged.is_empty() || (!request.paste && !request.key_path.is_empty()) {vec![path(&request.key_path)?]} else {Vec::new()};
+    let mut keys=if (staged.is_empty() && request.key_paths.is_empty()) || (!request.paste && !request.key_path.is_empty()) {vec![path(&request.key_path)?]} else {Vec::new()};
+    for key in &request.key_paths {keys.push(path(key)?);}
     for stage in &staged {keys.push(stage.path().map(CStr::to_owned).ok_or_else(||Failure::new("internal"))?);}
     // Decryption trusts every saved contact with an identity key. A contact
     // that is missing or fails Core's check is left out: that only makes the
@@ -450,7 +462,7 @@ mod tests {
         assert!(unsafe { CStr::from_ptr(version) }.to_bytes().starts_with(b"OpenSSL 4.1.0 "),
                 "GUI linked runtime does not match pinned OpenSSL 4.1.0");
     }
-    fn request(kind:Kind)->Request {Request{id:"test-job".into(),input:String::new(),output:String::new(),key_path:String::new(),public_path:String::new(),private_path:String::new(),password:Zeroizing::new(String::new()),confirmation:Zeroizing::new(String::new()),key_text:Zeroizing::new(String::new()),paste:false,replace:false,overwrite:false,contacts:Vec::new(),
+    fn request(kind:Kind)->Request {Request{id:"test-job".into(),input:String::new(),output:String::new(),key_path:String::new(),public_path:String::new(),private_path:String::new(),password:Zeroizing::new(String::new()),confirmation:Zeroizing::new(String::new()),key_text:Zeroizing::new(String::new()),paste:false,replace:false,overwrite:false,contacts:Vec::new(),key_paths:Vec::new(),
         // Signing has its own tests; the others check one behaviour of all formats.
         sign_key_path:String::new(),unsigned:kind==Kind::Encrypt,require_signature:false,kind}}
     fn run(backend:&Arc<Backend>,r:Request)->Result<Outcome,Failure>{let job=backend.reserve(&r)?;let _hold=Reservation{backend:backend.clone(),job:job.clone()};execute(&backend,r,job,|_,_|{})}
@@ -624,6 +636,15 @@ mod tests {
             let mut r=decrypt(private,password,name);r.input=keys.file("own.nkem");run(&backend,r).unwrap();
             assert_eq!(fs::read(keys.file(name)).unwrap(),data);
         }
+        // One-off key files join them; a repeated key file is refused.
+        let carol={let _core=contact::core_lock();contact::keypair(&keys,"carol","public-test-carol")};
+        let mut r=encrypt(&alice_id,"extra.nkem");r.key_path=bob.clone();r.key_paths=vec![carol.0.clone()];run(&backend,r).unwrap();
+        let mut r=decrypt(&carol.1,"public-test-carol","extra-carol.out");r.input=keys.file("extra.nkem");run(&backend,r).unwrap();
+        assert_eq!(fs::read(keys.file("extra-carol.out")).unwrap(),data);
+        let mut r=encrypt(&alice_id,"repeat.nkem");r.key_path=bob.clone();r.key_paths=vec![bob.clone()];
+        assert_eq!(run(&backend,r).err().unwrap().code,"invalid-request");
+        let mut r=request(Kind::Decrypt);r.key_paths=vec![carol.0.clone()];
+        assert_eq!(run(&backend,r).err().unwrap().code,"invalid-request");
         // A contact is never combined with pasted key text.
         let mut r=encrypt(&alice_id,"combined.nkem");r.paste=true;r.key_text=Zeroizing::new(fs::read_to_string(&bob).unwrap());
         assert_eq!(run(&backend,r).err().unwrap().code,"invalid-request");

@@ -30,7 +30,7 @@ fun main(args: Array<String>): Unit = runBlocking(Dispatchers.Main) {
         withContext(Dispatchers.IO) { Backend.run(OperationRequest(id = "keygen-$name", kind = Kind.Keygen, publicPath = file("$name.public.key"), privatePath = file("$name.private.key.enc"), password = password, confirmation = password)) { _, _ -> } }
     }
     withContext(Dispatchers.IO) {
-        runCatching { Backend.saveContact(file("alice.public.key"), "", false, "Alice") }
+        runCatching { Backend.saveContact(file("alice.public.key"), "", false, "Alice") }.getOrNull()?.let { Backend.setVerified(it.id, it.fingerprint, true) }
         runCatching { Backend.saveContact(file("bob.public.key"), "", false, "Bob · laptop") }.getOrNull()?.let { Backend.setPinned(it.id, true) }
     }
     File(work, "report.pdf").writeBytes(ByteArray(3_000_000) { it.toByte() })
