@@ -55,6 +55,7 @@ enum Call {
     SaveContact { contact: ContactImport },
     UpdateContactNote { id: String, note: String },
     DeleteContact { id: String },
+    SetContactPinned { id: String, pinned: bool },
     CheckUpdate,
     OpenReleasePage { version: String },
     UpdatePreferences,
@@ -117,6 +118,7 @@ fn run(call: Call, progress: Option<ProgressCallback>) -> Result<Value, Failure>
         })),
         Call::UpdateContactNote { id, note } => json(contact_job(move |store| store.update_note(&id, &note))),
         Call::DeleteContact { id } => json(contact_job(move |store| store.delete(&id))),
+        Call::SetContactPinned { id, pinned } => json(contact_job(move |store| store.set_pinned(&id, pinned))),
         // Needs no Core lock and no job: it never touches keys or files.
         Call::CheckUpdate => json(Ok(update::check(VERSION))),
         Call::OpenReleasePage { version } => {

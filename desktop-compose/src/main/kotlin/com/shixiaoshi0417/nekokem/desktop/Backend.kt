@@ -29,7 +29,7 @@ data class Outcome(
     val output: String? = null, val fingerprint: String? = null, val recipients: List<String> = emptyList(),
     val format: Int? = null, val signature: Signature? = null, val legacyFingerprint: String? = null, val canVerify: Boolean? = null,
 )
-data class Contact(val id: String, val fingerprint: String, val name: String, val note: String, val canVerify: Boolean, val legacyFingerprint: String?)
+data class Contact(val id: String, val fingerprint: String, val name: String, val note: String, val canVerify: Boolean, val legacyFingerprint: String?, val pinned: Boolean = false)
 data class ContactList(val contacts: List<Contact>, val unreadable: Int)
 data class Settings(val language: String, val selection: String, val version: String)
 sealed interface UpdateStatus {
@@ -39,7 +39,7 @@ sealed interface UpdateStatus {
 }
 data class UpdatePreferences(val auto: Boolean = true, val lastCheck: Long = 0, val ignored: String = "")
 /** The choices the Tauri app keeps in WebView storage. Unsigned output is never saved. */
-data class DesktopPreferences(val requireSignature: Boolean = false, val signKeyPath: String = "", val sidebarOpen: Boolean = true, val style: String = "miuix")
+data class DesktopPreferences(val requireSignature: Boolean = false, val signKeyPath: String = "", val publicKeyPath: String = "", val sidebarOpen: Boolean = true, val style: String = "miuix")
 
 // Same limit as Core's NEKOKEM_MAX_RECIPIENTS for one NKEM v4/v5 file.
 const val MAX_RECIPIENTS = 64
@@ -85,7 +85,7 @@ object Backend {
     }
 
     private fun contact(value: JsonElement): Contact = value.obj().let {
-        Contact(it.text("id") ?: "", it.text("fingerprint") ?: "", it.text("name") ?: "", it.text("note") ?: "", it.flag("canVerify") ?: false, it.text("legacyFingerprint"))
+        Contact(it.text("id") ?: "", it.text("fingerprint") ?: "", it.text("name") ?: "", it.text("note") ?: "", it.flag("canVerify") ?: false, it.text("legacyFingerprint"), it.flag("pinned") ?: false)
     }
 
     fun contacts(): ContactList = Bridge.request { command("list_contacts") }.obj().let {
@@ -98,6 +98,7 @@ object Backend {
 
     fun updateNote(id: String, note: String): Contact = contact(Bridge.request { obj { field("update_contact_note") { field("id", id); field("note", note) } } })
 
+    fun setPinned(id: String, pinned: Boolean): Contact = contact(Bridge.request { obj { field("set_contact_pinned") { field("id", id); field("pinned", pinned) } } })
     fun deleteContact(id: String) { Bridge.request { obj { field("delete_contact") { field("id", id) } } } }
 
     fun checkUpdate(): UpdateStatus = try {
@@ -116,10 +117,10 @@ object Backend {
     }
 
     fun desktopPreferences(): DesktopPreferences = Bridge.request { command("desktop_preferences") }.obj().let {
-        DesktopPreferences(it.flag("requireSignature") ?: false, it.text("signKeyPath") ?: "", it.flag("sidebarOpen") ?: true, it.text("style") ?: "miuix")
+        DesktopPreferences(it.flag("requireSignature") ?: false, it.text("signKeyPath") ?: "", it.text("publicKeyPath") ?: "", it.flag("sidebarOpen") ?: true, it.text("style") ?: "miuix")
     }
 
     fun saveDesktopPreferences(value: DesktopPreferences) {
-        Bridge.request { obj { field("save_desktop_preferences") { field("preferences") { field("requireSignature", value.requireSignature); field("signKeyPath", value.signKeyPath); field("sidebarOpen", value.sidebarOpen); field("style", value.style) } } } }
+        Bridge.request { obj { field("save_desktop_preferences") { field("preferences") { field("requireSignature", value.requireSignature); field("signKeyPath", value.signKeyPath); field("publicKeyPath", value.publicKeyPath); field("sidebarOpen", value.sidebarOpen); field("style", value.style) } } } }
     }
 }

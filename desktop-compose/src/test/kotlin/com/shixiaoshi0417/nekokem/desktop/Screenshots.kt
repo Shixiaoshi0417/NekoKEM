@@ -31,7 +31,7 @@ fun main(args: Array<String>): Unit = runBlocking(Dispatchers.Main) {
     }
     withContext(Dispatchers.IO) {
         runCatching { Backend.saveContact(file("alice.public.key"), "", false, "Alice") }
-        runCatching { Backend.saveContact(file("bob.public.key"), "", false, "Bob · laptop") }
+        runCatching { Backend.saveContact(file("bob.public.key"), "", false, "Bob · laptop") }.getOrNull()?.let { Backend.setPinned(it.id, true) }
     }
     File(work, "report.pdf").writeBytes(ByteArray(3_000_000) { it.toByte() })
 
@@ -52,12 +52,15 @@ fun main(args: Array<String>): Unit = runBlocking(Dispatchers.Main) {
         suspend fun settle() { repeat(100) { delay(20); if (!state.busy && !state.contactBusy) return } }
 
         state.switchTab(View.Encrypt); settle()
-        state.setPath(PathField.KeyPath, file("alice.public.key"))
+        state.setPath(PathField.OwnPublicKey, file("me.public.key"))
         state.setPath(PathField.Input, file("report.pdf"))
         state.setPath(PathField.Output, file("report-${style.wire}-${theme.name}.pdf.nkem"))
         state.setPath(PathField.SignKeyPath, file("me.private.key.enc"))
         shot("encrypt")
         state.password.edit { append(password) }
+        state.submit(); settle()
+        state.contacts.lastOrNull()?.let(state::toggleContact)
+        shot("encrypt-recipients")
         state.submit(); settle()
         shot("encrypt-done")
 
@@ -65,7 +68,6 @@ fun main(args: Array<String>): Unit = runBlocking(Dispatchers.Main) {
         shot("keygen")
 
         state.switchTab(View.Contacts); settle()
-        state.contacts.firstOrNull()?.let(state::toggleContact)
         shot("contacts")
 
         state.switchTab(View.Fingerprint); settle()

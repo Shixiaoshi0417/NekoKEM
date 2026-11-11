@@ -252,7 +252,8 @@ pub fn execute<F:Fn(u64,u64)>(backend:&Backend,request:Request,job:Arc<Job>,emit
     let _guard=CORE_LOCK.lock().map_err(|_|Failure::new("internal"))?;
     backend.consume_offer(&request)?;
     if request.password.len()>1024 || request.confirmation.len()>1024 {return Err(Failure::new("password-limit"));}
-    if !request.contacts.is_empty() && (request.kind!=Kind::Encrypt || request.paste || !request.key_path.is_empty() || !request.key_text.is_empty()) {
+    // Encryption may add one key file (the user's own public key) before the contacts.
+    if !request.contacts.is_empty() && (request.kind!=Kind::Encrypt || request.paste || !request.key_text.is_empty()) {
         return Err(Failure::new("invalid-request"));
     }
     if request.replace && request.kind!=Kind::Keygen {return Err(Failure::new("invalid-request"));}
@@ -260,7 +261,7 @@ pub fn execute<F:Fn(u64,u64)>(backend:&Backend,request:Request,job:Arc<Job>,emit
     if (request.kind!=Kind::Encrypt && (request.unsigned || !request.sign_key_path.is_empty())) ||
         (request.kind==Kind::Encrypt && request.unsigned && !request.sign_key_path.is_empty()) ||
         (request.require_signature && request.kind!=Kind::Decrypt) {return Err(Failure::new("invalid-request"));}
-    if request.contacts.len()>MAX_RECIPIENTS {return Err(Failure::new("recipient-limit"));}
+    if request.contacts.len()+usize::from(!request.contacts.is_empty() && !request.key_path.is_empty())>MAX_RECIPIENTS {return Err(Failure::new("recipient-limit"));}
     let mut seen=std::collections::HashSet::new();
     if !request.contacts.iter().all(|id|seen.insert(id.as_str())) {return Err(Failure::new("invalid-request"));}
     if request.kind==Kind::Keygen {
@@ -313,9 +314,8 @@ pub fn execute<F:Fn(u64,u64)>(backend:&Backend,request:Request,job:Arc<Job>,emit
             staged.push(stage); recipients.push(fingerprint);
         }
     } else if request.paste {staged.push(Staged::new(&request.key_text)?);}
-    let keys=if staged.is_empty(){vec![path(&request.key_path)?]}else{
-        staged.iter().map(|stage|stage.path().map(CStr::to_owned).ok_or_else(||Failure::new("internal"))).collect::<Result<Vec<_>,_>>()?
-    };
+    let mut keys=if staged.is_empty() || (!request.paste && !request.key_path.is_empty()) {vec![path(&request.key_path)?]} else {Vec::new()};
+    for stage in &staged {keys.push(stage.path().map(CStr::to_owned).ok_or_else(||Failure::new("internal"))?);}
     // Decryption trusts every saved contact with an identity key. A contact
     // that is missing or fails Core's check is left out: that only makes the
     // reported status weaker, never stronger.
@@ -370,7 +370,7 @@ pub fn execute<F:Fn(u64,u64)>(backend:&Backend,request:Request,job:Arc<Job>,emit
         }
         match status {1=>{},-1=>return Err(Failure::new("cancelled")),-10=>return Err(Failure::new("signature-invalid")),
             -11=>return Err(Failure::new("signature-required")),-12=>return Err(Failure::new("signer-not-trusted")),_=>return Err(Failure::new("core-error"))}
-        let fingerprint=if recipients.len()==1 {recipients.first().cloned()} else {None};
+        let fingerprint=if recipients.len()==1 && keys.len()==1 {recipients.first().cloned()} else {None};
         let mut outcome=Outcome{output:Some(request.output.clone()),fingerprint,recipients:recipients.clone(),..Outcome::default()};
         match request.kind {
             Kind::Encrypt=>outcome.format=Some(written.format_version),
@@ -615,9 +615,16 @@ mod tests {
         assert_eq!(fs::read(keys.file("alice.out")).unwrap(),data);
         assert_eq!(run(&backend,decrypt(&bob_private,"public-test-bob","bob.out")).err().unwrap().code,"core-error");
 
-        // A contact is never combined with, or replaced by, another key source.
-        let mut r=encrypt(&alice_id,"combined.nkem");r.key_path=bob.clone();
-        assert_eq!(run(&backend,r).err().unwrap().code,"invalid-request");
+        // The user's own key file may come before the contacts; each key decrypts.
+        let mut r=encrypt(&alice_id,"own.nkem");r.key_path=bob.clone();
+        let outcome=run(&backend,r).unwrap();
+        assert_eq!(outcome.recipients,vec![alice_fingerprint.clone()]);
+        assert!(outcome.fingerprint.is_none());
+        for (private,password,name) in [(&alice_private,"public-test-alice","own-alice.out"),(&bob_private,"public-test-bob","own-bob.out")] {
+            let mut r=decrypt(private,password,name);r.input=keys.file("own.nkem");run(&backend,r).unwrap();
+            assert_eq!(fs::read(keys.file(name)).unwrap(),data);
+        }
+        // A contact is never combined with pasted key text.
         let mut r=encrypt(&alice_id,"combined.nkem");r.paste=true;r.key_text=Zeroizing::new(fs::read_to_string(&bob).unwrap());
         assert_eq!(run(&backend,r).err().unwrap().code,"invalid-request");
         for kind in [Kind::Decrypt,Kind::Fingerprint,Kind::Keygen] {let mut r=request(kind);r.contacts=vec![alice_id.clone()];assert_eq!(run(&backend,r).err().unwrap().code,"invalid-request");}
@@ -682,12 +689,13 @@ mod tests {
         assert_eq!((outcome.fingerprint.as_deref(),outcome.recipients.len()),(Some(people[2].2.as_str()),1));
         assert_eq!(fs::read(keys.file("single.nkem")).unwrap()[4],3);
 
-        // Duplicates, too many recipients and mixed key sources are refused.
+        // Duplicates and too many recipients are refused.
         assert_eq!(run(&backend,encrypt(&[&ids[0],&ids[0]],"bad.nkem")).err().unwrap().code,"invalid-request");
         let many:Vec<String>=(0..=MAX_RECIPIENTS).map(|index|format!("{index:064x}")).collect();
         assert_eq!(run(&backend,encrypt(&many.iter().collect::<Vec<_>>(),"bad.nkem")).err().unwrap().code,"recipient-limit");
-        let mut r=encrypt(&[&ids[0],&ids[1]],"bad.nkem");r.key_path=people[2].0.clone();
-        assert_eq!(run(&backend,r).err().unwrap().code,"invalid-request");
+        // The user's own key file counts toward the limit.
+        let mut r=encrypt(&many[1..].iter().collect::<Vec<_>>(),"bad.nkem");r.key_path=people[2].0.clone();
+        assert_eq!(run(&backend,r).err().unwrap().code,"recipient-limit");
         assert!(fs::metadata(keys.file("bad.nkem")).is_err());
 
         // A deleted contact fails the whole file and is named; the others are not

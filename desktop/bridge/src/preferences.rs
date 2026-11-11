@@ -19,12 +19,16 @@ extern "C" {
 /// notice, no saved signing key, sidebar open, MIUIX.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", default, deny_unknown_fields)]
-pub struct Preferences { pub require_signature: bool, pub sign_key_path: String, pub sidebar_open: bool, pub style: String }
+// The user's own key pair: the public key is offered first as a recipient, the
+// private key signs and decrypts by default.
+pub struct Preferences { pub require_signature: bool, pub sign_key_path: String, pub public_key_path: String, pub sidebar_open: bool, pub style: String }
 impl Default for Preferences {
-    fn default() -> Self { Self { require_signature: false, sign_key_path: String::new(), sidebar_open: true, style: "miuix".into() } }
+    fn default() -> Self { Self { require_signature: false, sign_key_path: String::new(), public_key_path: String::new(), sidebar_open: true, style: "miuix".into() } }
 }
 impl Preferences {
-    fn valid(&self) -> bool { STYLES.contains(&self.style.as_str()) && self.sign_key_path.len() <= MAX_PATH_BYTES && !self.sign_key_path.contains('\0') }
+    fn valid(&self) -> bool {
+        STYLES.contains(&self.style.as_str()) && [&self.sign_key_path, &self.public_key_path].iter().all(|path| path.len() <= MAX_PATH_BYTES && !path.contains('\0'))
+    }
 }
 
 pub fn load(directory: &str) -> Preferences {
@@ -54,7 +58,7 @@ mod tests {
         let directory = crate::contacts::tests::Directory::new();
         let path = directory.0.to_str().unwrap();
         assert_eq!(load(path), Preferences::default());
-        let chosen = Preferences { require_signature: true, sign_key_path: "C:\\Keys\\me.private.key.enc".into(), sidebar_open: false, style: "material".into() };
+        let chosen = Preferences { require_signature: true, sign_key_path: "C:\\Keys\\me.private.key.enc".into(), public_key_path: "C:\\Keys\\me.public.key".into(), sidebar_open: false, style: "material".into() };
         assert!(store(path, &chosen));
         assert_eq!(load(path), chosen);
         #[cfg(unix)]

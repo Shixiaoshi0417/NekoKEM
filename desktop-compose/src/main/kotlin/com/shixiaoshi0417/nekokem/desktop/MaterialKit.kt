@@ -37,7 +37,6 @@ import androidx.compose.material3.MaterialExpressiveTheme
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.MotionScheme
 import androidx.compose.material3.NavigationDrawerItem
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.PermanentDrawerSheet
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
@@ -66,6 +65,13 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.draw.clip
+import androidx.compose.foundation.border
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsFocusedAsState
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.unit.TextUnit
 import androidx.compose.material3.Text as MaterialText
 
 private val Compact = PaddingValues(horizontal = 16.dp)
@@ -178,20 +184,50 @@ object MaterialKit : Kit {
     }
 
     @Composable override fun TextInput(value: String, onValueChange: (String) -> Unit, label: String, enabled: Boolean, invalid: Boolean, modifier: Modifier) {
-        OutlinedTextField(value = value, onValueChange = onValueChange, singleLine = true, enabled = enabled, isError = invalid,
-            shape = RoundedCornerShape(10.dp), textStyle = MaterialTheme.typography.bodyMedium.copy(fontSize = 15.sp), modifier = modifier.semantics { contentDescription = label })
+        val focus = remember { MutableInteractionSource() }
+        val focused by focus.collectIsFocusedAsState()
+        BasicTextField(
+            value = value, onValueChange = onValueChange, singleLine = true, enabled = enabled, interactionSource = focus,
+            textStyle = fieldText(15.sp, null, enabled), cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
+            modifier = modifier.semantics { contentDescription = label },
+            decorationBox = { inner -> FieldBox(focused, invalid, enabled, singleLine = true, placeholder = "", empty = value.isEmpty(), inner = inner) },
+        )
     }
 
     @Composable override fun SecretInput(state: TextFieldState, label: String, enabled: Boolean, invalid: Boolean, masked: Boolean, lines: Int, placeholder: String, modifier: Modifier) {
-        OutlinedTextField(
-            state = state, enabled = enabled, isError = invalid,
+        val focus = remember { MutableInteractionSource() }
+        val focused by focus.collectIsFocusedAsState()
+        val single = lines == 1
+        BasicTextField(
+            state = state, enabled = enabled, interactionSource = focus,
             outputTransformation = if (masked) PasswordMask else null,
-            lineLimits = if (lines == 1) TextFieldLineLimits.SingleLine else TextFieldLineLimits.MultiLine(lines, lines),
-            textStyle = MaterialTheme.typography.bodyMedium.copy(fontSize = if (lines == 1) 15.sp else 13.sp, fontFamily = if (lines == 1) null else Mono),
-            placeholder = if (placeholder.isNotEmpty()) ({ MaterialText(placeholder) }) else null,
-            shape = RoundedCornerShape(10.dp),
+            lineLimits = if (single) TextFieldLineLimits.SingleLine else TextFieldLineLimits.MultiLine(lines, lines),
+            textStyle = fieldText(if (single) 15.sp else 13.sp, if (single) null else Mono, enabled),
+            cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
             modifier = modifier.fillMaxWidth().semantics { contentDescription = label },
+            decorator = { inner -> FieldBox(focused, invalid, enabled, single, placeholder, state.text.isEmpty(), inner) },
         )
+    }
+
+    @Composable private fun fieldText(size: TextUnit, family: FontFamily?, enabled: Boolean) =
+        MaterialTheme.typography.bodyMedium.copy(fontSize = size, fontFamily = family,
+            color = MaterialTheme.colorScheme.onSurface.copy(alpha = if (enabled) 1f else 0.38f))
+
+    /** A compact filled field, 40 tall, as FlClash draws its inputs; the outline shows only on focus or error. */
+    @Composable private fun FieldBox(focused: Boolean, invalid: Boolean, enabled: Boolean, singleLine: Boolean, placeholder: String, empty: Boolean, inner: @Composable () -> Unit) {
+        val scheme = MaterialTheme.colorScheme
+        val shape = RoundedCornerShape(10.dp)
+        val edge = when { invalid -> scheme.error; focused -> scheme.primary; else -> Color.Transparent }
+        Box(
+            Modifier.fillMaxWidth().then(if (singleLine) Modifier.height(40.dp) else Modifier)
+                .clip(shape).background(scheme.surfaceContainerHighest.copy(alpha = if (enabled) 1f else 0.6f))
+                .border(if (focused || invalid) 2.dp else 0.dp, edge, shape)
+                .padding(horizontal = 12.dp, vertical = if (singleLine) 0.dp else 10.dp),
+            contentAlignment = if (singleLine) Alignment.CenterStart else Alignment.TopStart,
+        ) {
+            if (empty && placeholder.isNotEmpty()) MaterialText(placeholder, fontSize = 15.sp, color = scheme.onSurfaceVariant)
+            inner()
+        }
     }
 
     @Composable override fun Segments(labels: List<String>, selected: Int, enabled: Boolean, onSelect: (Int) -> Unit) {

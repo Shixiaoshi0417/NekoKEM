@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -34,20 +35,22 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.Settings
 import top.yukonga.miuix.kmp.icon.MiuixIcons
-import top.yukonga.miuix.kmp.icon.extended.Contacts
-import top.yukonga.miuix.kmp.icon.extended.Create
-import top.yukonga.miuix.kmp.icon.extended.Lock
-import top.yukonga.miuix.kmp.icon.extended.Scan
-import top.yukonga.miuix.kmp.icon.extended.Settings
+import top.yukonga.miuix.kmp.icon.extended.NotesFill
 import top.yukonga.miuix.kmp.icon.extended.Sidebar
-import top.yukonga.miuix.kmp.icon.extended.Unlock
 
-// One set of line icons for both styles.
-private fun View.icon(): ImageVector = when (this) {
-    View.Keygen -> MiuixIcons.Create; View.Encrypt -> MiuixIcons.Lock; View.Decrypt -> MiuixIcons.Unlock
-    View.Fingerprint -> MiuixIcons.Scan; View.Contacts -> MiuixIcons.Contacts; View.Settings -> MiuixIcons.Settings
+/** The four sidebar entries, as on Android: file encryption, keys, contacts and settings. */
+private enum class Destination(val key: String, val icon: ImageVector, val views: List<View>) {
+    Files("navFiles", MiuixIcons.NotesFill, listOf(View.Encrypt, View.Decrypt)),
+    Keys("navKeys", Icons.Filled.Lock, listOf(View.Keygen, View.Fingerprint)),
+    Contacts("navContacts", Icons.Filled.Person, listOf(View.Contacts)),
+    Settings("settings", Icons.Filled.Settings, listOf(View.Settings)),
 }
+private val AppState.destination get() = Destination.entries.first { view in it.views }
 
 @Composable
 fun NekoKEMApp(state: AppState) {
@@ -71,6 +74,7 @@ fun NekoKEMApp(state: AppState) {
                             }
                         }
                         QrDialog(state)
+                        RecipientDialog(state)
                         UpdateDialog(state)
                     }
                 }
@@ -92,28 +96,33 @@ private fun Sidebar(state: AppState) {
                 }
             }
         },
-        entries = View.entries.map { NavEntry(state.t(it.key), it.icon(), state.view == it) { state.switchTab(it) } },
+        entries = Destination.entries.map { NavEntry(state.t(it.key), it.icon, state.destination == it) { state.switchTab(it.views.first()) } },
         enabled = !state.locked && state.loaded,
-        footer = {
-            Spacer(Modifier.height(24.dp))
-            kit.LinkButton(state.t("exit"), enabled = !state.locked && state.loaded, modifier = Modifier.padding(horizontal = 16.dp), onClick = state::exitApp)
-        },
+        footer = {},
     )
 }
 
 @Composable
 private fun ColumnScope.Page(state: AppState) {
     val kit = LocalKit.current
-    kit.Text(state.t(state.view.key), TextRole.Headline, Modifier.padding(top = 8.dp))
-    kit.Text(state.description, TextRole.Small, Modifier.padding(top = 8.dp, bottom = 16.dp))
-    when (state.view) {
-        View.Settings -> SettingsPage(state)
-        View.Contacts -> { OperationCard(state); ContactList(state) }
-        else -> OperationCard(state)
-    }
-    Column(Modifier.padding(top = 24.dp)) {
-        kit.Text(state.t("storage"), TextRole.Label)
-        Hint(state.t("storageHint"))
+    kit.Text(state.t(state.destination.key), TextRole.Headline, Modifier.padding(top = 8.dp, bottom = 16.dp))
+    when (state.destination) {
+        Destination.Settings -> SettingsPage(state)
+        Destination.Contacts -> { OperationCard(state); ContactList(state) }
+        Destination.Files -> {
+            kit.Segments(listOf(state.t("encrypt"), state.t("decrypt")), if (state.view == View.Decrypt) 1 else 0, state.editable) { state.switchTab(if (it == 1) View.Decrypt else View.Encrypt) }
+            Spacer(Modifier.height(16.dp))
+            OperationCard(state)
+        }
+        Destination.Keys -> {
+            // Generate, upgrade and export are the key page's modes; the fingerprint is the fourth tab.
+            val selected = if (state.view == View.Fingerprint) 3 else state.keyMode.ordinal
+            kit.Segments(listOf(state.t("keygen"), state.t("upgradeKey"), state.t("exportLegacy"), state.t("fingerprintTab")), selected, state.editable) {
+                if (it == 3) state.switchTab(View.Fingerprint) else { state.switchTab(View.Keygen); state.changeKeyMode(KeyMode.entries[it]) }
+            }
+            Spacer(Modifier.height(16.dp))
+            OperationCard(state)
+        }
     }
 }
 
@@ -163,10 +172,6 @@ private fun CheckRow(checked: Boolean, label: String, enabled: Boolean = true, o
 private fun OperationCard(state: AppState) {
     val kit = LocalKit.current
     kit.Section {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            kit.Text(state.t("subtitle"), TextRole.Small, Modifier.weight(1f))
-            kit.Text(state.status, TextRole.Small)
-        }
         when (state.view) {
             View.Keygen -> KeyFields(state)
             View.Contacts -> ContactFields(state)
@@ -175,16 +180,12 @@ private fun OperationCard(state: AppState) {
         if (state.passwordRequired) {
             Secret(state, state.password, state.t("password"), "password", masked = true)
             if (state.view == View.Keygen && state.keyMode == KeyMode.Generate) Secret(state, state.confirmation, state.t("confirmation"), "confirmation", masked = true)
-            Hint(state.t(if (state.signing) "signPasswordHint" else if (state.view == View.Keygen && state.keyMode == KeyMode.Upgrade) "upgradePasswordHint" else "passwordHint"))
         }
         if (state.busy) ProgressBlock(state)
         UpgradeConfirm(state)
         if (state.feedback == Feedback.Form) FormFeedback(state)
         Row(Modifier.fillMaxWidth().padding(top = 24.dp), verticalAlignment = Alignment.CenterVertically) {
-            Column(Modifier.weight(1f)) {
-                kit.Text(state.algorithms, TextRole.Tiny)
-                kit.Text(state.formatLabel, TextRole.Tiny)
-            }
+            Spacer(Modifier.weight(1f))
             if (state.busy && (state.view == View.Encrypt || state.view == View.Decrypt)) {
                 kit.SecondaryButton(state.t("cancel"), enabled = !state.cancelling, onClick = state::cancel)
                 Spacer(Modifier.width(8.dp))
@@ -204,8 +205,6 @@ private fun OperationCard(state: AppState) {
 
 @Composable
 private fun KeyFields(state: AppState) {
-    Spacer(Modifier.height(16.dp))
-    LocalKit.current.Segments(listOf(state.t("keygen"), state.t("upgradeKey"), state.t("exportLegacy")), state.keyMode.ordinal, state.editable) { state.changeKeyMode(KeyMode.entries[it]) }
     if (state.keyMode == KeyMode.Export) {
         PathInput(state, PathField.KeyPath, state.t("publicKey"), "keyPath")
         PathInput(state, PathField.Output, state.t("legacyOutput"), "output")
@@ -224,32 +223,30 @@ private fun KeyFields(state: AppState) {
 @Composable
 private fun ContactFields(state: AppState) {
     val kit = LocalKit.current
-    Spacer(Modifier.height(16.dp))
     kit.Segments(listOf(state.t("path"), state.t("paste")), if (state.contactPaste) 1 else 0, state.editable) { state.changeContactSource(it == 1) }
     if (!state.contactPaste) PathInput(state, PathField.ContactKeyPath, state.t("publicKey"), "contactKeyPath")
     else Secret(state, state.contactKeyText, state.t("paste"), "contactKeyText", masked = false, lines = 4, placeholder = state.t("pastePublicHint"))
     FieldLabel(state.t("note"), state.invalidField == "note")
     kit.TextInput(state.note, { state.note = it; state.edited("note") }, state.t("note"), state.editable, state.invalidField == "note", Modifier.fillMaxWidth())
-    Hint(state.t("noteHint"))
 }
 
 @Composable
 private fun FileFields(state: AppState) {
     val kit = LocalKit.current
-    Spacer(Modifier.height(16.dp))
-    val sources = buildList { add(KeySource.Path); add(KeySource.Paste); if (state.view == View.Encrypt) add(KeySource.Contact) }
-    val names = sources.map { state.t(when (it) { KeySource.Path -> "path"; KeySource.Paste -> "paste"; KeySource.Contact -> "savedContact" }) }
-    kit.Segments(names, sources.indexOf(state.source).coerceAtLeast(0), state.editable) { state.changeSource(sources[it]) }
-    when (state.source) {
-        KeySource.Path -> PathInput(state, PathField.KeyPath, state.t("key"), "keyPath")
-        KeySource.Paste -> Secret(state, state.keyText, state.t("paste"), "keyText", masked = false, lines = 4, placeholder = state.t("pasteHint"))
-        KeySource.Contact -> RecipientChoice(state)
+    when (state.view) {
+        View.Fingerprint -> {
+            val sources = listOf(KeySource.Path, KeySource.Paste)
+            kit.Segments(sources.map { state.t(if (it == KeySource.Path) "path" else "paste") }, sources.indexOf(state.source).coerceAtLeast(0), state.editable) { state.changeSource(sources[it]) }
+            if (state.source == KeySource.Paste) Secret(state, state.keyText, state.t("paste"), "keyText", masked = false, lines = 4, placeholder = state.t("pasteHint"))
+            else PathInput(state, PathField.KeyPath, state.t("key"), "keyPath")
+            return
+        }
+        View.Decrypt -> PathInput(state, PathField.KeyPath, state.t("myPrivateKey"), "keyPath")
+        else -> {}
     }
-    if (state.view != View.Fingerprint) {
-        PathInput(state, PathField.Input, state.t("input"), "input")
-        PathInput(state, PathField.Output, state.t("output"), "output")
-    }
-    if (state.signing) PathInput(state, PathField.SignKeyPath, state.t("signKey"), "signKeyPath")
+    PathInput(state, PathField.Input, state.t("input"), "input")
+    PathInput(state, PathField.Output, state.t("output"), "output")
+    if (state.signing) PathInput(state, PathField.SignKeyPath, state.t("myPrivateKey"), "signKeyPath")
     if (state.view == View.Encrypt && state.unsigned) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Hint(state.t("unsignedWarning"), danger = true, modifier = Modifier.weight(1f))
@@ -258,33 +255,47 @@ private fun FileFields(state: AppState) {
     }
 }
 
+/** One tickable recipient row: the user's own key or a saved contact. */
 @Composable
-private fun RecipientChoice(state: AppState) {
+private fun RecipientRow(title: String, detail: String, mark: String, checked: Boolean, enabled: Boolean, onToggle: () -> Unit) {
     val kit = LocalKit.current
-    Row(Modifier.padding(top = 16.dp, bottom = 8.dp)) {
-        kit.Text(state.t("recipients"), TextRole.Label, Modifier.weight(1f), color = if (state.invalidField == "contacts") kit.colors().danger else null)
-        kit.Text("${state.selected.size} / $MAX_RECIPIENTS", TextRole.Small)
-    }
-    for (contact in state.contacts) {
-        val chosen = contact.id in state.selected
-        val enabled = !state.locked && (chosen || !state.atRecipientLimit)
-        Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).clickable(enabled = enabled) { state.toggleContact(contact) }.padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-            kit.Check(chosen, enabled, state.label(contact), null)
-            Column(Modifier.padding(start = 12.dp)) {
-                kit.Text(state.label(contact), TextRole.Body)
-                kit.Text(contact.fingerprint, TextRole.Tiny, mono = true)
+    Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).clickable(enabled = enabled, onClick = onToggle).padding(vertical = 8.dp, horizontal = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+        kit.Check(checked, enabled, title, null)
+        Column(Modifier.padding(start = 12.dp).weight(1f)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                kit.Text(title, TextRole.Body)
+                if (mark.isNotEmpty()) kit.Text(mark, TextRole.Tiny, Modifier.padding(start = 8.dp), color = kit.colors().summary)
             }
+            if (detail.isNotEmpty()) kit.Text(detail, TextRole.Tiny, mono = true)
         }
     }
-    val chosen = state.selectedContacts
-    if (chosen.size == 1) Hint("${state.t("fingerprint")}: ${chosen[0].fingerprint}")
-    else if (chosen.size > 1) Hint(state.t("multiRecipientHint"))
-    if (state.atRecipientLimit) Hint(state.t("recipient-limit"))
-    state.contactsFailure?.let { Hint(state.t(it), danger = true) }
-    if (state.contactsFailure == null && state.contactsLoaded && state.contacts.isEmpty()) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Hint(state.t("noContacts"), modifier = Modifier.weight(1f))
-            kit.LinkButton(state.t("manageContacts"), modifier = Modifier.padding(top = 8.dp)) { state.switchTab(View.Contacts) }
+}
+
+/** Asked when Encrypt is pressed: own key first, then pinned contacts, then the rest. Nothing is ticked for the user. */
+@Composable
+private fun RecipientDialog(state: AppState) {
+    val kit = LocalKit.current
+    kit.Dialog(state.choosingRecipients, state.t("chooseRecipients"), "", state::closeRecipients) {
+        if (!state.choosingRecipients) return@Dialog
+        Column(Modifier.fillMaxWidth().heightIn(max = 360.dp).verticalScroll(rememberScrollState())) {
+            if (state.ownPublicKey.isNotEmpty()) {
+                RecipientRow(state.t("myPublicKey"), state.ownPublicKey.split('/', '\\').last(), state.t("appDefault"), state.ownSelected,
+                    !state.locked && (state.ownSelected || !state.atRecipientLimit), state::toggleOwn)
+            }
+            for (contact in state.contacts) {
+                val chosen = contact.id in state.selected
+                RecipientRow(state.label(contact), contact.fingerprint.take(23), if (contact.pinned) state.t("pinnedMark") else "", chosen,
+                    !state.locked && (chosen || !state.atRecipientLimit)) { state.toggleContact(contact) }
+            }
+            if (state.ownPublicKey.isEmpty() && state.contactsLoaded && state.contacts.isEmpty()) Hint(state.t("noContacts"))
+        }
+        state.contactsFailure?.let { Hint(state.t(it), danger = true) }
+        if (state.invalidField == "contacts") state.failure?.let { Hint(state.t(it), danger = true) }
+        Row(Modifier.fillMaxWidth().padding(top = 16.dp), verticalAlignment = Alignment.CenterVertically) {
+            kit.Text("${state.recipientCount} / $MAX_RECIPIENTS", TextRole.Small, Modifier.weight(1f))
+            kit.SecondaryButton(state.t("cancel"), onClick = state::closeRecipients)
+            Spacer(Modifier.width(8.dp))
+            kit.PrimaryButton(state.t("encrypt"), enabled = state.editable && state.recipientCount > 0, onClick = state::submit)
         }
     }
 }
@@ -333,7 +344,8 @@ private fun FormFeedback(state: AppState) {
     val result = state.result ?: return
     Notice(state.t(state.successMessage), danger = state.successMessage == "encryptedUnsigned") {
         result.output?.let { Detail(it) }
-        if (state.recipients.isNotEmpty()) Detail("${state.t(if (state.recipients.size > 1) "recipients" else "recipient")}: ${state.recipients.joinToString(", ") { state.label(it) }}")
+        val names = (if (state.ownRecipient) listOf(state.t("myPublicKey")) else emptyList()) + state.recipients.map(state::label)
+        if (names.isNotEmpty()) Detail("${state.t(if (names.size > 1) "recipients" else "recipient")}: ${names.joinToString(", ")}")
         result.fingerprint?.let { fingerprint ->
             Detail(fingerprint, mono = true)
             if (FingerprintQr.isFingerprint(fingerprint)) { Spacer(Modifier.height(8.dp)); kit.SecondaryButton(state.t("showQr")) { state.showQr(fingerprint) } }
@@ -409,7 +421,10 @@ private fun ContactRow(state: AppState, contact: Contact) {
         Row(verticalAlignment = Alignment.Top) {
             kit.Check(chosen, !state.locked && (chosen || !state.atRecipientLimit), "${state.t("selectContact")} · ${state.label(contact)}") { state.toggleContact(contact) }
             Column(Modifier.padding(start = 12.dp).weight(1f)) {
-                kit.Text(state.label(contact), TextRole.BodyStrong)
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    kit.Text(state.label(contact), TextRole.BodyStrong)
+                    if (contact.pinned) kit.Text(state.t("pinnedMark"), TextRole.Tiny, Modifier.padding(start = 8.dp))
+                }
                 if (contact.note.isNotEmpty()) kit.Text("${state.t("sourceFile")}: ${contact.name.ifEmpty { state.t("pastedKey") }}", TextRole.Small)
                 Detail(contact.fingerprint, mono = true)
                 kit.Text(state.t(if (contact.canVerify) "contactVerifies" else "contactLegacy"), TextRole.Tiny, Modifier.padding(top = 4.dp), color = if (contact.canVerify) null else colors.danger)
@@ -433,6 +448,8 @@ private fun ContactRow(state: AppState, contact: Contact) {
                 else -> {
                     kit.SecondaryButton(state.t("useContact"), enabled = !state.locked) { state.useContact(contact) }
                     Spacer(Modifier.width(8.dp))
+                    kit.LinkButton(state.t(if (contact.pinned) "unpinContact" else "pinContact"), enabled = !state.locked) { state.togglePin(contact) }
+                    Spacer(Modifier.width(8.dp))
                     kit.LinkButton(state.t("editNote"), enabled = !state.locked) { state.startEdit(contact) }
                     Spacer(Modifier.width(8.dp))
                     kit.LinkButton(state.t("deleteContact"), enabled = !state.locked) { state.askDelete(contact) }
@@ -449,13 +466,18 @@ private fun SettingsPage(state: AppState) {
     kit.SectionTitle(state.t("settingsGeneral"), first = true)
     kit.Section(padded = false) {
         val tags = Strings.choices.map { it.first }
-        kit.ChoiceRow(state.t("language"), state.t("languageHint"), Strings.choices.map { (tag, name) -> if (tag == "system") state.t("system") else name },
+        kit.ChoiceRow(state.t("language"), "", Strings.choices.map { (tag, name) -> if (tag == "system") state.t("system") else name },
             tags.indexOf(state.selectedLanguage).coerceAtLeast(0), state.editable) { state.changeLanguage(tags[it]) }
-        kit.ChoiceRow(state.t("uiStyle"), state.t("uiStyleHint"), Style.entries.map { it.title }, state.style.ordinal, true) { state.changeStyle(Style.entries[it]) }
+        kit.ChoiceRow(state.t("uiStyle"), "", Style.entries.map { it.title }, state.style.ordinal, true) { state.changeStyle(Style.entries[it]) }
+    }
+    kit.SectionTitle(state.t("settingsKeys"))
+    kit.Section(padded = false) {
+        kit.ActionRow(state.t("myPrivateKey"), state.signKeyPath.ifEmpty { state.t("notSet") }, state.editable) { state.browse(PathField.SignKeyPath) }
+        kit.ActionRow(state.t("myPublicKey"), state.ownPublicKey.ifEmpty { state.t("notSet") }, state.editable) { state.browse(PathField.OwnPublicKey) }
     }
     kit.SectionTitle(state.t("settingsSigning"))
     kit.Section(padded = false) {
-        kit.SwitchRow(state.t("unsignedSetting"), state.t(if (state.unsigned) "unsignedWarning" else "unsignedSettingHint"), state.unsigned, danger = state.unsigned, enabled = !state.confirmingUnsigned, onChange = state::toggleUnsigned)
+        kit.SwitchRow(state.t("unsignedSetting"), if (state.unsigned) state.t("unsignedWarning") else "", state.unsigned, danger = state.unsigned, enabled = !state.confirmingUnsigned, onChange = state::toggleUnsigned)
         if (state.confirmingUnsigned) {
             Column(Modifier.padding(horizontal = 16.dp).padding(bottom = 16.dp)) {
                 kit.Text(state.t("unsignedConfirmTitle"), TextRole.BodyStrong, color = danger)
@@ -467,11 +489,11 @@ private fun SettingsPage(state: AppState) {
                 }
             }
         }
-        kit.SwitchRow(state.t("requireSignature"), state.t("requireSignatureHint"), state.requireSignature, onChange = state::changeRequireSignature)
+        kit.SwitchRow(state.t("requireSignature"), "", state.requireSignature, onChange = state::changeRequireSignature)
     }
     kit.SectionTitle(state.t("settingsUpdates"))
     kit.Section(padded = false) {
-        kit.SwitchRow(state.t("autoUpdate"), state.t("autoUpdateHint"), state.autoUpdate, onChange = state::changeAutoUpdate)
+        kit.SwitchRow(state.t("autoUpdate"), "", state.autoUpdate, onChange = state::changeAutoUpdate)
         kit.ActionRow(state.t(if (state.checkingUpdate) "checkingUpdate" else "checkUpdate"), state.updateNotice?.let(state::t) ?: "v${state.version}", !state.checkingUpdate) { state.checkForUpdate(true) }
     }
 }
@@ -480,7 +502,7 @@ private fun SettingsPage(state: AppState) {
 private fun QrDialog(state: AppState) {
     val kit = LocalKit.current
     val fingerprint = state.qrFingerprint
-    kit.Dialog(fingerprint.isNotEmpty(), state.t("qrTitle"), state.t("qrHint"), state::closeQr) {
+    kit.Dialog(fingerprint.isNotEmpty(), state.t("qrTitle"), "", state::closeQr) {
         if (fingerprint.isEmpty()) return@Dialog
         val modules = remember(fingerprint) { FingerprintQr.modules(fingerprint) }
         // Black on white in both themes, with a four-module quiet zone, so cameras read it.

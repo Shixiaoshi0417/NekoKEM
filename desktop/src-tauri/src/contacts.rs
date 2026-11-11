@@ -46,6 +46,8 @@ pub struct Contact {
     // An identity key: files this contact signs are reported as trusted.
     pub can_verify: bool,
     #[serde(skip_serializing_if = "Option::is_none")] pub legacy_fingerprint: Option<String>,
+    // Pinned contacts are listed first, as on Android.
+    pub pinned: bool,
 }
 impl Contact {
     fn label(&self) -> &str { if self.note.is_empty() { &self.name } else { &self.note } }
@@ -68,6 +70,7 @@ struct Record {
     public_key: String,
     // Present exactly for identity keys; records from 4.x have neither.
     #[serde(default, skip_serializing_if = "Option::is_none")] legacy_fingerprint: Option<String>,
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")] pinned: bool,
 }
 impl Record {
     fn is_valid(&self, id: &str) -> bool {
@@ -85,7 +88,7 @@ impl Record {
     fn can_verify(&self) -> bool { self.legacy_fingerprint.is_some() }
     fn contact(&self, id: &str) -> Contact {
         Contact { id: id.into(), fingerprint: self.fingerprint.clone(), name: clean_name(&self.name), note: self.note.clone(),
-                  can_verify: self.can_verify(), legacy_fingerprint: self.legacy_fingerprint.clone() }
+                  can_verify: self.can_verify(), legacy_fingerprint: self.legacy_fingerprint.clone(), pinned: self.pinned }
     }
 }
 const BEGIN: &str = "-----BEGIN PUBLIC KEY-----";
@@ -121,7 +124,7 @@ impl Store {
                 Err(_) => unreadable += 1,
             }
         }
-        contacts.sort_by_cached_key(|contact| (contact.label().to_lowercase(), contact.id.clone()));
+        contacts.sort_by_cached_key(|contact| (!contact.pinned, contact.label().to_lowercase(), contact.id.clone()));
         Ok(Contacts { contacts, unreadable })
     }
 
@@ -151,6 +154,14 @@ impl Store {
         let _lock = self.lock()?;
         let mut record = self.read(checked(id)?)?;
         record.note = note;
+        self.write(id, &record)?;
+        Ok(record.contact(id))
+    }
+
+    pub fn set_pinned(&self, id: &str, pinned: bool) -> Result<Contact, Failure> {
+        let _lock = self.lock()?;
+        let mut record = self.read(checked(id)?)?;
+        record.pinned = pinned;
         self.write(id, &record)?;
         Ok(record.contact(id))
     }
@@ -247,7 +258,9 @@ impl Store {
                 .and_then(|bytes| String::from_utf8(bytes).ok())
                 .filter(|key| valid_public_key(key))
                 .ok_or_else(|| Failure::new("public-key-invalid"))?;
-            let record = Record { version: RECORD_VERSION, fingerprint, name, note, public_key, legacy_fingerprint: legacy };
+            // An upgraded key stays pinned like the legacy contact it replaces.
+            let pinned = replaces.as_ref().is_some_and(|(_, old)| old.pinned);
+            let record = Record { version: RECORD_VERSION, fingerprint, name, note, public_key, legacy_fingerprint: legacy, pinned };
             if !record.is_valid(&id) { return Err(Failure::new("public-key-invalid")); }
             self.write(&id, &record)?;
             if let Some((old, _)) = &replaces { self.remove(old)?; }
@@ -558,6 +571,27 @@ pub mod tests {
         assert_eq!(code(reopened.stage(&pasted.id)), "contact-missing");
         assert_eq!(reopened.list().unwrap().contacts, vec![saved]);
         assert_eq!(record_names(&contacts).len(), 1);
+    }
+
+    #[test]
+    fn pinned_contacts_come_first_and_stay_pinned() {
+        let _core = core_lock();
+        let keys = Directory::new();
+        let contacts = keys.private("contacts");
+        let store = store(&contacts);
+        let (alice, _, _) = keypair(&keys, "alice", "public-test-alice");
+        let (bob, _, _) = keypair(&keys, "bob", "public-test-bob");
+        store.save(Source::Path(&alice), "Alice").unwrap();
+        let bob = store.save(Source::Path(&bob), "Bob").unwrap();
+        let order = || store.list().unwrap().contacts.into_iter().map(|contact| (contact.note, contact.pinned)).collect::<Vec<_>>();
+        assert_eq!(order(), vec![("Alice".into(), false), ("Bob".into(), false)]);
+        assert!(store.set_pinned(&bob.id, true).unwrap().pinned);
+        assert_eq!(order(), vec![("Bob".into(), true), ("Alice".into(), false)]);
+        // Editing the note keeps the pin; unpinning restores the order.
+        assert!(store.update_note(&bob.id, "Bob · laptop").unwrap().pinned);
+        assert!(!store.set_pinned(&bob.id, false).unwrap().pinned);
+        assert_eq!(order(), vec![("Alice".into(), false), ("Bob · laptop".into(), false)]);
+        assert_eq!(code(store.set_pinned("../alice", true)), "invalid-request");
     }
 
     #[test]
