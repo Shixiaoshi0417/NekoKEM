@@ -1,6 +1,13 @@
 package com.shixiaoshi0417.nekokem.ui
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material3.FloatingActionButton
+import androidx.compose.material3.Icon
+import androidx.compose.ui.draw.alpha
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -77,106 +84,129 @@ fun PublicKeyContactsPage(
     }
     val selected = state.contactSelection
     val atLimit = selected.size >= NativeBridge.MAX_RECIPIENTS
-    LazyColumn(contentPadding = PaddingValues(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        item {
-            Text(stringResource(R.string.contact_description), style = MaterialTheme.typography.bodyMedium)
-        }
-        item {
-            ExpressiveButton(
-                text = stringResource(R.string.action_import_contact),
-                onClick = actions.onImportContact,
-                enabled = state.nativeConnected && !state.running,
-                size = ActionSize.MEDIUM,
-                modifier = Modifier.fillMaxWidth(),
-            )
-        }
-        item { ContactStorageStatus(state.contactsState) }
-        if (selected.isNotEmpty()) {
-            item(key = "selection") {
-                // Several recipients share one NKEM v4 file; nothing changes until this is pressed.
-                Card(
-                    modifier = Modifier.fillMaxWidth().animateItem(),
-                    shape = MaterialTheme.shapes.extraLarge,
-                    colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.primaryContainer,
-                        contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
-                    ),
-                ) {
-                    Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Text(
-                            stringResource(R.string.contact_selection_count, selected.size),
-                            style = MaterialTheme.typography.titleLargeEmphasized,
-                        )
-                        if (atLimit) {
+    val canImport = state.nativeConnected && !state.running
+    // With contacts listed, adding another moves to a floating button in the corner.
+    val floatingAdd = state.contactsState.contacts.isNotEmpty()
+    Box(Modifier.fillMaxSize()) {
+        LazyColumn(
+            contentPadding = PaddingValues(start = 20.dp, top = 20.dp, end = 20.dp, bottom = if (floatingAdd) 104.dp else 20.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            item {
+                Text(stringResource(R.string.contact_description), style = MaterialTheme.typography.bodyMedium)
+            }
+            if (!floatingAdd) {
+                item {
+                    ExpressiveButton(
+                        text = stringResource(R.string.action_import_contact),
+                        onClick = actions.onImportContact,
+                        enabled = canImport,
+                        size = ActionSize.MEDIUM,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                }
+            }
+            item { ContactStorageStatus(state.contactsState) }
+            if (selected.isNotEmpty()) {
+                item(key = "selection") {
+                    // Several recipients share one NKEM v4 file; nothing changes until this is pressed.
+                    Card(
+                        modifier = Modifier.fillMaxWidth().animateItem(),
+                        shape = MaterialTheme.shapes.extraLarge,
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.primaryContainer,
+                            contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                        ),
+                    ) {
+                        Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                             Text(
-                                stringResource(R.string.contact_selection_limit, NativeBridge.MAX_RECIPIENTS),
-                                style = MaterialTheme.typography.bodySmall,
+                                stringResource(R.string.contact_selection_count, selected.size),
+                                style = MaterialTheme.typography.titleLargeEmphasized,
+                            )
+                            if (atLimit) {
+                                Text(
+                                    stringResource(R.string.contact_selection_limit, NativeBridge.MAX_RECIPIENTS),
+                                    style = MaterialTheme.typography.bodySmall,
+                                )
+                            }
+                            Text(stringResource(R.string.contact_recipients_hint), style = MaterialTheme.typography.bodySmall)
+                            ExpressiveButton(
+                                text = stringResource(R.string.action_encrypt_for_selected),
+                                onClick = onEncryptSelected,
+                                enabled = state.nativeConnected && !state.running,
+                                size = ActionSize.MEDIUM,
+                                modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
+                            )
+                            ExpressiveButton(
+                                text = stringResource(R.string.action_clear_selection),
+                                onClick = actions.onClearContactSelection,
+                                enabled = !state.running,
+                                emphasis = ActionEmphasis.TEXT,
                             )
                         }
-                        Text(stringResource(R.string.contact_recipients_hint), style = MaterialTheme.typography.bodySmall)
-                        ExpressiveButton(
-                            text = stringResource(R.string.action_encrypt_for_selected),
-                            onClick = onEncryptSelected,
-                            enabled = state.nativeConnected && !state.running,
-                            size = ActionSize.MEDIUM,
-                            modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
+                    }
+                }
+            }
+            items(state.contactsState.contacts, key = { it.id }) { contact ->
+                val checked = contact.id in selected
+                val canToggle = !state.running && (checked || !atLimit)
+                val selectLabel = stringResource(R.string.contact_select_recipient)
+                // A chosen recipient's card rounds further and gains an outline.
+                val corner by animateDpAsState(
+                    targetValue = if (checked) 28.dp else 16.dp,
+                    animationSpec = MaterialTheme.motionScheme.defaultSpatialSpec(),
+                    label = "contactCorner",
+                )
+                Card(
+                    onClick = { openId = contact.id },
+                    modifier = Modifier.fillMaxWidth().animateItem(),
+                    shape = RoundedCornerShape(corner),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+                    ),
+                    border = if (checked) BorderStroke(2.dp, MaterialTheme.colorScheme.primary) else null,
+                ) {
+                    Row(
+                        Modifier.fillMaxWidth().padding(start = 4.dp, end = 16.dp, top = 8.dp, bottom = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Checkbox(
+                            checked = checked,
+                            onCheckedChange = { actions.onToggleContactSelection(contact) },
+                            enabled = canToggle,
+                            modifier = Modifier.semantics { contentDescription = "$selectLabel · ${contact.label}" },
                         )
-                        ExpressiveButton(
-                            text = stringResource(R.string.action_clear_selection),
-                            onClick = actions.onClearContactSelection,
-                            enabled = !state.running,
-                            emphasis = ActionEmphasis.TEXT,
-                        )
+                        Column(Modifier.weight(1f).padding(horizontal = 4.dp)) {
+                            Text(
+                                contact.label,
+                                style = MaterialTheme.typography.titleMediumEmphasized,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                            Text(
+                                shortFingerprint(contact.fingerprint),
+                                style = MaterialTheme.typography.bodySmall,
+                                fontFamily = FontFamily.Monospace,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                maxLines = 1,
+                            )
+                        }
+                        VerificationBadge(contact.verified)
                     }
                 }
             }
         }
-        items(state.contactsState.contacts, key = { it.id }) { contact ->
-            val checked = contact.id in selected
-            val canToggle = !state.running && (checked || !atLimit)
-            val selectLabel = stringResource(R.string.contact_select_recipient)
-            // A chosen recipient's card rounds further and gains an outline.
-            val corner by animateDpAsState(
-                targetValue = if (checked) 28.dp else 16.dp,
-                animationSpec = MaterialTheme.motionScheme.defaultSpatialSpec(),
-                label = "contactCorner",
-            )
-            Card(
-                onClick = { openId = contact.id },
-                modifier = Modifier.fillMaxWidth().animateItem(),
-                shape = RoundedCornerShape(corner),
-                colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
-                ),
-                border = if (checked) BorderStroke(2.dp, MaterialTheme.colorScheme.primary) else null,
+        if (floatingAdd) {
+            val addLabel = stringResource(R.string.action_import_contact)
+            FloatingActionButton(
+                onClick = { if (canImport) actions.onImportContact() },
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .padding(20.dp)
+                    .alpha(if (canImport) 1f else 0.38f)
+                    .semantics { contentDescription = addLabel },
             ) {
-                Row(
-                    Modifier.fillMaxWidth().padding(start = 4.dp, end = 16.dp, top = 8.dp, bottom = 8.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Checkbox(
-                        checked = checked,
-                        onCheckedChange = { actions.onToggleContactSelection(contact) },
-                        enabled = canToggle,
-                        modifier = Modifier.semantics { contentDescription = "$selectLabel · ${contact.label}" },
-                    )
-                    Column(Modifier.weight(1f).padding(horizontal = 4.dp)) {
-                        Text(
-                            contact.label,
-                            style = MaterialTheme.typography.titleMediumEmphasized,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                        )
-                        Text(
-                            shortFingerprint(contact.fingerprint),
-                            style = MaterialTheme.typography.bodySmall,
-                            fontFamily = FontFamily.Monospace,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            maxLines = 1,
-                        )
-                    }
-                    VerificationBadge(contact.verified)
-                }
+                Icon(Icons.Filled.Add, contentDescription = null)
             }
         }
     }

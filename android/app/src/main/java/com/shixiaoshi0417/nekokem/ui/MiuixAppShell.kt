@@ -31,7 +31,9 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.layout.ContentScale
@@ -57,6 +59,7 @@ import top.yukonga.miuix.kmp.basic.BasicComponentDefaults
 import top.yukonga.miuix.kmp.basic.ButtonDefaults
 import top.yukonga.miuix.kmp.basic.Card
 import top.yukonga.miuix.kmp.basic.Checkbox
+import top.yukonga.miuix.kmp.basic.FloatingActionButton
 import top.yukonga.miuix.kmp.basic.FloatingNavigationBar
 import top.yukonga.miuix.kmp.basic.FloatingNavigationBarItem
 import top.yukonga.miuix.kmp.basic.Icon
@@ -71,6 +74,7 @@ import top.yukonga.miuix.kmp.basic.TopAppBar
 import top.yukonga.miuix.kmp.blur.layerBackdrop
 import top.yukonga.miuix.kmp.blur.rememberLayerBackdrop
 import top.yukonga.miuix.kmp.icon.MiuixIcons
+import top.yukonga.miuix.kmp.icon.extended.Add
 import top.yukonga.miuix.kmp.icon.extended.Back
 import top.yukonga.miuix.kmp.icon.extended.Contacts
 import top.yukonga.miuix.kmp.icon.extended.File
@@ -173,15 +177,32 @@ internal fun MiuixAppShell(
                                     contactDetailPage(open, state, actions, onUse)
                                 }
                             } else {
-                                MiuixPage(title, bottom) {
-                                    contactsPage(
-                                        state,
-                                        actions,
-                                        onOpen = { openId = it.id },
-                                        onEncryptSelected = {
-                                            actions.onEncryptForSelectedContacts { destination = AppDestination.FILES }
-                                        },
-                                    )
+                                Box(Modifier.fillMaxSize()) {
+                                    MiuixPage(title, bottom) {
+                                        contactsPage(
+                                            state,
+                                            actions,
+                                            onOpen = { openId = it.id },
+                                            onEncryptSelected = {
+                                                actions.onEncryptForSelectedContacts { destination = AppDestination.FILES }
+                                            },
+                                        )
+                                    }
+                                    // With contacts listed, adding another moves to a floating button.
+                                    if (state.contactsState.contacts.isNotEmpty()) {
+                                        val canImport = state.nativeConnected && !state.running
+                                        val addLabel = stringResource(R.string.action_import_contact)
+                                        FloatingActionButton(
+                                            onClick = { if (canImport) actions.onImportContact() },
+                                            modifier = Modifier
+                                                .align(Alignment.BottomEnd)
+                                                .padding(end = 20.dp, bottom = bottom + 20.dp)
+                                                .alpha(if (canImport) 1f else 0.38f)
+                                                .semantics { contentDescription = addLabel },
+                                        ) {
+                                            Icon(MiuixIcons.Add, contentDescription = null, tint = Color.White)
+                                        }
+                                    }
                                 }
                             }
                         }
@@ -462,7 +483,9 @@ private fun LazyListScope.contactsPage(
     val atLimit = selected.size >= NativeBridge.MAX_RECIPIENTS
     section(key = "intro") {
         BasicComponent(summary = stringResource(R.string.contact_description))
-        Action(R.string.action_import_contact, state.nativeConnected && !state.running, actions.onImportContact)
+        if (state.contactsState.contacts.isEmpty()) {
+            Action(R.string.action_import_contact, state.nativeConnected && !state.running, actions.onImportContact)
+        }
         ContactStatus(state.contactsState)
     }
     if (selected.isNotEmpty()) {
@@ -524,6 +547,7 @@ private fun LazyListScope.contactsPage(
             }
         }
     }
+    if (state.contactsState.contacts.isNotEmpty()) item(key = "fab-space") { Spacer(Modifier.height(80.dp)) }
 }
 
 /** One contact: identity, Signal-style fingerprint verification, then its actions. */
