@@ -307,4 +307,14 @@
     <string name="action_back_to_contacts">全部聯絡人</string>
     <string name="operation_verify_contact">核對聯絡人</string>
     <string name="fingerprint_scan_camera_unavailable">找不到可用的相機，此裝置無法掃碼。請改為與對方逐字核對完整指紋。</string>
+    <string name="action_pin">置頂</string>
+    <string name="action_unpin">取消置頂</string>
+    <string name="action_archive">封存</string>
+    <string name="action_unarchive">取消封存</string>
+    <string name="contact_pinned_label">已置頂</string>
+    <string name="contact_archived_section">已封存（%1$d）</string>
+    <string name="contact_pinned_done">已置頂聯絡人</string>
+    <string name="contact_unpinned_done">已取消置頂</string>
+    <string name="contact_archived_done">已封存聯絡人</string>
+    <string name="contact_unarchived_done">已取消封存</string>
 </resources>

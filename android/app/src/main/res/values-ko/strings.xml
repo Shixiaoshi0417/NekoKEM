@@ -307,4 +307,14 @@
     <string name="action_back_to_contacts">모든 연락처</string>
     <string name="operation_verify_contact">연락처 확인</string>
     <string name="fingerprint_scan_camera_unavailable">사용할 수 있는 카메라가 없어 이 기기에서는 스캔할 수 없습니다. 대신 상대와 전체 지문을 눈으로 비교하세요.</string>
+    <string name="action_pin">고정</string>
+    <string name="action_unpin">고정 해제</string>
+    <string name="action_archive">보관</string>
+    <string name="action_unarchive">보관 해제</string>
+    <string name="contact_pinned_label">고정됨</string>
+    <string name="contact_archived_section">보관됨 (%1$d)</string>
+    <string name="contact_pinned_done">연락처를 고정했습니다</string>
+    <string name="contact_unpinned_done">고정을 해제했습니다</string>
+    <string name="contact_archived_done">연락처를 보관했습니다</string>
+    <string name="contact_unarchived_done">보관을 해제했습니다</string>
 </resources>

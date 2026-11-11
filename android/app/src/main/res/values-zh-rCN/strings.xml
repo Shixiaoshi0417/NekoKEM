@@ -321,4 +321,14 @@
     <string name="action_back_to_contacts">全部联系人</string>
     <string name="operation_verify_contact">核对联系人</string>
     <string name="fingerprint_scan_camera_unavailable">未找到可用的相机，此设备无法扫码。请改为与对方逐字核对完整指纹。</string>
+    <string name="action_pin">置顶</string>
+    <string name="action_unpin">取消置顶</string>
+    <string name="action_archive">归档</string>
+    <string name="action_unarchive">取消归档</string>
+    <string name="contact_pinned_label">已置顶</string>
+    <string name="contact_archived_section">已归档（%1$d）</string>
+    <string name="contact_pinned_done">已置顶联系人</string>
+    <string name="contact_unpinned_done">已取消置顶</string>
+    <string name="contact_archived_done">已归档联系人</string>
+    <string name="contact_unarchived_done">已取消归档</string>
 </resources>

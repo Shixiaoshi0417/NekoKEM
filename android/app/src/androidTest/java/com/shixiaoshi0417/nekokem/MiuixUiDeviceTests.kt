@@ -163,13 +163,16 @@ internal fun runMiuixUiTests(instrumentation: Instrumentation, screenshotPrefix:
         val keyDir = File.createTempFile("ci-miuix-contacts-", ".tmp", context.cacheDir).apply { check(delete() && mkdir()) }
         try {
             val workflow = SafFileWorkflow(context, LocalKeyManager(context))
-            for ((note, verified) in listOf("Alice" to true, "Bob" to false)) {
+            for ((note, verified) in listOf("Alice" to true, "Bob" to false, "Carol" to false)) {
                 val publicKey = File(keyDir, "$note.key")
                 generateContactTestKeypair(publicKey, File(keyDir, "$note.nkpr"))
                 val key = checkNotNull(workflow.stageTemporaryPublicKey(Uri.fromFile(publicKey), "$note.key").key)
                 val contact = try { checkNotNull(contacts.save(key, note).contact) } finally { workflow.discardTemporaryPublicKey(key) }
                 savedContacts += contact.id
                 if (verified) check(contacts.setVerified(contact.id, contact.fingerprint, true).code == NativeBridge.RESULT_SUCCESS)
+                // Bob is pinned above Alice; Carol waits in the archive.
+                if (note == "Bob") check(contacts.setPinned(contact.id, true).code == NativeBridge.RESULT_SUCCESS)
+                if (note == "Carol") check(contacts.setArchived(contact.id, true).code == NativeBridge.RESULT_SUCCESS)
             }
         } finally { keyDir.deleteRecursively() }
         activity = instrumentation.startActivitySync(

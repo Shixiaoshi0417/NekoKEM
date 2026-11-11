@@ -5,10 +5,13 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.ui.draw.alpha
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.geometry.Offset
@@ -78,6 +81,7 @@ fun PublicKeyContactsPage(
     var openId by rememberSaveable { mutableStateOf<String?>(null) }
     val open = openId?.let { id -> state.contactsState.contacts.firstOrNull { it.id == id } }
     BackHandler(enabled = open != null) { openId = null }
+    var showArchived by rememberSaveable { mutableStateOf(false) }
     if (open != null) {
         PublicKeyContactDetail(open, state, actions, onUse, onBack = { openId = null })
         return
@@ -147,51 +151,35 @@ fun PublicKeyContactsPage(
                     }
                 }
             }
-            items(state.contactsState.contacts, key = { it.id }) { contact ->
-                val checked = contact.id in selected
-                val canToggle = !state.running && (checked || !atLimit)
-                val selectLabel = stringResource(R.string.contact_select_recipient)
-                // A chosen recipient's card rounds further and gains an outline.
-                val corner by animateDpAsState(
-                    targetValue = if (checked) 28.dp else 16.dp,
-                    animationSpec = MaterialTheme.motionScheme.defaultSpatialSpec(),
-                    label = "contactCorner",
-                )
-                Card(
-                    onClick = { openId = contact.id },
-                    modifier = Modifier.fillMaxWidth().animateItem(),
-                    shape = RoundedCornerShape(corner),
-                    colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
-                    ),
-                    border = if (checked) BorderStroke(2.dp, MaterialTheme.colorScheme.primary) else null,
-                ) {
+            val active = state.contactsState.contacts.filterNot { it.archived }
+            val archived = state.contactsState.contacts.filter { it.archived }
+            items(active, key = { it.id }) { contact ->
+                MaterialContactCard(contact, state, actions, atLimit, Modifier.animateItem()) { openId = contact.id }
+            }
+            if (archived.isNotEmpty()) {
+                item(key = "archived") {
                     Row(
-                        Modifier.fillMaxWidth().padding(start = 4.dp, end = 16.dp, top = 8.dp, bottom = 8.dp),
+                        Modifier.fillMaxWidth().animateItem()
+                            .clickable { showArchived = !showArchived }
+                            .padding(vertical = 8.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        Checkbox(
-                            checked = checked,
-                            onCheckedChange = { actions.onToggleContactSelection(contact) },
-                            enabled = canToggle,
-                            modifier = Modifier.semantics { contentDescription = "$selectLabel · ${contact.label}" },
+                        Text(
+                            stringResource(R.string.contact_archived_section, archived.size),
+                            style = MaterialTheme.typography.titleSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.weight(1f),
                         )
-                        Column(Modifier.weight(1f).padding(horizontal = 4.dp)) {
-                            Text(
-                                contact.label,
-                                style = MaterialTheme.typography.titleMediumEmphasized,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                            )
-                            Text(
-                                shortFingerprint(contact.fingerprint),
-                                style = MaterialTheme.typography.bodySmall,
-                                fontFamily = FontFamily.Monospace,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                maxLines = 1,
-                            )
-                        }
-                        VerificationBadge(contact.verified)
+                        Icon(
+                            if (showArchived) Icons.Filled.KeyboardArrowUp else Icons.Filled.KeyboardArrowDown,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
+                if (showArchived) {
+                    items(archived, key = { it.id }) { contact ->
+                        MaterialContactCard(contact, state, actions, atLimit, Modifier.animateItem()) { openId = contact.id }
                     }
                 }
             }
@@ -207,6 +195,86 @@ fun PublicKeyContactsPage(
                     .semantics { contentDescription = addLabel },
             ) {
                 Icon(Icons.Filled.Add, contentDescription = null)
+            }
+        }
+    }
+}
+
+/** A small contact card: selection, name, short fingerprint and the verification mark. */
+@Composable
+private fun MaterialContactCard(
+    contact: PublicKeyContact,
+    state: NekoKEMUiState,
+    actions: NekoKEMActions,
+    atLimit: Boolean,
+    modifier: Modifier,
+    onOpen: () -> Unit,
+) {
+    val checked = contact.id in state.contactSelection
+    val canToggle = !state.running && (checked || !atLimit)
+    val selectLabel = stringResource(R.string.contact_select_recipient)
+    // A chosen recipient's card rounds further and gains an outline.
+    val corner by animateDpAsState(
+        targetValue = if (checked) 28.dp else 16.dp,
+        animationSpec = MaterialTheme.motionScheme.defaultSpatialSpec(),
+        label = "contactCorner",
+    )
+    val shape = RoundedCornerShape(corner)
+    SwipeableContactCard(
+        contact,
+        enabled = !state.running,
+        shape = shape,
+        onPin = { actions.onSetContactPinned(contact, it) },
+        onArchive = { actions.onSetContactArchived(contact, it) },
+        onDelete = { actions.onDeleteContact(contact) },
+        modifier = modifier.fillMaxWidth(),
+    ) {
+        Card(
+            onClick = onOpen,
+            modifier = Modifier.fillMaxWidth(),
+            shape = shape,
+            colors = CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+            ),
+            border = if (checked) BorderStroke(2.dp, MaterialTheme.colorScheme.primary) else null,
+        ) {
+            Row(
+                Modifier.fillMaxWidth().padding(start = 4.dp, end = 16.dp, top = 8.dp, bottom = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Checkbox(
+                    checked = checked,
+                    onCheckedChange = { actions.onToggleContactSelection(contact) },
+                    enabled = canToggle,
+                    modifier = Modifier.semantics { contentDescription = "$selectLabel · ${contact.label}" },
+                )
+                Column(Modifier.weight(1f).padding(horizontal = 4.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            contact.label,
+                            style = MaterialTheme.typography.titleMediumEmphasized,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.weight(1f, fill = false),
+                        )
+                        if (contact.pinned) {
+                            Text(
+                                stringResource(R.string.contact_pinned_label),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.padding(start = 8.dp),
+                            )
+                        }
+                    }
+                    Text(
+                        shortFingerprint(contact.fingerprint),
+                        style = MaterialTheme.typography.bodySmall,
+                        fontFamily = FontFamily.Monospace,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                    )
+                }
+                VerificationBadge(contact.verified)
             }
         }
     }
@@ -445,7 +513,7 @@ fun PublicKeyContactPicker(
             Column {
                 ContactStorageStatus(state)
                 LazyColumn(Modifier.heightIn(max = 360.dp).selectableGroup()) {
-                    items(state.contacts, key = { it.id }) { contact ->
+                    items(state.contacts.filterNot { it.archived }, key = { it.id }) { contact ->
                         Row(
                             Modifier.fillMaxWidth().selectable(
                                 selected = selectedId == contact.id,

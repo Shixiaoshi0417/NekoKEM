@@ -166,6 +166,7 @@ internal fun MiuixAppShell(
                     AppDestination.CONTACTS -> {
                         // A small card per contact; tapping it opens the contact's own page.
                         var openId by rememberSaveable { mutableStateOf<String?>(null) }
+                        var showArchived by rememberSaveable { mutableStateOf(false) }
                         val open = openId?.let { id -> state.contactsState.contacts.firstOrNull { it.id == id } }
                         BackHandler(enabled = open != null) { openId = null }
                         val onUse = { contact: PublicKeyContact ->
@@ -186,6 +187,8 @@ internal fun MiuixAppShell(
                                             onEncryptSelected = {
                                                 actions.onEncryptForSelectedContacts { destination = AppDestination.FILES }
                                             },
+                                            showArchived = showArchived,
+                                            onToggleArchived = { showArchived = !showArchived },
                                         )
                                     }
                                     // With contacts listed, adding another moves to a floating button.
@@ -478,6 +481,8 @@ private fun LazyListScope.contactsPage(
     actions: NekoKEMActions,
     onOpen: (PublicKeyContact) -> Unit,
     onEncryptSelected: () -> Unit,
+    showArchived: Boolean,
+    onToggleArchived: () -> Unit,
 ) {
     val selected = state.contactSelection
     val atLimit = selected.size >= NativeBridge.MAX_RECIPIENTS
@@ -508,14 +513,48 @@ private fun LazyListScope.contactsPage(
             )
         }
     }
-    items(state.contactsState.contacts, key = { it.id }) { contact ->
-        val checked = contact.id in selected
-        val canToggle = !state.running && (checked || !atLimit)
-        val selectLabel = stringResource(R.string.contact_select_recipient)
+    val active = state.contactsState.contacts.filterNot { it.archived }
+    val archived = state.contactsState.contacts.filter { it.archived }
+    items(active, key = { it.id }) { contact -> MiuixContactCard(contact, state, actions, atLimit) { onOpen(contact) } }
+    if (archived.isNotEmpty()) {
+        item(key = "archived") {
+            ArrowPreference(
+                title = stringResource(R.string.contact_archived_section, archived.size),
+                onClick = onToggleArchived,
+            )
+        }
+        if (showArchived) {
+            items(archived, key = { it.id }) { contact -> MiuixContactCard(contact, state, actions, atLimit) { onOpen(contact) } }
+        }
+    }
+    if (state.contactsState.contacts.isNotEmpty()) item(key = "fab-space") { Spacer(Modifier.height(80.dp)) }
+}
+
+/** A small contact card: selection, name, short fingerprint and the verification mark. */
+@Composable
+private fun MiuixContactCard(
+    contact: PublicKeyContact,
+    state: NekoKEMUiState,
+    actions: NekoKEMActions,
+    atLimit: Boolean,
+    onOpen: () -> Unit,
+) {
+    val checked = contact.id in state.contactSelection
+    val canToggle = !state.running && (checked || !atLimit)
+    val selectLabel = stringResource(R.string.contact_select_recipient)
+    SwipeableContactCard(
+        contact,
+        enabled = !state.running,
+        shape = RoundedCornerShape(16.dp),
+        onPin = { actions.onSetContactPinned(contact, it) },
+        onArchive = { actions.onSetContactArchived(contact, it) },
+        onDelete = { actions.onDeleteContact(contact) },
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp).padding(bottom = 12.dp),
+    ) {
         Card(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp).padding(bottom = 12.dp),
+            modifier = Modifier.fillMaxWidth(),
             pressFeedbackType = PressFeedbackType.Sink,
-            onClick = { onOpen(contact) },
+            onClick = onOpen,
         ) {
             Row(
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 14.dp),
@@ -528,13 +567,24 @@ private fun LazyListScope.contactsPage(
                     modifier = Modifier.semantics { contentDescription = "$selectLabel · ${contact.label}" },
                 )
                 Column(Modifier.weight(1f).padding(horizontal = 12.dp)) {
-                    Text(
-                        text = contact.label,
-                        style = MiuixTheme.textStyles.headline1,
-                        fontWeight = FontWeight.Medium,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            text = contact.label,
+                            style = MiuixTheme.textStyles.headline1,
+                            fontWeight = FontWeight.Medium,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.weight(1f, fill = false),
+                        )
+                        if (contact.pinned) {
+                            Text(
+                                text = stringResource(R.string.contact_pinned_label),
+                                style = MiuixTheme.textStyles.footnote1,
+                                color = MiuixTheme.colorScheme.primary,
+                                modifier = Modifier.padding(start = 8.dp),
+                            )
+                        }
+                    }
                     Text(
                         text = shortFingerprint(contact.fingerprint),
                         style = MiuixTheme.textStyles.body2,
@@ -547,7 +597,6 @@ private fun LazyListScope.contactsPage(
             }
         }
     }
-    if (state.contactsState.contacts.isNotEmpty()) item(key = "fab-space") { Spacer(Modifier.height(80.dp)) }
 }
 
 /** One contact: identity, Signal-style fingerprint verification, then its actions. */

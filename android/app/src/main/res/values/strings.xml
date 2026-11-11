@@ -322,4 +322,14 @@
     <string name="action_back_to_contacts">All Contacts</string>
     <string name="operation_verify_contact">Verify contact</string>
     <string name="fingerprint_scan_camera_unavailable">No usable camera was found, so this device cannot scan. Compare the full fingerprint with the owner by eye instead.</string>
+    <string name="action_pin">Pin</string>
+    <string name="action_unpin">Unpin</string>
+    <string name="action_archive">Archive</string>
+    <string name="action_unarchive">Unarchive</string>
+    <string name="contact_pinned_label">Pinned</string>
+    <string name="contact_archived_section">Archived (%1$d)</string>
+    <string name="contact_pinned_done">Contact pinned</string>
+    <string name="contact_unpinned_done">Contact unpinned</string>
+    <string name="contact_archived_done">Contact archived</string>
+    <string name="contact_unarchived_done">Contact moved back from the archive</string>
 </resources>

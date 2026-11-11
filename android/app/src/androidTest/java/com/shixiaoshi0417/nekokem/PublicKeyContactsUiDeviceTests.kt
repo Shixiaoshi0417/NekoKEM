@@ -151,6 +151,21 @@ internal fun runPublicKeyContactsUiTests(instrumentation: Instrumentation) {
         instrumentation.waitForIdleSync()
         awaitText(checkNotNull(activity).getString(R.string.contact_verify_title))
     }
+    // The swipe actions are offered to accessibility services as custom actions on the card.
+    fun swipeAction(label: String) {
+        val deadline = SystemClock.uptimeMillis() + 30000
+        while (true) {
+            val node = roots().firstNotNullOfOrNull { root ->
+                find(root) { candidate -> candidate.actionList.any { it.label?.toString() == label } }
+            }
+            val action = node?.actionList?.firstOrNull { it.label?.toString() == label }
+            if (node != null && action != null && node.performAction(action.id)) break
+            check(SystemClock.uptimeMillis() < deadline) { "Missing contact card action: $label" }
+            instrumentation.waitForIdleSync()
+            SystemClock.sleep(100)
+        }
+        instrumentation.waitForIdleSync()
+    }
     fun awaitVerified(id: String, verified: Boolean) {
         val deadline = SystemClock.uptimeMillis() + 10000
         while (contacts.readState().contacts.single { it.id == id }.verified != verified &&
@@ -191,6 +206,13 @@ internal fun runPublicKeyContactsUiTests(instrumentation: Instrumentation) {
         check(!contacts.readState().contacts.single { it.id == contact.id }.verified)
         check(contacts.setVerified(contact.id, contact.fingerprint, true).code == NativeBridge.RESULT_SUCCESS)
         check(contacts.readState().contacts.single { it.id == contact.id }.verified)
+        // Pinning and archiving persist; archiving unpins.
+        check(contacts.setPinned(contact.id, true).code == NativeBridge.RESULT_SUCCESS)
+        check(contacts.readState().contacts.single { it.id == contact.id }.pinned)
+        check(contacts.setArchived(contact.id, true).code == NativeBridge.RESULT_SUCCESS)
+        contacts.readState().contacts.single { it.id == contact.id }.let { check(it.archived && !it.pinned) }
+        check(contacts.setArchived(contact.id, false).code == NativeBridge.RESULT_SUCCESS)
+        check(!contacts.readState().contacts.single { it.id == contact.id }.archived)
         // The fingerprint QR code needs this device's own key.
         if (manager.readState().fingerprint == null) {
             val password = "fingerprint-qr-device-test".toByteArray()
@@ -206,6 +228,18 @@ internal fun runPublicKeyContactsUiTests(instrumentation: Instrumentation) {
         SystemClock.sleep(800)
         instrumentation.uiAutomation.waitForIdle(500, 5000)
         capture("contacts-list")
+        // Swiping right pins the card; the same action unpins it again.
+        swipeAction(checkNotNull(activity).getString(R.string.action_pin))
+        val pinDeadline = SystemClock.uptimeMillis() + 10000
+        while (!contacts.readState().contacts.single { it.id == contact.id }.pinned &&
+            SystemClock.uptimeMillis() < pinDeadline) SystemClock.sleep(100)
+        check(contacts.readState().contacts.single { it.id == contact.id }.pinned)
+        awaitText(checkNotNull(activity).getString(R.string.contact_pinned_label))
+        swipeAction(checkNotNull(activity).getString(R.string.action_unpin))
+        val unpinDeadline = SystemClock.uptimeMillis() + 10000
+        while (contacts.readState().contacts.single { it.id == contact.id }.pinned &&
+            SystemClock.uptimeMillis() < unpinDeadline) SystemClock.sleep(100)
+        check(!contacts.readState().contacts.single { it.id == contact.id }.pinned)
         openContact("CI recipient")
         SystemClock.sleep(800)
         instrumentation.uiAutomation.waitForIdle(500, 5000)

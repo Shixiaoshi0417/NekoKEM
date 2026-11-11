@@ -20,6 +20,10 @@ data class PublicKeyContact(
     val legacyFingerprint: String? = null,
     /** The owner's fingerprint QR code was scanned and matched this record. */
     val verified: Boolean = false,
+    /** Listed before every other contact. */
+    val pinned: Boolean = false,
+    /** Kept, but listed apart from the others and left out of the key picker. */
+    val archived: Boolean = false,
 ) {
     /** Identity keys verify signatures; files this contact signs are trusted. */
     val canVerify: Boolean get() = legacyFingerprint != null
@@ -73,7 +77,7 @@ class PublicKeyContacts(
                     unreadable++
                     null
                 }
-            }.sortedWith(compareBy({ it.label.lowercase(Locale.ROOT) }, { it.id }))
+            }.sortedWith(compareBy({ !it.pinned }, { it.label.lowercase(Locale.ROOT) }, { it.id }))
             PublicKeyContactsState(contacts, unreadable)
         } catch (_: Exception) {
             PublicKeyContactsState(storageError = true)
@@ -148,6 +152,9 @@ class PublicKeyContacts(
                 note.trim().ifEmpty { replaced?.contact?.note.orEmpty() },
                 legacy,
                 verified = sameKey?.fingerprint == key.fingerprint && sameKey.verified,
+                // Pinning and archiving belong to the person, so an upgrade keeps them.
+                pinned = (sameKey ?: replaced?.contact)?.pinned == true,
+                archived = (sameKey ?: replaced?.contact)?.archived == true,
             )
             writeRecord(Record(contact, readPrivateFile(canonical.file, MAX_PUBLIC_KEY_BYTES)))
             if (replaced != null) {
@@ -201,6 +208,27 @@ class PublicKeyContacts(
             PublicKeyContactResult(LocalKeyManager.RESULT_STORAGE_ERROR)
         }
     }
+
+    fun setPinned(id: String, pinned: Boolean): PublicKeyContactResult = updateFlags(id) { it.copy(pinned = pinned) }
+
+    /** Archiving also unpins, so an archived contact never sits at the top. */
+    fun setArchived(id: String, archived: Boolean): PublicKeyContactResult =
+        updateFlags(id) { it.copy(archived = archived, pinned = it.pinned && !archived) }
+
+    private fun updateFlags(id: String, change: (PublicKeyContact) -> PublicKeyContact): PublicKeyContactResult =
+        synchronized(lock) {
+            try {
+                requirePrivateDirectory(directory)
+                val record = readRecord(id)
+                val updated = record.copy(contact = change(record.contact))
+                if (updated.contact != record.contact) writeRecord(updated)
+                PublicKeyContactResult(NativeBridge.RESULT_SUCCESS, updated.contact)
+            } catch (_: IllegalArgumentException) {
+                PublicKeyContactResult(NativeBridge.RESULT_INVALID_ARGUMENT)
+            } catch (_: Exception) {
+                PublicKeyContactResult(LocalKeyManager.RESULT_STORAGE_ERROR)
+            }
+        }
 
     fun delete(id: String): Int = synchronized(lock) {
         try {
@@ -345,7 +373,9 @@ class PublicKeyContacts(
         check(if (legacy == null) components == 2 else components == 4 && identity(legacy) != id)
         // Absent before fingerprint scanning; 5.0.0 ignores it and drops it on rewrite.
         val verified = if (json.has("verified")) json.get("verified") as Boolean else false
-        return Record(PublicKeyContact(id, fingerprint, name, note, legacy, verified), key)
+        val pinned = if (json.has("pinned")) json.get("pinned") as Boolean else false
+        val archived = if (json.has("archived")) json.get("archived") as Boolean else false
+        return Record(PublicKeyContact(id, fingerprint, name, note, legacy, verified, pinned, archived), key)
     }
 
     private fun writeRecord(record: Record) {
@@ -360,6 +390,8 @@ class PublicKeyContacts(
             .put("publicKey", Base64.encodeToString(record.publicKey, Base64.NO_WRAP))
             .apply { contact.legacyFingerprint?.let { put("legacyFingerprint", it) } }
             .apply { if (contact.verified) put("verified", true) }
+            .apply { if (contact.pinned) put("pinned", true) }
+            .apply { if (contact.archived) put("archived", true) }
             .toString().toByteArray(Charsets.UTF_8)
         check(encoded.size <= MAX_RECORD_BYTES)
         val candidate = File.createTempFile(".contact-", ".tmp", directory)

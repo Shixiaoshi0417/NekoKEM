@@ -1932,6 +1932,20 @@ private fun NekoKEMRoute(
                     }
                 }
             },
+            onSetContactPinned = { contact, pinned ->
+                runContactOperation(
+                    R.string.operation_update_contact,
+                    if (pinned) R.string.contact_pinned_done else R.string.contact_unpinned_done,
+                ) { publicKeyContacts.setPinned(contact.id, pinned).code }
+            },
+            onSetContactArchived = { contact, archived ->
+                // An archived contact is hidden from the list, so it leaves the selection.
+                if (archived) contactSelection = contactSelection - contact.id
+                runContactOperation(
+                    R.string.operation_update_contact,
+                    if (archived) R.string.contact_archived_done else R.string.contact_unarchived_done,
+                ) { publicKeyContacts.setArchived(contact.id, archived).code }
+            },
             onSetContactVerified = { contact, verified ->
                 runContactOperation(
                     R.string.operation_verify_contact,

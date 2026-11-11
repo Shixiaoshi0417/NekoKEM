@@ -154,6 +154,8 @@ data class NekoKEMActions(
     val onClearContactSelection: () -> Unit = {},
     val onEncryptForSelectedContacts: (onSelected: () -> Unit) -> Unit = {},
     val onSetContactVerified: (PublicKeyContact, Boolean) -> Unit = { _, _ -> },
+    val onSetContactPinned: (PublicKeyContact, Boolean) -> Unit = { _, _ -> },
+    val onSetContactArchived: (PublicKeyContact, Boolean) -> Unit = { _, _ -> },
     val onUiStyleChange: (UiStyle) -> Unit = {},
     val onUpgradeKey: () -> Unit = {},
     val onExportLegacyPublicKey: () -> Unit = {},
