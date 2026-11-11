@@ -8,7 +8,8 @@
     "build": "vue-tsc --noEmit && vite build",
     "test": "vitest run",
     "tauri": "tauri",
-    "preview": "vite preview --host 127.0.0.1"
+    "preview": "vite preview --host 127.0.0.1",
+    "strings:compose": "node --no-warnings scripts/export-compose-strings.mjs"
   },
   "dependencies": {
     "@tauri-apps/api": "^2.8.0",
