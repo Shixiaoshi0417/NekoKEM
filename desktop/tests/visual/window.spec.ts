@@ -330,7 +330,7 @@ test('upgrading a legacy contact waits for the new fingerprint check',async({pag
  await expect(page.locator('.upgrade-fingerprint')).toHaveValue(Array(32).fill('E5').join(':'));
  await expect(page.locator('.upgrade-cancel')).toBeFocused();
  await expect(page.locator('.upgrade-accept')).toBeDisabled();
- expect(await page.locator('#upgrade-title').evaluate(element=>getComputedStyle(element).color)).toBe('rgb(179, 38, 30)');
+ expect(await page.locator('#upgrade-title').evaluate(element=>getComputedStyle(element).color)).toBe('rgb(215, 0, 21)');
  await noHorizontalOverflow(page);
  await page.screenshot({path:'test-results/desktop-contact-upgrade-confirm.png',fullPage:true,animations:'disabled'});
  await page.locator('[name=upgradeChecked]').check();
@@ -349,7 +349,7 @@ test('signing settings warn in red and decryption reports the signer',async({pag
  await expect(page.locator('.unsigned-cancel')).toBeFocused();
  await expect(page.locator('[name=unsigned]')).not.toBeChecked();
  const red=await page.locator('#unsigned-title').evaluate(element=>getComputedStyle(element).color);
- expect(red).toBe('rgb(179, 38, 30)');
+ expect(red).toBe('rgb(215, 0, 21)');
  expect(await page.locator('.unsigned-accept').evaluate(element=>getComputedStyle(element).backgroundColor)).toBe(red);
  await page.screenshot({path:'test-results/desktop-unsigned-confirm.png',fullPage:true,animations:'disabled'});
  await page.locator('.unsigned-accept').click();

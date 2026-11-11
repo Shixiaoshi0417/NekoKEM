@@ -620,7 +620,7 @@ onUnmounted(() => unlisten?.());
       <section :key="operation" class="page-title enter-page"><div><h1>{{ t(operation) }}</h1><p>{{ description }}</p></div></section>
       <section v-if="operation === 'settings'" class="card settings enter-page" :aria-label="t('settings')">
         <div class="setting">
-          <label class="setting-row"><input type="checkbox" name="unsigned" :checked="settings.unsigned" :disabled="confirmingUnsigned" aria-describedby="unsigned-hint" @change="toggleUnsigned"><span><strong>{{ t('unsignedSetting') }}</strong><span id="unsigned-hint" class="hint" :class="{ 'danger-text': settings.unsigned }">{{ settings.unsigned ? t('unsignedWarning') : t('unsignedSettingHint') }}</span></span></label>
+          <label class="setting-row"><input type="checkbox" role="switch" name="unsigned" :checked="settings.unsigned" :disabled="confirmingUnsigned" aria-describedby="unsigned-hint" @change="toggleUnsigned"><span><strong>{{ t('unsignedSetting') }}</strong><span id="unsigned-hint" class="hint" :class="{ 'danger-text': settings.unsigned }">{{ settings.unsigned ? t('unsignedWarning') : t('unsignedSettingHint') }}</span></span></label>
           <div v-if="confirmingUnsigned" class="unsigned-confirm enter-feedback" role="alertdialog" aria-modal="false" aria-labelledby="unsigned-title" aria-describedby="unsigned-text" @keydown.esc.prevent="confirmUnsigned(false)">
             <strong id="unsigned-title" class="danger-text">{{ t('unsignedConfirmTitle') }}</strong>
             <p id="unsigned-text" class="danger-text">{{ t('unsignedConfirmText') }}</p>
@@ -628,10 +628,10 @@ onUnmounted(() => unlisten?.());
           </div>
         </div>
         <div class="setting">
-          <label class="setting-row"><input v-model="settings.requireSignature" type="checkbox" name="requireSignature" aria-describedby="require-hint"><span><strong>{{ t('requireSignature') }}</strong><span id="require-hint" class="hint">{{ t('requireSignatureHint') }}</span></span></label>
+          <label class="setting-row"><input v-model="settings.requireSignature" type="checkbox" role="switch" name="requireSignature" aria-describedby="require-hint"><span><strong>{{ t('requireSignature') }}</strong><span id="require-hint" class="hint">{{ t('requireSignatureHint') }}</span></span></label>
         </div>
         <div class="setting update-setting">
-          <label class="setting-row"><input v-model="update.auto" type="checkbox" name="autoUpdate" aria-describedby="update-hint"><span><strong>{{ t('autoUpdate') }}</strong><span id="update-hint" class="hint">{{ t('autoUpdateHint') }}</span></span></label>
+          <label class="setting-row"><input v-model="update.auto" type="checkbox" role="switch" name="autoUpdate" aria-describedby="update-hint"><span><strong>{{ t('autoUpdate') }}</strong><span id="update-hint" class="hint">{{ t('autoUpdateHint') }}</span></span></label>
           <div class="contact-actions"><button type="button" class="secondary check-update" :disabled="checkingUpdate" @click="checkForUpdate(true)">{{ checkingUpdate ? t('checkingUpdate') : t('checkUpdate') }}</button></div>
           <p v-if="updateNotice" class="hint update-notice" role="status">{{ t(updateNotice) }}</p>
         </div>
