@@ -125,9 +125,10 @@ API 26/29/35/36 设备测试覆盖两位联系人共享一个 v4 文件、各自
 ## 预测性返回
 
 App 启用 Android 预测性返回（`android:enableOnBackInvokedCallback="true"`）。在密钥管理、
-公钥通讯录、设置或关于页面侧滑返回时，当前页面跟随手指缩小、向内平移并显示圆角，
+公钥通讯录或设置页面侧滑返回时，当前页面跟随手指缩小、向内平移并显示圆角，
 下方预览文件加密页；松手完成返回文件页，取消手势则页面复原。页面由底部导航栏切换
-（与 LunexSU 相同的 Material 3 Expressive 短导航栏）。文件页不拦截返回，由系统显示返回桌面动画。
+（与 LunexSU 相同的 Material 3 Expressive 短导航栏，文件、密钥、通讯录、设置四个标签）；
+「关于」在设置页最下方，返回时回到设置。文件页不拦截返回，由系统显示返回桌面动画。
 文件操作进行中不拦截返回，原有进度对话框行为不变。Android 14 及以上提供跟手进度；
 Android 8–13 收到返回时直接回到文件页。MIUIX 界面在其他标签返回时同样回到文件页。
 
@@ -234,7 +235,7 @@ API 36 模拟器与 API 26/29/35 一起运行全部 JNI、SAF、语言和预测�
 
 ## 检查更新
 
-关于页的「检查更新」和默认开启的自动检查（启动时每天最多一次，设置中可关闭）只向 `https://api.github.com/repos/Shixiaoshi0417/NekoKEM/releases/latest` 发送一次 HTTPS GET，为此增加了 `INTERNET` 权限。请求使用系统 `HttpsURLConnection`，不跟随重定向，响应最多读取 1 MiB；只接受正式版本 `vX.Y.Z`，发布页地址由版本号拼出。提示框只链接到 GitHub Release 页面，不下载、不安装 APK；「忽略此版本」后自动检查不再提示该版本，手动检查仍会显示。设备测试用本地桩替换请求，不访问网络。
+设置 > 关于页的「检查更新」和默认开启的自动检查（启动时每天最多一次，设置中可关闭）只向 `https://api.github.com/repos/Shixiaoshi0417/NekoKEM/releases/latest` 发送一次 HTTPS GET，为此增加了 `INTERNET` 权限。请求使用系统 `HttpsURLConnection`，不跟随重定向，响应最多读取 1 MiB；只接受正式版本 `vX.Y.Z`，发布页地址由版本号拼出。提示框只链接到 GitHub Release 页面，不下载、不安装 APK；「忽略此版本」后自动检查不再提示该版本，手动检查仍会显示。设备测试用本地桩替换请求，不访问网络。
 
 ## 构建
 
