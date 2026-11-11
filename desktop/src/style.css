@@ -100,7 +100,10 @@ input[type=checkbox], input[type=radio] { accent-color: var(--accent); }
   background: var(--bg);
   border-right: 1px solid var(--border);
 }
-.brand { display: flex; align-items: center; gap: 12px; padding: 0 8px; font-size: 14px; font-weight: 600; letter-spacing: -.01em; }
+.brand { display: flex; align-items: center; gap: 12px; padding: 0 0 0 8px; font-size: 14px; font-weight: 600; letter-spacing: -.01em; }
+.brand-name { flex: 1; min-width: 0; }
+.sidebar-toggle { display: grid; place-items: center; width: 32px; height: 32px; flex: none; border-radius: 6px; color: var(--muted); }
+.sidebar-toggle:hover { background: var(--subtle); color: var(--text); }
 .brand img { width: 32px; height: 32px; border-radius: 6px; }
 .brand small { display: block; font-size: 12px; font-weight: 400; color: var(--muted); letter-spacing: 0; }
 nav { display: flex; flex-direction: column; gap: 4px; }
@@ -113,11 +116,14 @@ nav .exit-button { margin-top: 16px; }
 .sidebar-bottom { margin-top: auto; padding: 0 8px; font-size: 12px; }
 .sidebar-bottom strong { font-weight: 500; }
 .sidebar-bottom p { color: var(--muted); margin: 4px 0 0; }
-main { width: 100%; min-width: 0; max-width: 1024px; padding: 16px 32px 32px; }
-header { display: flex; justify-content: flex-end; }
-.language { display: flex; gap: 8px; align-items: center; font-size: 12px; color: var(--muted); }
-.language select { max-width: 180px; min-height: 24px; border: 0; background: var(--surface); box-shadow: var(--raised); border-radius: 6px; padding: 0 8px; color: var(--text); }
-.page-title { margin: 16px 0 24px; }
+/* Collapsed: icons only; labels stay available to assistive technology. */
+.sidebar.collapsed { width: 56px; padding: 24px 8px 16px; }
+.sidebar.collapsed .brand { padding: 0; justify-content: center; }
+.sidebar.collapsed .brand img, .sidebar.collapsed .brand-name, .sidebar.collapsed .sidebar-bottom { display: none; }
+.sidebar.collapsed nav button { justify-content: center; padding: 4px; }
+.sidebar.collapsed .nav-label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+main { width: 100%; min-width: 0; max-width: 1024px; padding: 32px; }
+.page-title { margin: 0 0 24px; }
 .page-title h1 { font-size: 22px; font-weight: 600; line-height: 1.3; letter-spacing: -.02em; margin: 0 0 4px; }
 .page-title p { color: var(--muted); margin: 0; }
 
@@ -235,6 +241,8 @@ fieldset:disabled .key-source label { cursor: default; }
 .setting-row input[role=switch]:checked { background-color: var(--accent); background-position: 14px 50%; }
 .setting-row input[role=switch]:disabled { cursor: default; opacity: .5; }
 .upgrade-check { justify-content: flex-start; }
+.language-row { align-items: center; }
+.language-row select { flex: none; max-width: 180px; min-height: 28px; padding: 0 8px; border: 0; border-radius: 6px; background: var(--surface); box-shadow: var(--raised); color: var(--text); }
 .unsigned-confirm { margin: 12px 0 0; padding: 16px; border: 1px solid var(--error); border-radius: 10px; background: var(--error-bg); }
 .unsigned-confirm p { margin: 4px 0 12px; font-size: 12px; }
 .upgrade-confirm { margin: 16px 0 0; }
@@ -301,7 +309,7 @@ fieldset:disabled .key-source label { cursor: default; }
 @keyframes spin { to { transform: rotate(360deg); } }
 @media (max-width: 900px) {
   .sidebar { width: 192px; }
-  main { padding: 16px 24px 24px; }
+  main { padding: 24px; }
   .format { max-width: 160px; }
 }
 @media (max-width: 790px) {
@@ -312,7 +320,7 @@ fieldset:disabled .key-source label { cursor: default; }
   .format { max-width: 120px; }
 }
 @media (forced-colors: active) {
-  .sidebar, .key-source, .key-source label.selected, .card, .notice, .field > input, .field > textarea, .field > select, .path-input, .primary, .secondary, .danger, .contact-list ul, .contact-actions.editing input, .recipient-options, .selection-bar, .language select { border: 1px solid CanvasText; }
+  .sidebar, .key-source, .key-source label.selected, .card, .notice, .field > input, .field > textarea, .field > select, .path-input, .primary, .secondary, .danger, .contact-list ul, .contact-actions.editing input, .recipient-options, .selection-bar, .language-row select { border: 1px solid CanvasText; }
   .setting-row input[role=switch] { border: 1px solid CanvasText; forced-color-adjust: none; background-color: Canvas; }
   .setting-row input[role=switch]:checked { background-color: Highlight; }
   .recipient-option.selected, .contact.selected { outline: 1px solid Highlight; }

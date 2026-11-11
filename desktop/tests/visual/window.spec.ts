@@ -28,6 +28,11 @@ async function fillEncryption(page:Page){
  await signWith(page);
  await page.locator('.primary').click();
 }
+// The language picker sits in Settings; this leaves the Settings page open.
+async function setLanguage(page:Page,tag:string){
+ await page.locator('.operation-tab').nth(5).click();
+ await page.locator('[name=language]').selectOption(tag);
+}
 async function noHorizontalOverflow(page:Page){
  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth)).toBe(true);
  if(await page.locator('form.card').count()===0)return;
@@ -97,7 +102,7 @@ test.beforeEach(async({page})=>{
 
 test('five languages across all six page layouts',async({page})=>{
  for(const tag of ['zh-CN','zh-TW','en','ja','ko'] as Language[]){
-  await page.locator('header select').selectOption(tag);
+  await setLanguage(page,tag);
   for(const [index,operation] of ['keygen','encrypt','decrypt','fingerprint','contacts','settings'].entries()){
    await page.locator('.operation-tab').nth(index).click();
    await expect(page.getByRole('heading',{name:translate(operation as 'keygen'|'encrypt'|'decrypt'|'fingerprint'|'contacts'|'settings',tag),exact:true,level:1})).toBeVisible();
@@ -115,7 +120,7 @@ test('five languages across all six page layouts',async({page})=>{
 test('minimum native window fits all five languages and pasted-key layouts',async({page})=>{
  await page.setViewportSize({width:760,height:620});
  for(const tag of ['zh-CN','zh-TW','en','ja','ko'] as Language[]){
-  await page.locator('header select').selectOption(tag);
+  await setLanguage(page,tag);
   for(let index=0;index<6;index++){
    await page.locator('.operation-tab').nth(index).click();await noHorizontalOverflow(page);
    if(index<5){await page.getByRole('radio').nth(index===0?2:1).check();await noHorizontalOverflow(page);}
@@ -139,12 +144,26 @@ test('minimum native window fits all five languages and pasted-key layouts',asyn
   await page.locator('.clear-selection').click();await expect(page.locator('.selection-bar')).toHaveCount(0);
  }
  await page.screenshot({path:'test-results/desktop-minimum-contact-selected.png',fullPage:true,animations:'disabled'});
- await page.locator('header select').selectOption('zh-CN');await page.locator('.operation-tab').nth(2).click();
+ await setLanguage(page,'zh-CN');await page.locator('.operation-tab').nth(2).click();
  await page.screenshot({path:'test-results/desktop-minimum-decrypt.png',fullPage:true,animations:'disabled'});
 });
 
+test('the sidebar collapses to icons and remembers it',async({page})=>{
+ await setLanguage(page,'en');
+ const toggle=page.getByRole('button',{name:'Collapse sidebar'});
+ await toggle.click();
+ await expect(page.locator('.sidebar')).toHaveClass(/collapsed/);
+ expect((await page.locator('.sidebar').boundingBox())!.width).toBe(56);
+ await expect(page.getByRole('button',{name:'Encrypt file'})).toBeVisible();
+ await page.screenshot({path:'test-results/desktop-sidebar-collapsed.png',fullPage:true,animations:'disabled'});
+ await page.reload();
+ await expect(page.locator('.sidebar')).toHaveClass(/collapsed/);
+ await page.locator('.sidebar-toggle').click();
+ await expect(page.locator('.sidebar')).not.toHaveClass(/collapsed/);
+});
+
 test('keyboard navigation and error focus remain visible',async({page})=>{
- await page.locator('header select').selectOption('en');
+ await setLanguage(page,'en');
  const first=page.locator('.operation-tab').first();await first.focus();
  await first.press('ArrowDown');await expect(page.locator('.operation-tab').nth(1)).toBeFocused();
  await page.keyboard.press('End');await expect(page.locator('.operation-tab').nth(5)).toBeFocused();
@@ -238,7 +257,7 @@ test('Windows high contrast keeps navigation, focus and progress readable',async
 });
 
 test('public-key contacts are saved, edited, chosen explicitly and deleted',async({page})=>{
- await page.locator('header select').selectOption('en');
+ await setLanguage(page,'en');
  await page.locator('.operation-tab').nth(4).click();
  await page.locator('[name=contactKeyPath]').fill('C:\\Local\\carol-public.key');
  // Note limits count Unicode code points; the browser must not cut emoji at 512 UTF-16 units.
@@ -290,7 +309,7 @@ test('public-key contacts are saved, edited, chosen explicitly and deleted',asyn
 });
 
 test('several contacts selected on the contacts page share one encrypted file',async({page})=>{
- await page.locator('header select').selectOption('en');
+ await setLanguage(page,'en');
  await page.locator('.operation-tab').nth(4).click();
  await expect(page.locator('.selection-bar')).toHaveCount(0);
  await page.getByRole('checkbox',{name:'Select · Pasted public key'}).check();
@@ -341,7 +360,7 @@ test('upgrading a legacy contact waits for the new fingerprint check',async({pag
 });
 
 test('signing settings warn in red and decryption reports the signer',async({page})=>{
- await page.locator('header select').selectOption('zh-CN');
+ await setLanguage(page,'zh-CN');
  await page.locator('.operation-tab').nth(5).click();
  await page.locator('[name=unsigned]').click();
  const dialog=page.getByRole('alertdialog');
@@ -395,7 +414,7 @@ test('update check offers a newer release in all five languages and fits the min
  await page.setViewportSize({width:760,height:620});
  await page.evaluate(()=>Object.assign(window,{updateStatus:{status:'available',version:'5.1.0'}}));
  for(const tag of ['zh-CN','zh-TW','en','ja','ko'] as Language[]){
-  await page.locator('header select').selectOption(tag);
+  await setLanguage(page,tag);
   await page.locator('.operation-tab').nth(5).click();
   await expect(page.locator('[name=autoUpdate]')).toBeChecked();
   await page.locator('.check-update').click();

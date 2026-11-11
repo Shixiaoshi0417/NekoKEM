@@ -35,6 +35,13 @@ const progress = ref<bridge.Progress | null>(null);
 const form = reactive({ input: '', output: '', keyPath: '', publicPath: '', privatePath: '', password: '', confirmation: '', keyText: '', source: 'path' as KeySource, contacts: [] as string[], replace: false, overwrite: false });
 const contactForm = reactive({ keyPath: '', keyText: '', paste: false, note: '' });
 const settings = reactive(loadSettings());
+// Whether the sidebar shows icons only; a per-device convenience.
+const SIDEBAR_KEY = 'nekokem.sidebar';
+const sidebarCollapsed = ref((() => { try { return localStorage.getItem(SIDEBAR_KEY) === 'collapsed'; } catch { return false; } })());
+function toggleSidebar() {
+  sidebarCollapsed.value = !sidebarCollapsed.value;
+  try { localStorage.setItem(SIDEBAR_KEY, sidebarCollapsed.value ? 'collapsed' : 'expanded'); } catch { /* expanded next time */ }
+}
 const signKeyPath = ref(settings.signKeyPath);
 const keyMode = ref<KeyMode>('generate');
 // Turning off signing needs an explicit, red-marked confirmation.
@@ -605,20 +612,22 @@ onUnmounted(() => unlisten?.());
 
 <template>
   <div class="shell">
-    <aside class="sidebar">
-      <div class="brand"><img src="/icon.png" alt=""><span>NekoKEM<small>v{{ version }}</small></span></div>
+    <aside class="sidebar" :class="{ collapsed: sidebarCollapsed }">
+      <div class="brand"><img src="/icon.png" alt=""><span class="brand-name">NekoKEM<small>v{{ version }}</small></span><button type="button" class="sidebar-toggle" :aria-label="t(sidebarCollapsed ? 'expandSidebar' : 'collapseSidebar')" :title="t(sidebarCollapsed ? 'expandSidebar' : 'collapseSidebar')" :aria-expanded="!sidebarCollapsed" @click="toggleSidebar"><AppIcon name="sidebar" /></button></div>
       <nav ref="navigation" :aria-label="t('navigation')">
-        <button v-for="(tab, index) in tabs" :key="tab" class="operation-tab" :class="{ active: operation === tab }" :aria-current="operation === tab ? 'page' : undefined" :disabled="locked || !loaded" @click="switchTab(tab)" @keydown="navigate($event, index)">
+        <button v-for="(tab, index) in tabs" :key="tab" class="operation-tab" :class="{ active: operation === tab }" :aria-current="operation === tab ? 'page' : undefined" :title="sidebarCollapsed ? t(tab) : undefined" :disabled="locked || !loaded" @click="switchTab(tab)" @keydown="navigate($event, index)">
           <AppIcon :name="tab" /><span class="nav-label">{{ t(tab) }}</span>
         </button>
-        <button class="exit-button" :disabled="locked || !loaded" @click="exit"><AppIcon name="exit" /><span class="nav-label">{{ t('exit') }}</span></button>
+        <button class="exit-button" :title="sidebarCollapsed ? t('exit') : undefined" :disabled="locked || !loaded" @click="exit"><AppIcon name="exit" /><span class="nav-label">{{ t('exit') }}</span></button>
       </nav>
       <div class="sidebar-bottom"><strong>{{ t('local') }}</strong><p>{{ t('localHint') }}</p></div>
     </aside>
     <main>
-      <header><label class="language">{{ t('language') }}<select v-model="selectedLanguage" :disabled="locked || !loaded" @change="changeLanguage"><option v-for="(name, tag) in languageNames" :key="tag" :value="tag">{{ tag === 'system' ? t('system') : name }}</option></select></label></header>
       <section :key="operation" class="page-title enter-page"><div><h1>{{ t(operation) }}</h1><p>{{ description }}</p></div></section>
       <section v-if="operation === 'settings'" class="card settings enter-page" :aria-label="t('settings')">
+        <div class="setting">
+          <label class="setting-row language-row"><span><strong>{{ t('language') }}</strong><span id="language-hint" class="hint">{{ t('languageHint') }}</span></span><select name="language" aria-describedby="language-hint" v-model="selectedLanguage" :disabled="locked || !loaded" @change="changeLanguage"><option v-for="(name, tag) in languageNames" :key="tag" :value="tag">{{ tag === 'system' ? t('system') : name }}</option></select></label>
+        </div>
         <div class="setting">
           <label class="setting-row"><input type="checkbox" role="switch" name="unsigned" :checked="settings.unsigned" :disabled="confirmingUnsigned" aria-describedby="unsigned-hint" @change="toggleUnsigned"><span><strong>{{ t('unsignedSetting') }}</strong><span id="unsigned-hint" class="hint" :class="{ 'danger-text': settings.unsigned }">{{ settings.unsigned ? t('unsignedWarning') : t('unsignedSettingHint') }}</span></span></label>
           <div v-if="confirmingUnsigned" class="unsigned-confirm enter-feedback" role="alertdialog" aria-modal="false" aria-labelledby="unsigned-title" aria-describedby="unsigned-text" @keydown.esc.prevent="confirmUnsigned(false)">

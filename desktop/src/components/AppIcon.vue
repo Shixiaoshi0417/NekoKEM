@@ -12,6 +12,7 @@ const paths = {
   check: ['m5 12 4 4L19 6'],
   alert: ['M12 3 2 21h20Z', 'M12 9v5', 'M12 17h.01'],
   close: ['m6 6 12 12', 'M18 6 6 18'],
+  sidebar: ['M4 5h16v14H4z', 'M9 5v14'],
 } as const;
 defineProps<{ name: keyof typeof paths }>();
 </script>
