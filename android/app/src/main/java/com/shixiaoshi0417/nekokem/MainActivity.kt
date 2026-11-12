@@ -1920,7 +1920,8 @@ private fun NekoKEMRoute(
                     else -> {
                         // Contacts the user chose on the contacts page start ticked; nothing else does.
                         cancelRecipientPick()
-                        val preset = selectedContactIds.filter { id -> contactsState.contacts.any { it.id == id } }
+                        // The dialog lists no archived contact, so none may start ticked where it cannot be seen.
+                        val preset = selectedContactIds.filter { id -> contactsState.contacts.any { it.id == id && !it.archived } }
                         selectedContactIds = emptyList()
                         recipientPick = RecipientPick(contactIds = preset)
                     }
@@ -1984,7 +1985,10 @@ private fun NekoKEMRoute(
             },
             onSetContactArchived = { contact, archived ->
                 // An archived contact is hidden from the list, so it leaves the selection.
-                if (archived) contactSelection = contactSelection - contact.id
+                if (archived) {
+                    contactSelection = contactSelection - contact.id
+                    selectedContactIds = selectedContactIds - contact.id
+                }
                 runContactOperation(
                     R.string.operation_update_contact,
                     if (archived) R.string.contact_archived_done else R.string.contact_unarchived_done,
