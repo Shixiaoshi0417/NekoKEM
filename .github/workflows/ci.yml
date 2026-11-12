@@ -1025,6 +1025,229 @@ jobs:
             ${{ runner.temp }}/macos-swiftui/NekoKEM-macos-arm64-SwiftUI.zip
           retention-days: 14
 
+  compose-linux:
+    name: Linux ${{ matrix.arch }} Compose desktop build, screenshots and packages
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: x86_64
+            runner: ubuntu-24.04
+            resources: linux-x64
+          - arch: aarch64
+            runner: ubuntu-24.04-arm
+            resources: linux-arm64
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5
+        with:
+          distribution: temurin
+          java-version: "25"
+      - uses: dtolnay/rust-toolchain@7e38f4b43b4db5c8dd498af069a4f6196df1d067 # master
+        with:
+          toolchain: 1.99.0
+          targets: ${{ matrix.arch }}-unknown-linux-gnu
+      - name: Install native build, packaging and desktop test tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends \
+            build-essential ca-certificates curl perl binutils fakeroot rpm \
+            xvfb xauth xdotool libgl1 libxrender1 libxtst6 libxi6
+      - name: Identify native compiler and libc
+        id: compiler
+        run: |
+          set -Eeuo pipefail
+          test "$(uname -m)" = '${{ matrix.arch }}'
+          identity=$({ gcc --version; getconf GNU_LIBC_VERSION; } | sha256sum | cut -d ' ' -f 1)
+          echo "identity=$identity" >> "$GITHUB_OUTPUT"
+          echo "NEKOKEM_OPENSSL_PREFIX=$RUNNER_TEMP/linux-gui-openssl" >> "$GITHUB_ENV"
+      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: ${{ runner.temp }}/linux-gui-openssl
+          key: linux-gui-${{ matrix.arch }}-openssl-4.1.0-${{ steps.compiler.outputs.identity }}-${{ hashFiles('desktop/scripts/build-linux-openssl.sh') }}
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
+        with:
+          workspaces: desktop/bridge
+          cache-on-failure: true
+      - uses: gradle/actions/setup-gradle@ed408507eac070d1f99cc633dbcf757c94c7933a # v4
+      - name: Build and verify the pinned static PIC dependency
+        run: bash desktop/scripts/build-linux-openssl.sh '${{ matrix.arch }}' "$NEKOKEM_OPENSSL_PREFIX"
+      - name: Test and build the bridge library against the C17 Core
+        working-directory: desktop/bridge
+        run: |
+          set -Eeuo pipefail
+          cargo test --locked --release --target '${{ matrix.arch }}-unknown-linux-gnu' -- --test-threads=1
+          cargo build --locked --release --target '${{ matrix.arch }}-unknown-linux-gnu'
+          library="target/${{ matrix.arch }}-unknown-linux-gnu/release/libnekokem_native.so"
+          # OpenSSL is linked in; no libcrypto may be needed at run time.
+          if readelf -d "$library" | grep -E 'NEEDED.*(libcrypto|libssl)'; then exit 1; fi
+          mkdir -p "$GITHUB_WORKSPACE/desktop-compose/native/${{ matrix.resources }}"
+          cp "$library" "$GITHUB_WORKSPACE/desktop-compose/native/${{ matrix.resources }}/"
+          echo "NEKOKEM_BRIDGE=$GITHUB_WORKSPACE/desktop-compose/native/${{ matrix.resources }}/libnekokem_native.so" >> "$GITHUB_ENV"
+      - name: Render every page of both styles with the real bridge
+        working-directory: desktop-compose
+        run: |
+          set -Eeuo pipefail
+          ./gradlew --no-daemon screenshots
+          test "$(find build/screenshots -name '*.png' -size +0 | wc -l)" -ge 24
+      - name: Build the Debian and RPM packages
+        working-directory: desktop-compose
+        run: |
+          set -Eeuo pipefail
+          ./gradlew --no-daemon packageDeb packageRpm
+          mkdir -p "$RUNNER_TEMP/compose-linux"
+          cp build/compose/binaries/main/deb/*.deb "$RUNNER_TEMP/compose-linux/NekoKEM-linux-${{ matrix.arch }}-Compose.deb"
+          cp build/compose/binaries/main/rpm/*.rpm "$RUNNER_TEMP/compose-linux/NekoKEM-linux-${{ matrix.arch }}-Compose.rpm"
+          cp -r build/screenshots "$RUNNER_TEMP/compose-linux/screens"
+      - name: Install the package and verify the installed window opens
+        run: |
+          set -Eeuo pipefail
+          sudo apt-get install --yes "$RUNNER_TEMP/compose-linux/NekoKEM-linux-${{ matrix.arch }}-Compose.deb"
+          test -s /opt/nekokem/lib/app/resources/libnekokem_native.so
+          export XDG_CONFIG_HOME="$RUNNER_TEMP/compose-linux/config"
+          mkdir -p "$XDG_CONFIG_HOME"
+          xvfb-run -a -s '-screen 0 1280x1024x24' bash -c '
+            /opt/nekokem/bin/NekoKEM > "$RUNNER_TEMP/compose-linux/startup.log" 2>&1 &
+            pid=$!
+            for attempt in $(seq 1 60); do
+              if xdotool search --name "^NekoKEM$" > /dev/null 2>&1; then break; fi
+              kill -0 "$pid" || { cat "$RUNNER_TEMP/compose-linux/startup.log"; exit 1; }
+              sleep 1
+            done
+            xdotool search --name "^NekoKEM$" > /dev/null
+            sleep 3
+            kill -0 "$pid"
+            kill -TERM "$pid"
+            wait "$pid" || true
+          '
+          cat "$RUNNER_TEMP/compose-linux/startup.log"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        if: always()
+        with:
+          name: compose-linux-${{ matrix.arch }}
+          path: ${{ runner.temp }}/compose-linux
+          retention-days: 14
+
+  compose-windows:
+    name: Windows Compose desktop build, screenshots and installer
+    runs-on: windows-2022
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5
+        with:
+          distribution: temurin
+          java-version: "25"
+      - uses: dtolnay/rust-toolchain@7e38f4b43b4db5c8dd498af069a4f6196df1d067 # master
+        with:
+          toolchain: 1.99.0-x86_64-pc-windows-gnu
+          targets: x86_64-pc-windows-gnu
+      - uses: msys2/setup-msys2@ec48f7c5447b3140e2b088413ae3a55687bccb6e # v2
+        with:
+          msystem: UCRT64
+          # MSYS2 requires a coherent rolling package set; see release/README.md.
+          update: true
+          install: >-
+            make perl curl tar
+            mingw-w64-ucrt-x86_64-gcc
+            mingw-w64-ucrt-x86_64-python
+      - name: Identify native compiler
+        id: compiler
+        shell: msys2 {0}
+        run: |
+          echo "version=$(gcc -dumpfullversion)" >> "$GITHUB_OUTPUT"
+          echo "gcc=$(cygpath -m "$(command -v gcc)")" >> "$GITHUB_OUTPUT"
+      - uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: ${{ runner.temp }}/windows-openssl
+          key: windows-ucrt64-openssl-4.1.0-${{ steps.compiler.outputs.version }}-${{ hashFiles('windows/scripts/build-windows-cli.sh') }}
+          restore-keys: windows-ucrt64-openssl-4.1.0-${{ steps.compiler.outputs.version }}-
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
+        with:
+          workspaces: desktop/bridge
+          cache-on-failure: true
+      - uses: gradle/actions/setup-gradle@ed408507eac070d1f99cc633dbcf757c94c7933a # v4
+      - name: Build the pinned OpenSSL with the original CLI
+        shell: msys2 {0}
+        run: |
+          export NEKOKEM_OPENSSL_PREFIX="$(cygpath -u "$RUNNER_TEMP")/windows-openssl"
+          bash windows/scripts/build-windows-cli.sh "$(cygpath -u "$RUNNER_TEMP")/windows-cli"
+      - name: Configure the matching Rust/C ABI
+        shell: pwsh
+        run: |
+          $compiler = '${{ steps.compiler.outputs.gcc }}'
+          if (!(Test-Path -LiteralPath $compiler)) { throw "GCC not found: $compiler" }
+          $bin = Split-Path $compiler
+          "NEKOKEM_NATIVE_BIN=$bin" >> $env:GITHUB_ENV
+          "CC_x86_64_pc_windows_gnu=$compiler" >> $env:GITHUB_ENV
+          "CARGO_TARGET_X86_64_PC_WINDOWS_GNU_LINKER=$compiler" >> $env:GITHUB_ENV
+          "NEKOKEM_OPENSSL_PREFIX=$env:RUNNER_TEMP\windows-openssl" >> $env:GITHUB_ENV
+      - name: Test and build the bridge library against the C17 Core
+        shell: pwsh
+        working-directory: desktop/bridge
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $env:PATH = "$env:NEKOKEM_NATIVE_BIN;$env:PATH"
+          cargo test --locked --release --target x86_64-pc-windows-gnu -- --test-threads=1
+          if ($LASTEXITCODE -ne 0) { throw 'Bridge tests failed' }
+          cargo build --locked --release --target x86_64-pc-windows-gnu
+          if ($LASTEXITCODE -ne 0) { throw 'Bridge build failed' }
+          $library = 'target\x86_64-pc-windows-gnu\release\nekokem_native.dll'
+          # One self-contained DLL: no MinGW runtime or OpenSSL DLL beside it.
+          $imports = & "$env:NEKOKEM_NATIVE_BIN\objdump.exe" -p $library | Select-String 'DLL Name'
+          $imports
+          if ($imports -match 'libgcc|libwinpthread|libcrypto|libssl|libstdc') { throw 'The bridge needs a runtime DLL' }
+          $resources = Join-Path $env:GITHUB_WORKSPACE 'desktop-compose\native\windows-x64'
+          New-Item -ItemType Directory -Force $resources | Out-Null
+          Copy-Item $library $resources
+          "NEKOKEM_BRIDGE=$resources\nekokem_native.dll" >> $env:GITHUB_ENV
+      - name: Render every page of both styles with the real bridge
+        shell: pwsh
+        working-directory: desktop-compose
+        run: |
+          $ErrorActionPreference = 'Stop'
+          .\gradlew.bat --no-daemon screenshots
+          if ($LASTEXITCODE -ne 0) { throw 'Screenshots failed' }
+          $count = (Get-ChildItem build\screenshots -Filter *.png | Where-Object Length -gt 0).Count
+          if ($count -lt 24) { throw "Only $count screenshots" }
+      - name: Build the application folder and the MSI installer
+        shell: pwsh
+        working-directory: desktop-compose
+        run: |
+          $ErrorActionPreference = 'Stop'
+          .\gradlew.bat --no-daemon createDistributable packageMsi
+          if ($LASTEXITCODE -ne 0) { throw 'Packaging failed' }
+          $out = Join-Path $env:RUNNER_TEMP 'compose-windows'
+          New-Item -ItemType Directory -Force $out | Out-Null
+          Copy-Item (Get-ChildItem build\compose\binaries\main\msi\*.msi | Select-Object -First 1) (Join-Path $out 'NekoKEM-windows-x86_64-Compose.msi')
+          Copy-Item -Recurse build\screenshots (Join-Path $out 'screens')
+      - name: Verify the packaged application starts with its own bridge
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $app = 'desktop-compose\build\compose\binaries\main\app\NekoKEM'
+          if (!(Test-Path "$app\app\resources\nekokem_native.dll")) { throw 'The bridge is not in the package' }
+          $env:LOCALAPPDATA = Join-Path $env:RUNNER_TEMP 'compose-windows-config'
+          New-Item -ItemType Directory -Force $env:LOCALAPPDATA | Out-Null
+          $process = Start-Process -FilePath "$app\NekoKEM.exe" -PassThru
+          $shown = $false
+          foreach ($attempt in 1..60) {
+            Start-Sleep -Seconds 1
+            $process.Refresh()
+            if ($process.HasExited) { throw "The application exited with $($process.ExitCode)" }
+            if ($process.MainWindowTitle -eq 'NekoKEM') { $shown = $true; break }
+          }
+          if (!$shown) { throw 'The window did not open' }
+          Stop-Process -Id $process.Id
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        if: always()
+        with:
+          name: compose-windows-x86_64
+          path: ${{ runner.temp }}/compose-windows
+          retention-days: 14
+
   linux-gui:
     name: Linux ${{ matrix.arch }} GUI build and native tests
     runs-on: ${{ matrix.runner }}

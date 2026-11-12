@@ -137,3 +137,6 @@ Desktop.ini
 
 # SwiftUI macOS app build products
 macos/gui/.build/
+
+# Compose desktop: the bridge library copied in before packaging
+desktop-compose/native/
