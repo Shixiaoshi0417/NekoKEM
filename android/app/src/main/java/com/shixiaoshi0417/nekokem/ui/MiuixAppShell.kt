@@ -172,16 +172,27 @@ internal fun MiuixAppShell(
                         var openId by rememberSaveable { mutableStateOf<String?>(null) }
                         var showArchived by rememberSaveable { mutableStateOf(false) }
                         val open = openId?.let { id -> state.contactsState.contacts.firstOrNull { it.id == id } }
+                        // Fingerprint verification is its own page under the contact.
+                        var verifying by rememberSaveable { mutableStateOf(false) }
                         BackHandler(enabled = open != null) { openId = null }
+                        BackHandler(enabled = open != null && verifying) { verifying = false }
                         val onUse = { contact: PublicKeyContact ->
                             actions.onSelectContact(contact) { destination = AppDestination.FILES }
                         }
                         key(open?.id) {
-                            if (open != null) {
+                            if (open != null && verifying) {
+                                MiuixPage(
+                                    stringResource(R.string.contact_verify_title),
+                                    bottom,
+                                    onBack = { verifying = false },
+                                    backDescription = open.label,
+                                ) { contactVerifyPage(open, state, actions) }
+                            } else if (open != null) {
                                 MiuixPage(open.label, bottom, onBack = { openId = null }) {
-                                    contactDetailPage(open, state, actions, onUse)
+                                    contactDetailPage(open, state, actions, onUse, onVerify = { verifying = true })
                                 }
                             } else {
+                                verifying = false
                                 Box(Modifier.fillMaxSize()) {
                                     MiuixPage(title, bottom) {
                                         contactsPage(
@@ -573,12 +584,13 @@ private fun MiuixContactCard(
     }
 }
 
-/** One contact: identity, Signal-style fingerprint verification, then its actions. */
+/** One contact: identity, the entry to fingerprint verification, then its actions. */
 private fun LazyListScope.contactDetailPage(
     contact: PublicKeyContact,
     state: NekoKEMUiState,
     actions: NekoKEMActions,
     onUse: (PublicKeyContact) -> Unit,
+    onVerify: () -> Unit,
 ) {
     val checked = contact.id in state.contactSelection
     val canToggle = !state.running && (checked || state.contactSelection.size < NativeBridge.MAX_RECIPIENTS)
@@ -590,20 +602,8 @@ private fun LazyListScope.contactDetailPage(
             endActions = { VerifiedMark(contact.verified, MiuixTheme.colorScheme.onSurface, size = 24.dp) },
         )
     }
-    item(key = "verify") {
-        Column {
-            SmallTitle(text = stringResource(R.string.contact_verify_title))
-            SafetyNumberCard(
-                fingerprint = contact.fingerprint,
-                verified = contact.verified,
-                enabled = !state.running,
-                container = MiuixTheme.colorScheme.primary,
-                content = MiuixTheme.colorScheme.onPrimary,
-                onScan = { actions.onScanContact(contact) },
-                onToggleVerified = { actions.onSetContactVerified(contact, !contact.verified) },
-                modifier = Modifier.padding(horizontal = 12.dp).padding(bottom = 12.dp),
-            )
-        }
+    section(key = "verify") {
+        Action(R.string.contact_verify_title, true, onVerify)
     }
     section(key = "use") {
         val selectLabel = stringResource(R.string.contact_select_recipient)
@@ -626,6 +626,22 @@ private fun LazyListScope.contactDetailPage(
         Action(R.string.action_use_contact, state.nativeConnected && !state.running, { onUse(contact) })
         Action(R.string.action_edit_contact_note, !state.running, { actions.onEditContact(contact) })
         Action(R.string.action_delete, !state.running, { actions.onDeleteContact(contact) }, destructive = true)
+    }
+}
+
+/** The contact's fingerprint card on its own page. */
+private fun LazyListScope.contactVerifyPage(contact: PublicKeyContact, state: NekoKEMUiState, actions: NekoKEMActions) {
+    item(key = "verify-card") {
+        SafetyNumberCard(
+            fingerprint = contact.fingerprint,
+            verified = contact.verified,
+            enabled = !state.running,
+            container = MiuixTheme.colorScheme.primary,
+            content = MiuixTheme.colorScheme.onPrimary,
+            onScan = { actions.onScanContact(contact) },
+            onToggleVerified = { actions.onSetContactVerified(contact, !contact.verified) },
+            modifier = Modifier.padding(12.dp),
+        )
     }
 }
 

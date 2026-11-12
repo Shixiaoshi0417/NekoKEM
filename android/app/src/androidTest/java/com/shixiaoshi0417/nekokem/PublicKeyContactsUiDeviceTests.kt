@@ -254,9 +254,20 @@ internal fun runPublicKeyContactsUiTests(instrumentation: Instrumentation) {
         SystemClock.sleep(4500)
         instrumentation.uiAutomation.waitForIdle(500, 5000)
         capture("contacts-detail")
-        awaitText(contact.fingerprint)
         awaitText(checkNotNull(activity).getString(R.string.contact_verified))
-        awaitText(checkNotNull(activity).getString(R.string.action_scan_fingerprint))
+        // Verification is a page of its own under the contact.
+        fun openVerify() {
+            click(checkNotNull(activity).getString(R.string.contact_verify_title))
+            awaitText(checkNotNull(activity).getString(R.string.action_scan_fingerprint))
+        }
+        fun closeVerify() {
+            instrumentation.runOnMainSync {
+                (checkNotNull(activity) as androidx.activity.ComponentActivity).onBackPressedDispatcher.onBackPressed()
+            }
+            awaitText(checkNotNull(activity).getString(R.string.action_use_contact))
+        }
+        openVerify()
+        awaitText(contact.fingerprint)
         capture("contacts-verified")
         // The rest of the page, then back to where the test continues.
         scrollPage(true)
@@ -266,14 +277,17 @@ internal fun runPublicKeyContactsUiTests(instrumentation: Instrumentation) {
         click(checkNotNull(activity).getString(R.string.action_unmark_verified))
         awaitVerified(contact.id, false)
         awaitText(checkNotNull(activity).getString(R.string.action_mark_verified))
+        closeVerify()
         openDialog(checkNotNull(activity).getString(R.string.action_use_contact))
         awaitText(checkNotNull(activity).getString(R.string.contact_unverified_title))
         capture("contacts-unverified-warning")
         click(checkNotNull(activity).getString(R.string.action_cancel))
         check(contacts.readState().contacts.single { it.id == contact.id }.verified.not())
+        openVerify()
         click(checkNotNull(activity).getString(R.string.action_mark_verified))
         awaitVerified(contact.id, true)
         awaitText(checkNotNull(activity).getString(R.string.action_unmark_verified))
+        closeVerify()
         openDialog(checkNotNull(activity).getString(R.string.action_edit_contact_note))
         val editorDeadline = SystemClock.uptimeMillis() + 10000
         var editor: AccessibilityNodeInfo? = null

@@ -86,12 +86,20 @@ fun PublicKeyContactsPage(
     // A small card per contact; tapping it opens the contact's own page.
     var openId by rememberSaveable { mutableStateOf<String?>(null) }
     val open = openId?.let { id -> state.contactsState.contacts.firstOrNull { it.id == id } }
+    // Fingerprint verification is its own page under the contact.
+    var verifying by rememberSaveable { mutableStateOf(false) }
     BackHandler(enabled = open != null) { openId = null }
+    BackHandler(enabled = open != null && verifying) { verifying = false }
     var showArchived by rememberSaveable { mutableStateOf(false) }
-    if (open != null) {
-        PublicKeyContactDetail(open, state, actions, onUse, onBack = { openId = null })
+    if (open != null && verifying) {
+        PublicKeyContactVerify(open, state, actions, onBack = { verifying = false })
         return
     }
+    if (open != null) {
+        PublicKeyContactDetail(open, state, actions, onUse, onVerify = { verifying = true }, onBack = { openId = null })
+        return
+    }
+    verifying = false
     val selected = state.contactSelection
     val atLimit = selected.size >= NativeBridge.MAX_RECIPIENTS
     val canImport = state.nativeConnected && !state.running
@@ -286,13 +294,38 @@ private fun MaterialContactCard(
     }
 }
 
-/** One contact: identity, Signal-style fingerprint verification, then its actions. */
+/** The contact's fingerprint card on its own page. */
+@Composable
+private fun PublicKeyContactVerify(
+    contact: PublicKeyContact,
+    state: NekoKEMUiState,
+    actions: NekoKEMActions,
+    onBack: () -> Unit,
+) {
+    LazyColumn(contentPadding = PaddingValues(20.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+        item { ExpressiveButton(text = contact.label, onClick = onBack, emphasis = ActionEmphasis.TEXT) }
+        item {
+            SafetyNumberCard(
+                fingerprint = contact.fingerprint,
+                verified = contact.verified,
+                enabled = !state.running,
+                container = MaterialTheme.colorScheme.primary,
+                content = MaterialTheme.colorScheme.onPrimary,
+                onScan = { actions.onScanContact(contact) },
+                onToggleVerified = { actions.onSetContactVerified(contact, !contact.verified) },
+            )
+        }
+    }
+}
+
+/** One contact: identity, then its actions; fingerprint verification opens from here. */
 @Composable
 private fun PublicKeyContactDetail(
     contact: PublicKeyContact,
     state: NekoKEMUiState,
     actions: NekoKEMActions,
     onUse: (PublicKeyContact) -> Unit,
+    onVerify: () -> Unit,
     onBack: () -> Unit,
 ) {
     val checked = contact.id in state.contactSelection
@@ -323,20 +356,6 @@ private fun PublicKeyContactDetail(
             }
         }
         item {
-            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                Text(stringResource(R.string.contact_verify_title), style = MaterialTheme.typography.titleMediumEmphasized)
-                SafetyNumberCard(
-                    fingerprint = contact.fingerprint,
-                    verified = contact.verified,
-                    enabled = !state.running,
-                    container = MaterialTheme.colorScheme.primary,
-                    content = MaterialTheme.colorScheme.onPrimary,
-                    onScan = { actions.onScanContact(contact) },
-                    onToggleVerified = { actions.onSetContactVerified(contact, !contact.verified) },
-                )
-            }
-        }
-        item {
             Card(Modifier.fillMaxWidth(), shape = MaterialTheme.shapes.extraLarge, colors = cardColors) {
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     val selectLabel = stringResource(R.string.contact_select_recipient)
@@ -357,6 +376,11 @@ private fun PublicKeyContactDetail(
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                         verticalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
+                        ExpressiveButton(
+                            text = stringResource(R.string.contact_verify_title),
+                            onClick = onVerify,
+                            emphasis = ActionEmphasis.OUTLINED,
+                        )
                         ExpressiveButton(
                             text = stringResource(R.string.action_use_contact),
                             onClick = { onUse(contact) },

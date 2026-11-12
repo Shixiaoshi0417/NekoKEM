@@ -215,11 +215,16 @@ internal fun runMiuixUiTests(instrumentation: Instrumentation, screenshotPrefix:
                 check(target.performAction(AccessibilityNodeInfo.ACTION_CLICK))
                 await("contact page") { exact(string(R.string.contact_verify_title)) != null }
                 capture("contact-detail")
-                // The whole page: two more half-screen steps.
+                // Verification is a page of its own under the contact.
+                click(string(R.string.contact_verify_title))
+                await("verify page") { exact(string(R.string.action_scan_fingerprint)) != null }
+                capture("contact-verify")
                 scrollPage(true)
-                capture("contact-detail-2")
-                scrollPage(true)
-                capture("contact-detail-3")
+                capture("contact-verify-2")
+                instrumentation.runOnMainSync {
+                    (checkNotNull(activity) as androidx.activity.ComponentActivity).onBackPressedDispatcher.onBackPressed()
+                }
+                await("contact page again") { exact(string(R.string.action_use_contact)) != null }
                 instrumentation.runOnMainSync {
                     (checkNotNull(activity) as androidx.activity.ComponentActivity).onBackPressedDispatcher.onBackPressed()
                 }
