@@ -1101,6 +1101,13 @@
    "アップデートを確認",
    "업데이트 확인"
   ],
+  "fontsNotice": [
+   "Text is set in MiSans, Google Sans Flex and JetBrains Mono.",
+   "界面文字使用 MiSans、Google Sans Flex 和 JetBrains Mono 字体。",
+   "介面文字使用 MiSans、Google Sans Flex 和 JetBrains Mono 字型。",
+   "文字には MiSans、Google Sans Flex、JetBrains Mono を使用しています。",
+   "글꼴은 MiSans, Google Sans Flex, JetBrains Mono를 사용합니다."
+  ],
   "checkingUpdate": [
    "Checking for updates…",
    "正在检查更新…",

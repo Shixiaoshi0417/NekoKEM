@@ -35,6 +35,7 @@ import androidx.compose.material3.ListItem
 import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialExpressiveTheme
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Typography
 import androidx.compose.material3.MotionScheme
 import androidx.compose.material3.NavigationDrawerItem
 import androidx.compose.material3.PermanentDrawerSheet
@@ -70,11 +71,20 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsFocusedAsState
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.material3.Text as MaterialText
 
 private val Compact = PaddingValues(horizontal = 16.dp)
+
+// The bundled Google Sans Flex in every Material text style.
+private val MaterialTypography = Typography().run {
+    fun TextStyle.own() = copy(fontFamily = MaterialFont)
+    copy(displayLarge.own(), displayMedium.own(), displaySmall.own(), headlineLarge.own(), headlineMedium.own(), headlineSmall.own(),
+        titleLarge.own(), titleMedium.own(), titleSmall.own(), bodyLarge.own(), bodyMedium.own(), bodySmall.own(),
+        labelLarge.own(), labelMedium.own(), labelSmall.own())
+}
 
 /** Material 3 Expressive, the Android app's other look, laid out after FlClash's desktop app. */
 object MaterialKit : Kit {
@@ -82,6 +92,7 @@ object MaterialKit : Kit {
         MaterialExpressiveTheme(
             colorScheme = if (isSystemInDarkTheme()) BlueDark else BlueLight,
             motionScheme = MotionScheme.expressive(),
+            typography = MaterialTypography,
             content = content,
         )
     }

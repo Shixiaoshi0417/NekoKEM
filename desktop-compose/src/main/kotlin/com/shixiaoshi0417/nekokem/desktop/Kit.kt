@@ -8,7 +8,6 @@ import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.text.font.FontFamily
 
 /** The two looks the Android app offers, chosen in Settings. */
 enum class Style(val wire: String, val title: String) { Miuix("miuix", "MIUIX"), Material("material", "Material 3 Expressive") }
@@ -24,7 +23,6 @@ class NavEntry(val label: String, val icon: ImageVector, val selected: Boolean, 
 
 // Passwords are drawn as dots; the field's state keeps the characters.
 val PasswordMask = OutputTransformation { val count = length; if (count > 0) replace(0, count, "•".repeat(count)) }
-val Mono = FontFamily.Monospace
 
 /**
  * The widgets the pages are built from. Each style draws them with its own

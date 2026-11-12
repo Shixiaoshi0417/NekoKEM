@@ -113,6 +113,7 @@ const messages={
  autoUpdate:['Check for updates automatically', '自动检查更新', '自動檢查更新', 'アップデートを自動で確認', '업데이트 자동 확인'],
  autoUpdateHint:['At most once a day. Only asks GitHub for the latest version number; no keys or file details are sent.', '每天最多一次，只向 GitHub 查询最新版本号，不发送任何密钥或文件信息。', '每天最多一次，只向 GitHub 查詢最新版本號，不傳送任何金鑰或檔案資訊。', '1 日に最大 1 回、GitHub に最新のバージョン番号だけを問い合わせます。鍵やファイルの情報は送信しません。', '하루에 최대 한 번 GitHub에 최신 버전 번호만 확인하며, 키나 파일 정보는 보내지 않습니다.'],
  checkUpdate:['Check for updates', '检查更新', '檢查更新', 'アップデートを確認', '업데이트 확인'],
+ fontsNotice:['Text is set in MiSans, Google Sans Flex and JetBrains Mono.', '界面文字使用 MiSans、Google Sans Flex 和 JetBrains Mono 字体。', '介面文字使用 MiSans、Google Sans Flex 和 JetBrains Mono 字型。', '文字には MiSans、Google Sans Flex、JetBrains Mono を使用しています。', '글꼴은 MiSans, Google Sans Flex, JetBrains Mono를 사용합니다.'],
  checkingUpdate:['Checking for updates…', '正在检查更新…', '正在檢查更新…', 'アップデートを確認しています…', '업데이트 확인 중…'],
  upToDate:['NekoKEM is up to date.', '已是最新版本。', '已是最新版本。', '最新バージョンです。', '최신 버전입니다.'],
  updateFailed:['Could not check for updates. Try again later.', '检查更新失败，请稍后重试。', '檢查更新失敗，請稍後再試。', 'アップデートを確認できませんでした。しばらくしてからもう一度お試しください。', '업데이트를 확인하지 못했습니다. 잠시 후 다시 시도하세요.'],

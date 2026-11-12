@@ -533,6 +533,8 @@ private fun SettingsPage(state: AppState) {
         kit.SwitchRow(state.t("autoUpdate"), "", state.autoUpdate, onChange = state::changeAutoUpdate)
         kit.ActionRow(state.t(if (state.checkingUpdate) "checkingUpdate" else "checkUpdate"), state.updateNotice?.let(state::t) ?: "v${state.version}", !state.checkingUpdate) { state.checkForUpdate(true) }
     }
+    // Xiaomi's terms for MiSans ask the software to say that it uses the font.
+    kit.Text(state.t("fontsNotice"), TextRole.Tiny, Modifier.padding(start = 16.dp, top = 12.dp))
 }
 
 @Composable

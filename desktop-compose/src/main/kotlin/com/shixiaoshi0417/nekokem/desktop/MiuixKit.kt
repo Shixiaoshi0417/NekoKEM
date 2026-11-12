@@ -23,6 +23,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.state.ToggleableState
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -47,6 +48,7 @@ import top.yukonga.miuix.kmp.preference.SwitchPreference
 import top.yukonga.miuix.kmp.theme.ColorSchemeMode
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 import top.yukonga.miuix.kmp.theme.ThemeController
+import top.yukonga.miuix.kmp.theme.defaultTextStyles
 import top.yukonga.miuix.kmp.basic.Text as MiuixText
 
 /** MIUIX, the Android app's default look. */
@@ -54,7 +56,15 @@ object MiuixKit : Kit {
     @Composable override fun Theme(content: @Composable () -> Unit) {
         // Follows the system's light or dark appearance, like the Android app.
         val controller = remember { ThemeController(ColorSchemeMode.System) }
-        MiuixTheme(controller = controller, content = content)
+        // The bundled MiSans replaces the system default in every MIUIX text style.
+        val styles = remember {
+            defaultTextStyles().run {
+                fun TextStyle.own() = copy(fontFamily = MiuixFont)
+                copy(main.own(), paragraph.own(), body1.own(), body2.own(), button.own(), footnote1.own(), footnote2.own(),
+                    headline1.own(), headline2.own(), subtitle.own(), title1.own(), title2.own(), title3.own(), title4.own())
+            }
+        }
+        MiuixTheme(controller = controller, textStyles = styles, content = content)
     }
 
     @Composable override fun colors() = MiuixTheme.colorScheme.let {
