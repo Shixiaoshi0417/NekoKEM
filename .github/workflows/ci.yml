@@ -1054,7 +1054,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install --yes --no-install-recommends \
             build-essential ca-certificates curl perl binutils fakeroot rpm \
-            xvfb xauth xdotool libgl1 libxrender1 libxtst6 libxi6
+            xvfb xauth xdotool libgl1 libegl1 libxrender1 libxtst6 libxi6
       - name: Identify native compiler and libc
         id: compiler
         run: |
@@ -1085,12 +1085,12 @@ jobs:
           if readelf -d "$library" | grep -E 'NEEDED.*(libcrypto|libssl)'; then exit 1; fi
           mkdir -p "$GITHUB_WORKSPACE/desktop-compose/native/${{ matrix.resources }}"
           cp "$library" "$GITHUB_WORKSPACE/desktop-compose/native/${{ matrix.resources }}/"
-          echo "NEKOKEM_BRIDGE=$GITHUB_WORKSPACE/desktop-compose/native/${{ matrix.resources }}/libnekokem_native.so" >> "$GITHUB_ENV"
       - name: Render every page of both styles with the real bridge
         working-directory: desktop-compose
         run: |
           set -Eeuo pipefail
-          ./gradlew --no-daemon screenshots
+          # Named for this run only; the packaged launcher finds the library in its own resources.
+          ./gradlew --no-daemon screenshots "-Pnekokem.bridge=$PWD/native/${{ matrix.resources }}/libnekokem_native.so"
           test "$(find build/screenshots -name '*.png' -size +0 | wc -l)" -ge 24
       - name: Build the Debian and RPM packages
         working-directory: desktop-compose
@@ -1204,13 +1204,13 @@ jobs:
           $resources = Join-Path $env:GITHUB_WORKSPACE 'desktop-compose\native\windows-x64'
           New-Item -ItemType Directory -Force $resources | Out-Null
           Copy-Item $library $resources
-          "NEKOKEM_BRIDGE=$resources\nekokem_native.dll" >> $env:GITHUB_ENV
       - name: Render every page of both styles with the real bridge
         shell: pwsh
         working-directory: desktop-compose
         run: |
           $ErrorActionPreference = 'Stop'
-          .\gradlew.bat --no-daemon screenshots
+          # Named for this run only; the packaged launcher finds the library in its own resources.
+          .\gradlew.bat --no-daemon screenshots "-Pnekokem.bridge=$PWD\native\windows-x64\nekokem_native.dll"
           if ($LASTEXITCODE -ne 0) { throw 'Screenshots failed' }
           $count = (Get-ChildItem build\screenshots -Filter *.png | Where-Object Length -gt 0).Count
           if ($count -lt 24) { throw "Only $count screenshots" }
@@ -1243,6 +1243,20 @@ jobs:
             $process.Refresh()
             if ($process.HasExited) {
               Get-Content "$out\startup-out.log", "$out\startup-err.log"
+              # The launcher has no console; the same start through java.exe shows the reason.
+              $cfg = Get-Content "$app\app\NekoKEM.cfg"
+              $cfg
+              $base = (Resolve-Path "$app\app").Path
+              $classpath = ($cfg | Where-Object { $_ -like 'app.classpath=*' } | ForEach-Object { $_.Substring(14).Replace('$APPDIR', $base) }) -join ';'
+              $options = @($cfg | Where-Object { $_ -like 'java-options=*' } | ForEach-Object { $_.Substring(13).Replace('$APPDIR', $base) })
+              $main = ($cfg | Where-Object { $_ -like 'app.mainclass=*' }).Substring(14)
+              $java = "$app\runtime\bin\java.exe"
+              if (!(Test-Path $java)) { $java = "$env:JAVA_HOME\bin\java.exe" }
+              $arguments = $options + @('-cp', $classpath, $main)
+              $direct = Start-Process -FilePath $java -ArgumentList $arguments -PassThru -NoNewWindow `
+                -RedirectStandardOutput "$out\direct-out.log" -RedirectStandardError "$out\direct-err.log"
+              if (!$direct.WaitForExit(30000)) { Stop-Process -Id $direct.Id }
+              Get-Content "$out\direct-out.log", "$out\direct-err.log"
               throw "The application exited with $($process.ExitCode)"
             }
             if ($process.MainWindowTitle -eq 'NekoKEM') { $shown = $true; break }
