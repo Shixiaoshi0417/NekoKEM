@@ -75,12 +75,13 @@ compose.desktop {
 }
 
 // Only Latin fonts ship with the app, so the Linux packages depend on Noto Sans CJK
-// for Chinese, Japanese and Korean text. Fedora and openSUSE name the package differently.
+// for Chinese, Japanese and Korean text (Fedora and openSUSE name the package differently)
+// and on curl, which the update check runs.
 // The value goes into jpackage's argument file as written, hence its own quotes.
 tasks.withType<org.jetbrains.compose.desktop.application.tasks.AbstractJPackageTask>().configureEach {
     when (name) {
-        "packageDeb" -> freeArgs.addAll("--linux-package-deps", "fonts-noto-cjk")
-        "packageRpm" -> freeArgs.addAll("--linux-package-deps", "\"(google-noto-sans-cjk-fonts or google-noto-sans-cjk-vf-fonts or noto-sans-cjk-fonts)\"")
+        "packageDeb" -> freeArgs.addAll("--linux-package-deps", "\"fonts-noto-cjk, curl\"")
+        "packageRpm" -> freeArgs.addAll("--linux-package-deps", "\"(google-noto-sans-cjk-fonts or google-noto-sans-cjk-vf-fonts or noto-sans-cjk-fonts), curl\"")
     }
 }
 

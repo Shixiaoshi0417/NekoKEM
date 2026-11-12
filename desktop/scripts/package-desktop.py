@@ -121,12 +121,14 @@ def linux(arguments):
             f'The Debian package is not version {current}')
     require(output_of('dpkg-deb', '-f', arguments.deb, 'Architecture').strip() == deb_arch,
             'The Debian package is for another architecture')
-    require('fonts-noto-cjk' in output_of('dpkg-deb', '-f', arguments.deb, 'Depends'),
-            'The Debian package does not depend on the CJK fonts')
+    depends = output_of('dpkg-deb', '-f', arguments.deb, 'Depends')
+    require('fonts-noto-cjk' in depends and re.search(r'\bcurl\b', depends) is not None,
+            'The Debian package does not depend on the CJK fonts and curl')
     require(output_of('rpm', '-qp', '--queryformat', '%{VERSION} %{ARCH}', arguments.rpm) == f'{current} {arch}',
             f'The RPM package is not version {current} for {arch}')
-    require('noto-sans-cjk' in output_of('rpm', '-qp', '--requires', arguments.rpm),
-            'The RPM package does not depend on the CJK fonts')
+    requires = output_of('rpm', '-qp', '--requires', arguments.rpm)
+    require('noto-sans-cjk' in requires and re.search(r'(?m)^curl\b', requires) is not None,
+            'The RPM package does not depend on the CJK fonts and curl')
 
     output = new_directory(arguments.output)
     base = f'NekoKEM-linux-{arch}-GUI'

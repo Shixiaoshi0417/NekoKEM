@@ -1,23 +1,27 @@
 # NekoKEM Desktop GUI
 
-Rust + Tauri 2 + Vue 3 + TypeScript desktop frontend, released as v5.0.0 for
-Windows 10/11 x64. It requires the Microsoft Edge WebView2 Runtime. Open
-`nekokem-gui.exe` to
-use the app; it opens a native window without a terminal. Keep the included
-Microsoft `WebView2Loader.dll` beside the EXE. The portable package
-contains no Android signing material and is not Authenticode signed.
+The desktop apps call the same C17 Core as the CLI through one small native
+library, the bridge (`desktop/bridge`): Rust around the Core, the contact store
+and the update check.
 
-v5.0.0 also provides native Apple Silicon `aarch64-apple-darwin`
-`NekoKEM.app` ZIP and DMG packages using macOS system WKWebView. macOS 11.0 is
-the deployment target; native CI runs on macOS 15. Intel Macs are not supported.
-本版 Release 提供 M 系列 Mac 原生应用 ZIP 与 DMG，部署目标为 macOS 11.0，
-实际验证基线为 macOS 15。
+| System | App | Packages |
+|---|---|---|
+| Windows 10/11 x64 | Compose Multiplatform (`desktop-compose`) | `NekoKEM-Windows-GUI.msi` installer, `NekoKEM-Windows-GUI.zip` folder |
+| Linux x86_64 and ARM64 | Compose Multiplatform (`desktop-compose`) | `NekoKEM-linux-<arch>-GUI.deb`, `.rpm`, `.tar.gz` folder |
+| macOS, Apple Silicon | SwiftUI (`macos/gui`) | `NekoKEM-macos-arm64-GUI.zip`, `.dmg` |
 
-Linux GUI targets native x86_64 and ARM64 with system GTK3, WebKitGTK 4.1 and
-glibc 2.39 or newer. Ubuntu 24.04 is the build/test baseline; native Fedora 44
-containers install and launch the RPM in CI. v5.0.0 provides `.deb`, `.rpm` and
-portable `.tar.gz` packages for each architecture. Linux 原生 GUI 提供两种架构
-的 DEB、RPM 和便携包；实际验证基线为 Ubuntu 24.04 与 Fedora 44 的 X11 会话。
+The Windows and Linux app offers the Android app's two styles, MIUIX (the
+default) and Material 3 Expressive, chosen in Settings. It carries its own Java
+runtime; nothing else needs installing. The macOS app is native SwiftUI in
+Apple's Liquid Glass design on macOS 26 and runs on macOS 13 or newer; Intel
+Macs are not supported. No package is signed by a developer certificate (the
+macOS app is ad-hoc signed), so verify downloads with `SHA256SUMS.txt`.
+
+Windows 与 Linux 使用 Compose Multiplatform 应用，提供 MIUIX（默认）和 Material 3
+Expressive 两种风格，自带 Java 运行时；macOS 使用原生 SwiftUI 应用，在 macOS 26
+上采用液态玻璃设计，最低支持 macOS 13，仅支持 Apple Silicon。所有桌面应用通过同一个
+桥接库调用与 CLI 相同的 C17 Core。安装包均未使用开发者证书签名，请用
+`SHA256SUMS.txt` 校验。
 
 ## Features / 功能
 
@@ -30,28 +34,24 @@ portable `.tar.gz` packages for each architecture. Linux 原生 GUI 提供两种
   existing output on failure/cancellation through the same Core checks as the CLI.
 - Automatically detect Windows/macOS display language or Linux locale and share the CLI's private saved
   language preference. English, simplified/traditional Chinese, Japanese and Korean.
-- Both CLI and GUI retain the square Android artwork; the outer white area of
-  the Windows EXE icons is transparent. Android keeps its existing square white
-  background; README uses a separate rounded display image.
-  macOS ICNS contains the same transparent square PNG artwork without editing pixels.
-  Linux uses the existing transparent square PNGs directly.
-  CLI/GUI 图案保持方形，EXE、macOS 与 Linux 图标外部白色区域透明；README 圆角只用于展示。
-- Short entry transitions, navigation/button feedback and animated progress follow
-  the system's reduced-motion preference. Windows high-contrast mode is supported.
-  页面过渡、按钮反馈与进度动画遵循系统减少动态效果设置，支持 Windows 高对比度。
-- Navigate operations with Up/Down, Home/End; validation focuses the affected field.
-  Native file dialogs lock editing until they return. 支持键盘导航与错误字段定位。
 - Save recipients' public keys with notes and choose one when encrypting; see
   [Public-key contacts](#public-key-contacts--公钥通讯录). 公钥通讯录与加密时选择已保存公钥。
 
-Production cryptography stays in the shared C17 Core. Rust validates requests,
-serializes Core calls, owns zeroizing secrets, bridges progress/cancellation and
-creates protected temporary pasted-key files through the platform backend. The Vue
-frontend has no filesystem, shell, arbitrary process or remote-content access.
+Production cryptography stays in the shared C17 Core. The bridge validates
+requests, serializes Core calls, owns zeroizing secrets, bridges progress and
+cancellation and creates protected temporary pasted-key files. The apps reach
+files only through it.
+
+Text on Windows and Linux is set in MiSans (MIUIX style), Google Sans Flex
+(Material style) and JetBrains Mono (fingerprints); the fonts ship with the app
+(`desktop-compose/src/main/resources/fonts`). Chinese, Japanese and Korean text
+uses the system's fonts; the Linux packages depend on Noto Sans CJK.
+界面文字使用内置的 MiSans、Google Sans Flex 和 JetBrains Mono；中日韩文字使用系统字体，
+Linux 安装包依赖 Noto Sans CJK。
 
 ## Public-key contacts / 公钥通讯录
 
-The **Public-key contacts** page (fifth navigation item) saves recipients' public keys.
+The **Contacts** page saves recipients' public keys.
 Choose a key file or paste both `PUBLIC KEY` blocks, optionally add a note of up to 512
 characters, then save. Notes can be edited and entries deleted after an inline
 confirmation. On **Encrypt file**, choose **Saved contact** and explicitly select a
@@ -106,7 +106,7 @@ cannot open v4 files.
 不加密任何内容，错误提示指出该联系人并只取消选择它。重复联系人、超过 64 位接收方以及与其他公钥来源混用
 都会被拒绝。解密会自动识别 v3 与 v4；NekoKEM v3.3.2 及更早版本无法打开 v4 文件。
 
-公钥通讯录位于第五个导航项：可从文件或粘贴内容保存接收方公钥，备注可选且最多 512 个字符，
+公钥通讯录位于“联系人”页：可从文件或粘贴内容保存接收方公钥，备注可选且最多 512 个字符，
 支持编辑备注和确认后删除。加密页选择“通讯录”后必须显式选择条目，条目上的“用于加密”会打开
 加密页并选中它；列表和选择框显示完整指纹，列表同时显示来源文件名，加密完成后显示接收方及其指纹。记录保存在语言设置旁的私有
 `contacts` 目录，每个指纹一条 JSON 记录，仅包含 Core 规范化导出的公钥、指纹、来源文件名和备注，
@@ -120,162 +120,77 @@ link/permission/hard-link rejection, private directory locations, recipient roun
 rejection of combined key sources, missing/damaged contacts without output, cancellation
 and snapshot cleanup, plus several-contact NKEM v4 files that each selected recipient
 decrypts, refused duplicates and recipient limits, and failures that name the contact.
-Frontend tests cover five-language layouts at the default and minimum window sizes, note
-editing, delete confirmation, explicit single and multiple selection, the 64-recipient cap,
-failure handling and scrubbing of pasted key text.
 
-## Windows build
+## Install / 安装
 
-Use Node 24, Rust with `x86_64-pc-windows-gnu` target, MSYS2 UCRT64 GCC and the
-pinned static OpenSSL 4.1.0 prefix created by `windows/scripts/build-windows-cli.sh`.
-The GNU target intentionally matches the existing tested C17 Windows ABI/toolchain.
+Windows: run the MSI, then open **NekoKEM** from the Start menu. Or unpack the
+ZIP anywhere and open `NekoKEM\NekoKEM.exe`.
 
-```powershell
-rustup toolchain install stable-x86_64-pc-windows-gnu
-rustup default stable-x86_64-pc-windows-gnu
-$env:Path = 'C:\msys64\ucrt64\bin;' + $env:Path
-$env:CC_x86_64_pc_windows_gnu = 'C:\msys64\ucrt64\bin\gcc.exe'
-$env:NEKOKEM_OPENSSL_PREFIX = 'C:\path\to\pinned-windows-openssl'
-cd desktop
-npm ci --ignore-scripts
-npm test
-npm run build
-npm run tauri -- build --target x86_64-pc-windows-gnu --no-bundle
-```
-
-Checked-in lockfiles are used with npm ci and Cargo --locked. The GNU host
-toolchain also makes Tauri's resource compiler produce GNU-compatible COFF icons
-and the application manifest. CI verifies the loader DLL against the checksum-locked
-WebView2 SDK crate and its Microsoft Authenticode signature before packaging.
-
-## Apple Silicon macOS build
-
-Build on an arm64 Mac with Xcode Command Line Tools, Node 24 and Rust stable.
-The macOS helper builds the pinned static OpenSSL 4.1.0 prefix and checks its
-official source checksum, compiler/SDK manifest, runtime and Argon2 thread support.
-GUI builds reuse that prefix. OpenSSL and project licenses enter the app before
-its resources are sealed and signed.
+Linux: use the package matching `uname -m` (`x86_64` is Debian `amd64`,
+`aarch64` is Debian `arm64`), then open **NekoKEM** from the application menu.
+The app installs to `/opt/nekokem`. Ubuntu 24.04 (glibc 2.39) is the build and
+test baseline; CI also installs the RPM on Fedora 44.
 
 ```sh
-bash macos/scripts/build-openssl.sh /absolute/path/to/pinned-macos-openssl
-export NEKOKEM_OPENSSL_PREFIX=/absolute/path/to/pinned-macos-openssl
-export MACOSX_DEPLOYMENT_TARGET=11.0
-rustup target add aarch64-apple-darwin
-cd desktop
-npm ci --ignore-scripts
-npm test
-npm run build
-TAURI_CONFIG="$(cat src-tauri/tauri.macos.conf.json)" cargo test --locked --target aarch64-apple-darwin --manifest-path src-tauri/Cargo.toml --bin nekokem-gui -- --test-threads=1
-npm run tauri -- build --target aarch64-apple-darwin --config src-tauri/tauri.macos.conf.json --bundles app,dmg -- --locked
-cd ..
-python3 desktop/scripts/package-macos-gui.py \
-  --bundle-dir desktop/src-tauri/target/aarch64-apple-darwin/release/bundle \
-  --output macos/dist \
-  --version 5.0.0 --source-sha "$(git rev-parse HEAD)"
+sudo apt install ./NekoKEM-linux-x86_64-GUI.deb     # Debian, Ubuntu
+sudo dnf install ./NekoKEM-linux-x86_64-GUI.rpm     # Fedora
+tar -xzf NekoKEM-linux-x86_64-GUI.tar.gz && NekoKEM-linux-x86_64-GUI/bin/NekoKEM
 ```
 
-`NekoKEM-macos-arm64-GUI.zip` contains `NekoKEM.app`, documentation, licenses,
-source/build metadata and checksums. `NekoKEM-macos-arm64-GUI.dmg` contains the
-same app. Packaging verifies thin arm64 Mach-O, PIE, minimum OS, system-only
-dynamic imports, embedded ICNS and licenses, then mounts the DMG read-only to
-confirm the same sealed app is present. CI runs real Rust/Core roundtrips,
-wrong-password, pasted-key and cancellation tests, POSIX permission/link checks,
-and visible native window startup with local WKWebView page-load and real
-settings IPC evidence. Windows retains its original GNU/UCRT64 toolchain,
-loader and PE checks.
+The DEB and RPM depend on Noto Sans CJK and curl; with the folder archive,
+install a Chinese, Japanese and Korean font and curl yourself.
 
-The macOS app has an **ad-hoc signature with hardened runtime**. This is not an
-Apple Developer ID signature, and the application is not notarized. The signature
-checks sealed resources without establishing a trusted developer identity.
-Gatekeeper may block downloaded packages. This project does not disable or bypass
-macOS security protections. Mac 应用使用 ad-hoc 签名与 hardened runtime，未经
-Developer ID 签名或 Apple 公证，系统可能阻止启动；这不是可信开发者身份认证。
+macOS: open the DMG or unpack the ZIP and move `NekoKEM.app` to Applications.
+The app is ad-hoc signed, so the first launch needs **Open** from the context
+menu, or System Settings, Privacy & Security, Open Anyway.
 
-## Linux installation and build / Linux 安装与构建
+## Build / 构建
 
-Use the package matching `uname -m`: `x86_64` (Debian `amd64`) or `aarch64`
-(Debian `arm64`). On Ubuntu 24.04 install the `.deb` with apt, then open **NekoKEM**
-from the application menu; no terminal is required. Its installed desktop entry
-uses the existing square app icon.
+Every platform first builds the pinned static OpenSSL 4.1.0, then the bridge
+against it, then the app. CI (`.github/workflows/ci.yml`) and the Release
+workflow run exactly these steps.
+
+Linux, on the native architecture, with Rust, JDK 25, `fakeroot` and `rpm`:
 
 ```sh
-sudo apt install ./NekoKEM-linux-x86_64-GUI.deb
-```
-
-Fedora 44 uses the native `.rpm`; DNF resolves GTK3/WebKitGTK 4.1 and the
-versioned glibc requirement from declared library capabilities. Change the
-architecture to `aarch64` for ARM64. Fedora 可安装 RPM，并从应用菜单启动。
-
-```sh
-sudo dnf install ./NekoKEM-linux-x86_64-GUI.rpm
-```
-
-The RPM is built directly by Tauri, with the same application, desktop entry,
-icons and licenses as the DEB; only Tauri's three-byte bundle-format marker
-differs in the executable. It is not developer GPG signed. Verify package
-SHA-256 hashes; these and RPM digests check integrity, not developer identity.
-Only generated public resource copies have their permissions normalized to
-`0644`; private keys and configuration retain `0600`/`0700`.
-
-For the portable archive, install system dependencies, extract it and run the
-launcher. Change `x86_64` to `aarch64` for ARM64. A graphical session is required;
-the archive does not bundle GTK, WebKit or glibc; the supported baseline requires
-glibc 2.39 or newer.
-Keep the package tree together. Linux 便携包需要系统图形运行库；安装包可从系统应用菜单打开。
-
-```sh
-sudo apt install libgtk-3-0t64 libwebkit2gtk-4.1-0 libayatana-appindicator3-1
-tar -xzf NekoKEM-linux-x86_64-GUI.tar.gz
-./NekoKEM-linux-x86_64-GUI/NekoKEM-GUI.sh
-```
-
-Automatic language detection uses the CLI's saved preference, then `LC_ALL`,
-`LC_MESSAGES`, `LANG`, falling back to English. Five languages and **Follow system**
-are available. CLI and GUI share `$XDG_CONFIG_HOME/nekokem/language`, or
-`$HOME/.config/nekokem/language` when XDG is unset/relative, with mode `0600`.
-The GUI renders UTF-8 even when launched with a `C/POSIX` terminal locale; the
-CLI's ASCII/non-UTF-8 terminal fallback continues to apply to terminal output.
-GUI 在 C/POSIX 环境下仍可手动选择五种语言。
-
-Build on the native Ubuntu 24.04 architecture with Node 24 and Rust stable:
-
-```sh
-sudo apt install build-essential curl perl pkg-config libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev patchelf rpm
 architecture=$(uname -m)
-bash desktop/scripts/build-linux-openssl.sh "$architecture" /absolute/path/to/pinned-linux-gui-openssl
 export NEKOKEM_OPENSSL_PREFIX=/absolute/path/to/pinned-linux-gui-openssl
-rustup target add "$architecture-unknown-linux-gnu"
-cd desktop
-npm ci --ignore-scripts
-npm test
-npm run build
-TAURI_CONFIG="$(cat src-tauri/tauri.linux.conf.json)" cargo test --locked --target "$architecture-unknown-linux-gnu" --manifest-path src-tauri/Cargo.toml --bin nekokem-gui -- --test-threads=1
-bash scripts/build-linux-gui.sh "$architecture"
-cd ..
-python3 desktop/scripts/package-linux-gui.py \
-  --bundle-dir "desktop/src-tauri/target/$architecture-unknown-linux-gnu/release/bundle" \
-  --output linux/gui-dist --arch "$architecture" \
-  --openssl-prefix "$NEKOKEM_OPENSSL_PREFIX" --source-sha "$(git rev-parse HEAD)"
+bash desktop/scripts/build-linux-openssl.sh "$architecture" "$NEKOKEM_OPENSSL_PREFIX"
+(cd desktop/bridge && cargo test --locked --release -- --test-threads=1 && cargo build --locked --release)
+resources=linux-x64    # linux-arm64 on aarch64
+python3 desktop/scripts/package-desktop.py resources \
+  --library desktop/bridge/target/release/libnekokem_native.so \
+  --openssl-license "$NEKOKEM_OPENSSL_PREFIX/LICENSE.txt" \
+  --target "desktop-compose/native/$resources"
+(cd desktop-compose && ./gradlew createDistributable packageDeb packageRpm)
 ```
 
-The helper verifies the official OpenSSL 4.1.0 source checksum and builds native
-static PIC libcrypto with assembly/threads, Fortify and stack protection. Core and
-OpenSSL symbols stay hidden from WebKit's dynamic TLS libraries. Packaging checks
-ELF PIE/full RELRO/nonexecutable stack, dependencies, licenses, the unchanged PNG
-icon, desktop entry and hashes of all three packages. RPM validation checks
-native architecture, digests, every ELF dependency, installed file permissions,
-absence of installation scripts and matching DEB resources. CI installs the
-`.deb` on Ubuntu 24.04 and the `.rpm` through DNF in native Fedora 44 containers,
-then runs actual X11 WebKit startup/normal-close checks as ordinary users on both
-architectures with sandboxing retained. Rust/Core and private-file tests remain.
-Wayland and distributions other than this Ubuntu/Fedora baseline have not
-received equivalent native testing.
-The build wrapper declares the matching dynamic-loader capability in each native
-RPM: `ld-linux-x86-64.so.2` on x86_64 and `ld-linux-aarch64.so.1` on ARM64.
-Core's thread-local state can make this a direct ELF dependency; packaging still
-checks that every actual ELF dependency is declared.
-构建脚本为两种架构的 RPM 分别声明对应的动态加载器依赖，打包仍检查全部实际 ELF 依赖。
-See [Linux GUI security boundaries](LINUX-SECURITY.md).
+Windows, with MSYS2 UCRT64 GCC, Rust for `x86_64-pc-windows-gnu` and JDK 25:
+build OpenSSL and the CLI with `windows/scripts/build-windows-cli.sh`, build the
+bridge with `cargo build --locked --release --target x86_64-pc-windows-gnu`,
+copy `nekokem_native.dll` and the licences into `desktop-compose/native/windows-x64`
+with `package-desktop.py resources`, then run
+`gradlew.bat createDistributable packageMsi` in `desktop-compose`.
+
+macOS, on an Apple Silicon Mac with the macOS 26 SDK and Rust:
+
+```sh
+export NEKOKEM_OPENSSL_PREFIX=/absolute/path/to/pinned-macos-openssl
+bash macos/scripts/build-openssl.sh "$NEKOKEM_OPENSSL_PREFIX"
+bash macos/gui/scripts/build-app.sh /absolute/path/to/output
+```
+
+`desktop/scripts/package-desktop.py linux|windows|macos` then checks the built
+app (the bridge's hardening and licences, versions, package dependencies, the
+macOS signature) and writes the public packages with `gui-SHA256SUMS.txt` and
+their build records.
+
+While developing the Compose app, `./gradlew run -Pnekokem.bridge=<library>`
+starts it and `./gradlew screenshots -Pnekokem.bridge=<library>` renders every
+page of both styles in light and dark into `build/screenshots`. The macOS app
+does the same with `NekoKEM --screenshots <directory>`.
+
+Interface text for all three systems is `desktop-compose/src/main/resources/strings.json`.
 
 ## Security boundary / 安全边界
 
@@ -311,7 +226,7 @@ For decryption, re-enter the password after the first attempt clears it.
 解密首次尝试清除口令后，需要重新输入。
 
 On Windows, the same local fixed-NTFS, owner/ACL, ancestor pinning, regular-file, hard-link,
-reparse-point, device/pipe/ADS and atomic-output checks apply. The frontend cannot
+reparse-point, device/pipe/ADS and atomic-output checks apply. The app cannot
 relax them. Existing outputs must already satisfy the CLI's private output policy.
 Passwords retain the CLI's 1024 UTF-8 byte limit. Private PEM text is obscured in the paste field. Pasted keys are capped at 1 MiB
 and 16384 UTF-8 bytes per line, matching the CLI, and remain subject to Core format/component/tail validation.
@@ -323,27 +238,21 @@ See the [macOS filesystem design](../macos/SECURITY-DESIGN.md) for platform limi
 
 On Linux, the same Core POSIX file checks and descriptor-relative pasted-key
 staging apply, requiring private `0700` directories, `0600` regular files, current
-ownership, one hard link and no symlinks. Pasted-key staging uses the same runtime/private-home directory policy as macOS, unbuffered writes and no `fsync`; durable output commits retain Core sync checks. System WebKitGTK
-keeps its sandbox enabled and uses a temporary data store. See the
-[Linux GUI design](LINUX-SECURITY.md) for limits and the native test baseline.
+ownership, one hard link and no symlinks. Pasted-key staging uses the same runtime/private-home directory policy as macOS, unbuffered writes and no `fsync`; durable output commits retain Core sync checks.
 
-Only bundled local content runs with incognito enabled in the main WebView
-(Windows InPrivate/macOS nonpersistent WKWebView/Linux ephemeral WebKitGTK storage). CSP blocks remote scripts,
-frames and network requests. Only native open/save dialogs and the listed Rust
-commands are exposed. The update check is a backend command: it runs the system curl
+The apps load no remote content and contain no web view. The update check is a
+bridge command: it runs the system curl
 (`System32\curl.exe` on Windows, `/usr/bin/curl` elsewhere; the Linux packages depend on curl)
 with `--disable --proto =https`, a 15-second limit and a 1 MiB response limit against the fixed
 GitHub latest-release address, and the release page opens through the system URL handler with an
-address built from the version number. The frontend cannot choose either address. The capability list grants only event listen/unlisten and open/save dialogs, rather than `core:default`. Navigation permits only the platform local app origin (`tauri://localhost`, or Windows `http://tauri.localhost`); HTTPS and new windows are refused. Debug builds additionally allow the local Vite origin. Developer tools are unavailable in the production release.
-粘贴密钥优先暂存于符合当前所有者及 `0700` 要求的 `$XDG_RUNTIME_DIR`，macOS 上其次使用不进入 Time Machine 的用户临时目录，否则使用私有 `$HOME/.nekokem-tmp`；临时写入关闭 stdio 缓冲，不做持久化同步。权限仅包含事件监听/取消监听与打开/保存对话框；导航只允许对应平台的本地应用来源，拒绝 HTTPS 与新窗口。检查更新由后端调用系统 curl（Windows `System32\curl.exe`，其他平台 `/usr/bin/curl`，Linux 包依赖 curl），以 `--disable --proto =https`、15 秒超时和 1 MiB 上限请求固定的 GitHub 最新版本地址；发布页由系统 URL 处理程序打开，地址按版本号拼出，前端无法指定任何地址。
+address built from the version number. The app cannot choose either address.
+粘贴密钥优先暂存于符合当前所有者及 `0700` 要求的 `$XDG_RUNTIME_DIR`，macOS 上其次使用不进入 Time Machine 的用户临时目录，否则使用私有 `$HOME/.nekokem-tmp`；临时写入关闭 stdio 缓冲，不做持久化同步。应用不加载任何远程内容，也不含网页视图。检查更新由桥接库调用系统 curl（Windows `System32\curl.exe`，其他平台 `/usr/bin/curl`，Linux 包依赖 curl），以 `--disable --proto =https`、15 秒超时和 1 MiB 上限请求固定的 GitHub 最新版本地址；发布页由系统 URL 处理程序打开，地址按版本号拼出，应用无法指定任何地址。
 
-Passwords/key text are not stored in browser storage, configuration or logs. Both
-form references and live secret input values clear before native invocation,
-operation switches and unmounting. Switching away from pasted keys discards their
-text. Entry animations do not retain outgoing forms. Rust uses Zeroizing<String> and Core borrows
-password bytes only for the call. JavaScript/IPC can make temporary string copies;
-reliable zeroization of the WebView heap is not guaranteed. This extra UI/IPC
-boundary has not received an independent professional audit.
+Passwords and key text are never written to settings or logs. The bridge keeps
+them in zeroizing memory and Core borrows the password bytes only for the call.
+The Compose app writes each request into native memory that is zeroed before it
+is freed. Text fields of the interface toolkits can still hold temporary copies
+that the app cannot reliably erase.
 
 Closing the window, or quitting the macOS application from its menu or ⌘Q,
 during an operation requests cancellation and waits for Core
@@ -356,12 +265,12 @@ Windows power-loss equivalence to POSIX directory fsync is unverified. Pair comm
 are not cross-file crash atomic. Process death may leave protected plaintext/key
 staging files; deletion is not physical erasure. See the
 [Windows filesystem design](../windows/SECURITY-DESIGN.md) for the complete backend
-boundary. The v5.0.0 Windows application is not Authenticode signed. Verifying the bundled
-Microsoft SDK loader does not sign the application. This experimental project has
+boundary. The Windows application and installer are not Authenticode signed. This experimental project has
 not undergone an independent professional security audit and must not be used to
 protect important or sensitive data.
 
-Download `NekoKEM-Windows-GUI.zip` from the [v5.0.0 Release](https://github.com/Shixiaoshi0417/NekoKEM/releases/tag/v5.0.0)
-and verify it against the release's top-level `SHA256SUMS.txt`. See the complete
-[bilingual release notes](../release/v5.0.0.md). v5.0.0 提供便携 GUI 压缩包；下载后先校验
-SHA-256，再解压并保留 EXE 旁的 Microsoft SDK loader。
+Download the packages from the [Releases page](https://github.com/Shixiaoshi0417/NekoKEM/releases)
+and verify them against the release's top-level `SHA256SUMS.txt`. Releases up to
+v5.0.0 carry the earlier Tauri desktop app; the apps described here ship from
+the release after it. 请从 Releases 页面下载并先校验 SHA-256。v5.0.0 及更早版本的桌面端是旧的
+Tauri 应用，本文描述的应用从其后的版本开始提供。
