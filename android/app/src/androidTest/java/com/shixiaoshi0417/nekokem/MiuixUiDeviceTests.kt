@@ -145,10 +145,9 @@ internal fun runMiuixUiTests(instrumentation: Instrumentation, screenshotPrefix:
         return true
     }
     fun click(value: String) {
-        // Keep the node the wait found; a recomposition can drop it before a second lookup.
-        var found: AccessibilityNodeInfo? = null
-        await("missing $value") { reveal(value); found = exact(value); found != null }
-        check(tap(checkNotNull(found))) { "$value refused the click" }
+        // A recomposition after the scroll can drop the node between the lookup and the press,
+        // so a refused press looks the row up again.
+        await("missing or unpressable $value") { reveal(value); exact(value)?.let(::tap) == true }
     }
     // A dropdown that closes again before its menu is read is opened once more.
     fun choose(title: String, option: String) {
