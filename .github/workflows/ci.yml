@@ -949,6 +949,82 @@ jobs:
           retention-days: 14
           if-no-files-found: error
 
+  macos-swiftui:
+    name: Apple Silicon SwiftUI app build, bridge tests and screenshots
+    runs-on: macos-15
+    timeout-minutes: 60
+    env:
+      MACOSX_DEPLOYMENT_TARGET: '11.0'
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: dtolnay/rust-toolchain@7e38f4b43b4db5c8dd498af069a4f6196df1d067 # master
+        with:
+          toolchain: 1.99.0
+          targets: aarch64-apple-darwin
+      - name: Identify native Apple compiler and SDK
+        id: compiler
+        run: |
+          set -Eeuo pipefail
+          test "$(uname -m)" = arm64
+          identity=$({ xcrun clang --version; xcrun --sdk macosx --show-sdk-version; } | shasum -a 256 | cut -d ' ' -f 1)
+          echo "identity=$identity" >> "$GITHUB_OUTPUT"
+          echo "NEKOKEM_OPENSSL_PREFIX=$RUNNER_TEMP/macos-openssl" >> "$GITHUB_ENV"
+          xcrun swift --version
+      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: ${{ runner.temp }}/macos-openssl
+          key: macos-arm64-openssl-4.1.0-${{ steps.compiler.outputs.identity }}-${{ hashFiles('macos/scripts/build-openssl.sh') }}
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
+        with:
+          workspaces: desktop/bridge
+          cache-on-failure: true
+      - name: Build the pinned native static dependency
+        run: bash macos/scripts/build-openssl.sh "$NEKOKEM_OPENSSL_PREFIX"
+      - name: Run the bridge tests against the C17 Core
+        working-directory: desktop/bridge
+        run: cargo test --locked --release --target aarch64-apple-darwin -- --test-threads=1
+      - name: Build the ad-hoc signed SwiftUI application
+        run: bash macos/gui/scripts/build-app.sh "$RUNNER_TEMP/macos-swiftui"
+      - name: Verify the app starts and reads its settings through the bridge
+        run: |
+          set -Eeuo pipefail
+          log="$RUNNER_TEMP/macos-swiftui/startup.log"
+          NEKOKEM_NATIVE_STARTUP_EVIDENCE=1 "$RUNNER_TEMP/macos-swiftui/NekoKEM.app/Contents/MacOS/NekoKEM" > "$log" 2>&1 &
+          pid=$!
+          for attempt in $(seq 1 150); do
+            if grep -Fq 'NekoKEM native startup: settings-ready' "$log"; then break; fi
+            kill -0 "$pid" || { cat "$log"; exit 1; }
+            sleep 0.2
+          done
+          cat "$log"
+          grep -Fq 'NekoKEM native startup: settings-ready' "$log"
+          kill -TERM "$pid"
+          wait "$pid" || true
+      - name: Capture every page of the app
+        run: |
+          set -Eeuo pipefail
+          screens="$RUNNER_TEMP/macos-swiftui/screens"
+          "$RUNNER_TEMP/macos-swiftui/NekoKEM.app/Contents/MacOS/NekoKEM" --screenshots "$screens" &
+          pid=$!
+          for attempt in $(seq 1 120); do
+            kill -0 "$pid" 2>/dev/null || break
+            sleep 1
+          done
+          if kill -0 "$pid" 2>/dev/null; then kill -KILL "$pid"; echo 'The screenshot run did not finish' >&2; exit 1; fi
+          for name in encrypt encrypt-recipients encrypt-warning decrypt keys fingerprint contacts settings; do
+            test -s "$screens/$name.png"
+          done
+          ditto -c -k --keepParent "$RUNNER_TEMP/macos-swiftui/NekoKEM.app" "$RUNNER_TEMP/macos-swiftui/NekoKEM-macos-arm64-SwiftUI.zip"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        if: always()
+        with:
+          name: macos-swiftui-app
+          path: |
+            ${{ runner.temp }}/macos-swiftui/screens
+            ${{ runner.temp }}/macos-swiftui/startup.log
+            ${{ runner.temp }}/macos-swiftui/NekoKEM-macos-arm64-SwiftUI.zip
+          retention-days: 14
+
   linux-gui:
     name: Linux ${{ matrix.arch }} GUI build and native tests
     runs-on: ${{ matrix.runner }}

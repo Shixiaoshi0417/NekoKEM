@@ -134,3 +134,6 @@ Desktop.ini
 /desktop/src-tauri/gen/
 /desktop/test-results/
 /desktop/playwright-report/
+
+# SwiftUI macOS app build products
+macos/gui/.build/

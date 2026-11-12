@@ -1,7 +1,7 @@
 [package]
 name = "nekokem-native"
 version = "5.0.0"
-description = "NekoKEM desktop bridge: the desktop backend and the unchanged C17 Core as one DLL"
+description = "NekoKEM desktop bridge: the desktop backend and the unchanged C17 Core as one library"
 authors = ["Shixiaoshi0417"]
 edition = "2021"
 license = "Apache-2.0"
@@ -9,7 +9,8 @@ publish = false
 
 [lib]
 name = "nekokem_native"
-crate-type = ["cdylib", "rlib"]
+# The static library is what the SwiftUI macOS app links.
+crate-type = ["cdylib", "staticlib", "rlib"]
 
 [build-dependencies]
 cc = "1"
