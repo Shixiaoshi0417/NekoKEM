@@ -712,6 +712,7 @@ final class AppState: ObservableObject {
             screen = .fingerprint; keyPath = ownPublicKey
             result = Outcome(fingerprint: contacts[1].fingerprint); result?.canVerify = true
         case "contacts": screen = .contacts
+        case "contacts-selected": screen = .contacts; selected = ["alice", "bob"]
         default: screen = .settings
         }
     }

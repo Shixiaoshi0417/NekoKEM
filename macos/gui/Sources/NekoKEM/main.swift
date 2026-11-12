@@ -14,11 +14,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.mainMenu = menu()
         window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 960, height: 680),
-                          styleMask: [.titled, .closable, .miniaturizable, .resizable], backing: .buffered, defer: false)
+                          styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView], backing: .buffered, defer: false)
         window.title = "NekoKEM"
         window.isReleasedWhenClosed = false
         window.delegate = self
-        window.contentView = NSHostingView(rootView: ContentView(state: state))
+        // The sidebar runs the full height of the window and the toolbar sits over the content,
+        // which is where the system draws Liquid Glass on macOS 26.
+        window.toolbarStyle = .unified
+        let host = NSHostingView(rootView: ContentView(state: state))
+        if #available(macOS 14.0, *) { host.sceneBridgingOptions = [.title, .toolbars] }
+        window.contentView = host
         window.center()
         window.setFrameAutosaveName("NekoKEM")
         window.makeKeyAndOrderFront(nil)
@@ -76,7 +81,7 @@ final class Screenshots {
     private let state: AppState
     private let window: NSWindow
     private let directory: URL
-    private var names = ["encrypt", "encrypt-recipients", "encrypt-warning", "decrypt", "keys", "fingerprint", "contacts", "settings"]
+    private var names = ["encrypt", "encrypt-recipients", "encrypt-warning", "decrypt", "keys", "fingerprint", "contacts", "contacts-selected", "settings"]
 
     init(state: AppState, window: NSWindow, directory: String) {
         self.state = state; self.window = window; self.directory = URL(fileURLWithPath: directory, isDirectory: true)

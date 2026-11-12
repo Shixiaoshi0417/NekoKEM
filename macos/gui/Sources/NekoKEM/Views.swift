@@ -4,16 +4,38 @@ import SwiftUI
 
 private let danger = Color(nsColor: .systemRed)
 
+// Liquid Glass belongs to the navigation layer: the system draws the sidebar
+// and the toolbar as glass on macOS 26, and the page content stays plain
+// underneath. Earlier systems show the same structure with their own materials.
+extension View {
+    /// The one main action of a page or sheet.
+    @ViewBuilder func primaryAction() -> some View {
+        if #available(macOS 26.0, *) { buttonStyle(.glassProminent) } else { buttonStyle(.borderedProminent) }
+    }
+    /// Controls that float over content.
+    @ViewBuilder func floatingGlass() -> some View {
+        if #available(macOS 26.0, *) { glassEffect(.regular, in: .capsule) } else { background(.regularMaterial, in: Capsule()) }
+    }
+}
+
 struct ContentView: View {
     @ObservedObject var state: AppState
 
     var body: some View {
-        HStack(spacing: 0) {
-            Sidebar(state: state).frame(width: 200)
-            Divider()
+        NavigationSplitView {
+            List(selection: Binding<Destination?>(get: { state.destination }, set: { if let item = $0, state.editable { state.open(item) } })) {
+                ForEach(Destination.allCases) { item in
+                    Label(state.t(item.key), systemImage: item.symbol).tag(item)
+                }
+            }
+            .navigationSplitViewColumnWidth(min: 180, ideal: 200, max: 280)
+            .safeAreaInset(edge: .bottom) {
+                Text("NekoKEM v" + state.version).font(.caption).foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading).padding(.horizontal, 16).padding(.bottom, 12)
+            }
+        } detail: {
             ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
-                    Text(state.t(state.destination.key)).font(.title2.weight(.semibold))
                     switch state.destination {
                     case .files: FilesPage(state: state)
                     case .keys: KeysPage(state: state)
@@ -25,7 +47,19 @@ struct ContentView: View {
                 .padding(24)
                 .frame(maxWidth: .infinity)
             }
-            .background(Color(nsColor: .windowBackgroundColor))
+            .safeAreaInset(edge: .bottom) {
+                if state.destination == .contacts && !state.selected.isEmpty { SelectionBar(state: state).padding(.bottom, 16) }
+            }
+            .navigationTitle(state.t(state.destination.key))
+            .toolbar {
+                ToolbarItem(placement: .principal) {
+                    switch state.destination {
+                    case .files: FilesModePicker(state: state)
+                    case .keys: KeysModePicker(state: state)
+                    default: EmptyView()
+                    }
+                }
+            }
         }
         .frame(minWidth: 820, minHeight: 600)
         .sheet(isPresented: Binding(get: { state.choosingRecipients }, set: { if !$0 { state.closeRecipients() } })) { RecipientSheet(state: state) }
@@ -34,51 +68,46 @@ struct ContentView: View {
     }
 }
 
-private struct Sidebar: View {
+/// Encrypt or decrypt, in the toolbar.
+private struct FilesModePicker: View {
     @ObservedObject var state: AppState
-
     var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            HStack(spacing: 8) {
-                if let icon = NSApp.applicationIconImage { Image(nsImage: icon).resizable().frame(width: 32, height: 32) }
-                VStack(alignment: .leading, spacing: 0) {
-                    Text("NekoKEM").font(.headline)
-                    Text("v" + state.version).font(.caption).foregroundStyle(.secondary)
-                }
-            }
-            .padding(.horizontal, 8).padding(.bottom, 12)
-            ForEach(Destination.allCases) { item in
-                let current = state.destination == item
-                Button { state.open(item) } label: {
-                    HStack(spacing: 8) {
-                        Image(systemName: item.symbol).frame(width: 20)
-                        Text(state.t(item.key))
-                        Spacer()
-                    }
-                    .padding(.horizontal, 8).padding(.vertical, 6)
-                    .background(current ? Color.accentColor : Color.clear, in: RoundedRectangle(cornerRadius: 6))
-                    .foregroundStyle(current ? Color.white : Color.primary)
-                    .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-                .disabled(!state.editable && !current)
-            }
-            Spacer()
+        Picker("", selection: Binding(get: { state.screen == .decrypt ? 1 : 0 }, set: { state.switchTo($0 == 1 ? .decrypt : .encrypt) })) {
+            Text(state.t("encrypt")).tag(0)
+            Text(state.t("decrypt")).tag(1)
         }
-        .padding(.horizontal, 8).padding(.top, 16)
-        .background(VisualEffect())
+        .pickerStyle(.segmented).labelsHidden().disabled(!state.editable)
     }
 }
 
-/// The sidebar material of native macOS apps.
-private struct VisualEffect: NSViewRepresentable {
-    func makeNSView(context: Context) -> NSVisualEffectView {
-        let view = NSVisualEffectView()
-        view.material = .sidebar
-        view.blendingMode = .behindWindow
-        return view
+/// The four key tasks, in the toolbar.
+private struct KeysModePicker: View {
+    @ObservedObject var state: AppState
+    var body: some View {
+        Picker("", selection: Binding(get: { state.screen == .fingerprint ? 3 : state.keyMode.rawValue }, set: { choice in
+            if choice == 3 { state.switchTo(.fingerprint) } else { state.switchTo(.keygen); state.changeKeyMode(KeyMode(rawValue: choice) ?? .generate) }
+        })) {
+            Text(state.t("keygen")).tag(0)
+            Text(state.t("upgradeKey")).tag(1)
+            Text(state.t("exportLegacy")).tag(2)
+            Text(state.t("fingerprintTab")).tag(3)
+        }
+        .pickerStyle(.segmented).labelsHidden().disabled(!state.editable)
     }
-    func updateNSView(_ view: NSVisualEffectView, context: Context) {}
+}
+
+/// Floats over the contact list while contacts are ticked.
+private struct SelectionBar: View {
+    @ObservedObject var state: AppState
+    var body: some View {
+        HStack(spacing: 12) {
+            Text(state.t("selectedCount").replacingOccurrences(of: "{count}", with: String(state.selected.count)))
+            Button(state.t("clearSelection")) { state.clearSelection() }.buttonStyle(.link).disabled(state.locked)
+            Button(state.t("encryptSelected")) { state.encryptSelected() }.primaryAction().disabled(state.locked)
+        }
+        .padding(.leading, 16).padding(.trailing, 8).padding(.vertical, 8)
+        .floatingGlass()
+    }
 }
 
 /// A titled group box, as in System Settings.
@@ -88,8 +117,7 @@ private struct Card<Content: View>: View {
         VStack(alignment: .leading, spacing: 12) { content }
             .padding(16)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 10))
-            .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(Color(nsColor: .separatorColor)))
+            .background(Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
     }
 }
 
@@ -163,7 +191,7 @@ private struct Notice<Content: View>: View {
         }
         .padding(12)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color(nsColor: .quaternaryLabelColor), in: RoundedRectangle(cornerRadius: 6))
+        .background(Color(nsColor: .quaternaryLabelColor), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
     }
 }
 
@@ -189,11 +217,6 @@ private struct FilesPage: View {
     @ObservedObject var state: AppState
 
     var body: some View {
-        Picker("", selection: Binding(get: { state.screen == .decrypt ? 1 : 0 }, set: { state.switchTo($0 == 1 ? .decrypt : .encrypt) })) {
-            Text(state.t("encrypt")).tag(0)
-            Text(state.t("decrypt")).tag(1)
-        }
-        .pickerStyle(.segmented).labelsHidden().disabled(!state.editable)
         Card {
             if state.screen == .decrypt { PathInput(state: state, field: .keyPath, label: state.t("myPrivateKey")) }
             PathInput(state: state, field: .input, label: state.t("input"))
@@ -209,15 +232,6 @@ private struct KeysPage: View {
     @ObservedObject var state: AppState
 
     var body: some View {
-        Picker("", selection: Binding(get: { state.screen == .fingerprint ? 3 : state.keyMode.rawValue }, set: { choice in
-            if choice == 3 { state.switchTo(.fingerprint) } else { state.switchTo(.keygen); state.changeKeyMode(KeyMode(rawValue: choice) ?? .generate) }
-        })) {
-            Text(state.t("keygen")).tag(0)
-            Text(state.t("upgradeKey")).tag(1)
-            Text(state.t("exportLegacy")).tag(2)
-            Text(state.t("fingerprintTab")).tag(3)
-        }
-        .pickerStyle(.segmented).labelsHidden().disabled(!state.editable)
         Card {
             if state.screen == .fingerprint {
                 Picker("", selection: Binding(get: { state.pasteKey ? 1 : 0 }, set: { state.changeSource(paste: $0 == 1) })) {
@@ -272,7 +286,7 @@ private struct OperationFooter: View {
             if state.busy && (state.screen == .encrypt || state.screen == .decrypt) {
                 Button(state.t("cancel")) { state.cancel() }.disabled(state.cancelling)
             }
-            Button(actionTitle) { state.submit() }.keyboardShortcut(.defaultAction).disabled(!state.editable)
+            Button(actionTitle) { state.submit() }.primaryAction().keyboardShortcut(.defaultAction).disabled(!state.editable)
         }
     }
 
@@ -382,14 +396,6 @@ private struct ContactsPage: View {
                 if state.result != nil { Notice(title: state.t(state.successMessage)) {} }
             }
             if state.contactsLoaded && state.contactsFailure == nil && state.contacts.isEmpty { Text(state.t("noContacts")).foregroundStyle(.secondary) }
-            if !state.selected.isEmpty {
-                HStack {
-                    Text(state.t("selectedCount").replacingOccurrences(of: "{count}", with: String(state.selected.count)))
-                    Spacer()
-                    Button(state.t("clearSelection")) { state.clearSelection() }.buttonStyle(.link).disabled(state.locked)
-                    Button(state.t("encryptSelected")) { state.encryptSelected() }.disabled(state.locked)
-                }
-            }
             ForEach(Array(state.contacts.enumerated()), id: \.element.id) { index, contact in
                 if index > 0 { Divider() }
                 ContactRow(state: state, contact: contact)
@@ -449,7 +455,7 @@ private struct ContactRow: View {
             }
         }
         .padding(.vertical, 4)
-        .background(state.highlighted == contact.id ? Color.accentColor.opacity(0.12) : Color.clear, in: RoundedRectangle(cornerRadius: 6))
+        .background(state.highlighted == contact.id ? Color.accentColor.opacity(0.12) : Color.clear, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
     }
 }
 
@@ -592,7 +598,7 @@ private struct RecipientSheet: View {
                 Spacer()
                 Button(state.t("cancel"), role: .cancel) { state.closeRecipients() }.keyboardShortcut(.cancelAction)
                 if warned { Button(state.t("encryptAnyway"), role: .destructive) { state.submit() }.disabled(!state.editable) }
-                else { Button(state.t("encrypt")) { state.submit() }.keyboardShortcut(.defaultAction).disabled(!state.editable || state.recipientCount == 0) }
+                else { Button(state.t("encrypt")) { state.submit() }.primaryAction().keyboardShortcut(.defaultAction).disabled(!state.editable || state.recipientCount == 0) }
             }
         }
         .padding(20)
@@ -629,7 +635,7 @@ private struct QrSheet: View {
             // Black on white in both themes, so cameras read it.
             if let image = FingerprintQr.image(fingerprint) {
                 Image(nsImage: image).interpolation(.none).resizable().frame(width: 220, height: 220)
-                    .padding(12).background(Color.white, in: RoundedRectangle(cornerRadius: 10))
+                    .padding(12).background(Color.white, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
             }
             VStack(spacing: 2) {
                 Text(String(fingerprint.prefix(47)))
@@ -654,7 +660,7 @@ private struct UpdateSheet: View {
                 Button(state.t("ignoreVersion")) { state.ignoreRelease() }.buttonStyle(.link)
                 Spacer()
                 Button(state.t("later"), role: .cancel) { state.availableVersion = "" }.keyboardShortcut(.cancelAction)
-                Button(state.t("openRelease")) { state.openRelease() }.keyboardShortcut(.defaultAction)
+                Button(state.t("openRelease")) { state.openRelease() }.primaryAction().keyboardShortcut(.defaultAction)
             }
         }
         .padding(20)

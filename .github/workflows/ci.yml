@@ -951,7 +951,8 @@ jobs:
 
   macos-swiftui:
     name: Apple Silicon SwiftUI app build, bridge tests and screenshots
-    runs-on: macos-15
+    # macOS 26 and its SDK: the app adopts Liquid Glass there.
+    runs-on: macos-26
     timeout-minutes: 60
     env:
       MACOSX_DEPLOYMENT_TARGET: '11.0'
@@ -973,7 +974,7 @@ jobs:
       - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
         with:
           path: ${{ runner.temp }}/macos-openssl
-          key: macos-arm64-openssl-4.1.0-${{ steps.compiler.outputs.identity }}-${{ hashFiles('macos/scripts/build-openssl.sh') }}
+          key: macos26-arm64-openssl-4.1.0-${{ steps.compiler.outputs.identity }}-${{ hashFiles('macos/scripts/build-openssl.sh') }}
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
         with:
           workspaces: desktop/bridge
@@ -1011,7 +1012,7 @@ jobs:
             sleep 1
           done
           if kill -0 "$pid" 2>/dev/null; then kill -KILL "$pid"; echo 'The screenshot run did not finish' >&2; exit 1; fi
-          for name in encrypt encrypt-recipients encrypt-warning decrypt keys fingerprint contacts settings; do
+          for name in encrypt encrypt-recipients encrypt-warning decrypt keys fingerprint contacts contacts-selected settings; do
             test -s "$screens/$name.png"
           done
           ditto -c -k --keepParent "$RUNNER_TEMP/macos-swiftui/NekoKEM.app" "$RUNNER_TEMP/macos-swiftui/NekoKEM-macos-arm64-SwiftUI.zip"
