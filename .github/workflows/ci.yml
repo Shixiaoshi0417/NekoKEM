@@ -496,6 +496,9 @@ jobs:
             performance-baseline-source/windows/scripts/build-windows-cli.sh
           cp core/tests/openssl_version_tests.c \
             performance-baseline-source/core/tests/openssl_version_tests.c
+          # The recipe runs its checks from the tree it builds.
+          mkdir -p performance-baseline-source/windows/tests
+          cp windows/tests/check_icon.py performance-baseline-source/windows/tests/check_icon.py
           bash performance-baseline-source/windows/scripts/build-windows-cli.sh \
             "$(cygpath -u "$RUNNER_TEMP")/windows-cli-performance-baseline"
       - uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
