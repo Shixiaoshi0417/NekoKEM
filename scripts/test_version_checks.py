@@ -23,6 +23,9 @@ class VersionChecks(unittest.TestCase):
             'linux/scripts/build-linux-release.sh', 'macos/scripts/build-macos-cli.sh',
             'windows/scripts/build-windows-cli.sh', 'desktop/scripts/package-linux-gui.py',
             '.github/workflows/ci.yml', '.github/workflows/release.yml',
+            'desktop/bridge/Cargo.toml', 'desktop/bridge/Cargo.lock', 'desktop-compose/build.gradle.kts',
+            'desktop-compose/src/main/kotlin/com/shixiaoshi0417/nekokem/desktop/AppState.kt',
+            'macos/gui/Sources/NekoKEM/AppState.swift',
             'android/app/build.gradle.kts', '.github/scripts/verify_android_release.py',
             *(f'android/app/src/main/res/{directory}/strings.xml' for directory in
               ('values', 'values-zh-rCN', 'values-zh-rTW', 'values-ja', 'values-ko')),
@@ -37,6 +40,8 @@ class VersionChecks(unittest.TestCase):
     def test_application_signing_package_and_workflow_drift_is_detected(self):
         version = check_versions.check_versions(self.root)[0]
         for relative in ('desktop/src-tauri/Cargo.toml', 'linux/src/main.c',
+                         'desktop/bridge/Cargo.toml', 'desktop-compose/build.gradle.kts',
+                         'macos/gui/Sources/NekoKEM/AppState.swift',
                          '.github/scripts/verify_android_release.py',
                          '.github/workflows/release.yml',
                          'android/app/src/main/res/values-ko/strings.xml'):

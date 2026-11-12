@@ -92,6 +92,19 @@ def check_versions(root):
         errors.append(f'{windows_script}: version metadata must use a checked executable --version response')
     matches('desktop/scripts/package-linux-gui.py', r"'neko-kem',\s*'([^']+)'")
     matches('desktop/scripts/package-linux-gui.py', r"field\('Version'\) == '([^']+)'")
+    # The Compose (Windows, Linux) and SwiftUI (macOS) apps and the bridge they share.
+    same('desktop/bridge/Cargo.toml',
+         tomllib.loads((root / 'desktop/bridge/Cargo.toml').read_text())['package']['version'])
+    bridge = [package for package in tomllib.loads((root / 'desktop/bridge/Cargo.lock').read_text())['package']
+              if package['name'] == 'nekokem-native']
+    if len(bridge) != 1:
+        errors.append('desktop/bridge/Cargo.lock: expected one bridge package')
+    else:
+        same('desktop/bridge/Cargo.lock bridge', bridge[0]['version'])
+    matches('desktop-compose/build.gradle.kts', r'(?m)^version = "([^"]+)"')
+    matches('desktop-compose/src/main/kotlin/com/shixiaoshi0417/nekokem/desktop/AppState.kt',
+            r'var version by mutableStateOf\("([^"]+)"\)')
+    matches('macos/gui/Sources/NekoKEM/AppState.swift', r'var version = "([^"]+)"')
     for workflow in ('ci.yml', 'release.yml'):
         matches(f'.github/workflows/{workflow}', r'--version ([0-9]+\.[0-9]+\.[0-9]+)')
         relative = f'.github/workflows/{workflow}'

@@ -1104,6 +1104,8 @@ jobs:
       - name: Install the package and verify the installed window opens
         run: |
           set -Eeuo pipefail
+          # The package registers its menu entry; a runner image has no desktop menu directories.
+          sudo mkdir -p /usr/share/applications /usr/share/desktop-directories
           sudo apt-get install --yes "$RUNNER_TEMP/compose-linux/NekoKEM-linux-${{ matrix.arch }}-Compose.deb"
           test -s /opt/nekokem/lib/app/resources/libnekokem_native.so
           export XDG_CONFIG_HOME="$RUNNER_TEMP/compose-linux/config"
@@ -1231,12 +1233,18 @@ jobs:
           if (!(Test-Path "$app\app\resources\nekokem_native.dll")) { throw 'The bridge is not in the package' }
           $env:LOCALAPPDATA = Join-Path $env:RUNNER_TEMP 'compose-windows-config'
           New-Item -ItemType Directory -Force $env:LOCALAPPDATA | Out-Null
-          $process = Start-Process -FilePath "$app\NekoKEM.exe" -PassThru
+          $out = Join-Path $env:RUNNER_TEMP 'compose-windows'
+          $env:JPACKAGE_DEBUG = 'true'
+          $process = Start-Process -FilePath "$app\NekoKEM.exe" -PassThru `
+            -RedirectStandardOutput "$out\startup-out.log" -RedirectStandardError "$out\startup-err.log"
           $shown = $false
           foreach ($attempt in 1..60) {
             Start-Sleep -Seconds 1
             $process.Refresh()
-            if ($process.HasExited) { throw "The application exited with $($process.ExitCode)" }
+            if ($process.HasExited) {
+              Get-Content "$out\startup-out.log", "$out\startup-err.log"
+              throw "The application exited with $($process.ExitCode)"
+            }
             if ($process.MainWindowTitle -eq 'NekoKEM') { $shown = $true; break }
           }
           if (!$shown) { throw 'The window did not open' }
