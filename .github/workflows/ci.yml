@@ -1234,7 +1234,6 @@ jobs:
           $env:LOCALAPPDATA = Join-Path $env:RUNNER_TEMP 'compose-windows-config'
           New-Item -ItemType Directory -Force $env:LOCALAPPDATA | Out-Null
           $out = Join-Path $env:RUNNER_TEMP 'compose-windows'
-          $env:JPACKAGE_DEBUG = 'true'
           $process = Start-Process -FilePath "$app\NekoKEM.exe" -PassThru `
             -RedirectStandardOutput "$out\startup-out.log" -RedirectStandardError "$out\startup-err.log"
           $shown = $false
@@ -1259,10 +1258,15 @@ jobs:
               Get-Content "$out\direct-out.log", "$out\direct-err.log"
               throw "The application exited with $($process.ExitCode)"
             }
-            if ($process.MainWindowTitle -eq 'NekoKEM') { $shown = $true; break }
+            # The launcher may hand over to a child process, which then owns the window.
+            if (Get-Process -Name NekoKEM -ErrorAction SilentlyContinue | Where-Object MainWindowTitle -eq 'NekoKEM') { $shown = $true; break }
           }
-          if (!$shown) { throw 'The window did not open' }
-          Stop-Process -Id $process.Id
+          if (!$shown) {
+            Get-Process | Where-Object { $_.MainWindowTitle } | Format-Table Name, Id, MainWindowTitle
+            Get-Content "$out\startup-out.log", "$out\startup-err.log"
+            throw 'The window did not open'
+          }
+          Get-Process -Name NekoKEM -ErrorAction SilentlyContinue | Stop-Process
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         if: always()
         with:
