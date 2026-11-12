@@ -25,6 +25,9 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.snapshotFlow
+import androidx.compose.ui.platform.LocalWindowInfo
+import kotlinx.coroutines.flow.first
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
@@ -1750,7 +1753,10 @@ private fun NekoKEMRoute(
         }
     }
 
+    // The prompt opens a window of its own, so the check waits until the page's window is up and focused.
+    val windowInfo = LocalWindowInfo.current
     LaunchedEffect(Unit) {
+        snapshotFlow { windowInfo.isWindowFocused }.first { it }
         if (UpdateSettingsStore.due(updateSettings, System.currentTimeMillis())) checkForUpdate(manual = false)
     }
 
