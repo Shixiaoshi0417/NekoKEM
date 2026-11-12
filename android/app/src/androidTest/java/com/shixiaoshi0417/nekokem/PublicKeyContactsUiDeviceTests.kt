@@ -211,7 +211,9 @@ internal fun runPublicKeyContactsUiTests(instrumentation: Instrumentation) {
         finally { workflow.discardTemporaryPublicKey(key) }
         savedId = contact.id
         // A matching scan marks the contact; a stale fingerprint marks nothing.
-        check(contacts.setVerified(contact.id, "00" + contact.fingerprint.drop(2), true).code != NativeBridge.RESULT_SUCCESS)
+        // The first byte is changed to one it cannot already be.
+        val stale = (if (contact.fingerprint.startsWith("00")) "FF" else "00") + contact.fingerprint.drop(2)
+        check(contacts.setVerified(contact.id, stale, true).code != NativeBridge.RESULT_SUCCESS)
         check(!contacts.readState().contacts.single { it.id == contact.id }.verified)
         check(contacts.setVerified(contact.id, contact.fingerprint, true).code == NativeBridge.RESULT_SUCCESS)
         check(contacts.readState().contacts.single { it.id == contact.id }.verified)
