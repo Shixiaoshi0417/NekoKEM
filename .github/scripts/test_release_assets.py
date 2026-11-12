@@ -97,6 +97,9 @@ def build_release(root, version=VERSION, app_version=VERSION, windows_run=RUN, r
     windows_gui = root / 'NekoKEM-windows-gui-x86_64'
     windows_gui.mkdir()
     write_zip(windows_gui / 'NekoKEM-Windows-GUI.zip', {'build-metadata.json': windows_metadata})
+    (windows_gui / 'NekoKEM-Windows-GUI.msi').write_bytes(b'installer')
+    write_sums(windows_gui / 'gui-SHA256SUMS.txt',
+               [windows_gui / 'NekoKEM-Windows-GUI.zip', windows_gui / 'NekoKEM-Windows-GUI.msi'])
 
 
 class ReleaseAssetTests(unittest.TestCase):
@@ -188,6 +191,9 @@ class ReleaseAssetTests(unittest.TestCase):
                     write_zip(package, {'build-metadata.json': json.dumps(record)})
                     if directory == 'NekoKEM-windows-x86_64':
                         write_sums(package.parent / 'windows-SHA256SUMS.txt', [package])
+                    else:
+                        write_sums(package.parent / 'gui-SHA256SUMS.txt',
+                                   [package, package.with_suffix('.msi')])
                     with self.assertRaisesRegex(assets.ReleaseError, 'Windows.*not version'):
                         self.verify()
 

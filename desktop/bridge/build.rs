@@ -1,7 +1,6 @@
-// Compiles the same C17 Core and desktop adapter as desktop/src-tauri/build.rs,
-// with the same flags, for the Compose desktop app (Windows and Linux), which
-// loads it through Java's foreign function API, and for the SwiftUI macOS app,
-// which links the static library.
+// Compiles the C17 Core and the desktop adapter for the Compose desktop app
+// (Windows and Linux), which loads the library through Java's foreign function
+// API, and for the SwiftUI macOS app, which links the static library.
 use std::{env, path::PathBuf};
 fn main() {
     let target = env::var("TARGET").unwrap();
@@ -37,7 +36,7 @@ fn main() {
     build.file(root.join("linux/src/i18n.c")).file(root.join("desktop/native/bridge.c"));
     build.compile("nekokem_core");
     println!("cargo:rerun-if-env-changed=NEKOKEM_OPENSSL_PREFIX");
-    for path in ["core/include", "core/src", "linux/src", "desktop/native", "desktop/src-tauri/src"] {
+    for path in ["core/include", "core/src", "linux/src", "desktop/native"] {
         println!("cargo:rerun-if-changed={}", root.join(path).display());
     }
     println!("cargo:rustc-link-search=native={}", prefix.join("lib").display());

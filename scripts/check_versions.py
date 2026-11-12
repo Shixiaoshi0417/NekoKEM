@@ -2,7 +2,6 @@
 """Fail when application, package or Android signing versions drift apart."""
 import argparse
 import ast
-import json
 from pathlib import Path
 import re
 import tomllib
@@ -52,9 +51,10 @@ def windows_cli_version_is_derived(text):
 
 def check_versions(root):
     root = Path(root)
-    version = json.loads((root / 'desktop/package.json').read_text())['version']
+    # The bridge every desktop app shares names the application version.
+    version = tomllib.loads((root / 'desktop/bridge/Cargo.toml').read_text())['package']['version']
     if re.fullmatch(r'[0-9]+\.[0-9]+\.[0-9]+', version) is None:
-        raise ValueError('desktop/package.json has an invalid application version')
+        raise ValueError('desktop/bridge/Cargo.toml has an invalid application version')
     errors = []
 
     def same(label, actual, expected=version):
@@ -68,20 +68,6 @@ def check_versions(root):
         for actual in found:
             same(relative, actual, expected)
 
-    lock = json.loads((root / 'desktop/package-lock.json').read_text())
-    same('desktop/package-lock.json root', lock['version'])
-    same('desktop/package-lock.json application package', lock['packages']['']['version'])
-    same('desktop/src-tauri/tauri.conf.json',
-         json.loads((root / 'desktop/src-tauri/tauri.conf.json').read_text())['version'])
-    same('desktop/src-tauri/Cargo.toml',
-         tomllib.loads((root / 'desktop/src-tauri/Cargo.toml').read_text())['package']['version'])
-    packages = tomllib.loads((root / 'desktop/src-tauri/Cargo.lock').read_text())['package']
-    application = [package for package in packages if package['name'] == 'nekokem-gui']
-    if len(application) != 1:
-        errors.append('desktop/src-tauri/Cargo.lock: expected one application package')
-    else:
-        same('desktop/src-tauri/Cargo.lock application', application[0]['version'])
-
     matches('linux/src/main.c', r'#define NEKOKEM_CLI_VERSION "([^"]+)"')
     matches('linux/packaging/README', r'^NekoKEM Linux CLI ([^\n]+)')
     matches('linux/scripts/build-linux-release.sh', r'NekoKEM ([0-9]+\.[0-9]+\.[0-9]+)')
@@ -90,11 +76,7 @@ def check_versions(root):
     windows_script = 'windows/scripts/build-windows-cli.sh'
     if not windows_cli_version_is_derived((root / windows_script).read_text()):
         errors.append(f'{windows_script}: version metadata must use a checked executable --version response')
-    matches('desktop/scripts/package-linux-gui.py', r"'neko-kem',\s*'([^']+)'")
-    matches('desktop/scripts/package-linux-gui.py', r"field\('Version'\) == '([^']+)'")
-    # The Compose (Windows, Linux) and SwiftUI (macOS) apps and the bridge they share.
-    same('desktop/bridge/Cargo.toml',
-         tomllib.loads((root / 'desktop/bridge/Cargo.toml').read_text())['package']['version'])
+    # The Compose (Windows, Linux) and SwiftUI (macOS) apps.
     bridge = [package for package in tomllib.loads((root / 'desktop/bridge/Cargo.lock').read_text())['package']
               if package['name'] == 'nekokem-native']
     if len(bridge) != 1:
@@ -105,13 +87,13 @@ def check_versions(root):
     matches('desktop-compose/src/main/kotlin/com/shixiaoshi0417/nekokem/desktop/AppState.kt',
             r'var version by mutableStateOf\("([^"]+)"\)')
     matches('macos/gui/Sources/NekoKEM/AppState.swift', r'var version = "([^"]+)"')
+    # Workflows take the version from the bridge, never from a number of their own.
     for workflow in ('ci.yml', 'release.yml'):
-        matches(f'.github/workflows/{workflow}', r'--version ([0-9]+\.[0-9]+\.[0-9]+)')
         relative = f'.github/workflows/{workflow}'
-        source = (root / relative).read_text()
-        if ('$version = (Get-Content desktop/src-tauri/tauri.conf.json -Raw | ConvertFrom-Json).version'
-                not in source or 'version=$version; exe_sha256' not in source):
-            errors.append(f'{relative}: Windows GUI metadata must use the checked Tauri configuration version')
+        for actual in re.findall(r'--version ([0-9]+\.[0-9]+\.[0-9]+)', (root / relative).read_text()):
+            errors.append(f'{relative}: version {actual!r} must come from desktop/bridge/Cargo.toml')
+    if 'def version():' not in (root / 'desktop/scripts/package-desktop.py').read_text():
+        errors.append('desktop/scripts/package-desktop.py: packages must record the bridge version')
 
     matches('android/app/build.gradle.kts', r'versionName\s*=\s*"([^"]+)"')
     matches('.github/scripts/verify_android_release.py', r"(?m)^VERSION = '([^']+)'")

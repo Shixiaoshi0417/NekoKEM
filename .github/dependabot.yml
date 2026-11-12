@@ -31,8 +31,8 @@ updates:
       android-minor:
         update-types: [minor, patch]
 
-  - package-ecosystem: npm
-    directory: /desktop
+  - package-ecosystem: gradle
+    directory: /desktop-compose
     schedule:
       interval: weekly
       day: monday
@@ -40,11 +40,11 @@ updates:
     commit-message:
       prefix: "chore(desktop)"
     groups:
-      npm-minor:
+      compose-minor:
         update-types: [minor, patch]
 
   - package-ecosystem: cargo
-    directory: /desktop/src-tauri
+    directory: /desktop/bridge
     schedule:
       interval: weekly
       day: monday
@@ -54,8 +54,3 @@ updates:
     groups:
       cargo-minor:
         update-types: [minor, patch]
-    ignore:
-      # Tauri 2 pins the GTK 0.18 stack, so glib stays on 0.18.x until Tauri
-      # moves (RUSTSEC-2024-0429 is unreachable from NekoKEM).
-      - dependency-name: glib
-        update-types: [version-update:semver-major, version-update:semver-minor]

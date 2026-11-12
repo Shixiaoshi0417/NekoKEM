@@ -24,6 +24,7 @@ import zipfile
 PACKAGES = (
     'app-release.apk',
     'NekoKEM-Windows-GUI.zip',
+    'NekoKEM-Windows-GUI.msi',
     'NekoKEM-windows-x86_64.zip',
     'NekoKEM-macos-arm64.tar.gz',
     'NekoKEM-macos-arm64-GUI.zip',
@@ -45,6 +46,7 @@ INTERNAL_SUMS = (
     'NekoKEM-macos-arm64/macos-SHA256SUMS.txt',
     'NekoKEM-macos-arm64-gui/gui-SHA256SUMS.txt',
     'NekoKEM-windows-x86_64/windows-SHA256SUMS.txt',
+    'NekoKEM-windows-gui-x86_64/gui-SHA256SUMS.txt',
 )
 # The build-tools version publish.yml installs for the APK checks.
 BUILD_TOOLS = '35.0.0'
@@ -83,7 +85,7 @@ def sums_text(hashes):
 
 
 def collect(artifacts, output):
-    """Copy the 14 packages into a new directory and add SHA256SUMS.txt."""
+    """Copy the 15 packages into a new directory and add SHA256SUMS.txt."""
     output = Path(output)
     output.mkdir(parents=True)
     hashes = {}
@@ -227,7 +229,7 @@ def build_records(language, source, ci_run, release_run, hashes):
 
 
 def fill_notes(notes, source, ci_run, release_run, hashes):
-    require(sorted(hashes) == sorted(PACKAGES), 'Release notes must list the 14 packages')
+    require(sorted(hashes) == sorted(PACKAGES), 'Release notes must list the 15 packages')
     require(notes.count(ZH_PLACEHOLDER) == 1 and notes.count(EN_PLACEHOLDER) == 1,
             'Release notes need each build-record placeholder exactly once')
     notes = notes.replace(ZH_PLACEHOLDER, build_records('zh', source, ci_run, release_run, hashes))

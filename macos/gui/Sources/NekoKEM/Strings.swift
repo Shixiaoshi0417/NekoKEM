@@ -1,6 +1,6 @@
 import Foundation
 
-/// The shared desktop catalog (desktop/src/i18n.ts, exported to strings.json):
+/// The shared desktop catalog (desktop-compose/src/main/resources/strings.json):
 /// the app bundle carries a copy in Resources.
 enum Strings {
     /// Catalog order of each message's translations.

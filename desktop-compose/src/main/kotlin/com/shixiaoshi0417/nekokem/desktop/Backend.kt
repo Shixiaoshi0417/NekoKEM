@@ -10,7 +10,7 @@ import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.longOrNull
 
-/** The commands of desktop/src-tauri/src/main.rs, typed for Kotlin. */
+/** The bridge's commands (desktop/bridge/src/lib.rs), typed for Kotlin. */
 enum class Kind(val wire: String) { Keygen("keygen"), Encrypt("encrypt"), Decrypt("decrypt"), Fingerprint("fingerprint"), Upgrade("upgrade"), ExportLegacy("export-legacy") }
 
 /** One operation. The secret fields are read from the text fields when the request is written. */
@@ -38,7 +38,7 @@ sealed interface UpdateStatus {
     data object Failed : UpdateStatus
 }
 data class UpdatePreferences(val auto: Boolean = true, val lastCheck: Long = 0, val ignored: String = "")
-/** The choices the Tauri app keeps in WebView storage. Unsigned output is never saved. */
+/** The choices kept between launches. Unsigned output is never saved. */
 data class DesktopPreferences(val requireSignature: Boolean = false, val signKeyPath: String = "", val publicKeyPath: String = "", val sidebarOpen: Boolean = true, val style: String = "miuix")
 
 // Same limit as Core's NEKOKEM_MAX_RECIPIENTS for one NKEM v4/v5 file.

@@ -15,8 +15,7 @@ const MAX_RESPONSE_BYTES:usize=1<<20;
 #[serde(rename_all="camelCase",tag="status")]
 pub enum UpdateStatus{Available{version:String},Current,Failed}
 
-// The main WebView is incognito, so its storage ends with the App: the
-// choices live in a private file beside the contacts directory instead.
+// The update choices live in a private file beside the contacts directory.
 const PREFERENCES_FILE:&str="update.json";
 const MAX_PREFERENCES_BYTES:usize=4096;
 extern "C" {

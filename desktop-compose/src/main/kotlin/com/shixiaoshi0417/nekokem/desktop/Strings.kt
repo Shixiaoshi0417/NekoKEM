@@ -5,10 +5,7 @@ import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 
-/**
- * The Tauri app's catalog (desktop/src/i18n.ts), exported to strings.json by
- * `npm run strings:compose`; a desktop test keeps the two the same.
- */
+/** The desktop catalog (strings.json), shared with the SwiftUI macOS app. */
 object Strings {
     /** Catalog order of each message's translations. */
     val languages = listOf("en", "zh-CN", "zh-TW", "ja", "ko")

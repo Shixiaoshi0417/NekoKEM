@@ -1,4 +1,4 @@
-// Compose desktop choices that the Tauri frontend keeps in WebView storage. They
+// The desktop choices: interface style, language and similar settings. They
 // live in a private file beside update.json, written by Core's file layer.
 // Unsigned output is not among them: every launch starts by signing again.
 use serde::{Deserialize, Serialize};

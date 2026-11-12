@@ -5,7 +5,7 @@ import com.google.zxing.EncodeHintType
 import com.google.zxing.qrcode.QRCodeWriter
 import com.google.zxing.qrcode.decoder.ErrorCorrectionLevel
 
-// The fingerprint QR code shared with Android and the Tauri app: NEKOKEM-FP1:
+// The fingerprint QR code shared with the Android and macOS apps: NEKOKEM-FP1:
 // and the 64 hexadecimal digits, upper case, at level M. It carries only the
 // fingerprint, never a key.
 object FingerprintQr {

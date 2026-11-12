@@ -1,6 +1,6 @@
-//! The Compose desktop app's native layer: the Tauri desktop backend (Core
-//! calls, contact store, update check) unchanged, behind a small C ABI that
-//! Kotlin calls through Java's foreign function API.
+//! The desktop apps' native layer: the backend (Core calls, contact store,
+//! update check) behind a small C ABI. The Compose app (Windows, Linux) calls
+//! it through Java's foreign function API; the SwiftUI app (macOS) links it.
 //!
 //! Every call is one UTF-8 JSON request and one JSON reply, both owned by the
 //! caller's buffers until this layer returns. Secrets (passwords, pasted keys)
@@ -8,13 +8,10 @@
 //! so serde never buffers them in an intermediate copy.
 #![allow(clippy::missing_safety_doc)]
 #[allow(dead_code)]
-#[path = "../../src-tauri/src/core.rs"]
 mod core;
 #[allow(dead_code)]
-#[path = "../../src-tauri/src/contacts.rs"]
 mod contacts;
 #[allow(dead_code)]
-#[path = "../../src-tauri/src/update.rs"]
 mod update;
 mod preferences;
 
@@ -44,7 +41,7 @@ struct ContactImport {
     #[serde(default)] confirm_upgrade: String,
 }
 
-/// The same commands as the Tauri backend (desktop/src-tauri/src/main.rs).
+/// The commands the desktop apps send.
 #[derive(Deserialize)]
 #[serde(rename_all = "snake_case", deny_unknown_fields)]
 enum Call {
@@ -77,7 +74,7 @@ fn idle() -> Result<(), Failure> {
     if active.is_some() { Err(Failure::new("busy")) } else { Ok(()) }
 }
 
-// Contact changes hold the operation slot and Core, as in the Tauri backend.
+// Contact changes hold the operation slot and Core, so nothing else runs meanwhile.
 fn contact_job<T>(work: impl FnOnce(&Store) -> Result<T, Failure>) -> Result<T, Failure> {
     let backend = backend().clone();
     let job = backend.reserve_internal()?;

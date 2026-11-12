@@ -7,7 +7,7 @@ plugins {
     id("org.jetbrains.compose") version "1.12.2"
 }
 
-// Must match desktop/package.json; scripts/check_versions.py checks it.
+// Must match desktop/bridge/Cargo.toml; scripts/check_versions.py checks it.
 version = "5.0.0"
 
 // The bridge library (desktop/bridge) built for this platform, for tests and `run`.

@@ -18,7 +18,7 @@ import kotlinx.serialization.json.jsonObject
 
 /**
  * The desktop backend (desktop/bridge): Core, the contact store and the update
- * check, the same code as the Tauri app. Each call blocks, so run it off the UI
+ * check. Each call blocks, so run it off the UI
  * thread. Requests are written as UTF-8 into native memory that is zeroed
  * before it is freed; secrets never become Kotlin strings here.
  */

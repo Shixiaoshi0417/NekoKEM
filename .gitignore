@@ -127,13 +127,8 @@ Desktop.ini
 
 /linux/nekokem
 
-# Desktop frontend and Rust build products
-/desktop/node_modules/
-/desktop/dist/
-/desktop/src-tauri/target/
-/desktop/src-tauri/gen/
-/desktop/test-results/
-/desktop/playwright-report/
+# Desktop bridge build products
+/desktop/bridge/target/
 
 # SwiftUI macOS app build products
 macos/gui/.build/
