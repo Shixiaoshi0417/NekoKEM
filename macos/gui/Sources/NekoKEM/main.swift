@@ -123,8 +123,11 @@ final class Screenshots {
 
 let arguments = CommandLine.arguments
 let screenshots = arguments.firstIndex(of: "--screenshots").flatMap { $0 + 1 < arguments.count ? arguments[$0 + 1] : nil }
-let application = NSApplication.shared
-let delegate = AppDelegate(screenshots: screenshots)
-application.delegate = delegate
-application.setActivationPolicy(.regular)
-application.run()
+// Top-level code is not main-actor isolated in Swift 5 mode, although it always runs on the main thread.
+MainActor.assumeIsolated {
+    let application = NSApplication.shared
+    let delegate = AppDelegate(screenshots: screenshots)
+    application.delegate = delegate
+    application.setActivationPolicy(.regular)
+    withExtendedLifetime(delegate) { application.run() }
+}
