@@ -190,7 +190,13 @@ internal fun runMiuixUiTests(instrumentation: Instrumentation, screenshotPrefix:
         instrumentation.waitForIdleSync()
         // The automatic check runs at launch and offers the newer release.
         val updateTitle = string(R.string.update_available_title).replace("%1\$s", "99.0.0")
-        await("automatic update prompt") { exact(updateTitle) != null }
+        try {
+            await("automatic update prompt") { exact(updateTitle) != null }
+        } catch (failure: IllegalStateException) {
+            // Says whether the check ran at all when the prompt stays away.
+            val stored = UpdateSettingsStore.read(context)
+            error("${failure.message} (auto=${stored.autoCheck}, last=${stored.lastCheckMillis}, ignored=${stored.ignoredVersion})")
+        }
         capture("update-available")
         click(string(R.string.action_later))
         await("update prompt closed") { exact(updateTitle) == null }
