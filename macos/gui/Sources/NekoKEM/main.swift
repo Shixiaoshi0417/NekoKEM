@@ -21,6 +21,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         // The sidebar runs the full height of the window and the toolbar sits over the content,
         // which is where the system draws Liquid Glass on macOS 26.
         window.toolbarStyle = .unified
+        // The sidebar already names the page; the toolbar keeps its width for the mode picker.
+        window.titleVisibility = .hidden
         let host = NSHostingView(rootView: ContentView(state: state))
         if #available(macOS 14.0, *) { host.sceneBridgingOptions = [.title, .toolbars] }
         window.contentView = host
