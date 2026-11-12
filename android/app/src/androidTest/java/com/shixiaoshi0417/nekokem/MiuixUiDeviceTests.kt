@@ -351,8 +351,8 @@ internal fun runMiuixUiTests(instrumentation: Instrumentation, screenshotPrefix:
         }
         await("Material Files page again") { exact(string(R.string.navigation_files)) != null }
         clickNavigationTab(instrumentation, string(R.string.tab_settings))
-        click(string(R.string.settings_ui_style_title))
-        click(string(R.string.settings_ui_style_miuix))
+        // Looking for a menu entry that is not drawn yet would scroll the page and close the menu.
+        choose(string(R.string.settings_ui_style_title), string(R.string.settings_ui_style_miuix))
         await("MIUIX style stored") { UiStyles.selection(context) == UiStyle.MIUIX }
         await("MIUIX Files page") { exact(string(R.string.navigation_files)) != null }
     } finally {
