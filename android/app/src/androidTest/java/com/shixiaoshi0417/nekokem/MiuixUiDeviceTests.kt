@@ -136,14 +136,19 @@ internal fun runMiuixUiTests(instrumentation: Instrumentation, screenshotPrefix:
             }
         }
     }
+    // False when the node is gone or has no clickable parent by the time it is pressed.
+    fun tap(node: AccessibilityNodeInfo): Boolean {
+        var target = node
+        while (!target.isClickable) target = target.parent ?: return false
+        if (!target.performAction(AccessibilityNodeInfo.ACTION_CLICK)) return false
+        instrumentation.waitForIdleSync()
+        return true
+    }
     fun click(value: String) {
         // Keep the node the wait found; a recomposition can drop it before a second lookup.
         var found: AccessibilityNodeInfo? = null
         await("missing $value") { reveal(value); found = exact(value); found != null }
-        var target = checkNotNull(found)
-        while (!target.isClickable) target = checkNotNull(target.parent) { "$value is not clickable" }
-        check(target.performAction(AccessibilityNodeInfo.ACTION_CLICK))
-        instrumentation.waitForIdleSync()
+        check(tap(checkNotNull(found))) { "$value refused the click" }
     }
     // A dropdown that closes again before its menu is read is opened once more.
     fun choose(title: String, option: String) {
@@ -151,10 +156,9 @@ internal fun runMiuixUiTests(instrumentation: Instrumentation, screenshotPrefix:
             click(title)
             val deadline = SystemClock.uptimeMillis() + 3_000L
             while (SystemClock.uptimeMillis() < deadline) {
-                if (exact(option) != null) {
-                    click(option)
-                    return
-                }
+                // An entry still animating in can refuse the press; it is looked up again.
+                // No scrolling here: that would close the menu.
+                if (exact(option)?.let(::tap) == true) return
                 instrumentation.waitForIdleSync()
                 SystemClock.sleep(100)
             }
