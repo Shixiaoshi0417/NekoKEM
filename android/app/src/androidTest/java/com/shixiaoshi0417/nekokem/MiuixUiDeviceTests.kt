@@ -113,10 +113,24 @@ internal fun runMiuixUiTests(instrumentation: Instrumentation, screenshotPrefix:
         // On small screens the row can sit below the fold or under the floating bar.
         // A lazy list drops rows scrolled past, so look back up once the end is reached.
         for (action in listOf(AccessibilityNodeInfo.ACTION_SCROLL_FORWARD, AccessibilityNodeInfo.ACTION_SCROLL_BACKWARD)) {
+            var dragged = false
             repeat(6) {
                 if (exact(value) != null) return
-                val scrollable = find(automation.rootInActiveWindow) { it.isScrollable } ?: return
-                if (!scrollable.performAction(action)) return@repeat
+                // The page is not always the first scrollable node, so each one is asked in turn.
+                val scrollables = mutableListOf<AccessibilityNodeInfo>()
+                fun collect(node: AccessibilityNodeInfo?) {
+                    if (node == null) return
+                    if (node.isScrollable) scrollables += node
+                    for (index in 0 until node.childCount) collect(node.getChild(index))
+                }
+                collect(automation.rootInActiveWindow)
+                if (scrollables.none { it.performAction(action) }) {
+                    // A row scrolled out of view leaves the tree; one drag brings the page back when no node scrolls.
+                    if (dragged) return@repeat
+                    dragged = true
+                    scrollPage(action == AccessibilityNodeInfo.ACTION_SCROLL_FORWARD)
+                    return@repeat
+                }
                 instrumentation.waitForIdleSync()
                 SystemClock.sleep(300)
             }
