@@ -75,15 +75,15 @@ object PasswordManagerCredentials {
     }
 
     /**
-     * Asks for a saved password. [credentialId] limits the choice to entries
-     * for one key, plus an entry saved before the key had a public key; null
-     * offers every NekoKEM entry, for a key being imported.
+     * Asks for a saved password. [credentialIds] limits the choice to the
+     * names one key has had, plus an entry saved before the key had a public
+     * key; null offers every NekoKEM entry, for a key being imported.
      * The caller owns the returned bytes and must clear them.
      */
-    suspend fun fill(activity: Activity, credentialId: String?): FillResult {
+    suspend fun fill(activity: Activity, credentialIds: Set<String>?): FillResult {
         if (!isSupported) return FillResult.Unavailable
         val option = GetPasswordOption(
-            allowedUserIds = credentialId?.let { setOf(it, APP_ACCOUNT) } ?: emptySet(),
+            allowedUserIds = credentialIds?.plus(APP_ACCOUNT) ?: emptySet(),
         )
         return try {
             val response = CredentialManager.create(activity).getCredential(

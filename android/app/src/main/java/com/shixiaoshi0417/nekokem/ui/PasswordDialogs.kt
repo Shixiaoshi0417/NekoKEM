@@ -50,11 +50,11 @@ import top.yukonga.miuix.kmp.theme.MiuixTheme
 
 /**
  * What a password dialog offers around the system password manager.
- * [credentialId] picks the saved entry to fill (null offers every NekoKEM
- * entry); [offerSave] adds the "save after it succeeds" choice.
+ * [credentialIds] picks the saved entries to fill from (null offers every
+ * NekoKEM entry); [offerSave] adds the "save after it succeeds" choice.
  */
 data class PasswordManagerOptions(
-    val credentialId: String?,
+    val credentialIds: Set<String>?,
     val canFill: Boolean = true,
     val offerSave: Boolean = false,
 )
@@ -214,7 +214,7 @@ fun SinglePasswordDialog(
                             when (
                                 val result = PasswordManagerCredentials.fill(
                                     activity,
-                                    manager.credentialId,
+                                    manager.credentialIds,
                                 )
                             ) {
                                 is PasswordManagerCredentials.FillResult.Filled -> {

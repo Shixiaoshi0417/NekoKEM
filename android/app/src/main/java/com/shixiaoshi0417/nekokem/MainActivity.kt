@@ -1208,11 +1208,16 @@ private fun NekoKEMRoute(
         val passwordManager = when (prompt) {
             PasswordPrompt.SELECT_TEMPORARY_PRIVATE_KEY -> null
             PasswordPrompt.IMPORT_PRIVATE_KEY -> PasswordManagerOptions(
-                credentialId = null,
+                credentialIds = null,
                 offerSave = true,
             )
+            // Upgrading to an identity key changes the fingerprint and keeps
+            // the password, so an entry saved under the 4.x fingerprint still fits.
             else -> PasswordManagerOptions(
-                credentialId = PasswordManagerCredentials.credentialId(keyState.fingerprint),
+                credentialIds = setOfNotNull(
+                    PasswordManagerCredentials.credentialId(keyState.fingerprint),
+                    keyState.legacyFingerprint?.let(PasswordManagerCredentials::credentialId),
+                ),
                 offerSave = prompt == PasswordPrompt.CHECK_PRIVATE_KEY,
             )
         }

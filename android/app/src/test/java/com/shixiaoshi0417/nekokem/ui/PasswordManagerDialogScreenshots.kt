@@ -71,7 +71,7 @@ class PasswordManagerDialogScreenshots {
                 titleResource = R.string.decrypt_password_title,
                 messageResource = R.string.decrypt_password_message,
                 labelResource = R.string.decrypt_password_label,
-                passwordManager = PasswordManagerOptions(credentialId = "NekoKEM 0123 4567 89AB CDEF"),
+                passwordManager = PasswordManagerOptions(credentialIds = setOf("NekoKEM 0123 4567 89AB CDEF")),
                 onDismiss = {},
                 onConfirm = { password, _ -> password.fill(0) },
             )
@@ -85,7 +85,7 @@ class PasswordManagerDialogScreenshots {
                 titleResource = R.string.check_password_title,
                 messageResource = R.string.check_password_message,
                 passwordManager = PasswordManagerOptions(
-                    credentialId = "NekoKEM 0123 4567 89AB CDEF",
+                    credentialIds = setOf("NekoKEM 0123 4567 89AB CDEF"),
                     offerSave = true,
                 ),
                 onDismiss = {},
