@@ -8,7 +8,7 @@ plugins {
 }
 
 // Must match desktop/bridge/Cargo.toml; scripts/check_versions.py checks it.
-version = "5.0.0"
+version = "5.1.0"
 
 // The bridge library (desktop/bridge) built for this platform, for tests and `run`.
 val bridgeLibrary = providers.gradleProperty("nekokem.bridge").orElse(providers.environmentVariable("NEKOKEM_BRIDGE"))

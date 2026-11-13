@@ -1,6 +1,6 @@
 [package]
 name = "nekokem-native"
-version = "5.0.0"
+version = "5.1.0"
 description = "NekoKEM desktop bridge: the desktop backend and the unchanged C17 Core as one library"
 authors = ["Shixiaoshi0417"]
 edition = "2021"

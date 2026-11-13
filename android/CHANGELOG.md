@@ -1,5 +1,14 @@
 # Changelog
 
+## 5.1.0
+
+- 全平台 5.1.0，Core 5.0，Android versionCode 16；沿用既有签名，可覆盖升级。文件格式与密码参数不变。
+- 新增指纹二维码核对：密钥页显示只含指纹的二维码，联系人可扫码核对；一致时记为已核对，不一致时红字警告并清除标记。相机权限仅在扫码时申请，不依赖 Google Play 服务。
+- 联系人页改为小卡片，右侧显示核对标记；「核对指纹」单独一页。使用未核对的联系人加密前会弹出警告。
+- OpenSSL 升级为 4.1.0，构建工具链和依赖更新。桌面端改为 Compose 与 SwiftUI 应用。完整双语说明见 [v5.1.0](../release/v5.1.0.md)。
+
+Android 5.1.0 / versionCode 16 retains the existing signer; file formats and cryptographic parameters are unchanged. The Keys page shows a QR code holding only the fingerprint, and a contact is verified by scanning it: a match marks the contact verified, a mismatch shows a red warning and clears the mark. The camera permission is requested only when scanning, without Google Play services. Contacts are compact cards with the verification mark on the right, Verify fingerprint is a page of its own, and encrypting for an unverified contact asks first. OpenSSL moves to 4.1.0 and the build toolchain and dependencies are updated. The desktop apps are now Compose and SwiftUI apps. See the [bilingual notes](../release/v5.1.0.md).
+
 ## 5.0.0
 
 - 全平台 5.0.0，Core 5.0，Android versionCode 15；沿用既有签名，可覆盖升级。
