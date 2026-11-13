@@ -640,7 +640,7 @@ private fun LazyListScope.contactVerifyPage(contact: PublicKeyContact, state: Ne
             content = MiuixTheme.colorScheme.onPrimary,
             onScan = { actions.onScanContact(contact) },
             onToggleVerified = { actions.onSetContactVerified(contact, !contact.verified) },
-            modifier = Modifier.padding(12.dp),
+            modifier = Modifier.padding(horizontal = 40.dp, vertical = 12.dp),
         )
     }
 }
