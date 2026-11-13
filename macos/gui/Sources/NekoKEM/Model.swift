@@ -13,12 +13,15 @@ struct OperationRequest {
     var replace = false, overwrite = false
     var signKeyPath = ""
     var unsigned = false, requireSignature = false
+    // Encryption and decryption write to a private staged file; saveOutput moves it to the chosen place.
+    var stage = false
 
     var json: [String: Any] {
         ["id": id, "kind": kind.rawValue, "input": input, "output": output, "keyPath": keyPath,
          "publicPath": publicPath, "privatePath": privatePath, "password": password, "confirmation": confirmation,
          "keyText": keyText, "paste": paste, "contacts": contacts, "keyPaths": keyPaths, "replace": replace,
-         "overwrite": overwrite, "signKeyPath": signKeyPath, "unsigned": unsigned, "requireSignature": requireSignature]
+         "overwrite": overwrite, "signKeyPath": signKeyPath, "unsigned": unsigned, "requireSignature": requireSignature,
+         "stage": stage]
     }
 }
 
@@ -96,6 +99,8 @@ enum Backend {
     static func run(_ request: OperationRequest, progress: @escaping (UInt64, UInt64) -> Void) throws -> Outcome {
         Outcome(try Bridge.call(["run_operation": ["request": request.json]], progress: progress))
     }
+    static func saveOutput(_ destination: String) throws { _ = try Bridge.call(["save_output": ["destination": destination]]) }
+    static func discardOutput() throws { _ = try Bridge.call("discard_output") }
     static func contacts() throws -> (contacts: [Contact], unreadable: Int) {
         let fields = try Bridge.call("list_contacts") as? [String: Any] ?? [:]
         return ((fields["contacts"] as? [Any] ?? []).map(Contact.init), fields["unreadable"] as? Int ?? 0)

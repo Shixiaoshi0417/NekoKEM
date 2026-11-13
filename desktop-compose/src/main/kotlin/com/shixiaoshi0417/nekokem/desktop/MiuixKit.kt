@@ -27,6 +27,8 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.foundation.layout.Arrangement
+import top.yukonga.miuix.kmp.basic.BasicComponent
 import top.yukonga.miuix.kmp.basic.BasicComponentDefaults
 import top.yukonga.miuix.kmp.basic.Button
 import top.yukonga.miuix.kmp.basic.ButtonDefaults
@@ -180,7 +182,19 @@ object MiuixKit : Kit {
     }
 
     @Composable override fun ActionRow(title: String, summary: String, enabled: Boolean, onClick: () -> Unit) {
-        ArrowPreference(title = title, summary = summary, enabled = enabled, onClick = onClick)
+        ArrowPreference(title = title, summary = summary.ifEmpty { null }, enabled = enabled, onClick = onClick)
+    }
+
+    @Composable override fun InfoRow(title: String, summary: String, danger: Boolean) {
+        BasicComponent(title = title, summary = summary.ifEmpty { null },
+            titleColor = if (danger) BasicComponentDefaults.titleColor(color = MiuixTheme.colorScheme.error) else BasicComponentDefaults.titleColor())
+    }
+
+    @Composable override fun ButtonPair(first: String, second: String, enabled: Boolean, onFirst: () -> Unit, onSecond: () -> Unit) {
+        Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            TextButton(text = first, onClick = onFirst, enabled = enabled, colors = ButtonDefaults.textButtonColorsPrimary(), modifier = Modifier.weight(1f))
+            TextButton(text = second, onClick = onSecond, enabled = enabled, modifier = Modifier.weight(1f))
+        }
     }
 
     @Composable override fun Progress(fraction: Float?, modifier: Modifier) {

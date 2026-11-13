@@ -211,19 +211,21 @@ Core 也会拒绝。请先备份旧密钥，再选择新的保存位置，或勾
 Core 按已有普通文件的身份比较（包括同一文件的不同路径写法），符号链接或 reparse point 密钥输入会直接拒绝，不会跟随。后端仅接受同一应用会话中上一次“密钥已存在”响应指明的完全相同路径，授权五分钟内有效且被下一次操作消耗。私钥按文件内容识别 NKPR，Android 导出的
 `private.nkpr` 无需改名即可使用。
 
-Encryption and decryption report an existing output before writing it. Choose another
-path, or tick “Replace the existing output file” and start again. This confirmation
-covers one run at the same output path and follows the same session/expiry rule as
-key replacement. Without confirmation, the final Core commit is atomically create-only:
-a file created by another writer during processing is preserved and reported too. On
-volumes with neither hard links nor a no-replace rename (FAT or exFAT on macOS, some
-network mounts), the commit instead checks the target immediately before an ordinary rename.
-For decryption, re-enter the password after the first attempt clears it.
-加解密会先提示已有输出文件；请选择新路径，或勾选“覆盖已有输出文件”后重新开始。
-确认仅适用于同一输出路径的一次操作，使用与密钥替换相同的会话与过期规则；
-未确认时 Core 最终提交以原子方式拒绝覆盖，处理过程中其他写入者新建的目标也会保留并提示；
-在既不支持硬链接也不支持不覆盖重命名的卷上（如 macOS 上的 FAT、exFAT 和部分网络挂载），改为在普通重命名前一刻检查目标。
-解密首次尝试清除口令后，需要重新输入。
+The file page works as on Android: choose a file, press **Encrypt** or **Decrypt**,
+answer the recipient and password questions, and choose where to save in the system
+dialog once the work is done. Until then the output is a private staged file on disk
+(never the tmpfs runtime directory), written through the same Core checks. The chosen
+destination is checked by Core before the staged file is moved there; an existing file
+is replaced only after the system dialog's own confirmation. Closing the dialog discards
+the result. If the chosen place cannot be written, the result is kept and **Save as…**
+asks again. Starting another operation, switching pages or quitting deletes an unsaved
+result. Only legacy-key export still asks for its output first and reports an existing
+file with “Replace the existing output file”.
+文件页与 Android 一致：选择文件，按“加密”或“解密”，回答收件人与口令，处理完成后再在系统对话框里
+选择保存位置。在此之前输出是磁盘上的私有暂存文件（不使用 tmpfs 运行时目录），写入时经过相同的 Core 检查。
+所选位置先由 Core 检查，再把暂存文件移过去；已有文件只有在系统对话框确认后才会被替换。关闭对话框即放弃结果。
+所选位置无法写入时结果会保留，可用“保存到…”重新选择。开始新的操作、切换页面或退出都会删除未保存的结果。
+只有导出旧版密钥仍然先选输出，并用“覆盖已有输出文件”提示已有文件。
 
 On Windows, the same local fixed-NTFS, owner/ACL, ancestor pinning, regular-file, hard-link,
 reparse-point, device/pipe/ADS and atomic-output checks apply. The app cannot

@@ -22,6 +22,8 @@ class OperationRequest(
     val paste: Boolean = false, val contacts: List<String> = emptyList(), val keyPaths: List<String> = emptyList(),
     val replace: Boolean = false, val overwrite: Boolean = false,
     val signKeyPath: String = "", val unsigned: Boolean = false, val requireSignature: Boolean = false,
+    // Encryption and decryption write to a private staged file; saveOutput moves it to the chosen place.
+    val stage: Boolean = false,
 )
 
 data class Signature(val status: String, val fingerprint: String?, val contact: String?, val signerKey: String?)
@@ -69,10 +71,14 @@ object Backend {
                     arrayField("keyPaths") { request.keyPaths.forEach { value(it) } }
                     field("replace", request.replace); field("overwrite", request.overwrite)
                     field("signKeyPath", request.signKeyPath); field("unsigned", request.unsigned); field("requireSignature", request.requireSignature)
+                    field("stage", request.stage)
                 }
             }
         }
     })
+
+    fun saveOutput(destination: String) { Bridge.request { obj { field("save_output") { field("destination", destination) } } } }
+    fun discardOutput() { Bridge.request { command("discard_output") } }
 
     private fun outcome(value: JsonElement): Outcome {
         val it = value.obj()

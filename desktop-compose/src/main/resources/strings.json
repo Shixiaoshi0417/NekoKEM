@@ -577,11 +577,11 @@
    "작업에 실패했습니다. 암호, 키/파일 형식, 로컬 NTFS 경로와 개인 키 권한을 확인하세요."
   ],
   "cancelled": [
-   "Cancelled; no new output was committed.",
-   "已取消，未提交新的输出文件。",
-   "已取消，未提交新的輸出檔案。",
-   "キャンセルしました。新しい出力は保存されていません。",
-   "취소되었습니다. 새 출력은 저장되지 않았습니다."
+   "Cancelled; nothing was saved.",
+   "已取消，未保存任何文件。",
+   "已取消，未儲存任何檔案。",
+   "キャンセルしました。何も保存されていません。",
+   "취소되었습니다. 저장된 파일이 없습니다."
   ],
   "cleanup-error": [
    "Temporary key cleanup failed. A protected temporary key may remain; the output may already exist.",
@@ -1359,6 +1359,97 @@
    "關閉",
    "閉じる",
    "닫기"
+  ],
+  "selectedFile": [
+   "Selected file",
+   "已选择文件",
+   "已選擇檔案",
+   "選択したファイル",
+   "선택한 파일"
+  ],
+  "noFileSelected": [
+   "No file selected",
+   "尚未选择文件",
+   "尚未選擇檔案",
+   "ファイルが選択されていません",
+   "선택한 파일 없음"
+  ],
+  "selectFile": [
+   "Select file",
+   "选择文件",
+   "選擇檔案",
+   "ファイルを選択",
+   "파일 선택"
+  ],
+  "encryptAction": [
+   "Encrypt",
+   "加密",
+   "加密",
+   "暗号化",
+   "암호화"
+  ],
+  "decryptAction": [
+   "Decrypt",
+   "解密",
+   "解密",
+   "復号",
+   "복호화"
+  ],
+  "decryptKeyTitle": [
+   "Decryption private key",
+   "解密私钥",
+   "解密私鑰",
+   "復号用の秘密鍵",
+   "복호화 개인 키"
+  ],
+  "selectOtherPrivateKey": [
+   "Select other private key",
+   "选择其他私钥",
+   "選擇其他私鑰",
+   "別の秘密鍵を選択",
+   "다른 개인 키 선택"
+  ],
+  "restoreDefaultPrivateKey": [
+   "Restore default private key",
+   "恢复默认私钥",
+   "恢復預設私鑰",
+   "既定の秘密鍵に戻す",
+   "기본 개인 키로 복원"
+  ],
+  "keySourceLine": [
+   "Source: {source}",
+   "来源：{source}",
+   "來源：{source}",
+   "ソース: {source}",
+   "출처: {source}"
+  ],
+  "keyFileLine": [
+   "File: {file}",
+   "文件：{file}",
+   "檔案：{file}",
+   "ファイル: {file}",
+   "파일: {file}"
+  ],
+  "keySourceChosen": [
+   "Chosen for now",
+   "临时选择",
+   "暫時選擇",
+   "一時的に選択",
+   "임시 선택"
+  ],
+  "saveAs": [
+   "Save as…",
+   "保存到…",
+   "儲存到…",
+   "名前を付けて保存…",
+   "다른 이름으로 저장…"
+  ],
+  "save-failed": [
+   "The file could not be saved there and is still waiting. Choose another place.",
+   "无法保存到所选位置，文件仍在等待保存。请选择其他位置。",
+   "無法儲存到所選位置，檔案仍在等待儲存。請選擇其他位置。",
+   "選択した場所に保存できませんでした。ファイルは保存待ちのままです。別の場所を選んでください。",
+   "선택한 위치에 저장할 수 없습니다. 파일은 저장을 기다리고 있습니다. 다른 위치를 선택하세요."
   ]
  }
 }

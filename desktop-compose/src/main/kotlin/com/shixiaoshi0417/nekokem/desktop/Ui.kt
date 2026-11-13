@@ -50,7 +50,7 @@ import top.yukonga.miuix.kmp.icon.extended.Sidebar
 
 /** The four sidebar entries, as on Android: file encryption, keys, contacts and settings. */
 private enum class Destination(val key: String, val icon: ImageVector, val views: List<View>) {
-    Files("navFiles", MiuixIcons.NotesFill, listOf(View.Encrypt, View.Decrypt)),
+    Files("navFiles", MiuixIcons.NotesFill, listOf(View.Files)),
     Keys("navKeys", Icons.Filled.Lock, listOf(View.Keygen, View.Fingerprint)),
     Contacts("navContacts", Icons.Filled.Person, listOf(View.Contacts)),
     Settings("settings", Icons.Filled.Settings, listOf(View.Settings)),
@@ -80,6 +80,7 @@ fun NekoKEMApp(state: AppState) {
                         }
                         QrDialog(state)
                         RecipientDialog(state)
+                        PasswordDialog(state)
                         UpdateDialog(state)
                     }
                 }
@@ -114,11 +115,7 @@ private fun ColumnScope.Page(state: AppState) {
     when (state.destination) {
         Destination.Settings -> SettingsPage(state)
         Destination.Contacts -> { OperationCard(state); ContactList(state) }
-        Destination.Files -> {
-            kit.Segments(listOf(state.t("encrypt"), state.t("decrypt")), if (state.view == View.Decrypt) 1 else 0, state.editable) { state.switchTab(if (it == 1) View.Decrypt else View.Encrypt) }
-            Spacer(Modifier.height(16.dp))
-            OperationCard(state)
-        }
+        Destination.Files -> FilesPage(state)
         Destination.Keys -> {
             // Generate, upgrade and export are the key page's modes; the fingerprint is the fourth tab.
             val selected = if (state.view == View.Fingerprint) 3 else state.keyMode.ordinal
@@ -191,10 +188,6 @@ private fun OperationCard(state: AppState) {
         if (state.feedback == Feedback.Form) FormFeedback(state)
         Row(Modifier.fillMaxWidth().padding(top = 24.dp), verticalAlignment = Alignment.CenterVertically) {
             Spacer(Modifier.weight(1f))
-            if (state.busy && (state.view == View.Encrypt || state.view == View.Decrypt)) {
-                kit.SecondaryButton(state.t("cancel"), enabled = !state.cancelling, onClick = state::cancel)
-                Spacer(Modifier.width(8.dp))
-            }
             val action = when {
                 state.busy || state.contactBusy -> state.t("working")
                 state.view == View.Contacts -> state.t("saveContact")
@@ -244,18 +237,65 @@ private fun FileFields(state: AppState) {
             kit.Segments(sources.map { state.t(if (it == KeySource.Path) "path" else "paste") }, sources.indexOf(state.source).coerceAtLeast(0), state.editable) { state.changeSource(sources[it]) }
             if (state.source == KeySource.Paste) Secret(state, state.keyText, state.t("paste"), "keyText", masked = false, lines = 4, placeholder = state.t("pasteHint"))
             else PathInput(state, PathField.KeyPath, state.t("key"), "keyPath")
-            return
         }
-        View.Decrypt -> PathInput(state, PathField.KeyPath, state.t("myPrivateKey"), "keyPath")
         else -> {}
     }
-    PathInput(state, PathField.Input, state.t("input"), "input")
-    PathInput(state, PathField.Output, state.t("output"), "output")
-    if (state.signing) PathInput(state, PathField.SignKeyPath, state.t("myPrivateKey"), "signKeyPath")
-    if (state.view == View.Encrypt && state.unsigned) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Hint(state.t("unsignedWarning"), danger = true, modifier = Modifier.weight(1f))
-            kit.LinkButton(state.t("settings"), modifier = Modifier.padding(start = 8.dp, top = 8.dp)) { state.switchTab(View.Settings) }
+}
+
+/**
+ * The file page, as on Android: the chosen file with Encrypt and Decrypt, then
+ * the private key that decrypts. Recipients and the password are asked for when
+ * a button is pressed, and where to save once the work is done.
+ */
+@Composable
+private fun FilesPage(state: AppState) {
+    val kit = LocalKit.current
+    val chosen = state.input.isNotEmpty()
+    kit.Section(padded = false) {
+        kit.InfoRow(if (chosen) fileName(state.input) else state.t("noFileSelected"), if (chosen) state.input else state.t("selectedFile"))
+        kit.ButtonPair(state.t("encryptAction"), state.t("decryptAction"), state.editable && chosen, state::encrypt, state::decrypt)
+        if (state.unsigned) kit.InfoRow(state.t("unsignedWarning"), "", danger = true)
+        kit.ActionRow(state.t(if (state.choosing == PathField.Input) "choosing" else "selectFile"), "", state.editable) { state.browse(PathField.Input) }
+        if (chosen) kit.ActionRow(state.t("clearSelection"), "", state.editable, state::clearFile)
+    }
+    kit.SectionTitle(state.t("decryptKeyTitle"))
+    kit.Section(padded = false) {
+        val other = state.otherPrivateKey.isNotEmpty()
+        kit.InfoRow(state.t("keySourceLine").replace("{source}", state.t(if (other) "keySourceChosen" else "myPrivateKey")),
+            state.t("keyFileLine").replace("{file}", state.decryptKey.ifEmpty { state.t("notSet") }))
+        kit.ActionRow(state.t("selectOtherPrivateKey"), "", state.editable) { state.browse(PathField.OtherPrivateKey) }
+        if (other) kit.ActionRow(state.t("restoreDefaultPrivateKey"), "", state.editable, state::restoreDefaultKey)
+    }
+    if (!state.busy && !state.unsaved && state.failure == null && state.result == null) return
+    Spacer(Modifier.height(24.dp))
+    kit.Section {
+        if (state.busy) {
+            ProgressBlock(state, first = true)
+            Row(Modifier.fillMaxWidth().padding(top = 16.dp), horizontalArrangement = Arrangement.End) {
+                kit.SecondaryButton(state.t("cancel"), enabled = !state.cancelling, onClick = state::cancel)
+            }
+        }
+        FormFeedback(state, first = !state.busy)
+        if (state.unsaved) {
+            Row(Modifier.fillMaxWidth().padding(top = 16.dp), horizontalArrangement = Arrangement.End) {
+                kit.PrimaryButton(state.t("saveAs"), enabled = state.editable, onClick = state::saveAgain)
+            }
+        }
+    }
+}
+
+/** Asked after Encrypt (to sign) or Decrypt is pressed; the password opens the private key and is not kept. */
+@Composable
+private fun PasswordDialog(state: AppState) {
+    val kit = LocalKit.current
+    kit.Dialog(state.askingPassword, state.t("password"), if (state.fileAction == Kind.Encrypt) state.t("signPasswordHint") else "", state::cancelPassword) {
+        if (!state.askingPassword) return@Dialog
+        kit.SecretInput(state.password, state.t("password"), state.editable, state.invalidField == "password", masked = true, lines = 1, placeholder = "")
+        if (state.invalidField == "password") state.failure?.let { Hint(state.t(it), danger = true, modifier = Modifier.fillMaxWidth()) }
+        Row(Modifier.fillMaxWidth().padding(top = 16.dp), horizontalArrangement = Arrangement.End) {
+            kit.SecondaryButton(state.t("cancel"), onClick = state::cancelPassword)
+            Spacer(Modifier.width(8.dp))
+            kit.PrimaryButton(state.t(if (state.fileAction == Kind.Encrypt) "encryptAction" else "decryptAction"), enabled = state.editable, onClick = state::confirmPassword)
         }
     }
 }
@@ -328,16 +368,16 @@ private fun RecipientDialog(state: AppState) {
             kit.SecondaryButton(state.t("cancel"), onClick = state::closeRecipients)
             Spacer(Modifier.width(8.dp))
             val warned = state.unverifiedWarned && unverified.isNotEmpty()
-            if (warned) kit.DangerButton(state.t("encryptAnyway"), enabled = state.editable, onClick = state::submit)
-            else kit.PrimaryButton(state.t("encrypt"), enabled = state.editable && state.recipientCount > 0, onClick = state::submit)
+            if (warned) kit.DangerButton(state.t("encryptAnyway"), enabled = state.editable, onClick = state::confirmRecipients)
+            else kit.PrimaryButton(state.t("encryptAction"), enabled = state.editable && state.recipientCount > 0, onClick = state::confirmRecipients)
         }
     }
 }
 
 @Composable
-private fun ProgressBlock(state: AppState) {
+private fun ProgressBlock(state: AppState, first: Boolean = false) {
     val kit = LocalKit.current
-    Column(Modifier.padding(top = 16.dp)) {
+    Column(Modifier.padding(top = if (first) 0.dp else 16.dp)) {
         Row {
             kit.Text(state.t(if (state.cancelling) "cancelling" else if (state.progress != null) "progress" else "preparing"), TextRole.Body, Modifier.weight(1f))
             state.percent?.let { kit.Text("$it%", TextRole.BodyStrong) }
@@ -348,10 +388,10 @@ private fun ProgressBlock(state: AppState) {
 
 /** A grouped message, with an optional detail block. */
 @Composable
-private fun Notice(title: String, danger: Boolean = false, content: @Composable ColumnScope.() -> Unit = {}) {
+private fun Notice(title: String, danger: Boolean = false, first: Boolean = false, content: @Composable ColumnScope.() -> Unit = {}) {
     val kit = LocalKit.current
     val colors = kit.colors()
-    Column(Modifier.fillMaxWidth().padding(top = 16.dp).clip(RoundedCornerShape(10.dp)).background(colors.notice).padding(12.dp)) {
+    Column(Modifier.fillMaxWidth().padding(top = if (first) 0.dp else 16.dp).clip(RoundedCornerShape(10.dp)).background(colors.notice).padding(12.dp)) {
         kit.Text(title, TextRole.BodyStrong, color = if (danger) colors.danger else null)
         content()
     }
@@ -363,7 +403,7 @@ private fun Detail(text: String, mono: Boolean = false) {
 }
 
 @Composable
-private fun FormFeedback(state: AppState) {
+private fun FormFeedback(state: AppState, first: Boolean = false) {
     val kit = LocalKit.current
     if (state.overwriteOffered) {
         Spacer(Modifier.height(8.dp))
@@ -371,12 +411,14 @@ private fun FormFeedback(state: AppState) {
         Hint(state.t("overwriteOutputHint"), danger = true)
     }
     state.failure?.let { failure ->
-        Notice(state.t(failure), danger = failure != "cancelled") {
+        // The password dialog and the recipient dialog show their own errors.
+        if (state.invalidField == "password" || state.invalidField == "contacts") return@let
+        Notice(state.t(failure), danger = failure != "cancelled", first = first) {
             state.failedContact?.let { Detail("${state.t("recipient")}: ${state.label(it)} · ${it.fingerprint}") }
         }
     }
     val result = state.result ?: return
-    Notice(state.t(state.successMessage), danger = state.successMessage == "encryptedUnsigned") {
+    Notice(state.t(state.successMessage), danger = state.successMessage == "encryptedUnsigned", first = first) {
         result.output?.let { Detail(it) }
         val names = (if (state.ownRecipient) listOf(state.t("myPublicKey")) else emptyList()) + state.otherRecipients.map(::fileName) + state.recipients.map(state::label)
         if (names.isNotEmpty()) Detail("${state.t(if (names.size > 1) "recipients" else "recipient")}: ${names.joinToString(", ")}")

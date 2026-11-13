@@ -12,23 +12,27 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
-enum class View(val key: String) { Keygen("keygen"), Encrypt("encrypt"), Decrypt("decrypt"), Fingerprint("fingerprint"), Contacts("contacts"), Settings("settings") }
-enum class KeySource { Path, Paste, Contact }
+enum class View(val key: String) { Keygen("keygen"), Files("navFiles"), Fingerprint("fingerprint"), Contacts("contacts"), Settings("settings") }
+enum class KeySource { Path, Paste }
 // The key page generates identity keys, upgrades a 4.x key pair or exports the
 // two-component public key that NekoKEM 4.x and earlier read.
 enum class KeyMode { Generate, Upgrade, Export }
-enum class PathField { Input, Output, KeyPath, PublicPath, PrivatePath, ContactKeyPath, SignKeyPath, OwnPublicKey }
+enum class PathField { Input, Output, KeyPath, PublicPath, PrivatePath, ContactKeyPath, SignKeyPath, OwnPublicKey, OtherPrivateKey }
 enum class Feedback { Form, List }
+
+/** A finished encryption or decryption whose staged output waits for the place to save it. */
+private class Unsaved(val outcome: Outcome, val kind: Kind, val source: String, val contacts: List<Contact>, val own: Boolean, val others: List<String>)
 
 class UpgradePrompt(val keyPath: String, val keyText: TextFieldState?, val note: String, val contact: String, val fingerprint: String, val fromSigner: Boolean)
 
 /**
- * The window's state and actions: desktop/src/App.vue, step for step, so the
- * two desktop apps behave the same. Secrets live only in [TextFieldState]s,
- * which are cleared (with their undo history) as soon as a request is written.
+ * The window's state and actions. The file page works as on Android: choose a
+ * file, press Encrypt or Decrypt, answer what is asked, and choose where to
+ * save once the work is done. Secrets live only in [TextFieldState]s, which
+ * are cleared (with their undo history) as soon as a request is written.
  */
 class AppState(private val scope: CoroutineScope, private val files: FileChooser, private val exit: () -> Unit) {
-    var view by mutableStateOf(View.Encrypt); private set
+    var view by mutableStateOf(View.Files); private set
     var language by mutableStateOf("en"); private set
     var selectedLanguage by mutableStateOf("system"); private set
     var version by mutableStateOf("5.0.0"); private set
@@ -68,7 +72,17 @@ class AppState(private val scope: CoroutineScope, private val files: FileChooser
     // decrypts. The public key is offered first when choosing recipients, never ticked.
     var signKeyPath by mutableStateOf(""); private set
     var ownPublicKey by mutableStateOf(""); private set
-    // Encrypting asks for the recipients after the form is complete.
+    // Decryption uses the user's own private key unless another is chosen for now.
+    var otherPrivateKey by mutableStateOf(""); private set
+    val decryptKey get() = otherPrivateKey.ifEmpty { signKeyPath }
+    // Encrypt or Decrypt was pressed and its questions are being answered, or it runs.
+    var fileAction by mutableStateOf<Kind?>(null); private set
+    var askingPassword by mutableStateOf(false); private set
+    // The output is written to a private staged file first. It stays there, and
+    // can be saved again, when the chosen place could not be written.
+    private var staged: Unsaved? = null
+    var unsaved by mutableStateOf(false); private set
+    // Pressing Encrypt asks for the recipients.
     var choosingRecipients by mutableStateOf(false); private set
     var ownSelected by mutableStateOf(false); private set
     // Public key files added in the dialog for this file alone; ticked when added.
@@ -118,12 +132,10 @@ class AppState(private val scope: CoroutineScope, private val files: FileChooser
 
     val kind get() = when (view) {
         View.Keygen -> when (keyMode) { KeyMode.Generate -> Kind.Keygen; KeyMode.Upgrade -> Kind.Upgrade; KeyMode.Export -> Kind.ExportLegacy }
-        View.Encrypt -> Kind.Encrypt
-        View.Decrypt -> Kind.Decrypt
         else -> Kind.Fingerprint
     }
-    val signing get() = view == View.Encrypt && !unsigned
-    val passwordRequired get() = (view == View.Keygen && keyMode != KeyMode.Export) || view == View.Decrypt || signing
+    val signing get() = fileAction == Kind.Encrypt && !unsigned
+    val passwordRequired get() = view == View.Keygen && keyMode != KeyMode.Export
     val percent get() = progress?.takeIf { it.second > 0 }?.let { (it.first * 100 / it.second).toInt().coerceIn(0, 100) }
     val selectedContacts get() = selected.mapNotNull { id -> contacts.firstOrNull { it.id == id } }
     val recipientCount get() = selected.size + otherKeys.size + if (ownSelected) 1 else 0
@@ -200,10 +212,13 @@ class AppState(private val scope: CoroutineScope, private val files: FileChooser
         PathField.Input -> input; PathField.Output -> output; PathField.KeyPath -> keyPath
         PathField.PublicPath -> publicPath; PathField.PrivatePath -> privatePath
         PathField.ContactKeyPath -> contactKeyPath; PathField.SignKeyPath -> signKeyPath; PathField.OwnPublicKey -> ownPublicKey
+        PathField.OtherPrivateKey -> otherPrivateKey
     }
     fun setPath(field: PathField, value: String) {
         when (field) {
-            PathField.Input -> input = value
+            // Another file starts again: the last result belonged to the previous one.
+            PathField.Input -> { if (value != input) { discardStaged(); resetFeedback() }; input = value }
+            PathField.OtherPrivateKey -> otherPrivateKey = value
             PathField.Output -> { if (value != output) withdrawOverwrite(); output = value }
             PathField.KeyPath -> keyPath = value
             PathField.PublicPath -> { if (value != publicPath) withdrawReplace(); publicPath = value }
@@ -238,13 +253,9 @@ class AppState(private val scope: CoroutineScope, private val files: FileChooser
         resetFeedback()
         editing = null; confirmingDelete = null; highlighted = null
         withdrawReplace(); withdrawOverwrite()
-        confirmingUnsigned = false; closeRecipientsNow()
-        // Decryption uses a key file, by default the user's own private key.
-        if (value == View.Decrypt || source == KeySource.Contact) source = KeySource.Path
-        if (value == View.Decrypt) keyPath = signKeyPath
-        else if (view == View.Decrypt) keyPath = ""
+        confirmingUnsigned = false; closeRecipientsNow(); discardStaged()
         view = value
-        if (value == View.Encrypt || value == View.Decrypt || value == View.Contacts) scope.launch { refreshContacts() }
+        if (value == View.Files || value == View.Contacts) scope.launch { refreshContacts() }
     }
 
     fun changeSource(value: KeySource) {
@@ -271,14 +282,11 @@ class AppState(private val scope: CoroutineScope, private val files: FileChooser
                 // Upgrading changes existing key files, so it opens them.
                 val saving = field in listOf(PathField.Output, PathField.PublicPath, PathField.PrivatePath) && !(view == View.Keygen && keyMode == KeyMode.Upgrade)
                 val value = if (saving) {
-                    val name = input.split('/', '\\').last().ifEmpty { "file" }
-                    files.save(when {
-                        field == PathField.PublicPath -> "public.key"
-                        field == PathField.PrivatePath -> "private.key.enc"
-                        view == View.Keygen -> "legacy-public.key"
-                        view == View.Encrypt -> "$name.nkem"
-                        else -> name.removeSuffix(".nkem")
-                    })
+                    files.save(when (field) {
+                        PathField.PublicPath -> "public.key"
+                        PathField.PrivatePath -> "private.key.enc"
+                        else -> "legacy-public.key"
+                    }, null)
                 } else files.open()
                 if (value != null) setPath(field, value)
             } catch (error: Throwable) { failure = code(error) } finally { choosing = null }
@@ -322,41 +330,9 @@ class AppState(private val scope: CoroutineScope, private val files: FileChooser
             if (privatePath.isEmpty()) return invalid("invalid-path", "privatePath")
             if (password.text.isEmpty()) return invalid("password-empty", "password")
             if (keyMode == KeyMode.Generate && !same(password.text, confirmation.text)) return invalid("password-mismatch", "confirmation")
-        } else if (view == View.Encrypt) {
-            if (input.isEmpty()) return invalid("invalid-path", "input")
-            if (output.isEmpty()) return invalid("invalid-path", "output")
-            if (signing) {
-                if (signKeyPath.isEmpty()) return invalid("sign-key-missing", "signKeyPath")
-                if (password.text.isEmpty()) return invalid("password-empty", "password")
-            }
-            // The recipients are chosen afterwards, explicitly; none is ticked for the user.
-            if (choosingRecipients) {
-                if (recipientCount == 0) return invalid("contact-required", "contacts")
-                if (recipientCount > MAX_RECIPIENTS) return invalid("recipient-limit", "contacts")
-                if (selectedContacts.size != selected.size) return invalid("contact-missing", "contacts")
-                if (ownSelected && ownPublicKey.isEmpty()) return invalid("invalid-path", "contacts")
-            }
-        } else {
-            when (source) {
-                KeySource.Paste -> if (keyText.text.isEmpty() || bytes(keyText.text) > 1048576) return invalid("key-limit", "keyText")
-                // Explicit, currently listed contacts are required; never pick one implicitly.
-                KeySource.Contact -> {
-                    if (selected.isEmpty()) return invalid("contact-required", "contacts")
-                    if (selected.size > MAX_RECIPIENTS) return invalid("recipient-limit", "contacts")
-                    if (selectedContacts.size != selected.size) return invalid("contact-missing", "contacts")
-                }
-                KeySource.Path -> if (keyPath.isEmpty()) return invalid("invalid-path", "keyPath")
-            }
-            if (view != View.Fingerprint) {
-                if (input.isEmpty()) return invalid("invalid-path", "input")
-                if (output.isEmpty()) return invalid("invalid-path", "output")
-            }
-            // Signing is never skipped silently: it needs the sender's key and password.
-            if (signing) {
-                if (signKeyPath.isEmpty()) return invalid("sign-key-missing", "signKeyPath")
-                if (password.text.isEmpty()) return invalid("password-empty", "password")
-            }
-        }
+        } else if (source == KeySource.Paste) {
+            if (keyText.text.isEmpty() || bytes(keyText.text) > 1048576) return invalid("key-limit", "keyText")
+        } else if (keyPath.isEmpty()) return invalid("invalid-path", "keyPath")
         return null
     }
 
@@ -371,64 +347,136 @@ class AppState(private val scope: CoroutineScope, private val files: FileChooser
         val listed = selected.filter { id -> contacts.any { it.id == id } }
         if (listed.size != selected.size && !busy) {
             selected.retainAll(listed.toSet())
-            if (view == View.Encrypt && choosingRecipients && failure == null) failure = invalid("contact-missing", "contacts")
+            if (choosingRecipients && failure == null) failure = invalid("contact-missing", "contacts")
         }
     }
 
+    /** The key page's and the fingerprint page's button. */
     fun submit() {
         if (locked || !loaded) return
         if (view == View.Contacts) return saveContact()
-        if (view == View.Settings) return
+        if (view == View.Settings || view == View.Files) return
         resetFeedback()
         failure = validate()
         if (failure != null) return
-        if (view == View.Encrypt && !choosingRecipients) { closeRecipientsNow(); choosingRecipients = true; return }
-        if (view == View.Encrypt && unverifiedChosen.isNotEmpty() && !unverifiedWarned) { unverifiedWarned = true; return }
-        val encrypting = view == View.Encrypt
-        val chosen = if (encrypting) selectedContacts else emptyList()
-        val own = encrypting && ownSelected
-        val others = if (encrypting) otherKeys.toList() else emptyList()
-        closeRecipientsNow()
         jobId = UUID.randomUUID().toString()
         busy = true; cancelling = false
         val kind = kind
         val exporting = kind == Kind.ExportLegacy
         val keys = kind == Kind.Keygen || kind == Kind.Upgrade
+        val pasted = kind == Kind.Fingerprint && source == KeySource.Paste
         val request = OperationRequest(
-            id = jobId, kind = kind, input = if (keys || exporting) "" else input, output = if (keys) "" else output,
-            keyPath = if (encrypting) (if (own) ownPublicKey else "") else if (exporting || (!keys && source == KeySource.Path)) keyPath else "",
+            id = jobId, kind = kind, output = if (exporting) output else "",
+            keyPath = if (exporting || (kind == Kind.Fingerprint && !pasted)) keyPath else "",
             publicPath = if (keys) publicPath else "", privatePath = if (keys) privatePath else "",
             password = if (passwordRequired) password.text else "", confirmation = if (kind == Kind.Keygen) confirmation.text else "",
-            keyText = if (!keys && !exporting && !encrypting && source == KeySource.Paste) keyText.text else "",
-            paste = !keys && !exporting && !encrypting && source == KeySource.Paste, contacts = chosen.map { it.id }, keyPaths = others,
+            keyText = if (pasted) keyText.text else "", paste = pasted,
             replace = kind == Kind.Keygen && replaceOffered && replace,
-            overwrite = kind in listOf(Kind.Encrypt, Kind.Decrypt, Kind.ExportLegacy) && overwriteOffered && overwrite,
-            signKeyPath = if (signing) signKeyPath else "", unsigned = view == View.Encrypt && unsigned,
-            requireSignature = view == View.Decrypt && requireSignature,
+            overwrite = exporting && overwriteOffered && overwrite,
         )
-        if (signing) storePreferences()
         withdrawReplace(); withdrawOverwrite()
-        val id = jobId
+        scope.launch {
+            try {
+                // The request is written on the worker thread, then the fields are cleared.
+                result = native { Backend.run(request, ::reportProgress) }
+                // A new or upgraded key pair becomes the user's own keys.
+                if (keys) { ownPublicKey = request.publicPath; signKeyPath = request.privatePath; storePreferences() }
+                successMessage = when (kind) { Kind.Upgrade -> "keyUpgraded"; Kind.ExportLegacy -> "legacyExported"; else -> "success" }
+            } catch (error: Throwable) {
+                val message = code(error)
+                failure = message
+                if (kind == Kind.Keygen && message == "key-exists") replaceOffered = true
+                if (exporting && message == "output-exists") overwriteOffered = true
+            } finally {
+                // The native layer zeroized its copy; the fields are cleared here.
+                clearSecrets()
+                busy = false; cancelling = false
+            }
+            closeIfRequested()
+        }
+    }
+
+    fun clearFile() { if (!locked) setPath(PathField.Input, "") }
+    fun restoreDefaultKey() { if (!locked) otherPrivateKey = "" }
+    fun encrypt() = begin(Kind.Encrypt)
+    fun decrypt() = begin(Kind.Decrypt)
+
+    private fun begin(action: Kind) {
+        if (locked || !loaded || view != View.Files) return
+        discardStaged(); resetFeedback(); closeRecipientsNow(); clear(password)
+        if (input.isEmpty()) { failure = invalid("invalid-path", "input"); return }
+        if (action == Kind.Encrypt) {
+            // Signing is never skipped silently: it needs the user's own private key.
+            if (!unsigned && signKeyPath.isEmpty()) { failure = invalid("sign-key-missing", "signKeyPath"); return }
+            fileAction = action
+            choosingRecipients = true
+            scope.launch { refreshContacts() }
+        } else {
+            if (decryptKey.isEmpty()) { failure = invalid("invalid-path", "otherPrivateKey"); return }
+            fileAction = action
+            askingPassword = true
+        }
+    }
+
+    /** The recipient dialog's button. Nothing is ticked for the user; unverified contacts need a second, warned press. */
+    fun confirmRecipients() {
+        if (locked || !choosingRecipients) return
+        failure = when {
+            recipientCount == 0 -> invalid("contact-required", "contacts")
+            recipientCount > MAX_RECIPIENTS -> invalid("recipient-limit", "contacts")
+            selectedContacts.size != selected.size -> invalid("contact-missing", "contacts")
+            ownSelected && ownPublicKey.isEmpty() -> invalid("invalid-path", "contacts")
+            else -> { invalidField = null; null }
+        }
+        if (failure != null) return
+        if (unverifiedChosen.isNotEmpty() && !unverifiedWarned) { unverifiedWarned = true; return }
+        choosingRecipients = false
+        if (signing) askingPassword = true else runFile()
+    }
+
+    fun confirmPassword() {
+        if (locked || !askingPassword) return
+        failure = when {
+            password.text.isEmpty() -> invalid("password-empty", "password")
+            bytes(password.text) > 1024 -> invalid("password-limit", "password")
+            else -> { invalidField = null; null }
+        }
+        if (failure != null) return
+        askingPassword = false
+        runFile()
+    }
+    fun cancelPassword() { if (!locked) { askingPassword = false; clear(password); closeRecipients() } }
+
+    private fun runFile() {
+        val action = fileAction ?: return
+        val encrypting = action == Kind.Encrypt
+        val sign = encrypting && !unsigned
+        val chosen = if (encrypting) selectedContacts else emptyList()
+        val own = encrypting && ownSelected
+        val others = if (encrypting) otherKeys.toList() else emptyList()
+        val source = input
+        closeRecipientsNow()
+        jobId = UUID.randomUUID().toString()
+        busy = true; cancelling = false
+        val request = OperationRequest(
+            id = jobId, kind = action, input = source,
+            keyPath = if (encrypting) (if (own) ownPublicKey else "") else decryptKey,
+            password = if (sign || !encrypting) password.text else "",
+            contacts = chosen.map { it.id }, keyPaths = others,
+            signKeyPath = if (sign) signKeyPath else "", unsigned = encrypting && unsigned,
+            requireSignature = !encrypting && requireSignature, stage = true,
+        )
         scope.launch {
             var unavailable = false
             try {
                 // The request is written on the worker thread, then the fields are cleared.
                 val outcome = native { Backend.run(request, ::reportProgress) }
-                result = outcome
-                recipients = chosen; ownRecipient = own; otherRecipients = others
+                staged = Unsaved(outcome, action, source, chosen, own, others)
                 // Every encryption starts with nothing ticked.
                 if (encrypting) selected.clear()
-                // A new or upgraded key pair becomes the user's own keys.
-                if (kind == Kind.Keygen || kind == Kind.Upgrade) { ownPublicKey = request.publicPath; signKeyPath = request.privatePath; storePreferences() }
-                successMessage = when (kind) {
-                    Kind.Encrypt -> if (outcome.format == 5) "encryptedSigned" else "encryptedUnsigned"
-                    Kind.Upgrade -> "keyUpgraded"; Kind.ExportLegacy -> "legacyExported"; else -> "success"
-                }
             } catch (error: Throwable) {
                 val message = code(error)
                 failure = message
-                if (kind == Kind.Keygen && message == "key-exists") replaceOffered = true
-                if (kind in listOf(Kind.Encrypt, Kind.Decrypt, Kind.ExportLegacy) && message == "output-exists") overwriteOffered = true
                 // Nothing was encrypted. Deselect the contact that could not be used and
                 // require the user to start again with the recipients that remain.
                 unavailable = chosen.isNotEmpty() && message in CONTACT_FAILURES
@@ -436,17 +484,60 @@ class AppState(private val scope: CoroutineScope, private val files: FileChooser
                     val failed = chosen.firstOrNull { it.id == (error as? BridgeFailure)?.contact }
                     failedContact = failed
                     if (failed != null) selected.remove(failed.id) else selected.clear()
-                    invalidField = "contacts"
                 }
             } finally {
-                // The native layer zeroized its copy; the fields are cleared here.
+                // The native layer zeroized its copy; the field is cleared here.
                 clearSecrets()
-                busy = false; cancelling = false
+                busy = false; cancelling = false; fileAction = null
             }
+            save()
             if (unavailable) refreshContacts()
             closeIfRequested()
         }
     }
+
+    /** Asks where the finished file goes, as Android does. Closing the dialog gives the result up. */
+    private suspend fun save() {
+        val item = staged ?: return
+        if (closeRequested) return
+        choosing = PathField.Output
+        try {
+            val name = fileName(item.source).ifEmpty { "file" }
+            val plain = name.removeSuffix(".nkem").ifEmpty { "file" }
+            val suggested = if (item.kind == Kind.Encrypt) "$name.nkem" else if (plain != name) plain else "decrypted-$name"
+            val destination = files.save(suggested, java.io.File(item.source).parent)
+            if (destination == null) {
+                staged = null; unsaved = false
+                native { Backend.discardOutput() }
+                failure = "cancelled"
+                return
+            }
+            native { Backend.saveOutput(destination) }
+            staged = null; unsaved = false
+            result = item.outcome.copy(output = destination)
+            recipients = item.contacts; ownRecipient = item.own; otherRecipients = item.others
+            successMessage = when {
+                item.kind != Kind.Encrypt -> "success"
+                item.outcome.format == 5 -> "encryptedSigned"
+                else -> "encryptedUnsigned"
+            }
+        } catch (error: Throwable) {
+            failure = code(error)
+            // The staged file is still there when only the chosen place failed.
+            if (failure == "save-failed") unsaved = true else { staged = null; unsaved = false }
+        } finally { choosing = null }
+    }
+    fun saveAgain() {
+        if (locked || staged == null) return
+        failure = null
+        scope.launch { save(); closeIfRequested() }
+    }
+    private fun discardStaged() {
+        if (staged == null) return
+        staged = null; unsaved = false
+        scope.launch { runCatching { native { Backend.discardOutput() } } }
+    }
+    private fun fileName(path: String) = path.split('/', '\\').last()
 
     // Core reports progress often; the UI takes the latest value once per frame.
     private val latestProgress = java.util.concurrent.atomic.AtomicReference<Pair<Long, Long>?>(null)
@@ -613,7 +704,7 @@ class AppState(private val scope: CoroutineScope, private val files: FileChooser
     fun useContact(contact: Contact) {
         if (locked) return
         selected.clear(); selected.add(contact.id)
-        switchTab(View.Encrypt)
+        switchTab(View.Files)
     }
     fun toggleContact(contact: Contact) {
         if (locked) return
@@ -623,12 +714,12 @@ class AppState(private val scope: CoroutineScope, private val files: FileChooser
     }
     fun encryptSelected() {
         if (locked || selected.isEmpty()) return
-        switchTab(View.Encrypt)
+        switchTab(View.Files)
     }
     fun clearSelection() { if (!locked) selected.clear() }
     fun toggleOwn() { if (!locked && (ownSelected || !atRecipientLimit)) { ownSelected = !ownSelected; unverifiedWarned = false; edited("contacts") } }
-    fun closeRecipients() { if (!locked) { closeRecipientsNow(); invalidField = null; failure = null } }
-    private fun closeRecipientsNow() { choosingRecipients = false; ownSelected = false; otherKeys.clear(); unverifiedWarned = false }
+    fun closeRecipients() { if (!locked) { closeRecipientsNow(); fileAction = null; invalidField = null; failure = null } }
+    private fun closeRecipientsNow() { choosingRecipients = false; askingPassword = false; ownSelected = false; otherKeys.clear(); unverifiedWarned = false }
     fun removeOtherKey(path: String) { if (!locked) otherKeys.remove(path) }
     /** "Other public key file…": a one-off recipient for this file, never saved. */
     fun addOtherKey() {
@@ -680,9 +771,15 @@ class AppState(private val scope: CoroutineScope, private val files: FileChooser
     /** The window's close button: a running operation is stopped and finishes first. */
     fun requestClose() {
         if (Bridge.deferClose()) { closeRequested = true; return }
-        clearSecrets(); exit()
+        leave()
     }
-    private fun closeIfRequested() { if (closeRequested && Bridge.closeReady()) { clearSecrets(); exit() } }
+    private fun closeIfRequested() { if (closeRequested && Bridge.closeReady()) leave() }
+    // An output that was never saved is deleted before the window goes.
+    private fun leave() {
+        clearSecrets()
+        if (staged != null) runCatching { Backend.discardOutput() }
+        exit()
+    }
 
     companion object {
         private const val DAY = 24L * 60 * 60 * 1000

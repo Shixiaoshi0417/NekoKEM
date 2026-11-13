@@ -7,12 +7,22 @@ enum Destination: String, CaseIterable, Identifiable {
     var key: String { switch self { case .files: return "navFiles"; case .keys: return "navKeys"; case .contacts: return "navContacts"; case .settings: return "settings" } }
     var symbol: String { switch self { case .files: return "doc.fill"; case .keys: return "key.fill"; case .contacts: return "person.2.fill"; case .settings: return "gearshape.fill" } }
 }
-enum Screen: String { case keygen, encrypt, decrypt, fingerprint, contacts, settings }
+enum Screen: String { case keygen, files, fingerprint, contacts, settings }
 // The key page generates identity keys, upgrades a 4.x key pair or exports the
 // two-component public key that NekoKEM 4.x and earlier read.
 enum KeyMode: Int { case generate, upgrade, export }
-enum PathField: String { case input, output, keyPath, publicPath, privatePath, contactKeyPath, signKeyPath, ownPublicKey }
+enum PathField: String { case input, output, keyPath, publicPath, privatePath, contactKeyPath, signKeyPath, ownPublicKey, otherPrivateKey }
 enum Feedback { case form, list }
+
+/// A finished encryption or decryption whose staged output waits for the place to save it.
+struct Unsaved {
+    var outcome: Outcome
+    var kind: Kind
+    var source: String
+    var contacts: [Contact]
+    var own: Bool
+    var others: [String]
+}
 
 struct UpgradePrompt {
     var keyPath: String
@@ -25,9 +35,11 @@ struct UpgradePrompt {
 
 /// The window's state and actions, step for step the same as the Compose
 /// desktop app (desktop-compose AppState.kt), so the desktop apps behave alike.
+/// The file page works as on Android: choose a file, press Encrypt or Decrypt,
+/// answer what is asked, and choose where to save once the work is done.
 @MainActor
 final class AppState: ObservableObject {
-    @Published private(set) var screen = Screen.encrypt
+    @Published private(set) var screen = Screen.files
     @Published private(set) var language = "en"
     @Published private(set) var selectedLanguage = "system"
     @Published private(set) var version = "5.0.0"
@@ -42,7 +54,8 @@ final class AppState: ObservableObject {
     @Published private(set) var feedback = Feedback.form
     @Published private(set) var progress: (processed: UInt64, total: UInt64)?
 
-    @Published var input = "" { didSet { edited("input") } }
+    // Another file starts again: the last result belonged to the previous one.
+    @Published var input = "" { didSet { if input != oldValue { discardStaged(); resetFeedback() }; edited("input") } }
     @Published var output = "" { didSet { if output != oldValue { withdrawOverwrite() }; edited("output") } }
     @Published var keyPath = "" { didSet { edited("keyPath") } }
     @Published var publicPath = "" { didSet { if publicPath != oldValue { withdrawReplace() }; edited("publicPath") } }
@@ -67,7 +80,17 @@ final class AppState: ObservableObject {
     // decrypts. The public key is offered first when choosing recipients, never ticked.
     @Published var signKeyPath = "" { didSet { edited("signKeyPath") } }
     @Published private(set) var ownPublicKey = ""
-    // Encrypting asks for the recipients after the form is complete.
+    // Decryption uses the user's own private key unless another is chosen for now.
+    @Published private(set) var otherPrivateKey = ""
+    var decryptKey: String { otherPrivateKey.isEmpty ? signKeyPath : otherPrivateKey }
+    // Encrypt or Decrypt was pressed and its questions are being answered, or it runs.
+    @Published private(set) var fileAction: Kind?
+    @Published private(set) var askingPassword = false
+    // The output is written to a private staged file first. It stays there, and
+    // can be saved again, when the chosen place could not be written.
+    private var staged: Unsaved?
+    @Published private(set) var unsaved = false
+    // Pressing Encrypt asks for the recipients.
     @Published var choosingRecipients = false
     @Published private(set) var ownSelected = false
     // Public key files added in the sheet for this file alone; ticked when added.
@@ -119,7 +142,7 @@ final class AppState: ObservableObject {
 
     var destination: Destination {
         switch screen {
-        case .encrypt, .decrypt: return .files
+        case .files: return .files
         case .keygen, .fingerprint: return .keys
         case .contacts: return .contacts
         case .settings: return .settings
@@ -128,13 +151,11 @@ final class AppState: ObservableObject {
     var kind: Kind {
         switch screen {
         case .keygen: return keyMode == .generate ? .keygen : (keyMode == .upgrade ? .upgrade : .exportLegacy)
-        case .encrypt: return .encrypt
-        case .decrypt: return .decrypt
         default: return .fingerprint
         }
     }
-    var signing: Bool { screen == .encrypt && !unsigned }
-    var passwordRequired: Bool { (screen == .keygen && keyMode != .export) || screen == .decrypt || signing }
+    var signing: Bool { fileAction == .encrypt && !unsigned }
+    var passwordRequired: Bool { screen == .keygen && keyMode != .export }
     var percent: Int? {
         guard let progress, progress.total > 0 else { return nil }
         return min(100, Int(progress.processed * 100 / progress.total))
@@ -234,6 +255,7 @@ final class AppState: ObservableObject {
         case .contactKeyPath: return contactKeyPath
         case .signKeyPath: return signKeyPath
         case .ownPublicKey: return ownPublicKey
+        case .otherPrivateKey: return otherPrivateKey
         }
     }
     func setPath(_ field: PathField, _ value: String) {
@@ -246,6 +268,7 @@ final class AppState: ObservableObject {
         case .contactKeyPath: contactKeyPath = value
         case .signKeyPath: signKeyPath = value; if screen == .settings { storePreferences() }
         case .ownPublicKey: ownPublicKey = value; storePreferences()
+        case .otherPrivateKey: otherPrivateKey = value
         }
     }
     /// Editing the field that an error points at clears the error.
@@ -265,7 +288,7 @@ final class AppState: ObservableObject {
     func open(_ destination: Destination) {
         if destination == self.destination { return }
         switch destination {
-        case .files: switchTo(.encrypt)
+        case .files: switchTo(.files)
         case .keys: switchTo(.keygen)
         case .contacts: switchTo(.contacts)
         case .settings: switchTo(.settings)
@@ -278,12 +301,10 @@ final class AppState: ObservableObject {
         resetFeedback()
         editing = nil; confirmingDelete = nil; highlighted = nil
         withdrawReplace(); withdrawOverwrite()
-        confirmingUnsigned = false; closeRecipientsNow()
+        confirmingUnsigned = false; closeRecipientsNow(); discardStaged()
         pasteKey = false
-        // Decryption uses a key file, by default the user's own private key.
-        if value == .decrypt { keyPath = signKeyPath } else if screen == .decrypt { keyPath = "" }
         screen = value
-        if value == .encrypt || value == .decrypt || value == .contacts { Task { await refreshContacts() } }
+        if value == .files || value == .contacts { Task { await refreshContacts() } }
     }
     func changeSource(paste: Bool) {
         if locked || !loaded || paste == pasteKey { return }
@@ -307,9 +328,10 @@ final class AppState: ObservableObject {
         panel.canChooseFiles = true; panel.canChooseDirectories = false; panel.allowsMultipleSelection = false
         return panel.runModal() == .OK ? panel.url?.path : nil
     }
-    private func chooseSave(_ name: String) -> String? {
+    private func chooseSave(_ name: String, directory: String? = nil) -> String? {
         let panel = NSSavePanel()
         panel.nameFieldStringValue = name
+        if let directory, !directory.isEmpty { panel.directoryURL = URL(fileURLWithPath: directory, isDirectory: true) }
         return panel.runModal() == .OK ? panel.url?.path : nil
     }
     func browse(_ field: PathField) {
@@ -320,14 +342,10 @@ final class AppState: ObservableObject {
         let saving = [.output, .publicPath, .privatePath].contains(field) && !(screen == .keygen && keyMode == .upgrade)
         let value: String?
         if saving {
-            let name = input.isEmpty ? "file" : fileName(input)
             switch field {
             case .publicPath: value = chooseSave("public.key")
             case .privatePath: value = chooseSave("private.key.enc")
-            default:
-                if screen == .keygen { value = chooseSave("legacy-public.key") }
-                else if screen == .encrypt { value = chooseSave(name + ".nkem") }
-                else { value = chooseSave(name.hasSuffix(".nkem") ? String(name.dropLast(5)) : name) }
+            default: value = chooseSave("legacy-public.key")
             }
         } else { value = chooseOpen() }
         if let value { setPath(field, value) }
@@ -366,30 +384,9 @@ final class AppState: ObservableObject {
             if privatePath.isEmpty { return invalid("invalid-path", "privatePath") }
             if password.isEmpty { return invalid("password-empty", "password") }
             if keyMode == .generate && password != confirmation { return invalid("password-mismatch", "confirmation") }
-        } else if screen == .encrypt {
-            if input.isEmpty { return invalid("invalid-path", "input") }
-            if output.isEmpty { return invalid("invalid-path", "output") }
-            // Signing is never skipped silently: it needs the sender's key and password.
-            if signing {
-                if signKeyPath.isEmpty { return invalid("sign-key-missing", "signKeyPath") }
-                if password.isEmpty { return invalid("password-empty", "password") }
-            }
-            // The recipients are chosen afterwards, explicitly; none is ticked for the user.
-            if choosingRecipients {
-                if recipientCount == 0 { return invalid("contact-required", "contacts") }
-                if recipientCount > maxRecipients { return invalid("recipient-limit", "contacts") }
-                if selectedContacts.count != selected.count { return invalid("contact-missing", "contacts") }
-                if ownSelected && ownPublicKey.isEmpty { return invalid("invalid-path", "contacts") }
-            }
-        } else {
-            if pasteKey && screen == .fingerprint {
-                if keyText.isEmpty || keyText.utf8.count > 1_048_576 { return invalid("key-limit", "keyText") }
-            } else if keyPath.isEmpty { return invalid("invalid-path", "keyPath") }
-            if screen != .fingerprint {
-                if input.isEmpty { return invalid("invalid-path", "input") }
-                if output.isEmpty { return invalid("invalid-path", "output") }
-            }
-        }
+        } else if pasteKey {
+            if keyText.isEmpty || keyText.utf8.count > 1_048_576 { return invalid("key-limit", "keyText") }
+        } else if keyPath.isEmpty { return invalid("invalid-path", "keyPath") }
         return nil
     }
 
@@ -406,24 +403,18 @@ final class AppState: ObservableObject {
         let listed = selected.filter { id in contacts.contains { $0.id == id } }
         if listed.count != selected.count && !busy {
             selected = listed
-            if screen == .encrypt && choosingRecipients && failure == nil { failure = invalid("contact-missing", "contacts") }
+            if choosingRecipients && failure == nil { failure = invalid("contact-missing", "contacts") }
         }
     }
 
+    /// The key page's and the fingerprint page's button.
     func submit() {
         if locked || !loaded { return }
         if screen == .contacts { saveContact(); return }
-        if screen == .settings { return }
+        if screen == .settings || screen == .files { return }
         resetFeedback()
         failure = validate()
         if failure != nil { return }
-        if screen == .encrypt && !choosingRecipients { closeRecipientsNow(); choosingRecipients = true; return }
-        if screen == .encrypt && !unverifiedChosen.isEmpty && !unverifiedWarned { unverifiedWarned = true; return }
-        let encrypting = screen == .encrypt
-        let chosen = encrypting ? selectedContacts : []
-        let own = encrypting && ownSelected
-        let others = encrypting ? otherKeys : []
-        closeRecipientsNow()
         jobId = UUID().uuidString
         busy = true; cancelling = false
         let kind = self.kind
@@ -431,25 +422,119 @@ final class AppState: ObservableObject {
         let keys = kind == .keygen || kind == .upgrade
         let pasting = kind == .fingerprint && pasteKey
         var request = OperationRequest(id: jobId, kind: kind)
-        request.input = keys || exporting ? "" : input
-        request.output = keys ? "" : output
-        request.keyPath = encrypting ? (own ? ownPublicKey : "") : (exporting || (!keys && !pasting) ? keyPath : "")
+        request.output = exporting ? output : ""
+        request.keyPath = exporting || (kind == .fingerprint && !pasting) ? keyPath : ""
         request.publicPath = keys ? publicPath : ""
         request.privatePath = keys ? privatePath : ""
         request.password = passwordRequired ? password : ""
         request.confirmation = kind == .keygen ? confirmation : ""
         request.keyText = pasting ? keyText : ""
         request.paste = pasting
-        request.contacts = chosen.map(\.id)
-        request.keyPaths = others
         request.replace = kind == .keygen && replaceOffered && replace
-        request.overwrite = [.encrypt, .decrypt, .exportLegacy].contains(kind) && overwriteOffered && overwrite
-        request.signKeyPath = signing ? signKeyPath : ""
-        request.unsigned = encrypting && unsigned
-        request.requireSignature = screen == .decrypt && requireSignature
-        if signing { storePreferences() }
+        request.overwrite = exporting && overwriteOffered && overwrite
         withdrawReplace(); withdrawOverwrite()
         // The native layer keeps its own copy until it finishes; the fields are cleared now.
+        clearSecrets()
+        let id = jobId
+        Task {
+            do {
+                let sent = request
+                let outcome = try await native { [weak self] in
+                    try Backend.run(sent) { processed, total in
+                        Task { @MainActor in
+                            guard let self, self.busy, self.jobId == id else { return }
+                            self.progress = (processed, total)
+                        }
+                    }
+                }
+                result = outcome
+                // A new or upgraded key pair becomes the user's own keys.
+                if keys { ownPublicKey = request.publicPath; signKeyPath = request.privatePath; storePreferences() }
+                switch kind {
+                case .upgrade: successMessage = "keyUpgraded"
+                case .exportLegacy: successMessage = "legacyExported"
+                default: successMessage = "success"
+                }
+            } catch {
+                let message = code(error)
+                failure = message
+                if kind == .keygen && message == "key-exists" { replaceOffered = true }
+                if exporting && message == "output-exists" { overwriteOffered = true }
+            }
+            busy = false; cancelling = false
+            closeIfRequested()
+        }
+    }
+
+    func clearFile() { if !locked { input = "" } }
+    func restoreDefaultKey() { if !locked { otherPrivateKey = "" } }
+    func encrypt() { begin(.encrypt) }
+    func decrypt() { begin(.decrypt) }
+
+    private func begin(_ action: Kind) {
+        if locked || !loaded || screen != .files { return }
+        discardStaged(); resetFeedback(); closeRecipientsNow(); password = ""
+        if input.isEmpty { failure = invalid("invalid-path", "input"); return }
+        if action == .encrypt {
+            // Signing is never skipped silently: it needs the user's own private key.
+            if !unsigned && signKeyPath.isEmpty { failure = invalid("sign-key-missing", "signKeyPath"); return }
+            fileAction = action
+            choosingRecipients = true
+            Task { await refreshContacts() }
+        } else {
+            if decryptKey.isEmpty { failure = invalid("invalid-path", "otherPrivateKey"); return }
+            fileAction = action
+            askingPassword = true
+        }
+    }
+
+    /// The recipient sheet's button. Nothing is ticked for the user; unverified contacts need a second, warned press.
+    func confirmRecipients() {
+        if locked || !choosingRecipients { return }
+        invalidField = nil
+        if recipientCount == 0 { failure = invalid("contact-required", "contacts") }
+        else if recipientCount > maxRecipients { failure = invalid("recipient-limit", "contacts") }
+        else if selectedContacts.count != selected.count { failure = invalid("contact-missing", "contacts") }
+        else if ownSelected && ownPublicKey.isEmpty { failure = invalid("invalid-path", "contacts") }
+        else { failure = nil }
+        if failure != nil { return }
+        if !unverifiedChosen.isEmpty && !unverifiedWarned { unverifiedWarned = true; return }
+        choosingRecipients = false
+        if signing { askingPassword = true } else { runFile() }
+    }
+
+    func confirmPassword() {
+        if locked || !askingPassword { return }
+        if password.isEmpty { failure = invalid("password-empty", "password"); return }
+        if password.utf8.count > 1024 { failure = invalid("password-limit", "password"); return }
+        invalidField = nil; failure = nil
+        askingPassword = false
+        runFile()
+    }
+    func cancelPassword() { if !locked { password = ""; closeRecipients() } }
+
+    private func runFile() {
+        guard let action = fileAction else { return }
+        let encrypting = action == .encrypt
+        let sign = encrypting && !unsigned
+        let chosen = encrypting ? selectedContacts : []
+        let own = encrypting && ownSelected
+        let others = encrypting ? otherKeys : []
+        let source = input
+        jobId = UUID().uuidString
+        var request = OperationRequest(id: jobId, kind: action)
+        request.input = source
+        request.keyPath = encrypting ? (own ? ownPublicKey : "") : decryptKey
+        request.password = sign || !encrypting ? password : ""
+        request.contacts = chosen.map(\.id)
+        request.keyPaths = others
+        request.signKeyPath = sign ? signKeyPath : ""
+        request.unsigned = encrypting && unsigned
+        request.requireSignature = !encrypting && requireSignature
+        request.stage = true
+        closeRecipientsNow()
+        busy = true; cancelling = false
+        // The native layer keeps its own copy until it finishes; the field is cleared now.
         clearSecrets()
         let id = jobId
         Task {
@@ -464,23 +549,12 @@ final class AppState: ObservableObject {
                         }
                     }
                 }
-                result = outcome
-                recipients = chosen; ownRecipient = own; otherRecipients = others
+                staged = Unsaved(outcome: outcome, kind: action, source: source, contacts: chosen, own: own, others: others)
                 // Every encryption starts with nothing ticked.
                 if encrypting { selected = [] }
-                // A new or upgraded key pair becomes the user's own keys.
-                if keys { ownPublicKey = request.publicPath; signKeyPath = request.privatePath; storePreferences() }
-                switch kind {
-                case .encrypt: successMessage = outcome.format == 5 ? "encryptedSigned" : "encryptedUnsigned"
-                case .upgrade: successMessage = "keyUpgraded"
-                case .exportLegacy: successMessage = "legacyExported"
-                default: successMessage = "success"
-                }
             } catch {
                 let message = code(error)
                 failure = message
-                if kind == .keygen && message == "key-exists" { replaceOffered = true }
-                if [.encrypt, .decrypt, .exportLegacy].contains(kind) && message == "output-exists" { overwriteOffered = true }
                 // Nothing was encrypted. Deselect the contact that could not be used and
                 // require the user to start again with the recipients that remain.
                 unavailable = !chosen.isEmpty && Self.contactFailures.contains(message)
@@ -488,13 +562,53 @@ final class AppState: ObservableObject {
                     let failed = chosen.first { $0.id == (error as? BridgeFailure)?.contact }
                     failedContact = failed
                     if let failed { selected.removeAll { $0 == failed.id } } else { selected = [] }
-                    invalidField = "contacts"
                 }
             }
-            busy = false; cancelling = false
+            busy = false; cancelling = false; fileAction = nil
+            await save()
             if unavailable { await refreshContacts() }
             closeIfRequested()
         }
+    }
+
+    /// Asks where the finished file goes, as Android does. Closing the panel gives the result up.
+    private func save() async {
+        guard let item = staged, !closeRequested else { return }
+        choosing = true
+        defer { choosing = false }
+        let name = item.source.isEmpty ? "file" : fileName(item.source)
+        let plain = name.hasSuffix(".nkem") && name.count > 5 ? String(name.dropLast(5)) : name
+        let suggested = item.kind == .encrypt ? name + ".nkem" : (plain != name ? plain : "decrypted-" + name)
+        guard let destination = chooseSave(suggested, directory: (item.source as NSString).deletingLastPathComponent) else {
+            staged = nil; unsaved = false
+            _ = try? await native { try Backend.discardOutput() }
+            failure = "cancelled"
+            return
+        }
+        do {
+            try await native { try Backend.saveOutput(destination) }
+            staged = nil; unsaved = false
+            var outcome = item.outcome
+            outcome.output = destination
+            result = outcome
+            recipients = item.contacts; ownRecipient = item.own; otherRecipients = item.others
+            successMessage = item.kind != .encrypt ? "success" : (item.outcome.format == 5 ? "encryptedSigned" : "encryptedUnsigned")
+        } catch {
+            let message = code(error)
+            failure = message
+            // The staged file is still there when only the chosen place failed.
+            if message == "save-failed" { unsaved = true } else { staged = nil; unsaved = false }
+        }
+    }
+    func saveAgain() {
+        if locked || staged == nil { return }
+        failure = nil
+        Task { await save(); closeIfRequested() }
+    }
+    private func discardStaged() {
+        if staged == nil { return }
+        staged = nil; unsaved = false
+        Task { _ = try? await native { try Backend.discardOutput() } }
     }
 
     private func saveContact() {
@@ -635,7 +749,7 @@ final class AppState: ObservableObject {
     func useContact(_ contact: Contact) {
         if locked { return }
         selected = [contact.id]
-        switchTo(.encrypt)
+        switchTo(.files)
     }
     func toggleContact(_ contact: Contact) {
         if locked { return }
@@ -643,13 +757,13 @@ final class AppState: ObservableObject {
         unverifiedWarned = false
         edited("contacts")
     }
-    func encryptSelected() { if !locked && !selected.isEmpty { switchTo(.encrypt) } }
+    func encryptSelected() { if !locked && !selected.isEmpty { switchTo(.files) } }
     func clearSelection() { if !locked { selected = [] } }
     func toggleOwn() {
         if !locked && (ownSelected || !atRecipientLimit) { ownSelected.toggle(); unverifiedWarned = false; edited("contacts") }
     }
-    func closeRecipients() { if !locked { closeRecipientsNow(); invalidField = nil; failure = nil } }
-    private func closeRecipientsNow() { choosingRecipients = false; ownSelected = false; otherKeys = []; unverifiedWarned = false }
+    func closeRecipients() { if !locked { closeRecipientsNow(); fileAction = nil; invalidField = nil; failure = nil } }
+    private func closeRecipientsNow() { choosingRecipients = false; askingPassword = false; ownSelected = false; otherKeys = []; unverifiedWarned = false }
     func removeOtherKey(_ path: String) { if !locked { otherKeys.removeAll { $0 == path } } }
     /// "Other public key file…": a one-off recipient for this file, never saved.
     func addOtherKey() {
@@ -673,11 +787,16 @@ final class AppState: ObservableObject {
     /// The window's close button and Quit: a running operation is stopped and finishes first.
     func mayClose() -> Bool {
         if Bridge.deferClose() { closeRequested = true; return false }
-        clearSecrets()
+        leave()
         return true
     }
     private func closeIfRequested() {
-        if closeRequested && Bridge.closeReady() { clearSecrets(); NSApp.terminate(nil) }
+        if closeRequested && Bridge.closeReady() { leave(); NSApp.terminate(nil) }
+    }
+    // An output that was never saved is deleted before the app goes.
+    private func leave() {
+        clearSecrets()
+        if staged != nil { staged = nil; _ = try? Backend.discardOutput() }
     }
 
     // MARK: Fixed states for the screenshots
@@ -695,18 +814,23 @@ final class AppState: ObservableObject {
         demo = true; loaded = true
         signKeyPath = "/Users/shawn/Keys/private.key.enc"; ownPublicKey = "/Users/shawn/Keys/public.key"
         demoContacts()
-        choosingRecipients = false; ownSelected = false; selected = []; otherKeys = []; unverifiedWarned = false
-        result = nil; failure = nil; invalidField = nil
-        input = ""; output = ""; password = ""
+        choosingRecipients = false; askingPassword = false; fileAction = nil
+        ownSelected = false; selected = []; otherKeys = []; unverifiedWarned = false
+        input = ""; output = ""; password = ""; otherPrivateKey = ""
+        resetFeedback()
         switch name {
-        case "encrypt", "encrypt-recipients", "encrypt-warning":
-            screen = .encrypt
-            input = "/Users/shawn/Documents/report.pdf"; output = "/Users/shawn/Documents/report.pdf.nkem"; password = "demo-password"
-            if name != "encrypt" { choosingRecipients = true; ownSelected = true; selected = ["alice"] }
+        case "files-empty": screen = .files
+        case "files", "encrypt-recipients", "encrypt-warning", "files-password", "files-done":
+            screen = .files
+            input = name == "files-password" ? "/Users/shawn/Downloads/report.pdf.nkem" : "/Users/shawn/Documents/report.pdf"
+            if name == "encrypt-recipients" || name == "encrypt-warning" { fileAction = .encrypt; choosingRecipients = true; ownSelected = true; selected = ["alice"] }
             if name == "encrypt-warning" { selected = ["alice", "carol"]; unverifiedWarned = true }
-        case "decrypt":
-            screen = .decrypt; keyPath = signKeyPath
-            input = "/Users/shawn/Downloads/report.pdf.nkem"; output = "/Users/shawn/Downloads/report.pdf"
+            if name == "files-password" { fileAction = .decrypt; askingPassword = true; password = "demo-password" }
+            if name == "files-done" {
+                var done = Outcome()
+                done.output = "/Users/shawn/Documents/report.pdf.nkem"; done.format = 5
+                result = done; successMessage = "encryptedSigned"; ownRecipient = true; recipients = [contacts[1]]
+            }
         case "keys": screen = .keygen; keyMode = .generate
         case "fingerprint":
             screen = .fingerprint; keyPath = ownPublicKey

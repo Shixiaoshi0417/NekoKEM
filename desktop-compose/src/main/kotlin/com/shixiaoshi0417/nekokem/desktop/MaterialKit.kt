@@ -288,12 +288,33 @@ object MaterialKit : Kit {
     }
 
     @Composable override fun ActionRow(title: String, summary: String, enabled: Boolean, onClick: () -> Unit) {
+        // Without details the row is the action itself, as a button at the row's start.
+        if (summary.isEmpty()) {
+            Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp)) { SecondaryButton(title, enabled, onClick = onClick) }
+            return
+        }
         ListItem(
             headlineContent = { MaterialText(title, fontSize = 15.sp, fontWeight = FontWeight.SemiBold) },
             supportingContent = { MaterialText(summary, fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant) },
             trailingContent = { SecondaryButton(title, enabled, onClick = onClick) },
             colors = ListItemDefaults.colors(containerColor = Color.Transparent),
         )
+    }
+
+    @Composable override fun InfoRow(title: String, summary: String, danger: Boolean) {
+        ListItem(
+            headlineContent = { MaterialText(title, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = if (danger) MaterialTheme.colorScheme.error else Color.Unspecified) },
+            supportingContent = if (summary.isEmpty()) null else ({ MaterialText(summary, fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant) }),
+            colors = ListItemDefaults.colors(containerColor = Color.Transparent),
+        )
+    }
+
+    @Composable override fun ButtonPair(first: String, second: String, enabled: Boolean, onFirst: () -> Unit, onSecond: () -> Unit) {
+        Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Button(onClick = onFirst, enabled = enabled, shapes = ButtonDefaults.shapes(), modifier = Modifier.weight(1f).height(40.dp)) { MaterialText(first, fontSize = 15.sp, fontWeight = FontWeight.SemiBold) }
+            FilledTonalButton(onClick = onSecond, enabled = enabled, shapes = ButtonDefaults.shapes(), modifier = Modifier.weight(1f).height(40.dp),
+                colors = ButtonDefaults.filledTonalButtonColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh, contentColor = MaterialTheme.colorScheme.onSurface)) { MaterialText(second, fontSize = 15.sp, fontWeight = FontWeight.SemiBold) }
+        }
     }
 
     @Composable override fun Progress(fraction: Float?, modifier: Modifier) {

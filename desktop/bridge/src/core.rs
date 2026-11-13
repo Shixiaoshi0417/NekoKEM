@@ -56,6 +56,9 @@ pub struct Request {
     #[serde(default)] pub unsigned:bool,
     // Decryption: Core refuses NKEM v3/v4 files without a signature.
     #[serde(default)] pub require_signature:bool,
+    // Encryption/decryption: write to a private staged file, which the user
+    // saves afterwards (save_output) or gives up (discard_output). No `output`.
+    #[serde(default)] pub stage:bool,
 }
 #[derive(Serialize,Default)]
 #[serde(rename_all="camelCase")]
@@ -92,8 +95,12 @@ impl Offer {
         self.at.elapsed()<OFFER_LIFETIME && self.wall.elapsed().is_ok_and(|elapsed|elapsed<OFFER_LIFETIME)
     }
 }
-pub struct Backend { pub active:Mutex<Option<Arc<Job>>>, pub close_after:AtomicBool, offer:Mutex<Option<Offer>> }
-impl Default for Backend { fn default()->Self { Self{active:Mutex::new(None),close_after:AtomicBool::new(false),offer:Mutex::new(None)} } }
+pub struct Backend {
+    pub active:Mutex<Option<Arc<Job>>>, pub close_after:AtomicBool, offer:Mutex<Option<Offer>>,
+    // The finished output of a staged operation, until it is saved or discarded.
+    pending:Mutex<Option<Staged>>,
+}
+impl Default for Backend { fn default()->Self { Self{active:Mutex::new(None),close_after:AtomicBool::new(false),offer:Mutex::new(None),pending:Mutex::new(None)} } }
 impl Backend {
     pub fn reserve(&self, request:&Request)->Result<Arc<Job>,Failure> {
         if request.id.is_empty() || request.id.len()>64 || !request.id.bytes().all(|c|c.is_ascii_alphanumeric()||c==b'-') { return Err(Failure::new("invalid-request")); }
@@ -136,6 +143,25 @@ impl Backend {
     pub fn finish(&self,job:&Arc<Job>) {
         if let Ok(mut active)=self.active.lock() { if active.as_ref().is_some_and(|j|Arc::ptr_eq(j,job)) { *active=None; } }
     }
+    /// Moves the staged output to the place the user chose in the system's save
+    /// dialog, which already asked before replacing a file. A failure keeps the
+    /// staged output, so another place can be chosen.
+    pub fn save_output(&self,destination:&str)->Result<(),Failure> {
+        let target=path(destination)?;
+        // Core refuses a path it would not write to before anything opens it.
+        if exists(&target).is_none() {return Err(Failure::new("save-failed"));}
+        let mut pending=self.pending.lock().map_err(|_|Failure::new("internal"))?;
+        let source=pending.as_ref().and_then(Staged::path).and_then(|path|path.to_str().ok()).ok_or_else(||Failure::new("invalid-request"))?.to_owned();
+        move_file(std::path::Path::new(&source),std::path::Path::new(destination)).map_err(|_|Failure::new("save-failed"))?;
+        if pending.take().is_some_and(|mut staged|staged.close()) {Ok(())} else {Err(Failure::new("cleanup-error"))}
+    }
+    /// Deletes a staged output that was not saved. True when nothing is left.
+    pub fn discard_output(&self)->bool {
+        let Ok(mut pending)=self.pending.lock() else { return false; };
+        let Some(mut staged)=pending.take() else { return true; };
+        if let Some(path)=staged.path().and_then(|path|path.to_str().ok()) {let _=std::fs::remove_file(path);}
+        staged.close()
+    }
     // Return true while native shutdown must wait for Core/secret cleanup.
     pub fn defer_close(&self)->bool {
         let Ok(active)=self.active.lock() else { return true; };
@@ -145,6 +171,33 @@ impl Backend {
             true
         } else { false }
     }
+}
+// Renames within one volume. Otherwise the file is copied beside the destination
+// and renamed there, so a failed copy never leaves a partial file under the chosen
+// name. Windows always copies: a moved file would keep the private folder's
+// permissions instead of taking the destination folder's.
+fn move_file(source:&std::path::Path,destination:&std::path::Path)->std::io::Result<()> {
+    #[cfg(not(windows))]
+    if std::fs::rename(source,destination).is_ok() {return Ok(());}
+    let stamp=SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).map_or(0,|elapsed|elapsed.as_nanos());
+    let part=destination.with_file_name(format!(".nekokem-{}-{stamp:x}.part",std::process::id()));
+    let result=(||{
+        let mut from=std::fs::File::open(source)?;
+        let mut options=std::fs::OpenOptions::new();
+        options.write(true).create_new(true);
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::{OpenOptionsExt,PermissionsExt};
+            options.mode(from.metadata()?.permissions().mode()&0o777);
+        }
+        let mut to=options.open(&part)?;
+        std::io::copy(&mut from,&mut to)?;
+        to.sync_all()?;
+        drop(to);
+        std::fs::rename(&part,destination)
+    })();
+    if result.is_ok() {let _=std::fs::remove_file(source);} else {let _=std::fs::remove_file(&part);}
+    result
 }
 pub struct Reservation { pub backend:Arc<Backend>, pub job:Arc<Job> }
 impl Drop for Reservation { fn drop(&mut self){ self.backend.finish(&self.job); } }
@@ -171,6 +224,7 @@ extern "C" {
     fn file_set_output_no_replace(enabled:c_int)->c_int;
     fn desktop_stage_key(bytes:*const u8,length:usize)->*mut c_char;
     fn desktop_stage_output()->*mut c_char;
+    fn desktop_stage_file_output()->*mut c_char;
     fn desktop_remove_staged_key(path:*mut c_char)->c_int;
     fn desktop_language()->*const c_char;
     fn cli_language_save(language:*const c_char)->c_int;
@@ -228,12 +282,19 @@ impl Staged {
         let pointer=unsafe{desktop_stage_output()};
         if pointer.is_null() {return Err(Failure::new("core-error"));} Ok(Self(pointer))
     }
+    // The same on a disk, for a whole file the user saves afterwards.
+    pub fn file_output()->Result<Self,Failure> {
+        let pointer=unsafe{desktop_stage_file_output()};
+        if pointer.is_null() {return Err(Failure::new("core-error"));} Ok(Self(pointer))
+    }
     pub fn path(&self)->Option<&CStr> {
         if self.0.is_null(){None}else{Some(unsafe{CStr::from_ptr(self.0)})}
     }
     pub fn close(&mut self)->bool {if self.0.is_null(){return true;} let p=std::mem::replace(&mut self.0,std::ptr::null_mut());unsafe{desktop_remove_staged_key(p)==1}}
 }
 impl Drop for Staged {fn drop(&mut self){let _=self.close();}}
+// The path is an owned C string, used by one thread at a time.
+unsafe impl Send for Staged {}
 struct ProgressContext<F:Fn(u64,u64)> { job:Arc<Job>, emit:F, last_emit:Option<Instant> }
 struct OutputMode(c_int);
 impl OutputMode {
@@ -263,6 +324,9 @@ pub fn execute<F:Fn(u64,u64)>(backend:&Backend,request:Request,job:Arc<Job>,emit
         return Err(Failure::new("invalid-request"));
     }
     if request.replace && request.kind!=Kind::Keygen {return Err(Failure::new("invalid-request"));}
+    if request.stage && (!matches!(request.kind,Kind::Encrypt|Kind::Decrypt) || !request.output.is_empty() || request.overwrite) {return Err(Failure::new("invalid-request"));}
+    // An earlier output that was never saved does not outlive the next operation.
+    if !backend.discard_output() {return Err(Failure::new("cleanup-error"));}
     if request.overwrite && !matches!(request.kind,Kind::Encrypt|Kind::Decrypt|Kind::ExportLegacy) {return Err(Failure::new("invalid-request"));}
     if (request.kind!=Kind::Encrypt && (request.unsigned || !request.sign_key_path.is_empty())) ||
         (request.kind==Kind::Encrypt && request.unsigned && !request.sign_key_path.is_empty()) ||
@@ -296,22 +360,27 @@ pub fn execute<F:Fn(u64,u64)>(backend:&Backend,request:Request,job:Arc<Job>,emit
         }
         return Ok(Outcome{output:Some(request.public_path.clone()),fingerprint:fingerprint(&public),legacy_fingerprint:legacy_fingerprint(&public),can_verify:Some(true),..Outcome::default()});
     }
+    let mut staged_output=if request.stage {Some(Staged::file_output()?)} else {None};
+    let target=match &staged_output {
+        Some(stage)=>stage.path().and_then(|path|path.to_str().ok()).ok_or_else(||Failure::new("internal"))?.to_owned(),
+        None=>request.output.clone(),
+    };
     let signing=request.kind==Kind::Encrypt && !request.unsigned;
     if signing {
         // Signing never silently falls back to an unsigned file.
         if request.sign_key_path.is_empty() {return Err(Failure::new("sign-key-missing"));}
         if exists(&path(&request.sign_key_path)?)==Some(false) {return Err(Failure::new("sign-key-missing"));}
         if request.password.is_empty(){return Err(Failure::new("password-empty"));}
-        if same_file(&path(&request.output)?,&path(&request.sign_key_path)?)==Some(true) {return Err(Failure::new("output-is-key"));}
+        if same_file(&path(&target)?,&path(&request.sign_key_path)?)==Some(true) {return Err(Failure::new("output-is-key"));}
     }
     // Core refuses an output that is the key in use; this names the reason.
     if matches!(request.kind,Kind::Encrypt|Kind::Decrypt|Kind::ExportLegacy) && !request.key_path.is_empty() && !request.paste {
-        if same_file(&path(&request.output)?,&path(&request.key_path)?)==Some(true) {
+        if same_file(&path(&target)?,&path(&request.key_path)?)==Some(true) {
             return Err(Failure::new("output-is-key"));
         }
     }
     for key in &request.key_paths {
-        if same_file(&path(&request.output)?,&path(key)?)==Some(true) {return Err(Failure::new("output-is-key"));}
+        if same_file(&path(&target)?,&path(key)?)==Some(true) {return Err(Failure::new("output-is-key"));}
     }
     // Saved contacts are re-read and re-validated by Core for every encryption.
     // A missing or damaged contact fails the whole operation and names that
@@ -345,7 +414,7 @@ pub fn execute<F:Fn(u64,u64)>(backend:&Backend,request:Request,job:Arc<Job>,emit
         }
         // Exporting a legacy key reads only the key and writes the output.
         let input=if request.kind==Kind::ExportLegacy {CString::default()} else {path(&request.input)?};
-        let output=path(&request.output)?;
+        let output=path(&target)?;
         if !request.overwrite && exists(&output)==Some(true) {
             backend.offer(Confirmation::Output(request.output.clone()))?;
             return Err(Failure::new("output-exists"));
@@ -383,7 +452,7 @@ pub fn execute<F:Fn(u64,u64)>(backend:&Backend,request:Request,job:Arc<Job>,emit
         match status {1=>{},-1=>return Err(Failure::new("cancelled")),-10=>return Err(Failure::new("signature-invalid")),
             -11=>return Err(Failure::new("signature-required")),-12=>return Err(Failure::new("signer-not-trusted")),_=>return Err(Failure::new("core-error"))}
         let fingerprint=if recipients.len()==1 && keys.len()==1 {recipients.first().cloned()} else {None};
-        let mut outcome=Outcome{output:Some(request.output.clone()),fingerprint,recipients:recipients.clone(),..Outcome::default()};
+        let mut outcome=Outcome{output:(!request.stage).then(||request.output.clone()),fingerprint,recipients:recipients.clone(),..Outcome::default()};
         match request.kind {
             Kind::Encrypt=>outcome.format=Some(written.format_version),
             Kind::Decrypt=>{
@@ -406,6 +475,9 @@ pub fn execute<F:Fn(u64,u64)>(backend:&Backend,request:Request,job:Arc<Job>,emit
     for (_,stage) in signers.iter_mut() {cleaned&=stage.close();}
     if let Some(stage)=signer_output.as_mut() {cleaned&=stage.close();}
     if !cleaned {return Err(Failure::new("cleanup-error"));}
+    if result.is_ok() {
+        if let Some(stage)=staged_output.take() {*backend.pending.lock().map_err(|_|Failure::new("internal"))?=Some(stage);}
+    }
     result
 }
 
@@ -462,7 +534,7 @@ mod tests {
         assert!(unsafe { CStr::from_ptr(version) }.to_bytes().starts_with(b"OpenSSL 4.1.0 "),
                 "GUI linked runtime does not match pinned OpenSSL 4.1.0");
     }
-    fn request(kind:Kind)->Request {Request{id:"test-job".into(),input:String::new(),output:String::new(),key_path:String::new(),public_path:String::new(),private_path:String::new(),password:Zeroizing::new(String::new()),confirmation:Zeroizing::new(String::new()),key_text:Zeroizing::new(String::new()),paste:false,replace:false,overwrite:false,contacts:Vec::new(),key_paths:Vec::new(),
+    fn request(kind:Kind)->Request {Request{stage:false,id:"test-job".into(),input:String::new(),output:String::new(),key_path:String::new(),public_path:String::new(),private_path:String::new(),password:Zeroizing::new(String::new()),confirmation:Zeroizing::new(String::new()),key_text:Zeroizing::new(String::new()),paste:false,replace:false,overwrite:false,contacts:Vec::new(),key_paths:Vec::new(),
         // Signing has its own tests; the others check one behaviour of all formats.
         sign_key_path:String::new(),unsigned:kind==Kind::Encrypt,require_signature:false,kind}}
     fn run(backend:&Arc<Backend>,r:Request)->Result<Outcome,Failure>{let job=backend.reserve(&r)?;let _hold=Reservation{backend:backend.clone(),job:job.clone()};execute(&backend,r,job,|_,_|{})}

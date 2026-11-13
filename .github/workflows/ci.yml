@@ -762,7 +762,7 @@ jobs:
             sleep 1
           done
           if kill -0 "$pid" 2>/dev/null; then kill -KILL "$pid"; echo 'The screenshot run did not finish' >&2; exit 1; fi
-          for name in encrypt encrypt-recipients encrypt-warning decrypt keys fingerprint contacts contacts-selected settings; do
+          for name in files-empty files encrypt-recipients encrypt-warning files-password files-done keys fingerprint contacts contacts-selected settings; do
             test -s "$screens/$name.png"
           done
       - name: Check the application and write its ZIP and disk image
@@ -849,7 +849,7 @@ jobs:
           set -Eeuo pipefail
           # Named for this run only; the packaged launcher finds the library in its own resources.
           ./gradlew --no-daemon screenshots "-Pnekokem.bridge=$PWD/native/${{ matrix.resources }}/libnekokem_native.so"
-          test "$(find build/screenshots -name '*.png' -size +0 | wc -l)" -ge 24
+          test "$(find build/screenshots -name '*.png' -size +0 | wc -l)" -ge 40
       - name: Build, check and name the Debian, RPM and folder packages
         working-directory: desktop-compose
         run: |
@@ -994,7 +994,7 @@ jobs:
           .\gradlew.bat --no-daemon screenshots "-Pnekokem.bridge=$PWD\native\windows-x64\nekokem_native.dll"
           if ($LASTEXITCODE -ne 0) { throw 'Screenshots failed' }
           $count = (Get-ChildItem build\screenshots -Filter *.png | Where-Object Length -gt 0).Count
-          if ($count -lt 24) { throw "Only $count screenshots" }
+          if ($count -lt 40) { throw "Only $count screenshots" }
       - name: Build the application folder and the MSI installer
         shell: pwsh
         working-directory: desktop-compose

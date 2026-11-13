@@ -49,6 +49,10 @@ interface Kit {
     @Composable fun SwitchRow(title: String, summary: String, checked: Boolean, danger: Boolean = false, enabled: Boolean = true, onChange: (Boolean) -> Unit)
     @Composable fun ChoiceRow(title: String, summary: String, items: List<String>, selected: Int, enabled: Boolean, onSelect: (Int) -> Unit)
     @Composable fun ActionRow(title: String, summary: String, enabled: Boolean, onClick: () -> Unit)
+    /** A row that only shows something: a title over its details. */
+    @Composable fun InfoRow(title: String, summary: String, danger: Boolean = false)
+    /** The page's two main actions side by side, the first one emphasized. */
+    @Composable fun ButtonPair(first: String, second: String, enabled: Boolean, onFirst: () -> Unit, onSecond: () -> Unit)
     @Composable fun Progress(fraction: Float?, modifier: Modifier = Modifier)
     @Composable fun Dialog(show: Boolean, title: String, summary: String, onDismiss: () -> Unit, content: @Composable ColumnScope.() -> Unit)
 }

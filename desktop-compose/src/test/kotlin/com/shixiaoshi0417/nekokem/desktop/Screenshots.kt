@@ -36,7 +36,13 @@ fun main(args: Array<String>): Unit = runBlocking(Dispatchers.Main) {
     File(work, "report.pdf").writeBytes(ByteArray(3_000_000) { it.toByte() })
 
     for (style in Style.entries) for (theme in listOf(SystemTheme.Light, SystemTheme.Dark)) {
-        val state = AppState(this, object : FileChooser { override fun open() = null; override fun save(suggested: String) = null }) {}
+        // The save dialog answers with a new file beside the input, as a user would.
+        val saved = mutableListOf<String>()
+        val chooser = object : FileChooser {
+            override fun open() = null
+            override fun save(suggested: String, directory: String?) = File(directory ?: work.path, "${style.wire}-${theme.name}-$suggested").absolutePath.also(saved::add)
+        }
+        val state = AppState(this, chooser) {}
         state.start()
         while (!state.loaded || !state.contactsLoaded) delay(20)
         state.changeStyle(style)
@@ -51,18 +57,33 @@ fun main(args: Array<String>): Unit = runBlocking(Dispatchers.Main) {
         }
         suspend fun settle() { repeat(100) { delay(20); if (!state.busy && !state.contactBusy) return } }
 
-        state.switchTab(View.Encrypt); settle()
+        suspend fun done() { repeat(200) { delay(20); if (!state.locked && state.fileAction == null) return } }
+        state.switchTab(View.Files); settle()
+        shot("files-empty")
         state.setPath(PathField.OwnPublicKey, file("me.public.key"))
-        state.setPath(PathField.Input, file("report.pdf"))
-        state.setPath(PathField.Output, file("report-${style.wire}-${theme.name}.pdf.nkem"))
         state.setPath(PathField.SignKeyPath, file("me.private.key.enc"))
-        shot("encrypt")
-        state.password.edit { append(password) }
-        state.submit(); settle()
-        state.contacts.lastOrNull()?.let(state::toggleContact)
+        state.setPath(PathField.Input, file("report.pdf"))
+        shot("files")
+        state.encrypt(); settle()
+        state.contacts.first { it.note == "Alice" }.let(state::toggleContact)
         shot("encrypt-recipients")
-        state.submit(); settle()
+        state.confirmRecipients()
+        check(state.askingPassword) { "Signing asks for the password" }
+        shot("encrypt-password")
+        state.password.edit { append(password) }
+        state.confirmPassword(); done()
+        check(state.result?.output == saved.last() && File(saved.last()).length() > 3_000_000) { "Encrypted file was not saved: ${state.failure}" }
         shot("encrypt-done")
+
+        // The file comes back through the same page: pick it, decrypt, save.
+        state.setPath(PathField.Input, saved.last())
+        state.setPath(PathField.OtherPrivateKey, file("alice.private.key.enc"))
+        state.decrypt()
+        state.password.edit { append(password) }
+        state.confirmPassword(); done()
+        check(state.result?.signature != null && File(saved.last()).readBytes().contentEquals(File(work, "report.pdf").readBytes())) { "Decrypted file differs: ${state.failure}" }
+        shot("decrypt-done")
+        state.restoreDefaultKey()
 
         state.switchTab(View.Keygen); settle()
         shot("keygen")

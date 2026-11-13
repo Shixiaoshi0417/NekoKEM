@@ -83,7 +83,7 @@ final class Screenshots {
     private let state: AppState
     private let window: NSWindow
     private let directory: URL
-    private var names = ["encrypt", "encrypt-recipients", "encrypt-warning", "decrypt", "keys", "fingerprint", "contacts", "contacts-selected", "settings"]
+    private var names = ["files-empty", "files", "encrypt-recipients", "encrypt-warning", "files-password", "files-done", "keys", "fingerprint", "contacts", "contacts-selected", "settings"]
 
     init(state: AppState, window: NSWindow, directory: String) {
         self.state = state; self.window = window; self.directory = URL(fileURLWithPath: directory, isDirectory: true)

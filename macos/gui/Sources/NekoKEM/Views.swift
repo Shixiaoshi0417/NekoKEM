@@ -53,30 +53,17 @@ struct ContentView: View {
             .navigationTitle(state.t(state.destination.key))
             .toolbar {
                 ToolbarItem(placement: .principal) {
-                    switch state.destination {
-                    case .files: FilesModePicker(state: state)
-                    case .keys: KeysModePicker(state: state)
-                    default: EmptyView()
-                    }
+                    if state.destination == .keys { KeysModePicker(state: state) }
                 }
             }
         }
         .frame(minWidth: 820, minHeight: 600)
-        .sheet(isPresented: Binding(get: { state.choosingRecipients }, set: { if !$0 { state.closeRecipients() } })) { RecipientSheet(state: state) }
+        // Encrypting asks for the recipients and then, to sign, for the password: one sheet, two steps.
+        .sheet(isPresented: Binding(get: { state.choosingRecipients || state.askingPassword }, set: { if !$0 { state.closeRecipients() } })) {
+            if state.askingPassword { PasswordSheet(state: state) } else { RecipientSheet(state: state) }
+        }
         .sheet(isPresented: Binding(get: { !state.qrFingerprint.isEmpty }, set: { if !$0 { state.qrFingerprint = "" } })) { QrSheet(state: state) }
         .sheet(isPresented: Binding(get: { !state.availableVersion.isEmpty }, set: { if !$0 { state.availableVersion = "" } })) { UpdateSheet(state: state) }
-    }
-}
-
-/// Encrypt or decrypt, in the toolbar.
-private struct FilesModePicker: View {
-    @ObservedObject var state: AppState
-    var body: some View {
-        Picker("", selection: Binding(get: { state.screen == .decrypt ? 1 : 0 }, set: { state.switchTo($0 == 1 ? .decrypt : .encrypt) })) {
-            Text(state.t("encrypt")).tag(0)
-            Text(state.t("decrypt")).tag(1)
-        }
-        .pickerStyle(.segmented).labelsHidden().disabled(!state.editable)
     }
 }
 
@@ -214,17 +201,76 @@ private struct VerifiedMark: View {
 
 // MARK: Pages
 
+/// The file page, as on Android: the chosen file with Encrypt and Decrypt, then
+/// the private key that decrypts. Recipients and the password are asked for when
+/// a button is pressed, and where to save once the work is done.
 private struct FilesPage: View {
     @ObservedObject var state: AppState
 
     var body: some View {
+        let chosen = !state.input.isEmpty
+        let other = !state.otherPrivateKey.isEmpty
         Card {
-            if state.screen == .decrypt { PathInput(state: state, field: .keyPath, label: state.t("myPrivateKey")) }
-            PathInput(state: state, field: .input, label: state.t("input"))
-            PathInput(state: state, field: .output, label: state.t("output"))
-            if state.signing { PathInput(state: state, field: .signKeyPath, label: state.t("myPrivateKey")) }
-            if state.screen == .encrypt && state.unsigned { Text(state.t("unsignedWarning")).font(.callout).foregroundStyle(danger) }
-            OperationFooter(state: state)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(chosen ? fileName(state.input) : state.t("noFileSelected")).font(.title3).fontWeight(.semibold)
+                Text(chosen ? state.input : state.t("selectedFile")).font(.callout).foregroundStyle(.secondary).lineLimit(2).truncationMode(.middle)
+            }
+            HStack(spacing: 8) {
+                Button { state.encrypt() } label: { Text(state.t("encryptAction")).frame(maxWidth: .infinity) }
+                    .primaryAction().controlSize(.large).disabled(!state.editable || !chosen)
+                Button { state.decrypt() } label: { Text(state.t("decryptAction")).frame(maxWidth: .infinity) }
+                    .controlSize(.large).disabled(!state.editable || !chosen)
+            }
+            if state.unsigned { Text(state.t("unsignedWarning")).font(.callout).foregroundStyle(danger) }
+            HStack(spacing: 12) {
+                Button(state.t("selectFile")) { state.browse(.input) }.disabled(!state.editable)
+                if chosen { Button(state.t("clearSelection")) { state.clearFile() }.buttonStyle(.link).disabled(!state.editable) }
+            }
+        }
+        Text(state.t("decryptKeyTitle")).font(.headline).padding(.top, 8)
+        Card {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(state.t("keySourceLine").replacingOccurrences(of: "{source}", with: state.t(other ? "keySourceChosen" : "myPrivateKey")))
+                Text(state.t("keyFileLine").replacingOccurrences(of: "{file}", with: state.decryptKey.isEmpty ? state.t("notSet") : state.decryptKey))
+                    .font(.callout).foregroundStyle(.secondary).lineLimit(2).truncationMode(.middle)
+            }
+            HStack(spacing: 12) {
+                Button(state.t("selectOtherPrivateKey")) { state.browse(.otherPrivateKey) }.disabled(!state.editable)
+                if other { Button(state.t("restoreDefaultPrivateKey")) { state.restoreDefaultKey() }.buttonStyle(.link).disabled(!state.editable) }
+            }
+        }
+        if state.busy || state.unsaved || state.failure != nil || state.result != nil {
+            Card {
+                if state.busy {
+                    ProgressBlock(state: state)
+                    HStack {
+                        Spacer()
+                        Button(state.t("cancel")) { state.cancel() }.disabled(state.cancelling)
+                    }
+                }
+                FormFeedback(state: state)
+                if state.unsaved {
+                    HStack {
+                        Spacer()
+                        Button(state.t("saveAs")) { state.saveAgain() }.primaryAction().disabled(!state.editable)
+                    }
+                }
+            }
+        }
+    }
+}
+
+private struct ProgressBlock: View {
+    @ObservedObject var state: AppState
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack {
+                Text(state.t(state.cancelling ? "cancelling" : (state.progress != nil ? "progress" : "preparing")))
+                Spacer()
+                if let percent = state.percent { Text("\(percent)%").monospacedDigit() }
+            }
+            if let percent = state.percent { ProgressView(value: Double(percent), total: 100) } else { ProgressView().progressViewStyle(.linear) }
         }
     }
 }
@@ -270,23 +316,11 @@ private struct OperationFooter: View {
                 SecretInput(state: state, label: state.t("confirmation"), name: "confirmation", text: $state.confirmation)
             }
         }
-        if state.busy {
-            VStack(alignment: .leading, spacing: 4) {
-                HStack {
-                    Text(state.t(state.cancelling ? "cancelling" : (state.progress != nil ? "progress" : "preparing")))
-                    Spacer()
-                    if let percent = state.percent { Text("\(percent)%").monospacedDigit() }
-                }
-                if let percent = state.percent { ProgressView(value: Double(percent), total: 100) } else { ProgressView().progressViewStyle(.linear) }
-            }
-        }
+        if state.busy { ProgressBlock(state: state) }
         UpgradeConfirm(state: state)
         if state.feedback == .form { FormFeedback(state: state) }
         HStack {
             Spacer()
-            if state.busy && (state.screen == .encrypt || state.screen == .decrypt) {
-                Button(state.t("cancel")) { state.cancel() }.disabled(state.cancelling)
-            }
             Button(actionTitle) { state.submit() }.primaryAction().keyboardShortcut(.defaultAction).disabled(!state.editable)
         }
     }
@@ -314,7 +348,8 @@ private struct FormFeedback: View {
             Toggle(state.t("overwriteOutput"), isOn: $state.overwrite).disabled(!state.editable)
             Text(state.t("overwriteOutputHint")).font(.callout).foregroundStyle(danger)
         }
-        if let failure = state.failure, state.invalidField != "contacts" || !state.choosingRecipients {
+        // The recipient and password sheets show their own errors.
+        if let failure = state.failure, state.invalidField != "contacts", state.invalidField != "password" {
             Notice(title: state.t(failure), warn: failure != "cancelled") {
                 if let contact = state.failedContact { Detail(text: "\(state.t("recipient")): \(state.label(contact)) · \(contact.fingerprint)") }
             }
@@ -598,8 +633,30 @@ private struct RecipientSheet: View {
                 Text("\(state.recipientCount) / \(maxRecipients)").font(.callout).foregroundStyle(.secondary).monospacedDigit()
                 Spacer()
                 Button(state.t("cancel"), role: .cancel) { state.closeRecipients() }.keyboardShortcut(.cancelAction)
-                if warned { Button(state.t("encryptAnyway"), role: .destructive) { state.submit() }.disabled(!state.editable) }
-                else { Button(state.t("encrypt")) { state.submit() }.primaryAction().keyboardShortcut(.defaultAction).disabled(!state.editable || state.recipientCount == 0) }
+                if warned { Button(state.t("encryptAnyway"), role: .destructive) { state.confirmRecipients() }.disabled(!state.editable) }
+                else { Button(state.t("encryptAction")) { state.confirmRecipients() }.primaryAction().keyboardShortcut(.defaultAction).disabled(!state.editable || state.recipientCount == 0) }
+            }
+        }
+        .padding(20)
+        .frame(width: 440)
+    }
+}
+
+/// Asked after Encrypt (to sign) or Decrypt is pressed; the password opens the private key and is not kept.
+private struct PasswordSheet: View {
+    @ObservedObject var state: AppState
+
+    var body: some View {
+        let encrypting = state.fileAction == .encrypt
+        VStack(alignment: .leading, spacing: 12) {
+            Text(state.t("password")).font(.headline)
+            if encrypting { Text(state.t("signPasswordHint")).font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true) }
+            SecureField("", text: $state.password).textFieldStyle(.roundedBorder).accessibilityLabel(state.t("password"))
+            if state.invalidField == "password", let failure = state.failure { Text(state.t(failure)).font(.callout).foregroundStyle(danger) }
+            HStack {
+                Spacer()
+                Button(state.t("cancel"), role: .cancel) { state.cancelPassword() }.keyboardShortcut(.cancelAction)
+                Button(state.t(encrypting ? "encryptAction" : "decryptAction")) { state.confirmPassword() }.primaryAction().keyboardShortcut(.defaultAction).disabled(!state.editable)
             }
         }
         .padding(20)

@@ -48,6 +48,8 @@ enum Call {
     GetSettings,
     SetLanguage { language: String },
     RunOperation { request: Request },
+    SaveOutput { destination: String },
+    DiscardOutput,
     ListContacts,
     SaveContact { contact: ContactImport },
     UpdateContactNote { id: String, note: String },
@@ -109,6 +111,8 @@ fn run(call: Call, progress: Option<ProgressCallback>) -> Result<Value, Failure>
             drop(hold);
             json(result)
         }
+        Call::SaveOutput { destination } => idle().and_then(|_| locked(|| backend().save_output(&destination))).map(|_| Value::Null),
+        Call::DiscardOutput => idle().and_then(|_| locked(|| if backend().discard_output() { Ok(Value::Null) } else { Err(Failure::new("cleanup-error")) })),
         Call::ListContacts => json(locked(|| Store::open()?.list())),
         Call::SaveContact { contact } => json(contact_job(move |store| {
             let source = if contact.paste { Source::Text(&contact.key_text) } else { Source::Path(&contact.key_path) };
@@ -230,6 +234,46 @@ mod tests {
         assert!(SEEN.load(Ordering::Relaxed) > 0);
         let again = reply(&request);
         assert_eq!(again["error"]["code"], "output-exists");
+    }
+
+    #[test]
+    fn staged_output_is_saved_where_the_user_chooses_afterwards() {
+        let _slot = slot();
+        let directory = contact::Directory::new();
+        let (public, private, _) = { let _core = contact::core_lock(); contact::keypair(&directory, "alice", "secret") };
+        let input = directory.file("plain.txt");
+        std::fs::write(&input, vec![9u8; 100_000]).unwrap();
+        let path = |value: &str| serde_json::to_string(value).unwrap();
+        let encrypt = format!(r#"{{"run_operation":{{"request":{{"id":"enc-2","kind":"encrypt","input":{},"keyPath":{},"signKeyPath":{},"password":"secret","stage":true}}}}}}"#,
+            path(&input), path(&public), path(&private));
+        // Nothing is staged yet, and a staged run names no output.
+        assert_eq!(reply(&format!(r#"{{"save_output":{{"destination":{}}}}}"#, path(&directory.file("early.nkem"))))["error"]["code"], "invalid-request");
+        assert_eq!(reply(&encrypt.replace(r#""stage":true"#, r#""stage":true,"output":"x""#))["error"]["code"], "invalid-request");
+        let done = reply(&encrypt);
+        assert_eq!(done["ok"]["format"], 5, "{done}");
+        assert!(done["ok"]["output"].is_null());
+        // A place that cannot be written keeps the output for another try.
+        let missing = directory.file("no-such-folder/plain.txt.nkem");
+        assert_eq!(reply(&format!(r#"{{"save_output":{{"destination":{}}}}}"#, path(&missing)))["error"]["code"], "save-failed");
+        // The save dialog asked before replacing, so an existing file is replaced.
+        let encrypted = directory.file("plain.txt.nkem");
+        std::fs::write(&encrypted, b"old").unwrap();
+        assert_eq!(reply(&format!(r#"{{"save_output":{{"destination":{}}}}}"#, path(&encrypted))), serde_json::json!({ "ok": null }));
+        assert!(std::fs::metadata(&encrypted).unwrap().len() > 100_000);
+        assert_eq!(reply(&format!(r#"{{"save_output":{{"destination":{}}}}}"#, path(&encrypted)))["error"]["code"], "invalid-request");
+
+        let decrypt = format!(r#"{{"run_operation":{{"request":{{"id":"dec-2","kind":"decrypt","input":{},"keyPath":{},"password":"secret","stage":true}}}}}}"#,
+            path(&encrypted), path(&private));
+        let opened = reply(&decrypt);
+        assert_eq!(opened["ok"]["signature"]["status"], "untrusted", "{opened}");
+        // Giving up deletes the plaintext; nothing is left to save.
+        assert_eq!(reply(r#""discard_output""#), serde_json::json!({ "ok": null }));
+        let plain = directory.file("restored.txt");
+        assert_eq!(reply(&format!(r#"{{"save_output":{{"destination":{}}}}}"#, path(&plain)))["error"]["code"], "invalid-request");
+        assert!(!std::path::Path::new(&plain).exists());
+        assert_eq!(reply(&decrypt.replace("dec-2", "dec-3"))["ok"]["format"], 5);
+        assert_eq!(reply(&format!(r#"{{"save_output":{{"destination":{}}}}}"#, path(&plain))), serde_json::json!({ "ok": null }));
+        assert_eq!(std::fs::read(&plain).unwrap(), vec![9u8; 100_000]);
     }
 
     #[test]
