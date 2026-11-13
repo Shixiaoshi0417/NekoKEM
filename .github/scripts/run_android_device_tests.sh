@@ -82,11 +82,13 @@ adb shell am instrument -w -e languagePhase layout -e screenshotPrefix small-lig
 grep -Fx 'INSTRUMENTATION_RESULT: result=temporary-key-tests-passed' "$report_dir/layout-small-light.txt"
 grep -Fx 'INSTRUMENTATION_CODE: -1' "$report_dir/layout-small-light.txt"
 
-# The MIUIX pages as a common phone shows them: 1080x2400 at 440 dpi, default font size, dark, Chinese.
+# The MIUIX pages as a 6.7-inch phone shows them (393x873 dp, as 1080x2400 at 440 dpi), default font
+# size, dark, Chinese. Screenshots fail on a display taller than the emulator's own 1080x1920, so the
+# same dp size is rendered at 864x1920 and 352 dpi.
 # The display returns to the small light layout for the minified run that follows.
 adb shell am force-stop com.shixiaoshi0417.nekokem
-adb shell wm size 1080x2400
-adb shell wm density 440
+adb shell wm size 864x1920
+adb shell wm density 352
 adb shell settings put system font_scale 1.0
 adb shell cmd uimode night yes
 adb shell am instrument -w -e languagePhase phone -e screenshotPrefix phone-dark "$runner" | tee "$report_dir/phone-dark.txt"
