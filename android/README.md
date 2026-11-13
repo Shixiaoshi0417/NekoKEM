@@ -235,7 +235,7 @@ API 36 模拟器与 API 26/29/35 一起运行全部 JNI、SAF、语言和预测�
 
 ## 检查更新
 
-设置 > 关于页的「检查更新」和默认开启的自动检查（启动时每天最多一次，设置中可关闭）只向 `https://api.github.com/repos/Shixiaoshi0417/NekoKEM/releases/latest` 发送一次 HTTPS GET，为此增加了 `INTERNET` 权限。请求使用系统 `HttpsURLConnection`，不跟随重定向，响应最多读取 1 MiB；只接受正式版本 `vX.Y.Z`，发布页地址由版本号拼出。提示框只链接到 GitHub Release 页面，不下载、不安装 APK；「忽略此版本」后自动检查不再提示该版本，手动检查仍会显示。设备测试用本地桩替换请求，不访问网络。
+设置 > 关于页的「检查更新」和默认开启的自动检查（启动时每天最多一次，设置中可关闭）只向 `https://api.github.com/repos/Shixiaoshi0417/NekoKEM/releases/latest` 发送一次 HTTPS GET，为此增加了 `INTERNET` 权限。请求使用系统 `HttpsURLConnection`，不跟随重定向，响应最多读取 1 MiB；只接受正式版本 `vX.Y.Z`，发布页地址由版本号拼出。API 请求失败时（例如同一 IP 的匿名额度用完），再向 `https://github.com/Shixiaoshi0417/NekoKEM/releases/latest` 发送一次 HTTPS HEAD，只从重定向地址读出版本号，同样不跟随重定向。提示框只链接到 GitHub Release 页面，不下载、不安装 APK；「忽略此版本」后自动检查不再提示该版本，手动检查仍会显示。设备测试用本地桩替换请求，不访问网络。
 
 ## 构建
 

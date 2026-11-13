@@ -1,5 +1,6 @@
 // Update check: one HTTPS GET of GitHub's latest-release document through the
-// operating system's curl, then a link to the release page. The address is
+// operating system's curl, then a link to the release page. If the API refuses,
+// one HEAD of the website's latest-release redirect instead. The addresses are
 // fixed here; the frontend cannot choose where the App connects, and nothing
 // is downloaded or installed.
 use serde::{Deserialize,Serialize};
@@ -7,6 +8,10 @@ use std::ffi::{c_char,c_int,c_void,CStr,CString};
 use std::process::{Command,Stdio};
 
 const LATEST_URL:&str="https://api.github.com/repos/Shixiaoshi0417/NekoKEM/releases/latest";
+// The website's "latest release" address answers with a redirect to the newest
+// full release. It is not part of the API, so the API's hourly limit on
+// anonymous requests from one address does not apply to it.
+const LATEST_PAGE_URL:&str="https://github.com/Shixiaoshi0417/NekoKEM/releases/latest";
 const PAGE_PREFIX:&str="https://github.com/Shixiaoshi0417/NekoKEM/releases/tag/v";
 /// A release document is a few KiB; curl refuses anything larger.
 const MAX_RESPONSE_BYTES:usize=1<<20;
@@ -81,6 +86,19 @@ pub fn classify(body:&[u8],current:&str)->UpdateStatus{
     if remote>local{UpdateStatus::Available{version:format!("{}.{}.{}",remote[0],remote[1],remote[2])}}else{UpdateStatus::Current}
 }
 
+/// Reads the response headers of the "latest release" page: the release is the
+/// redirect's Location, accepted only as this repository's page for a plain version.
+pub fn classify_redirect(headers:&[u8],current:&str)->UpdateStatus{
+    let Some(local)=parse_version(current) else {return UpdateStatus::Failed};
+    let Ok(text)=std::str::from_utf8(headers) else {return UpdateStatus::Failed};
+    let location=text.lines().filter_map(|line|{
+        let (name,value)=line.split_once(':')?;
+        name.trim().eq_ignore_ascii_case("location").then(||value.trim())
+    }).last();
+    let Some(remote)=location.and_then(|value|value.strip_prefix(PAGE_PREFIX)).and_then(parse_version) else {return UpdateStatus::Failed};
+    if remote>local{UpdateStatus::Available{version:format!("{}.{}.{}",remote[0],remote[1],remote[2])}}else{UpdateStatus::Current}
+}
+
 /// The release page of [version], built here and never taken from a response.
 pub fn page_url(version:&str)->Option<String>{
     let [a,b,c]=parse_version(version)?;Some(format!("{PAGE_PREFIX}{a}.{b}.{c}"))
@@ -103,21 +121,26 @@ fn quiet(command:&mut Command)->&mut Command{
     command.stdin(Stdio::null()).stderr(Stdio::null())
 }
 
-fn fetch()->Option<Vec<u8>>{
+fn curl(arguments:&[&str],address:&str)->Option<Vec<u8>>{
     #[cfg(windows)] let curl=system_program("curl.exe")?;
     #[cfg(not(windows))] let curl=system_program("curl")?;
     let output=quiet(Command::new(curl)
         // --disable (first) ignores ~/.curlrc, which could redirect or log the request.
         .args(["--disable","--silent","--fail","--proto","=https","--tlsv1.2","--max-time","15",
-               "--max-filesize",&MAX_RESPONSE_BYTES.to_string(),
-               "--header","Accept: application/vnd.github+json","--user-agent","NekoKEM-Desktop",LATEST_URL])
+               "--max-filesize",&MAX_RESPONSE_BYTES.to_string(),"--user-agent","NekoKEM-Desktop"])
+        .args(arguments).arg(address)
         .env_remove("CURL_HOME").env_remove("SSLKEYLOGFILE"))
         .stdout(Stdio::piped()).output().ok()?;
     (output.status.success()&&output.stdout.len()<=MAX_RESPONSE_BYTES).then_some(output.stdout)
 }
 
 pub fn check(current:&str)->UpdateStatus{
-    match fetch(){Some(body)=>classify(&body,current),None=>UpdateStatus::Failed}
+    let api=curl(&["--header","Accept: application/vnd.github+json"],LATEST_URL).map(|body|classify(&body,current));
+    match api{
+        Some(status) if status!=UpdateStatus::Failed=>status,
+        // The API refuses once its limit is used up; the page's redirect (never followed) still answers.
+        _=>curl(&["--head"],LATEST_PAGE_URL).map_or(UpdateStatus::Failed,|headers|classify_redirect(&headers,current)),
+    }
 }
 
 pub fn open_page(version:&str)->bool{
@@ -148,6 +171,20 @@ mod tests {
             assert_eq!(classify(&body,"5.0.0"),UpdateStatus::Failed);
         }
         assert_eq!(classify(&release("v5.1.0",false,false),"dev"),UpdateStatus::Failed);
+    }
+    #[test]
+    fn the_release_page_redirect_names_the_release(){
+        let headers=|location:&str|format!("HTTP/2 302 \r\nserver: github.com\r\nlocation: {location}\r\ncontent-length: 0\r\n\r\n").into_bytes();
+        let page="https://github.com/Shixiaoshi0417/NekoKEM/releases/tag/";
+        assert_eq!(classify_redirect(&headers(&format!("{page}v5.1.0")),"5.0.0"),UpdateStatus::Available{version:"5.1.0".into()});
+        assert_eq!(classify_redirect(&headers(&format!("{page}v5.1.0")),"5.1.0"),UpdateStatus::Current);
+        assert_eq!(classify_redirect(format!("HTTP/1.1 200 Connection Established\r\n\r\nHTTP/1.1 302 Found\r\nLocation: {page}v5.1.0\r\n\r\n").as_bytes(),"5.0.0"),UpdateStatus::Available{version:"5.1.0".into()});
+        for bad in [format!("{page}v5.1.0-rc1"),format!("{page}v5.1.0/../x"),format!("{page}5.1.0"),"https://github.com/Shixiaoshi0417/NekoKEM/releases".into(),
+                    "https://evil.example/Shixiaoshi0417/NekoKEM/releases/tag/v5.1.0".into(),"https://github.com/login".into()]{
+            assert_eq!(classify_redirect(&headers(&bad),"5.0.0"),UpdateStatus::Failed,"{bad}");
+        }
+        assert_eq!(classify_redirect(b"HTTP/2 200 \r\n\r\n","5.0.0"),UpdateStatus::Failed);
+        assert_eq!(classify_redirect(&headers(&format!("{page}v5.1.0")),"dev"),UpdateStatus::Failed);
     }
     #[test]
     fn page_is_built_from_the_version(){
