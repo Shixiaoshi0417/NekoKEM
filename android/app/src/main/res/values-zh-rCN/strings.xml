@@ -266,7 +266,6 @@
     <string name="error_reason_upgrade">无法升级密钥：密码错误或密钥文件不匹配，文件保持不变。</string>
     <string name="key_identity_status">身份密钥 · 可签名和验证签名</string>
     <string name="key_legacy_status">旧版密钥 · 无法签名。升级后即可签名文件。</string>
-    <string name="legacy_fingerprint_label">旧版指纹（NekoKEM 4.x 及更早版本）</string>
     <string name="action_upgrade_key">升级密钥</string>
     <string name="action_export_legacy_public_key">导出旧版公钥</string>
     <string name="operation_upgrade_key">升级密钥</string>

@@ -70,7 +70,6 @@ pub struct Outcome {
     #[serde(skip_serializing_if="Option::is_none")] pub format:Option<i32>,
     #[serde(skip_serializing_if="Option::is_none")] pub signature:Option<Signature>,
     // Fingerprint and upgrade: the X448 + ML-KEM-1024 fingerprint NekoKEM 4.x shows.
-    #[serde(skip_serializing_if="Option::is_none")] pub legacy_fingerprint:Option<String>,
     #[serde(skip_serializing_if="Option::is_none")] pub can_verify:Option<bool>,
 }
 // Core decides the status and matches the signer; the GUI only reports it.
@@ -358,7 +357,7 @@ pub fn execute<F:Fn(u64,u64)>(backend:&Backend,request:Request,job:Arc<Job>,emit
         if unsafe{nekokem_upgrade_to_identity_keys(public.as_ptr(),private.as_ptr(),request.password.as_ptr(),request.password.len())}!=1 {
             return Err(Failure::new("core-error"));
         }
-        return Ok(Outcome{output:Some(request.public_path.clone()),fingerprint:fingerprint(&public),legacy_fingerprint:legacy_fingerprint(&public),can_verify:Some(true),..Outcome::default()});
+        return Ok(Outcome{output:Some(request.public_path.clone()),fingerprint:fingerprint(&public),can_verify:Some(true),..Outcome::default()});
     }
     let mut staged_output=if request.stage {Some(Staged::file_output()?)} else {None};
     let target=match &staged_output {
@@ -410,7 +409,7 @@ pub fn execute<F:Fn(u64,u64)>(backend:&Backend,request:Request,job:Arc<Job>,emit
     let result=(|| {
         if request.kind==Kind::Fingerprint {
             let fingerprint=fingerprint(&keys[0]).ok_or_else(||Failure::new("core-error"))?;
-            return Ok(Outcome{fingerprint:Some(fingerprint),legacy_fingerprint:legacy_fingerprint(&keys[0]),can_verify:Some(can_verify(&keys[0])),..Outcome::default()});
+            return Ok(Outcome{fingerprint:Some(fingerprint),can_verify:Some(can_verify(&keys[0])),..Outcome::default()});
         }
         // Exporting a legacy key reads only the key and writes the output.
         let input=if request.kind==Kind::ExportLegacy {CString::default()} else {path(&request.input)?};
@@ -894,14 +893,14 @@ mod tests {
         run(&backend,decrypt("group.nkem","group.out")).unwrap();
         assert_eq!(fs::read(keys.file("group.out")).unwrap(),data);
 
-        // Both fingerprints; the exported legacy key cannot verify.
+        // The exported legacy key cannot verify.
         let mut r=request(Kind::Fingerprint);r.key_path=alice.clone();let outcome=run(&backend,r).unwrap();
         assert_eq!((outcome.fingerprint.as_deref(),outcome.can_verify),(Some(alice_fingerprint.as_str()),Some(true)));
-        let legacy=outcome.legacy_fingerprint.unwrap();
+        let legacy=legacy_fingerprint(&path(&alice).unwrap()).unwrap();
         let mut r=request(Kind::ExportLegacy);r.key_path=alice.clone();r.output=keys.file("alice-legacy.pub");run(&backend,r).unwrap();
         let mut r=request(Kind::ExportLegacy);r.key_path=alice.clone();r.output=keys.file("alice-legacy.pub");assert_eq!(run(&backend,r).err().unwrap().code,"output-exists");
         let mut r=request(Kind::Fingerprint);r.key_path=keys.file("alice-legacy.pub");let outcome=run(&backend,r).unwrap();
-        assert_eq!((outcome.fingerprint,outcome.legacy_fingerprint,outcome.can_verify),(Some(legacy.clone()),Some(legacy),Some(false)));
+        assert_eq!((outcome.fingerprint,outcome.can_verify),(Some(legacy),Some(false)));
         assert_eq!(staging_entries(),staged);
     }
     #[test]
@@ -922,7 +921,7 @@ mod tests {
         assert_eq!(run(&backend,upgrade("")).err().unwrap().code,"password-empty");
         assert_eq!(run(&backend,upgrade("wrong")).err().unwrap().code,"core-error");
         let outcome=run(&backend,upgrade("public test password")).unwrap();
-        assert_eq!((outcome.legacy_fingerprint.as_deref(),outcome.can_verify),(Some(legacy.as_str()),Some(true)));
+        assert_eq!((legacy_fingerprint(&path(&public).unwrap()),outcome.can_verify),(Some(legacy.clone()),Some(true)));
         assert_ne!(outcome.fingerprint.as_deref(),Some(legacy.as_str()));
         assert_eq!(run(&backend,upgrade("public test password")).err().unwrap().code,"already-identity");
         // Old files still decrypt with the same password; the key now signs.

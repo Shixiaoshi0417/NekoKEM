@@ -125,7 +125,6 @@ data class NekoKEMUiState(
     val uiStyle: UiStyle = UiStyles.default,
     /** This device's key is an identity key: files are signed with it. */
     val canSign: Boolean = false,
-    val legacyFingerprint: String? = null,
     val signatureSettings: SignatureSettings = SignatureSettings(),
     val autoUpdateCheck: Boolean = true,
     val updateChecking: Boolean = false,
@@ -554,18 +553,6 @@ private fun KeyManagementPage(
                         if (state.canSign) R.string.key_identity_status else R.string.key_legacy_status,
                     ),
                     style = MaterialTheme.typography.labelLarge,
-                )
-            }
-            state.legacyFingerprint?.let { legacy ->
-                Text(
-                    modifier = Modifier.padding(top = 12.dp),
-                    text = stringResource(R.string.legacy_fingerprint_label),
-                    style = MaterialTheme.typography.labelLarge,
-                )
-                Text(
-                    modifier = Modifier.padding(top = 8.dp),
-                    text = legacy,
-                    style = MaterialTheme.typography.bodySmall,
                 )
             }
         }

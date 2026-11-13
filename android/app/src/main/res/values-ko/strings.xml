@@ -252,7 +252,6 @@
     <string name="error_reason_upgrade">키를 업그레이드할 수 없습니다. 암호가 틀렸거나 키 파일이 일치하지 않습니다. 파일은 그대로입니다.</string>
     <string name="key_identity_status">신원 키 · 서명 및 서명 확인 가능</string>
     <string name="key_legacy_status">이전 형식 키 · 서명할 수 없습니다. 업그레이드하면 서명할 수 있습니다.</string>
-    <string name="legacy_fingerprint_label">이전 형식 지문(NekoKEM 4.x 이하)</string>
     <string name="action_upgrade_key">키 업그레이드</string>
     <string name="action_export_legacy_public_key">이전 형식 공개 키 내보내기</string>
     <string name="operation_upgrade_key">키 업그레이드</string>

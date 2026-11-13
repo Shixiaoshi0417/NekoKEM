@@ -751,35 +751,24 @@ cleanup:
     return success;
 }
 
-static int print_fingerprints(const char *public_key_path)
+static int print_fingerprint(const char *public_key_path)
 {
     char fingerprint[NEKOKEM_FINGERPRINT_STRING_SIZE];
-    char legacy[NEKOKEM_FINGERPRINT_STRING_SIZE];
     int success = 0;
 
     if (!nekokem_public_key_fingerprint(public_key_path, fingerprint,
                                         sizeof(fingerprint))) {
         goto cleanup;
     }
+    printf(file_message("SHA-256 fingerprint:\n%s\n"), fingerprint);
     if (nekokem_public_key_can_verify(public_key_path) != 1) {
-        printf(file_message("SHA-256 fingerprint:\n%s\n"), fingerprint);
         fputs(file_message("This legacy key can receive files but cannot sign; upgrade it with upgrade-key.\n"),
               stdout);
-        success = 1;
-        goto cleanup;
     }
-    if (!nekokem_public_key_legacy_fingerprint(public_key_path, legacy,
-                                               sizeof(legacy))) {
-        goto cleanup;
-    }
-    printf(file_message("SHA-256 fingerprint:\n%s\n"), fingerprint);
-    printf(file_message("Legacy fingerprint (NekoKEM 4.x and earlier):\n%s\n"),
-           legacy);
     success = 1;
 
 cleanup:
     secure_mem_clear(fingerprint, sizeof(fingerprint));
-    secure_mem_clear(legacy, sizeof(legacy));
     return success;
 }
 
@@ -806,7 +795,7 @@ int cli_run_upgrade_key(const char *public_key_path,
     printf(file_message("Added Ed448 + ML-DSA-87 signing keys to %s and %s\n"),
            file_display_safe_path(public_key_path),
            file_display_safe_path(private_key_path));
-    if (!print_fingerprints(public_key_path)) {
+    if (!print_fingerprint(public_key_path)) {
         goto cleanup;
     }
     fputs(file_message("Send the new public key to your contacts. NekoKEM 4.x cannot read it; give those users export-legacy-public-key output instead.\n"),
@@ -831,7 +820,7 @@ int cli_run_export_legacy_public_key(const char *public_key_path,
 
 int cli_run_fingerprint(const char *public_key_path)
 {
-    return print_fingerprints(public_key_path);
+    return print_fingerprint(public_key_path);
 }
 
 /*
@@ -1427,7 +1416,7 @@ static int interactive_fingerprint(void)
     char *key_path = NULL;
     int temporary = 0;
     int success = select_key_input(0, &key_path, &temporary) &&
-                  print_fingerprints(key_path);
+                  print_fingerprint(key_path);
 
     cleanup_key_input(key_path, temporary);
     return success;

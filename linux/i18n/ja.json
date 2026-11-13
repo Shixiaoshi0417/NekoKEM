@@ -232,7 +232,6 @@
   "Key files already exist: %s, %s\nkeygen never replaces existing keys. Back up both files; to replace them deliberately, run keygen --replace.\n": "鍵ファイルは既に存在します：%s、%s\nkeygen は既存の鍵を置き換えません。両方のファイルをバックアップしてください。意図的に置き換える場合は keygen --replace を実行してください。\n",
   "Key transaction residue at %s; inspect it before cleanup or recovery\n": "鍵トランザクションの残留ファイルが %s にあります。削除や復元の前に確認してください\n",
   "Key-pair rollback stopped; retaining the new outputs where possible\n": "鍵ペアのロールバックを停止しました。可能な限り新しい出力を保持します\n",
-  "Legacy fingerprint (NekoKEM 4.x and earlier):\n%s\n": "旧形式のフィンガープリント（NekoKEM 4.x 以前）：\n%s\n",
   "ML-KEM ciphertext is too large for NKEM v3\n": "ML-KEM 暗号文が NKEM v3 の上限を超えています\n",
   "ML-KEM decapsulation failed": "ML-KEM のデカプセル化に失敗しました",
   "ML-KEM encapsulation failed": "ML-KEM のカプセル化に失敗しました",

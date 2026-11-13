@@ -267,7 +267,6 @@
     <string name="error_reason_upgrade">The key could not be upgraded: the password is incorrect or the key files do not match. They were left unchanged.</string>
     <string name="key_identity_status">Identity key · signs and verifies signatures</string>
     <string name="key_legacy_status">Legacy key · cannot sign. Upgrade it to sign your files.</string>
-    <string name="legacy_fingerprint_label">Legacy fingerprint (NekoKEM 4.x and earlier)</string>
     <string name="action_upgrade_key">Upgrade key</string>
     <string name="action_export_legacy_public_key">Export legacy public key</string>
     <string name="operation_upgrade_key">Upgrade key</string>

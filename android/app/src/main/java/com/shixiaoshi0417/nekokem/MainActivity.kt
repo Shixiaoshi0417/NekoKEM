@@ -1823,7 +1823,6 @@ private fun NekoKEMRoute(
             contactSelection = contactSelection,
             uiStyle = uiStyle,
             canSign = keyState.canSign,
-            legacyFingerprint = keyState.legacyFingerprint,
             signatureSettings = signatureSettings,
             autoUpdateCheck = updateSettings.autoCheck,
             updateChecking = updateChecking,

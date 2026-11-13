@@ -232,7 +232,6 @@
   "Key files already exist: %s, %s\nkeygen never replaces existing keys. Back up both files; to replace them deliberately, run keygen --replace.\n": "Key files already exist: %s, %s\nkeygen never replaces existing keys. Back up both files; to replace them deliberately, run keygen --replace.\n",
   "Key transaction residue at %s; inspect it before cleanup or recovery\n": "Key transaction residue at %s; inspect it before cleanup or recovery\n",
   "Key-pair rollback stopped; retaining the new outputs where possible\n": "Key-pair rollback stopped; retaining the new outputs where possible\n",
-  "Legacy fingerprint (NekoKEM 4.x and earlier):\n%s\n": "Legacy fingerprint (NekoKEM 4.x and earlier):\n%s\n",
   "ML-KEM ciphertext is too large for NKEM v3\n": "ML-KEM ciphertext is too large for NKEM v3\n",
   "ML-KEM decapsulation failed": "ML-KEM decapsulation failed",
   "ML-KEM encapsulation failed": "ML-KEM encapsulation failed",
