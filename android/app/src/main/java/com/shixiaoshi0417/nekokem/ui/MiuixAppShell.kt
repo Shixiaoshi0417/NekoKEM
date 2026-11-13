@@ -411,9 +411,7 @@ private fun LazyListScope.keysPage(state: NekoKEMUiState, actions: NekoKEMAction
             summary = buildList {
                 add(stringResource(R.string.fingerprint_label))
                 add(state.fingerprint ?: stringResource(R.string.not_available))
-                if (state.fingerprint != null) {
-                    add(stringResource(if (state.canSign) R.string.key_identity_status else R.string.key_legacy_status))
-                }
+                if (state.fingerprint != null && !state.canSign) add(stringResource(R.string.key_legacy_status))
             }.joinToString("\n"),
         )
         ButtonPair(

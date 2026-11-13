@@ -546,12 +546,10 @@ private fun KeyManagementPage(
                 text = state.fingerprint ?: unavailable,
                 style = MaterialTheme.typography.bodyMedium,
             )
-            if (state.fingerprint != null) {
+            if (state.fingerprint != null && !state.canSign) {
                 Text(
                     modifier = Modifier.padding(top = 12.dp),
-                    text = stringResource(
-                        if (state.canSign) R.string.key_identity_status else R.string.key_legacy_status,
-                    ),
+                    text = stringResource(R.string.key_legacy_status),
                     style = MaterialTheme.typography.labelLarge,
                 )
             }

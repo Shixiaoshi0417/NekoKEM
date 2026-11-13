@@ -13,7 +13,7 @@
     <string name="about_description">使用可重用的 NekoKEM C17 Core 與 OpenSSL EVP 提供密碼學功能的實驗性後量子混合檔案加密工具。</string>
     <string name="private_key_exists">私鑰：已存在</string>
     <string name="private_key_not_found">私鑰：找不到</string>
-    <string name="fingerprint_label">SHA-256 公鑰指紋</string>
+    <string name="fingerprint_label">指紋</string>
     <string name="selected_file_label">已選取檔案</string>
     <string name="selected_file_none">尚未選取檔案</string>
     <string name="settings_appearance_title">外觀與語言</string>
@@ -40,7 +40,7 @@
     <string name="select_temporary_private_key_password_title">驗證所選私鑰</string>
     <string name="select_temporary_private_key_password_message">請輸入此暫存 NKPR 私鑰的密碼。Core 會驗證容器並顯示其公鑰指紋，不會匯入或取代預設私鑰。</string>
     <string name="confirm_temporary_public_key_title">使用此公鑰？</string>
-    <string name="confirm_temporary_public_key_message">檔案：%1$s\n\nSHA-256 指紋：\n%2$s\n\n此金鑰僅使用一次，不會取代 App 預設公鑰。</string>
+    <string name="confirm_temporary_public_key_message">檔案：%1$s\n\n指紋：\n%2$s\n\n此金鑰僅使用一次，不會取代 App 預設公鑰。</string>
     <string name="delete_private_key_title">永久刪除私鑰？</string>
     <string name="delete_private_key_message">將刪除本機 NKPR 私鑰及相關暫存快取。公鑰會保留。</string>
     <string name="delete_public_key_title">永久刪除公鑰？</string>
@@ -105,7 +105,7 @@
     <string name="completion_result">結果</string>
     <string name="completion_success">成功</string>
     <string name="completion_file">檔案名稱</string>
-    <string name="completion_fingerprint">SHA-256 指紋</string>
+    <string name="completion_fingerprint">指紋</string>
     <string name="completion_keypair_files">%1$s 和 %2$s</string>
     <string name="completion_elapsed">耗時</string>
     <string name="completion_average_speed">平均速度</string>
@@ -250,7 +250,6 @@
     <string name="error_reason_signer_not_trusted">簽章者不在你信任的金鑰中，未寫入任何內容。</string>
     <string name="error_reason_already_identity">此金鑰已可簽章，無需升級。</string>
     <string name="error_reason_upgrade">無法升級金鑰：密碼錯誤或金鑰檔案不相符，檔案保持不變。</string>
-    <string name="key_identity_status">身分金鑰 · 可簽章和驗證簽章</string>
     <string name="key_legacy_status">舊版金鑰 · 無法簽章。升級後即可簽章檔案。</string>
     <string name="action_upgrade_key">升級金鑰</string>
     <string name="action_export_legacy_public_key">匯出舊版公開金鑰</string>

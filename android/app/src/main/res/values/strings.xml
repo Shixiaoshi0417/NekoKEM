@@ -16,7 +16,7 @@
 
     <string name="private_key_exists">Private key: Exists</string>
     <string name="private_key_not_found">Private key: Not found</string>
-    <string name="fingerprint_label">SHA-256 public-key fingerprint</string>
+    <string name="fingerprint_label">Fingerprint</string>
     <string name="selected_file_label">Selected file</string>
     <string name="selected_file_none">No file selected</string>
 
@@ -45,7 +45,7 @@
     <string name="select_temporary_private_key_password_title">Verify selected private key</string>
     <string name="select_temporary_private_key_password_message">Enter the password for this temporary NKPR key. Core validates the container and shows its public fingerprint without importing it.</string>
     <string name="confirm_temporary_public_key_title">Use this public key?</string>
-    <string name="confirm_temporary_public_key_message">File: %1$s\n\nSHA-256 fingerprint:\n%2$s\n\nThe key is used once and will not replace the App default.</string>
+    <string name="confirm_temporary_public_key_message">File: %1$s\n\nFingerprint:\n%2$s\n\nThe key is used once and will not replace the App default.</string>
 
     <string name="delete_private_key_title">Delete private key permanently?</string>
     <string name="delete_private_key_message">The local NKPR private key and related temporary cache will be deleted. The public key is kept.</string>
@@ -119,7 +119,7 @@
     <string name="completion_result">Result</string>
     <string name="completion_success">Success</string>
     <string name="completion_file">File</string>
-    <string name="completion_fingerprint">SHA-256 fingerprint</string>
+    <string name="completion_fingerprint">Fingerprint</string>
     <string name="completion_keypair_files">%1$s and %2$s</string>
     <string name="completion_elapsed">Elapsed</string>
     <string name="completion_average_speed">Average speed</string>
@@ -265,7 +265,6 @@
     <string name="error_reason_signer_not_trusted">The signer is not one of your trusted keys. Nothing was written.</string>
     <string name="error_reason_already_identity">This key can already sign; there is nothing to upgrade.</string>
     <string name="error_reason_upgrade">The key could not be upgraded: the password is incorrect or the key files do not match. They were left unchanged.</string>
-    <string name="key_identity_status">Identity key · signs and verifies signatures</string>
     <string name="key_legacy_status">Legacy key · cannot sign. Upgrade it to sign your files.</string>
     <string name="action_upgrade_key">Upgrade key</string>
     <string name="action_export_legacy_public_key">Export legacy public key</string>

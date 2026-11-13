@@ -760,7 +760,7 @@ static int print_fingerprint(const char *public_key_path)
                                         sizeof(fingerprint))) {
         goto cleanup;
     }
-    printf(file_message("SHA-256 fingerprint:\n%s\n"), fingerprint);
+    printf(file_message("Fingerprint:\n%s\n"), fingerprint);
     if (nekokem_public_key_can_verify(public_key_path) != 1) {
         fputs(file_message("This legacy key can receive files but cannot sign; upgrade it with upgrade-key.\n"),
               stdout);

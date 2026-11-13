@@ -275,7 +275,7 @@
   "Regular input changed while being read\n": "Regular input changed while being read\n",
   "Regular input exceeds the size limit\n": "Regular input exceeds the size limit\n",
   "Replacing the existing key pair %s and %s. Files encrypted for the old public key can only be decrypted with the old private key; press Ctrl+C now if it is not backed up.\n": "Replacing the existing key pair %s and %s. Files encrypted for the old public key can only be decrypted with the old private key; press Ctrl+C now if it is not backed up.\n",
-  "SHA-256 fingerprint:\n%s\n": "SHA-256 fingerprint:\n%s\n",
+  "Fingerprint:\n%s\n": "Fingerprint:\n%s\n",
   "Saved the signer's public key: %s\n": "Saved the signer's public key: %s\n",
   "Second hybrid key component": "Second hybrid key component",
   "Send the new public key to your contacts. NekoKEM 4.x cannot read it; give those users export-legacy-public-key output instead.\n": "Send the new public key to your contacts. NekoKEM 4.x cannot read it; give those users export-legacy-public-key output instead.\n",

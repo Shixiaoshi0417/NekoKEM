@@ -275,7 +275,7 @@
   "Regular input changed while being read\n": "読み取り中に通常の入力ファイルが変更されました\n",
   "Regular input exceeds the size limit\n": "通常の入力がサイズの上限を超えています\n",
   "Replacing the existing key pair %s and %s. Files encrypted for the old public key can only be decrypted with the old private key; press Ctrl+C now if it is not backed up.\n": "既存の鍵ペア %s と %s を置き換えます。古い公開鍵で暗号化したファイルは古い秘密鍵でしか復号できません。バックアップしていない場合は今すぐ Ctrl+C を押してください。\n",
-  "SHA-256 fingerprint:\n%s\n": "SHA-256 フィンガープリント：\n%s\n",
+  "Fingerprint:\n%s\n": "フィンガープリント：\n%s\n",
   "Saved the signer's public key: %s\n": "署名者の公開鍵を保存しました：%s\n",
   "Second hybrid key component": "ハイブリッド鍵の第2構成要素",
   "Send the new public key to your contacts. NekoKEM 4.x cannot read it; give those users export-legacy-public-key output instead.\n": "新しい公開鍵を連絡先に送ってください。NekoKEM 4.x はこれを読み込めないため、そのユーザーには export-legacy-public-key で書き出した公開鍵を渡してください。\n",
