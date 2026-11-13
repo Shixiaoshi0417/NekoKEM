@@ -6,6 +6,10 @@
     <uses-sdk tools:overrideLibrary="top.yukonga.miuix.kmp.blur" />
     <!-- Only for the update check: one HTTPS request to GitHub's release API. -->
     <uses-permission android:name="android.permission.INTERNET" />
+    <!-- Only for scanning a contact's fingerprint QR code; asked for when a scan
+         starts. Frames are analysed in memory and never stored. -->
+    <uses-permission android:name="android.permission.CAMERA" />
+    <uses-feature android:name="android.hardware.camera.any" android:required="false" />
     <!-- Predictive back: Android 13+ dispatches back through OnBackInvokedCallback. -->
     <application
         android:allowBackup="false"

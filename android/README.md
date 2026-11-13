@@ -23,11 +23,11 @@ README 图标仅使用专用圆角展示图，Android launcher 继续使用现�
 
 - Kotlin 2.4.21（AGP 内置 Kotlin）、Jetpack Compose 1.12、Material 3 Expressive（`material3` 1.5.0-beta01）
 - MIUIX（`top.yukonga.miuix.kmp` 0.9.4：`miuix-ui`、`miuix-icons`、`miuix-preference`、`miuix-blur`）
-- Android Gradle Plugin 9.4.1、Gradle 9.6.1（Kotlin DSL）、JDK 17 编译目标；运行 JVM 单元测试需要 JDK 21（miuix 以 Java 21 字节码发布）
+- Android Gradle Plugin 9.5.1、Gradle 9.9.0（Kotlin DSL）、JDK 17 编译目标；运行 JVM 单元测试需要 JDK 21（miuix 以 Java 21 字节码发布）
 - Android SDK Platform 37.0、Build Tools 36.0.0（`compileSdk 37`、`minSdk 26`、`targetSdk 36`）
 - Android NDK r28c（`28.2.13676358`）、CMake、C17
 - 仅 `arm64-v8a`
-- Android arm64 OpenSSL 4.0.3 静态 `libcrypto.a`
+- Android arm64 OpenSSL 4.1.0 静态 `libcrypto.a`
 
 不使用 Android 系统 OpenSSL。可复现构建脚本位于
 `scripts/build-openssl-android.sh`。
@@ -95,6 +95,8 @@ context.filesDir/
 每条 `0600` JSON 记录包含版本、指纹、原文件名、备注和 Base64 编码的规范化公钥，
 写入时同步文件并原子重命名，再同步目录。公钥先由现有 Core 校验和规范化，
 不保存私钥或密码；不增加存储权限、备份或网络通信（App 唯一的网络请求是检查更新，见下文）。
+每位联系人可「扫码核对」：扫描对方「密钥」页的指纹二维码，与保存的指纹一致时记录中写入 `verified`，
+不一致时清除；相机权限只在扫码时申请，画面不保存。详见根目录 README 的「指纹二维码」。
 
 记录在 App 重启后重新读取。选中的条目在连续加密及 Activity 重建后保持选择；
 每次加密都从记录创建独立私有快照，通过 Core 重新解析并核对指纹，临时快照在操作后清理。
@@ -123,9 +125,10 @@ API 26/29/35/36 设备测试覆盖两位联系人共享一个 v4 文件、各自
 ## 预测性返回
 
 App 启用 Android 预测性返回（`android:enableOnBackInvokedCallback="true"`）。在密钥管理、
-公钥通讯录、设置或关于页面侧滑返回时，当前页面跟随手指缩小、向内平移并显示圆角，
+公钥通讯录或设置页面侧滑返回时，当前页面跟随手指缩小、向内平移并显示圆角，
 下方预览文件加密页；松手完成返回文件页，取消手势则页面复原。页面由底部导航栏切换
-（与 LunexSU 相同的 Material 3 Expressive 短导航栏）。文件页不拦截返回，由系统显示返回桌面动画。
+（与 LunexSU 相同的 Material 3 Expressive 短导航栏，文件、密钥、通讯录、设置四个标签）；
+「关于」在设置页最下方，返回时回到设置。文件页不拦截返回，由系统显示返回桌面动画。
 文件操作进行中不拦截返回，原有进度对话框行为不变。Android 14 及以上提供跟手进度；
 Android 8–13 收到返回时直接回到文件页。MIUIX 界面在其他标签返回时同样回到文件页。
 
@@ -232,7 +235,7 @@ API 36 模拟器与 API 26/29/35 一起运行全部 JNI、SAF、语言和预测�
 
 ## 检查更新
 
-关于页的「检查更新」和默认开启的自动检查（启动时每天最多一次，设置中可关闭）只向 `https://api.github.com/repos/Shixiaoshi0417/NekoKEM/releases/latest` 发送一次 HTTPS GET，为此增加了 `INTERNET` 权限。请求使用系统 `HttpsURLConnection`，不跟随重定向，响应最多读取 1 MiB；只接受正式版本 `vX.Y.Z`，发布页地址由版本号拼出。提示框只链接到 GitHub Release 页面，不下载、不安装 APK；「忽略此版本」后自动检查不再提示该版本，手动检查仍会显示。设备测试用本地桩替换请求，不访问网络。
+设置 > 关于页的「检查更新」和默认开启的自动检查（启动时每天最多一次，设置中可关闭）只向 `https://api.github.com/repos/Shixiaoshi0417/NekoKEM/releases/latest` 发送一次 HTTPS GET，为此增加了 `INTERNET` 权限。请求使用系统 `HttpsURLConnection`，不跟随重定向，响应最多读取 1 MiB；只接受正式版本 `vX.Y.Z`，发布页地址由版本号拼出。提示框只链接到 GitHub Release 页面，不下载、不安装 APK；「忽略此版本」后自动检查不再提示该版本，手动检查仍会显示。设备测试用本地桩替换请求，不访问网络。
 
 ## 构建
 

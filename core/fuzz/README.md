@@ -59,3 +59,15 @@ and 64 recipients, each followed by a zero signature block, and one cut
 inside the signature block; the NKPR seeds cover versions 1 and 2. Seeds
 contain no password, private key, plaintext, or other sensitive material.
 Run `sh core/fuzz/generate_seeds.sh` to regenerate them deterministically.
+
+## Continuous fuzzing
+
+CI fuzzes each harness for 15 seconds on every pull request. The
+[Fuzz workflow](../../.github/workflows/fuzz.yml) runs every harness for an
+hour each Sunday at 18:00 UTC, in four parallel jobs, under UBSan. It can
+also be started by hand from the Actions tab with 60 to 18000 seconds per
+harness, and a pull request that changes the workflow runs it for one minute
+per harness. A crash, hang, sanitizer report or incomplete run fails the job; the
+AFL output, including any samples, is kept as the `fuzz-<target>-results`
+artifact for 30 days. Reproduce a sample locally with
+`core/fuzz/bin/fuzz_<target> <sample>` after `make -C linux fuzz-build`.

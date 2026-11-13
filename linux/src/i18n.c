@@ -303,7 +303,7 @@ int cli_language_init(int *argc, char **argv)
     }
     argv[output] = NULL;
     *argc = output;
-    /* Desktop WebViews always render UTF-8, independently of terminal encoding.
+    /* The desktop apps always render UTF-8, independently of terminal encoding.
      * CLI builds retain their ASCII/non-UTF-8 terminal fallback. */
 #ifndef NEKOKEM_DESKTOP_UTF8_UI
     if (!utf8_output()) selected_language = 0U;

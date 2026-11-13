@@ -69,8 +69,8 @@ class TemporaryKeyInstrumentation : Instrumentation() {
     }
 
     private fun runTemporaryKeyTests(baseContext: Context): String {
-        check(NativeBridge.nativeVersion().startsWith("OpenSSL 4.0.3 ")) {
-            "JNI runtime does not match the pinned OpenSSL 4.0.3"
+        check(NativeBridge.nativeVersion().startsWith("OpenSSL 4.1.0 ")) {
+            "JNI runtime does not match the pinned OpenSSL 4.1.0"
         }
         testBusyStateRestoration()
         testFileInputStateTransitions()

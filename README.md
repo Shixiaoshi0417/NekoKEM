@@ -37,6 +37,8 @@ Android v5.0.0 沿用 v3.2.0/v3.3.0 签名，可直接覆盖升级；建议先�
 
 下载后先用 [SHA256SUMS.txt](https://github.com/Shixiaoshi0417/NekoKEM/releases/download/v5.0.0/SHA256SUMS.txt) 校验对应归档，再校验包内文件。Linux GUI 需要 glibc 2.39+、GTK3 和 WebKitGTK 4.1；macOS 实际验证于 macOS 15，部署目标为 11.0。安装步骤与签名限制见下文各平台说明。
 
+> 桌面端说明：v5.0.0 的桌面 GUI 是 Tauri 应用，下文各平台的 GUI 小节描述的是该版本。主分支已改为 Compose Multiplatform（Windows、Linux）和 SwiftUI（macOS）应用，随下一个版本发布，说明见 [桌面 GUI 文档](desktop/README.md)。
+
 v4.1.0 之后发布的版本，每个附件还带有 GitHub 构建来源证明，可用 GitHub CLI 确认文件由本仓库 `main` 分支上的 Release 工作流构建（把文件名换成实际下载的附件）：
 
 ```sh
@@ -127,7 +129,7 @@ Debian 13：
 sudo apt install libssl-dev build-essential
 ```
 
-需要 OpenSSL 3.5 或更高版本，因为 ML-KEM 的 EVP 支持从 OpenSSL 3.5 开始提供。各平台的源码构建与 CI 固定使用 OpenSSL 4.0.3，并校验官方源码 SHA-256。
+需要 OpenSSL 3.5 或更高版本，因为 ML-KEM 的 EVP 支持从 OpenSSL 3.5 开始提供。各平台的源码构建与 CI 固定使用 OpenSSL 4.1.0，并校验官方源码 SHA-256。
 
 如需构建 AFL++ fuzz harness，额外安装：
 
@@ -149,7 +151,7 @@ GitHub Actions 统一使用 [CI](.github/workflows/ci.yml) 和 [Release](.github
 
 ## Windows CLI 与 GUI
 
-v5.0.0 提供原生 Windows 10/11 x64 `nekokem.exe` 和 `nekokem-gui.exe` 便携包。CLI 与 Linux 共用完整参数解析和五项菜单；双击 EXE 或不带参数运行即可进入菜单。构建、使用和导入私钥权限说明见 [Windows CLI 文档](windows/README.md)，文件安全设计见 [Windows 文件层说明](windows/SECURITY-DESIGN.md)。CLI 运行不需要 MSYS2 或 OpenSSL DLL；构建使用 MSYS2 UCRT64 与固定 OpenSSL 4.0.3。
+v5.0.0 提供原生 Windows 10/11 x64 `nekokem.exe` 和 `nekokem-gui.exe` 便携包。CLI 与 Linux 共用完整参数解析和五项菜单；双击 EXE 或不带参数运行即可进入菜单。构建、使用和导入私钥权限说明见 [Windows CLI 文档](windows/README.md)，文件安全设计见 [Windows 文件层说明](windows/SECURITY-DESIGN.md)。CLI 运行不需要 MSYS2 或 OpenSSL DLL；构建使用 MSYS2 UCRT64 与固定 OpenSSL 4.1.0。
 
 GUI 使用 Rust + Tauri 2 + Vue 3 + TypeScript，通过窄接口调用同一 C17 Core，提供原生文件选择、进度、取消、键盘导航和遵循系统减少动态效果设置的过渡动画。运行需要 Microsoft Edge WebView2 Runtime，并将包内 `WebView2Loader.dll` 放在 EXE 旁；详见 [Windows GUI 文档](desktop/README.md)。两种 Windows 应用均未进行 Authenticode 签名；构建时单独验证 Microsoft SDK loader 的签名与来源。
 
@@ -159,7 +161,7 @@ Windows 仅支持本地固定 NTFS，检查所有者与 ACL，并拒绝网络、
 
 v5.0.0 提供面向 M 系列 Apple Silicon Mac 的原生 `arm64` CLI 和 Rust + Tauri 2 + Vue 3 + TypeScript GUI。CLI 包名为 `NekoKEM-macos-arm64.tar.gz`；GUI 包为 `NekoKEM-macos-arm64-GUI.zip`（包含 `.app`）和 `NekoKEM-macos-arm64-GUI.dmg`，可从本版 Release 下载。详见 [macOS 构建与使用说明](macos/README.md) 和 [桌面 GUI 文档](desktop/README.md)。不提供 Intel/Rosetta 构建。
 
-CLI 与 Linux 共用参数解析、五项菜单和语言目录。GUI 使用系统 WKWebView，不需要 Windows 的 WebView2 Runtime 或 loader。两者静态链接固定 OpenSSL 4.0.3，保留其 arm64 汇编加速；运行仍依赖 macOS 系统库与框架。构建设置 macOS 11.0 deployment target；原生 CI 在 `macos-15` 上运行，这不代表已验证 macOS 11.0 实机或每代 M 系列芯片的兼容性、性能。
+CLI 与 Linux 共用参数解析、五项菜单和语言目录。GUI 使用系统 WKWebView，不需要 Windows 的 WebView2 Runtime 或 loader。两者静态链接固定 OpenSSL 4.1.0，保留其 arm64 汇编加速；运行仍依赖 macOS 系统库与框架。构建设置 macOS 11.0 deployment target；原生 CI 在 `macos-15` 上运行，这不代表已验证 macOS 11.0 实机或每代 M 系列芯片的兼容性、性能。
 
 macOS 文件层保留严格的所有者、权限、符号链接和硬链接检查，受保护文件与目录只允许空或 deny-only 扩展 ACL，并检查 APFS/HFS+ 大小写及 Unicode 名称别名。普通输出文件要求 `fsync` 与 `F_FULLFSYNC`，提交后要求父目录 `fsync`，失败时不静默降级；详细限制与测试边界见 [macOS 文件安全设计](macos/SECURITY-DESIGN.md)。Core 4.0 新增 NKEM v4 多接收方容器；NKEM v3、NKPR v1、密码参数及 64 KiB 流式分块不变。包只有 ad-hoc 签名，未使用 Developer ID，也未进行 Apple 公证；这不能证明发布者身份或保证通过 Gatekeeper。
 
@@ -167,7 +169,7 @@ macOS 文件层保留严格的所有者、权限、符号链接和硬链接检�
 
 Linux 原生 GUI 支持 `x86_64` 与 `aarch64`（ARM64），复用 Rust + Tauri 2 + Vue 3 + TypeScript 界面、五语言自动检测、原生文件选择、进度/取消、键盘导航和遵循系统减少动态效果设置的动画。每种架构提供 `NekoKEM-linux-<架构>-GUI.deb`、`NekoKEM-linux-<架构>-GUI.rpm` 和 `NekoKEM-linux-<架构>-GUI.tar.gz`。Ubuntu 使用 `sudo apt install ./NekoKEM-linux-x86_64-GUI.deb`；Fedora 使用 `sudo dnf install ./NekoKEM-linux-x86_64-GUI.rpm`，ARM64 将文件名中的架构换为 `aarch64`。安装后可从系统应用菜单打开；便携包使用 `NekoKEM-GUI.sh` 启动。图标直接使用现有透明外部白色区域的方形 PNG，README 仍用圆角展示图。
 
-构建与原生 CI 基线为 Ubuntu 24.04，CI 另在同架构 Fedora 44 容器中安装并启动 RPM。RPM 原生构建，以共享库能力声明依赖，并包含对应架构的动态加载器；运行需要系统 GTK3、WebKitGTK 4.1 和 glibc 2.39 或更新版本，GUI 便携包仍依赖这些系统库。OpenSSL 4.0.3 静态链接并隐藏符号，避免影响 WebKit 系统 TLS 库，保留汇编、线程、Fortify、栈保护、PIE 和完整 RELRO。Linux 文件权限、认证后提交及取消清理沿用 CLI/Core；Core 4.0 新增 NKEM v4 多接收方容器，NKEM v3、NKPR v1、KDF 参数与 64 KiB 流式处理不变。详见 [Linux 安装与构建](desktop/README.md#linux-installation-and-build--linux-安装与构建) 和 [Linux GUI 安全边界](desktop/LINUX-SECURITY.md)。
+构建与原生 CI 基线为 Ubuntu 24.04，CI 另在同架构 Fedora 44 容器中安装并启动 RPM。RPM 原生构建，以共享库能力声明依赖，并包含对应架构的动态加载器；运行需要系统 GTK3、WebKitGTK 4.1 和 glibc 2.39 或更新版本，GUI 便携包仍依赖这些系统库。OpenSSL 4.1.0 静态链接并隐藏符号，避免影响 WebKit 系统 TLS 库，保留汇编、线程、Fortify、栈保护、PIE 和完整 RELRO。Linux 文件权限、认证后提交及取消清理沿用 CLI/Core；Core 4.0 新增 NKEM v4 多接收方容器，NKEM v3、NKPR v1、KDF 参数与 64 KiB 流式处理不变。详见 [Linux 安装与构建](desktop/README.md#install--安装)。
 
 v5.0.0 Release 包含上述两种架构的全部 Linux GUI 安装包和便携包，现有静态 Linux CLI 包继续保留。原生窗口测试使用 X11 会话，不代表已验证所有 Linux 发行版或 Wayland 实机。
 
@@ -370,7 +372,7 @@ NKPR 是独立于 NKEM 文件容器的私钥存储格式；NKEM v3 不修改 NKP
 
 `header || salt || nonce` 全部作为 AES-GCM AAD。读取器严格验证版本、算法、参数、长度和 GCM 标签；错误密码与任何受认证字段或密文的修改都会失败，并对外统一报告无法解锁私钥，不区分错误口令与容器损坏。解密缓冲区即使在标签验证前产生数据也始终只驻留内存，并在失败路径清零。
 
-NKPR 的 AES-GCM 不具备密钥承诺性，不保证一个容器只能由唯一口令或保护密钥认证，也不提供跨保护密钥的明文一致性保证。此处说明现有格式的边界，不改变 NKPR 格式或密码参数。
+NKPR 的 AES-GCM 不具备密钥承诺性，不保证一个容器只能由唯一口令或保护密钥认证，也不提供跨保护密钥的明文一致性保证。此处说明现有格式的边界，不改变 NKPR 格式或密码参数。NKEM v4/v5 通过头部 HMAC-SHA512 承诺文件密钥，不受此限制；各处 AES-GCM 的评估和 NKPR v3 设计草案见 [密钥承诺评估](docs/key-commitment.md)。
 
 ## NKEM v3 hybrid 文件格式
 
@@ -476,11 +478,19 @@ make -C linux fuzz-build
 
 三个 harness 都接受一个 `argv[1]` 文件路径。两个解析器 harness 拒绝超过 2 MiB 的输入，不执行密钥解封装、Argon2id、AES-GCM 或明文写出；`core/fuzz/seeds/` 中的解析器样本只是零填充的结构样本，不含密码、私钥或真实敏感数据，同时提供多个截断样本。`fuzz_decrypt` 的种子在每次构建时生成：一把一次性的明文 PEM 测试密钥，以及用它加密的真实 v3、空 v3 和双接收方 v4 容器，因此变异能深入试解密、MAC 和载荷认证路径；该密钥不保护任何数据，也不会提交到仓库。具体 AFL 命令见 `core/fuzz/README.md`。
 
+CI 在每个 PR 上对每个 harness 只跑 15 秒；[Fuzz workflow](.github/workflows/fuzz.yml) 每周日 18:00 UTC 对四个 harness 各跑一小时（也可在 Actions 页面手动运行 60–18000 秒），发现崩溃、挂起或 UBSan 报告即失败，AFL 输出保留 30 天。
+
 ## 检查更新
 
-Android 和桌面 GUI 可以检查是否有新版本：「关于」页（Android）或「设置」页（桌面）有「检查更新」按钮；自动检查默认开启，启动时每天最多检查一次，可在设置中关闭。发现新版本时只提示版本号，「前往下载」打开 GitHub Release 页面，由用户自己下载并按发布说明校验，App 不会自动下载或安装任何内容。可以「忽略此版本」，之后自动检查不再提示该版本。
+Android 和桌面 GUI 可以检查是否有新版本：「设置 > 关于」页（Android）或「设置」页（桌面）有「检查更新」按钮；自动检查默认开启，启动时每天最多检查一次，可在设置中关闭。发现新版本时只提示版本号，「前往下载」打开 GitHub Release 页面，由用户自己下载并按发布说明校验，App 不会自动下载或安装任何内容。可以「忽略此版本」，之后自动检查不再提示该版本。
 
 检查只向固定地址 `https://api.github.com/repos/Shixiaoshi0417/NekoKEM/releases/latest` 发送一次 HTTPS GET，不附带密钥、指纹、文件或设置信息；响应超过 1 MiB、不是正式版本或版本号格式不符时视为失败，发布页地址由版本号拼出，不取自响应。GitHub 能看到请求的 IP 地址和时间。Android 为此增加了 INTERNET 权限，用系统 HTTPS；桌面由后端调用系统 curl（Windows `System32\curl.exe`，macOS/Linux `/usr/bin/curl`），前端仍无法发起网络请求。CLI 不检查更新。
+
+## 指纹二维码
+
+v5 的签名信任取决于你是否与对方核对过身份指纹。为了不再逐字比对 64 位十六进制，Android「密钥」页和桌面端的指纹结果都可以显示**指纹二维码**；Android 公钥通讯录里每位联系人都有「扫码核对」：扫描对方显示的二维码，与该联系人保存的指纹一致就标记为「已扫码核对指纹」，不一致会红字警告并清除之前的标记。
+
+二维码内容是 `NEKOKEM-FP1:` 加 64 位大写十六进制指纹，只包含指纹，不包含公钥，因此扫码只能核对已保存的联系人，不能添加或替换密钥。Android 为扫码增加了 `CAMERA` 权限，只在点击「扫码核对」时申请，相机画面只在内存中识别、不保存；二维码由 ZXing 生成和识别，相机画面来自 CameraX，不依赖 Google Play 服务。桌面端只显示二维码，不使用摄像头。核对标记保存在 Android 联系人记录中，5.0.0 会忽略它，在 5.0.0 中修改备注会丢失该标记。
 
 ## 安全边界
 

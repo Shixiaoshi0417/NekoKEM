@@ -14,13 +14,13 @@ GitHub Actions has three workflow definitions:
   produces Linux x86_64/aarch64 archives, a signed Android arm64 APK, and Windows
   CLI/GUI packages, macOS arm64 CLI/GUI packages and Linux x86_64/ARM64 GUI
   `.deb`/`.rpm`/portable archives. Regression suites run in CI. Source checksums, dependency
-  versions, compiler hardening, binary imports/protections, SDK loader signature,
+  versions, compiler hardening, binary imports/protections,
   icons, APK identity/signature and package checksums remain build requirements.
-  Its final job selects the 14 public packages and their `SHA256SUMS.txt` with
+  Its final job selects the 15 public packages and their `SHA256SUMS.txt` with
   `.github/scripts/release_assets.py` and attests each with GitHub build
   provenance (`actions/attest-build-provenance`), binding it to this run, this
   workflow and the built commit. Release never reads or writes an Actions
-  cache: OpenSSL, Rust, npm and Gradle dependencies are built or fetched from
+  cache: OpenSSL, Rust and Gradle dependencies are built or fetched from
   scratch in every run, so nothing a CI run stored can reach a release package
   or its attestation.
 - `publish.yml` (`Publish`) turns one successful Release run of `main` into a
@@ -59,15 +59,15 @@ CLI and GUI package metadata includes the application version, which Publish
 checks along with the source commit and build run.
 
 CI runs `scripts/check_versions.py` and mutation tests before its Linux suite.
-The application version in `desktop/package.json` is compared with CLI, Android,
-Tauri, npm/Cargo lockfiles, the fixed installer tag, packaging declarations, workflow package arguments,
+The application version in `desktop/bridge/Cargo.toml` (the library every desktop app
+shares) is compared with CLI, Android, the bridge lockfile, the Compose and SwiftUI apps, packaging declarations,
 Android signing version/name/code and all five Android display strings. This
 check changes no application, Core or container version.
 
 ## Toolchain version policy
 
 CI and Release explicitly select Rust `1.99.0`, Node.js `24.21.0` and Python
-`3.13.16`. OpenSSL remains `4.0.3`, Android build-tools remain `35.0.0`, and their
+`3.13.16`. OpenSSL remains `4.1.0`, Android build-tools remain `35.0.0`, and their
 existing checksum/SDK checks stay in place. Publish uses exactly build-tools
 `35.0.0` even when a runner also has a newer version. The Publish token is
 available only to the publication step. Windows OpenSSL caches are saved only
@@ -129,25 +129,27 @@ it promptly and let the artifact expire. Plaintext signing keys/passwords and
 the recovery private key must never be uploaded. Plaintext signing material is
 removed even when the job fails.
 
-The v5.0.0 public release contains 14 packages:
+The v5.0.0 public release contains 14 packages, with the earlier Tauri desktop app.
+From the release after it, the desktop packages are the Compose (Windows, Linux) and
+SwiftUI (macOS) apps, and the Windows installer joins them, for 15 packages:
 
 | Platform | Public assets |
 |---|---|
 | Android ARM64 | `app-release.apk` |
-| Windows x64 | `NekoKEM-windows-x86_64.zip`, `NekoKEM-Windows-GUI.zip` |
+| Windows x64 | `NekoKEM-windows-x86_64.zip`, `NekoKEM-Windows-GUI.zip`, `NekoKEM-Windows-GUI.msi` |
 | macOS Apple Silicon | `NekoKEM-macos-arm64.tar.gz`, `NekoKEM-macos-arm64-GUI.zip`, `NekoKEM-macos-arm64-GUI.dmg` |
 | Linux x86_64 | `NekoKEM-linux-x86_64.tar.gz`, `NekoKEM-linux-x86_64-GUI.deb`, `NekoKEM-linux-x86_64-GUI.rpm`, `NekoKEM-linux-x86_64-GUI.tar.gz` |
 | Linux ARM64 | `NekoKEM-linux-aarch64.tar.gz`, `NekoKEM-linux-aarch64-GUI.deb`, `NekoKEM-linux-aarch64-GUI.rpm`, `NekoKEM-linux-aarch64-GUI.tar.gz` |
 
 Publish only packages from the successful Release run for the exact CI-validated
-source; the Publish workflow enforces this. The fifteenth asset, top-level
-`SHA256SUMS.txt`, lists all 14 packages. The notes record the source commit,
+source; the Publish workflow enforces this. One more asset, top-level
+`SHA256SUMS.txt`, lists all the packages. The notes record the source commit,
 CI/Release run links, Android signer and public asset hashes, as in the
 [Chinese-then-English v5.0.0 notes](v5.0.0.md). Releases after v4.1.0 also carry
 build provenance attestations; v4.1.0 and earlier do not.
 A rotation's encrypted signing recovery envelope is never selected for
-publication; **do not attach it to the public GitHub Release**. Windows application EXEs are
-unsigned; verification of the Microsoft SDK loader's signature is separate.
+publication; **do not attach it to the public GitHub Release**. Windows application EXEs and
+the installer are unsigned.
 
 Android v5.0.0 uses versionCode `14`, keeps the v3.2.0/v3.3.0 signing identity and
 supports an in-place update. Only old-signer v3.1.x installations need backup
@@ -159,63 +161,51 @@ The v3.2.0 bootstrap key rotation and publication records remain historical audi
 data. Their one-time workflows and hard-coded publication automation have been
 retired in favor of these two entry points.
 
-## macOS Apple Silicon build artifacts
+## Desktop build artifacts
 
-v5.0.0 includes the following native macOS packages in CI and Release:
+`desktop/scripts/package-desktop.py` checks each built desktop app and writes its
+packages, `gui-SHA256SUMS.txt` and build records (source commit, run, version). CI
+runs the same commands on every pull request, installs the DEB on Ubuntu 24.04 and
+the RPM on Fedora 44, and starts the packaged apps; Release only builds and checks.
+See the [desktop GUI documentation](../desktop/README.md).
+
+Windows x64 (Compose Multiplatform, `windows-2022`):
+
+- `NekoKEM-Windows-GUI.msi`: the installer, with a Start menu entry.
+- `NekoKEM-Windows-GUI.zip`: the same application folder with `build-metadata.json`.
+
+The bridge is one DLL without MinGW or OpenSSL runtime DLLs. Nothing is
+Authenticode signed.
+
+macOS Apple Silicon (`macos-26` for the SwiftUI app and its macOS 26 SDK; the CLI
+stays on `macos-15`):
 
 - `NekoKEM-macos-arm64.tar.gz`: native CLI and Terminal menu launcher.
-- `NekoKEM-macos-arm64-GUI.zip`: `NekoKEM.app`, documentation, licenses,
-  checksums and build metadata.
-- `NekoKEM-macos-arm64-GUI.dmg`: Tauri DMG checked and exported under a stable
-  package name; its initial Tauri filename is `NekoKEM_5.0.0_aarch64.dmg`.
+- `NekoKEM-macos-arm64-GUI.zip`: `NekoKEM.app` and `build-metadata.json`.
+- `NekoKEM-macos-arm64-GUI.dmg`: a disk image of the same folder.
 
-Builds use native Apple Silicon and set a macOS 11.0 deployment target. The actual
-native CI runner is `macos-15`; the target does not establish compatibility on
-macOS 11.0 hardware or every M-series generation. OpenSSL 4.0.3 is statically
-linked with arm64 assembly acceleration; macOS system libraries/frameworks remain
-runtime dependencies. The GUI uses system WKWebView without a WebView2 loader.
+The app runs on macOS 13 or newer and is arm64 only. OpenSSL 4.1.0 is statically
+linked with arm64 assembly acceleration; macOS system libraries and frameworks
+remain runtime dependencies. CLI and GUI use ad-hoc signatures, with no Developer
+ID or Apple notarization: the build verifies their structure and integrity, which
+does not authenticate the publisher or guarantee Gatekeeper acceptance. See
+[macOS usage](../macos/README.md) and [filesystem boundaries](../macos/SECURITY-DESIGN.md).
 
-CLI and GUI use ad-hoc hardened-runtime signatures, with no Developer ID or Apple
-notarization. The build verifies their structure and integrity; this does not
-authenticate the publisher or guarantee Gatekeeper acceptance. Android signing
-material is not used. Native architecture, PIE, deployment target, allowable
-system dylibs, signatures, icons, metadata and package checksums remain build
-requirements in Release mode. Regression suites stay in CI.
+Linux x86_64 and ARM64 (Compose Multiplatform, native Ubuntu 24.04 runners), for
+each architecture:
 
-See [macOS usage](../macos/README.md), [filesystem boundaries](../macos/SECURITY-DESIGN.md)
-and [GUI build instructions](../desktop/README.md). Every published macOS package
-is included in top-level `SHA256SUMS.txt`; historical v3.3.0 assets remain unchanged.
+- `NekoKEM-linux-<architecture>-GUI.deb` and `.rpm`: the application under
+  `/opt/nekokem` with a desktop entry. Both depend on Noto Sans CJK and curl; the
+  RPM names the font package of Fedora and of openSUSE. Neither is developer signed.
+- `NekoKEM-linux-<architecture>-GUI.tar.gz`: the same application folder with
+  `build-metadata.json`, started with `bin/NekoKEM`.
 
-## Linux GUI build artifacts
+The app carries its Java runtime. The bridge links the pinned static PIC OpenSSL
+4.1.0 with hidden symbols; the packaging script requires that it needs no system
+OpenSSL and keeps immediate binding, read-only relocations and a non-executable
+stack, and that the project and OpenSSL licences are in the package. The fully
+static CLI archives are built as before. Other distributions and native Wayland
+are not established by the CI tests. Android signing material is not used.
 
-Linux GUI v5.0.0 uses native Ubuntu 24.04 x86_64 and ARM64 build/test runners.
-CI and Release produce, for each `x86_64`/`aarch64` architecture:
-
-- `NekoKEM-linux-<architecture>-GUI.deb`: native application, desktop entry,
-  existing transparent square PNG icons and project/OpenSSL licenses.
-- `NekoKEM-linux-<architecture>-GUI.rpm`: native RPM with the same application
-  resources, release `1` and shared-library capability dependencies, including
-  glibc 2.39 or newer. It is not developer GPG signed.
-- `NekoKEM-linux-<architecture>-GUI.tar.gz`: the exact installed application
-  tree, executable `NekoKEM-GUI.sh`, documentation, licenses, dependency lockfiles,
-  build metadata and inner checksums.
-- `gui-SHA256SUMS.txt`: hashes of all three distributable packages.
-
-The GUI uses system GTK3, WebKitGTK 4.1 and glibc 2.39 or newer; the portable archive
-does not bundle these runtimes. This differs from the existing fully static CLI
-archives, whose build path is retained. Core uses pinned static PIC OpenSSL 4.0.3
-with assembly/threads and hidden symbols to isolate it from system WebKit TLS.
-Native ELF architecture, PIE/full RELRO/nonexecutable stack, no RPATH/TEXTREL or
-OpenSSL dynamic exports, licenses, unchanged icons and hashes remain Release
-build requirements. RPM validation additionally checks declared ELF dependencies,
-digests, public file permissions, absence of installation scripts and byte-identical
-DEB resources; only Tauri's bundle-format marker differs in the executable.
-Actual `.deb` installation on Ubuntu 24.04, `.rpm` installation through DNF in
-native Fedora 44 containers, Rust/Core/private-file and sandboxed WebKit X11
-startup/normal-close tests run only in CI. Other distributions and native Wayland
-are not established by these tests. Android signing material is not used.
-
-See [Linux GUI installation and building](../desktop/README.md#linux-installation-and-build--linux-安装与构建)
-and [security boundaries](../desktop/LINUX-SECURITY.md). Every published Linux GUI
-package is included in top-level release checksums. Historical v3.3.0 assets remain
-unchanged.
+Every published desktop package is included in top-level `SHA256SUMS.txt`;
+historical assets remain unchanged.

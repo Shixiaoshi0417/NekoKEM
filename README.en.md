@@ -37,6 +37,8 @@ Android v5.0.0 retains the v3.2.0/v3.3.0 signing identity and supports an in-pla
 
 Verify each downloaded archive against [SHA256SUMS.txt](https://github.com/Shixiaoshi0417/NekoKEM/releases/download/v5.0.0/SHA256SUMS.txt), then verify its internal checksums. Linux GUI requires glibc 2.39+, GTK3 and WebKitGTK 4.1. macOS tests run on macOS 15 with an 11.0 deployment target. Platform installation steps and signing limitations follow below.
 
+> Desktop note: the v5.0.0 desktop GUI is a Tauri app, and the GUI sections below describe that release. The main branch has moved to a Compose Multiplatform app (Windows, Linux) and a SwiftUI app (macOS), which ship with the next release; see the [desktop GUI documentation](desktop/README.md).
+
 Releases after v4.1.0 also carry GitHub build provenance for every asset. With the GitHub CLI, confirm that a file was built by this repository's Release workflow on `main` (substitute the asset you downloaded):
 
 ```sh
@@ -132,7 +134,7 @@ Debian 13:
 sudo apt install libssl-dev build-essential
 ```
 
-OpenSSL 3.5 or newer is required because EVP support for ML-KEM begins with OpenSSL 3.5. Source builds and CI on all platforms pin OpenSSL 4.0.3 and verify the official source SHA-256.
+OpenSSL 3.5 or newer is required because EVP support for ML-KEM begins with OpenSSL 3.5. Source builds and CI on all platforms pin OpenSSL 4.1.0 and verify the official source SHA-256.
 
 To build the AFL++ fuzz harnesses, also install:
 
@@ -154,7 +156,7 @@ GitHub Actions uses [CI](.github/workflows/ci.yml) and [Release](.github/workflo
 
 ## Windows CLI and GUI
 
-v5.0.0 provides native Windows 10/11 x64 portable packages for `nekokem.exe` and `nekokem-gui.exe`. The CLI shares Linux's complete argument parser and five-option menu; double-clicking the EXE or running it without arguments opens the menu. See the [Windows CLI documentation](windows/README.md) for building, use and imported-key permissions, and the [filesystem design](windows/SECURITY-DESIGN.md) for its boundaries. Running the CLI requires no MSYS2 runtime or OpenSSL DLL; building uses MSYS2 UCRT64 and pinned OpenSSL 4.0.3.
+v5.0.0 provides native Windows 10/11 x64 portable packages for `nekokem.exe` and `nekokem-gui.exe`. The CLI shares Linux's complete argument parser and five-option menu; double-clicking the EXE or running it without arguments opens the menu. See the [Windows CLI documentation](windows/README.md) for building, use and imported-key permissions, and the [filesystem design](windows/SECURITY-DESIGN.md) for its boundaries. Running the CLI requires no MSYS2 runtime or OpenSSL DLL; building uses MSYS2 UCRT64 and pinned OpenSSL 4.1.0.
 
 The Rust + Tauri 2 + Vue 3 + TypeScript GUI calls the same C17 Core through a narrow interface, with native file dialogs, progress, cancellation, keyboard navigation and transitions that follow the system's reduced-motion preference. It requires Microsoft Edge WebView2 Runtime and the bundled `WebView2Loader.dll` beside the EXE; see the [Windows GUI documentation](desktop/README.md). Neither Windows application is Authenticode signed; the build separately verifies the Microsoft SDK loader's signature and provenance.
 
@@ -164,7 +166,7 @@ Windows accepts local fixed NTFS only, checks ownership and ACLs, and rejects ne
 
 v5.0.0 provides a native `arm64` CLI and Rust + Tauri 2 + Vue 3 + TypeScript GUI for M-series Apple Silicon Macs. Download `NekoKEM-macos-arm64.tar.gz`, `NekoKEM-macos-arm64-GUI.zip` (containing the `.app`) or `NekoKEM-macos-arm64-GUI.dmg` from this release. See the [macOS build and usage instructions](macos/README.md) and [desktop GUI documentation](desktop/README.md). Intel/Rosetta builds are not provided.
 
-The CLI shares Linux's argument parser, five-option menu and language catalogs. The GUI uses system WKWebView and needs no Windows WebView2 Runtime or loader. Both statically link pinned OpenSSL 4.0.3 with its arm64 assembly acceleration retained; macOS system libraries and frameworks are still runtime dependencies. Builds set a macOS 11.0 deployment target. Native CI runs on `macos-15`; this does not establish compatibility on a physical macOS 11.0 installation or performance and compatibility for every M-series generation.
+The CLI shares Linux's argument parser, five-option menu and language catalogs. The GUI uses system WKWebView and needs no Windows WebView2 Runtime or loader. Both statically link pinned OpenSSL 4.1.0 with its arm64 assembly acceleration retained; macOS system libraries and frameworks are still runtime dependencies. Builds set a macOS 11.0 deployment target. Native CI runs on `macos-15`; this does not establish compatibility on a physical macOS 11.0 installation or performance and compatibility for every M-series generation.
 
 The macOS file layer preserves strict ownership, permissions, symbolic-link and hard-link checks, permits only empty or deny-only extended ACLs on protected files/directories, and checks APFS/HFS+ case and Unicode name aliases. Regular output files require `fsync` and `F_FULLFSYNC`; commits require parent-directory `fsync`, without silent fallback on failure. See the [macOS filesystem design](macos/SECURITY-DESIGN.md) for limits and test boundaries. Core 4.0 adds the NKEM v4 multi-recipient container; NKEM v3, NKPR v1, cryptographic parameters and 64 KiB streaming chunks are unchanged. Packages use ad-hoc signing only, without Developer ID or Apple notarization; this neither authenticates the publisher nor guarantees Gatekeeper acceptance.
 
@@ -172,7 +174,7 @@ The macOS file layer preserves strict ownership, permissions, symbolic-link and 
 
 The native Linux GUI supports `x86_64` and `aarch64` (ARM64), reusing Rust + Tauri 2 + Vue 3 + TypeScript, five-language automatic detection, native file dialogs, progress/cancellation, keyboard navigation and animations honoring reduced motion. Each architecture provides `NekoKEM-linux-<architecture>-GUI.deb`, `NekoKEM-linux-<architecture>-GUI.rpm` and `NekoKEM-linux-<architecture>-GUI.tar.gz`. On Ubuntu use `sudo apt install ./NekoKEM-linux-x86_64-GUI.deb`; on Fedora use `sudo dnf install ./NekoKEM-linux-x86_64-GUI.rpm`, replacing the architecture with `aarch64` for ARM64. The installed app opens from the system application menu; the portable package uses `NekoKEM-GUI.sh`. Icons directly reuse the existing square PNG artwork with transparent outer white areas; README keeps its rounded display image.
 
-Builds and native CI use Ubuntu 24.04, with additional native RPM installation and startup in Fedora 44 containers. RPMs are built directly and declare shared-library capabilities, including the architecture’s dynamic loader, as dependencies. Running requires system GTK3, WebKitGTK 4.1 and glibc 2.39 or newer; portable GUI packages retain these runtime dependencies. OpenSSL 4.0.3 is statically linked with hidden symbols to avoid interposing on WebKit's system TLS libraries, retaining assembly, threads, Fortify, stack protection, PIE and full RELRO. Linux permissions, authenticated commit and cancellation cleanup reuse the CLI/Core. Core 4.0 adds the NKEM v4 multi-recipient container; NKEM v3, NKPR v1, KDF parameters and 64 KiB streaming are unchanged. See [Linux installation and building](desktop/README.md#linux-installation-and-build--linux-安装与构建) and [Linux GUI security boundaries](desktop/LINUX-SECURITY.md).
+Builds and native CI use Ubuntu 24.04, with additional native RPM installation and startup in Fedora 44 containers. RPMs are built directly and declare shared-library capabilities, including the architecture’s dynamic loader, as dependencies. Running requires system GTK3, WebKitGTK 4.1 and glibc 2.39 or newer; portable GUI packages retain these runtime dependencies. OpenSSL 4.1.0 is statically linked with hidden symbols to avoid interposing on WebKit's system TLS libraries, retaining assembly, threads, Fortify, stack protection, PIE and full RELRO. Linux permissions, authenticated commit and cancellation cleanup reuse the CLI/Core. Core 4.0 adds the NKEM v4 multi-recipient container; NKEM v3, NKPR v1, KDF parameters and 64 KiB streaming are unchanged. See [Linux installation and building](desktop/README.md#install--安装).
 
 The v5.0.0 Release includes every Linux GUI installation and portable package for both architectures, alongside the existing static CLI packages. Native window tests use X11 and do not establish testing on every Linux distribution or physical Wayland session.
 
@@ -375,7 +377,7 @@ The header is followed by:
 
 The complete `header || salt || nonce` is AES-GCM AAD. The reader strictly validates the version, algorithms, parameters, lengths, and GCM tag. An incorrect password or any change to authenticated fields or ciphertext causes failure, with one public private-key unlock error for wrong passwords and damaged containers. Decryption buffers always stay in memory, including data produced before tag verification, and are cleared on failure.
 
-NKPR's AES-GCM is not key-committing: it does not guarantee that only one password or protection key can authenticate a container, or that different protection keys yield the same plaintext. This documents the existing format's boundary without changing NKPR or its cryptographic parameters.
+NKPR's AES-GCM is not key-committing: it does not guarantee that only one password or protection key can authenticate a container, or that different protection keys yield the same plaintext. This documents the existing format's boundary without changing NKPR or its cryptographic parameters. NKEM v4/v5 commit to the file key through the header HMAC-SHA512 and are not affected; the assessment of every AES-GCM use and a draft NKPR v3 design are in [Key commitment](docs/key-commitment.md).
 
 ## NKEM v3 hybrid file format
 
@@ -480,11 +482,19 @@ This target builds with `afl-clang-fast` and UBSan:
 
 All three harnesses accept an `argv[1]` file path. The two parser harnesses reject inputs above 2 MiB and do not execute decapsulation, Argon2id, AES-GCM, or plaintext output; their seeds in `core/fuzz/seeds/` are zero-filled structural samples without passwords, private keys, or real sensitive data, and several truncated samples are included. Seeds for `fuzz_decrypt` are generated at every build: a throwaway plaintext-PEM test key and genuine v3, empty v3 and two-recipient v4 containers for it, so mutations reach trial decryption, the MAC and payload authentication. The key protects nothing and is never committed. See `core/fuzz/README.md` for AFL commands.
 
+CI fuzzes each harness for 15 seconds on every pull request. The [Fuzz workflow](.github/workflows/fuzz.yml) runs each of the four harnesses for an hour every Sunday at 18:00 UTC (or by hand from the Actions tab for 60–18000 seconds); a crash, hang or UBSan report fails it, and the AFL output is kept for 30 days.
+
 ## Update checks
 
-Android and the desktop GUI can check for a newer release: Check for updates is on the About page (Android) or the Settings page (desktop). Automatic checks are on by default, run at most once a day at launch, and can be turned off in Settings. A newer release is only announced by its version number; Go to download opens the GitHub release page, where you download and verify it as the release notes describe. The App never downloads or installs anything itself. Skip this version keeps automatic checks quiet about that version.
+Android and the desktop GUI can check for a newer release: Check for updates is on the Settings > About page (Android) or the Settings page (desktop). Automatic checks are on by default, run at most once a day at launch, and can be turned off in Settings. A newer release is only announced by its version number; Go to download opens the GitHub release page, where you download and verify it as the release notes describe. The App never downloads or installs anything itself. Skip this version keeps automatic checks quiet about that version.
 
 A check sends one HTTPS GET to the fixed address `https://api.github.com/repos/Shixiaoshi0417/NekoKEM/releases/latest`, with no keys, fingerprints, files or settings. A response over 1 MiB, a draft or pre-release, or an unexpected version format counts as a failure, and the release page address is built from the version number rather than taken from the response. GitHub sees the request's IP address and time. Android adds the INTERNET permission for this and uses the system HTTPS stack; the desktop backend runs the system curl (Windows `System32\curl.exe`, macOS/Linux `/usr/bin/curl`), and the frontend still cannot make network requests. The CLI does not check for updates.
+
+## Fingerprint QR codes
+
+Trust in a v5 signature rests on comparing the identity fingerprint with its owner. Instead of reading 64 hexadecimal digits aloud, the Android Keys page and the desktop fingerprint result can show a **fingerprint QR code**, and every Android contact has **Scan to verify**: scanning the owner's code marks the contact "Fingerprint verified by scan" when it matches the saved fingerprint, and shows a red warning and removes any earlier mark when it does not.
+
+The code holds `NEKOKEM-FP1:` and the 64 upper-case hexadecimal digits of the fingerprint. It carries no key, so a scan only checks a saved contact and can never add or replace one. Android adds the `CAMERA` permission for scanning, asks for it only when a scan starts, and analyses frames in memory without storing them; ZXing draws and reads the codes and CameraX supplies the frames, without Google Play services. The desktop GUI only shows codes and never uses a camera. The mark is stored in the Android contact record; 5.0.0 ignores it, and editing the note in 5.0.0 drops it.
 
 ## Security boundaries
 

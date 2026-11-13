@@ -8,7 +8,7 @@
 make core
 ```
 
-Core 使用 OpenSSL EVP、NKEM v3（单接收方）、NKEM v4（多接收方）和 NKPR；固定依赖为 OpenSSL 4.0.3。NKEM v3 使用独立的
+Core 使用 OpenSSL EVP、NKEM v3（单接收方）、NKEM v4（多接收方）和 NKPR；固定依赖为 OpenSSL 4.1.0。NKEM v3 使用独立的
 32-byte HKDF salt；NKPR 作为独立私钥容器继续维护。
 
 ## 公共 API

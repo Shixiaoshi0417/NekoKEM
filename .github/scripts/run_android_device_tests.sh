@@ -55,8 +55,8 @@ for system_locale in ja-JP de-DE; do
     screenshot_prefix=large-dark
     if [[ "$language" == de ]]; then
         adb shell cmd uimode night no
-        adb shell wm size 720x1280
-        adb shell wm density 320
+        adb shell wm size 1080x1920
+        adb shell wm density 480
         screenshot_prefix=small-light
     fi
     adb shell run-as com.shixiaoshi0417.nekokem rm -f cache/i18n-system-ready
@@ -75,7 +75,7 @@ for system_locale in ja-JP de-DE; do
     grep -Fx 'INSTRUMENTATION_CODE: -1' "$report_dir/system-$language.txt"
 done
 
-# Repeat the UI language/layout assertions at 360x640 dp in light mode.
+# Repeat the UI language/layout assertions at 360x640 dp (1080x1920 at 480 dpi) in light mode.
 # JNI/SAF gates already executed in full above; this phase exercises the UI only.
 adb shell am force-stop com.shixiaoshi0417.nekokem
 adb shell am instrument -w -e languagePhase layout -e screenshotPrefix small-light "$runner" | tee "$report_dir/layout-small-light.txt"

@@ -17,12 +17,13 @@ class VersionChecks(unittest.TestCase):
         self.addCleanup(temp.cleanup)
         self.root = Path(temp.name)
         for relative in (
-            'desktop/package.json', 'desktop/package-lock.json',
-            'desktop/src-tauri/tauri.conf.json', 'desktop/src-tauri/Cargo.toml',
-            'desktop/src-tauri/Cargo.lock', 'linux/src/main.c', 'linux/packaging/README',
+            'linux/src/main.c', 'linux/packaging/README',
             'linux/scripts/build-linux-release.sh', 'macos/scripts/build-macos-cli.sh',
-            'windows/scripts/build-windows-cli.sh', 'desktop/scripts/package-linux-gui.py',
+            'windows/scripts/build-windows-cli.sh', 'desktop/scripts/package-desktop.py',
             '.github/workflows/ci.yml', '.github/workflows/release.yml',
+            'desktop/bridge/Cargo.toml', 'desktop/bridge/Cargo.lock', 'desktop-compose/build.gradle.kts',
+            'desktop-compose/src/main/kotlin/com/shixiaoshi0417/nekokem/desktop/AppState.kt',
+            'macos/gui/Sources/NekoKEM/AppState.swift',
             'android/app/build.gradle.kts', '.github/scripts/verify_android_release.py',
             *(f'android/app/src/main/res/{directory}/strings.xml' for directory in
               ('values', 'values-zh-rCN', 'values-zh-rTW', 'values-ja', 'values-ko')),
@@ -36,9 +37,10 @@ class VersionChecks(unittest.TestCase):
 
     def test_application_signing_package_and_workflow_drift_is_detected(self):
         version = check_versions.check_versions(self.root)[0]
-        for relative in ('desktop/src-tauri/Cargo.toml', 'linux/src/main.c',
+        for relative in ('linux/src/main.c',
+                         'desktop/bridge/Cargo.lock', 'desktop-compose/build.gradle.kts',
+                         'macos/gui/Sources/NekoKEM/AppState.swift',
                          '.github/scripts/verify_android_release.py',
-                         '.github/workflows/release.yml',
                          'android/app/src/main/res/values-ko/strings.xml'):
             with self.subTest(relative=relative):
                 path = self.root / relative
@@ -61,10 +63,9 @@ class VersionChecks(unittest.TestCase):
                 self.assertTrue(any('windows/scripts/build-windows-cli.sh' in error for error in errors))
         path.write_text(original)
 
-    def test_windows_gui_metadata_cannot_override_tauri_version(self):
+    def test_workflows_cannot_name_a_version_of_their_own(self):
         path = self.root / '.github/workflows/release.yml'
-        path.write_text(path.read_text().replace('version=$version; exe_sha256',
-                                                "version='99.99.99'; exe_sha256"))
+        path.write_text(path.read_text() + '\n# package-desktop.py --version 99.99.99\n')
         self.assertTrue(any('.github/workflows/release.yml' in error
                             for error in check_versions.check_versions(self.root)[1]))
 

@@ -23,6 +23,7 @@
 const char *desktop_language(void);
 char *desktop_stage_key(const unsigned char *bytes, size_t length);
 char *desktop_stage_output(void);
+char *desktop_stage_file_output(void);
 int desktop_remove_staged_key(char *path);
 int desktop_private_directory(const char *path);
 int desktop_contacts_directory(char *path, size_t capacity);
@@ -151,11 +152,13 @@ static int private_parent(const char *path)
     return safe;
 }
 
-/* Creates a new private 0700 staging directory and returns its descriptor. */
-static int stage_directory(char *directory_path, size_t capacity)
+/* Creates a new private 0700 staging directory and returns its descriptor.
+ * XDG_RUNTIME_DIR is memory, sized for keys; [on_disk] leaves it out for a
+ * whole encrypted or decrypted file. */
+static int stage_directory(char *directory_path, size_t capacity, int on_disk)
 {
     char fallback[PATH_MAX];
-    const char *base = getenv("XDG_RUNTIME_DIR");
+    const char *base = on_disk ? NULL : getenv("XDG_RUNTIME_DIR");
     struct stat status;
 #ifdef __APPLE__
     char darwin[PATH_MAX];
@@ -262,7 +265,7 @@ char *desktop_stage_key(const unsigned char *bytes, size_t length)
     return path;
 #else
     char directory_path[PATH_MAX];
-    int directory = stage_directory(directory_path, sizeof(directory_path));
+    int directory = stage_directory(directory_path, sizeof(directory_path), 0);
     if (directory < 0) return NULL;
     struct stat status;
     int descriptor = openat(directory, "key.pem",
@@ -299,6 +302,18 @@ char *desktop_stage_key(const unsigned char *bytes, size_t length)
 #endif
 }
 
+#ifndef _WIN32
+static char *staged_output(int on_disk)
+{
+    char directory_path[PATH_MAX];
+    int directory = stage_directory(directory_path, sizeof(directory_path), on_disk);
+    if (directory < 0) return NULL;
+    char *path = close(directory) == 0 ? staged_name(directory_path) : NULL;
+    if (path == NULL) (void)rmdir(directory_path);
+    return path;
+}
+#endif
+
 /* Returns a not-yet-existing key.pem path in a new private staging directory.
  * Core creates it atomically; desktop_remove_staged_key() removes both. */
 char *desktop_stage_output(void)
@@ -334,11 +349,16 @@ char *desktop_stage_output(void)
     (void)snprintf(path, capacity, "%s/key.pem", directory);
     return path;
 #else
-    char directory_path[PATH_MAX];
-    int directory = stage_directory(directory_path, sizeof(directory_path));
-    if (directory < 0) return NULL;
-    char *path = close(directory) == 0 ? staged_name(directory_path) : NULL;
-    if (path == NULL) (void)rmdir(directory_path);
-    return path;
+    return staged_output(0);
+#endif
+}
+
+/* The same for a file the user saves afterwards: always on a disk. */
+char *desktop_stage_file_output(void)
+{
+#ifdef _WIN32
+    return desktop_stage_output();
+#else
+    return staged_output(1);
 #endif
 }

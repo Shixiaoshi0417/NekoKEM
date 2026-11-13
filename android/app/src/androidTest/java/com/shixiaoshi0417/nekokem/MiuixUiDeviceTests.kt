@@ -6,10 +6,15 @@ import android.app.Instrumentation
 import android.content.Context
 import android.content.Intent
 import android.graphics.Bitmap
+import android.net.Uri
 import android.os.Build
 import android.os.SystemClock
 import android.view.accessibility.AccessibilityNodeInfo
+import com.shixiaoshi0417.nekokem.files.SafFileWorkflow
 import com.shixiaoshi0417.nekokem.i18n.AppLanguages
+import com.shixiaoshi0417.nekokem.keys.LocalKeyManager
+import com.shixiaoshi0417.nekokem.keys.PublicKeyContacts
+import com.shixiaoshi0417.nekokem.nativecore.NativeBridge
 import com.shixiaoshi0417.nekokem.ui.SignatureSettingsStore
 import com.shixiaoshi0417.nekokem.update.Releases
 import com.shixiaoshi0417.nekokem.update.UpdateSettingsStore
@@ -62,7 +67,35 @@ internal fun runMiuixUiTests(instrumentation: Instrumentation, screenshotPrefix:
             find(root) { it.text?.toString() == value || it.contentDescription?.toString() == value }
         }
     }
+    // Every copy on screen. A window left over from the other shell can hold one that
+    // cannot be pressed, so a press tries each of them.
+    fun copies(value: String): List<AccessibilityNodeInfo> {
+        val roots = listOfNotNull(automation.rootInActiveWindow) +
+            runCatching { automation.windows.mapNotNull { it.root } }.getOrDefault(emptyList())
+        val found = mutableListOf<AccessibilityNodeInfo>()
+        fun collect(node: AccessibilityNodeInfo?) {
+            if (node == null) return
+            if (node.text?.toString() == value || node.contentDescription?.toString() == value) found += node
+            for (index in 0 until node.childCount) collect(node.getChild(index))
+        }
+        roots.forEach(::collect)
+        return found
+    }
+    fun containing(value: String): AccessibilityNodeInfo? {
+        val roots = listOfNotNull(automation.rootInActiveWindow) +
+            runCatching { automation.windows.mapNotNull { it.root } }.getOrDefault(emptyList())
+        return roots.firstNotNullOfOrNull { root -> find(root) { it.text?.toString()?.contains(value) == true } }
+    }
     fun string(resource: Int) = checkNotNull(activity).getString(resource)
+    // Drags the page by half a screen (down when [forward]) so long pages are captured whole.
+    fun scrollPage(forward: Boolean) {
+        val metrics = context.resources.displayMetrics
+        val x = metrics.widthPixels / 2
+        val (from, to) = if (forward) metrics.heightPixels * 3 / 4 to metrics.heightPixels / 4 else metrics.heightPixels / 4 to metrics.heightPixels * 3 / 4
+        instrumentation.uiAutomation.executeShellCommand("input swipe $x $from $x $to 600").close()
+        SystemClock.sleep(1000)
+        instrumentation.uiAutomation.waitForIdle(500, 5000)
+    }
     fun capture(name: String) {
         // Let the bar's spring and the page fade settle before the frame is taken.
         SystemClock.sleep(800)
@@ -90,27 +123,56 @@ internal fun runMiuixUiTests(instrumentation: Instrumentation, screenshotPrefix:
             SystemClock.sleep(100)
         }
     }
-    fun reveal(value: String) {
+    // [past] scrolls one step before looking: the copy already found refused the press.
+    fun reveal(value: String, past: Boolean = false) {
+        var skip = past
         // On small screens the row can sit below the fold or under the floating bar.
         // A lazy list drops rows scrolled past, so look back up once the end is reached.
         for (action in listOf(AccessibilityNodeInfo.ACTION_SCROLL_FORWARD, AccessibilityNodeInfo.ACTION_SCROLL_BACKWARD)) {
+            var dragged = false
             repeat(6) {
-                if (exact(value) != null) return
-                val scrollable = find(automation.rootInActiveWindow) { it.isScrollable } ?: return
-                if (!scrollable.performAction(action)) return@repeat
+                if (!skip && exact(value) != null) return
+                skip = false
+                // The page is not always the first scrollable node, so each one is asked in turn.
+                val scrollables = mutableListOf<AccessibilityNodeInfo>()
+                fun collect(node: AccessibilityNodeInfo?) {
+                    if (node == null) return
+                    if (node.isScrollable) scrollables += node
+                    for (index in 0 until node.childCount) collect(node.getChild(index))
+                }
+                collect(automation.rootInActiveWindow)
+                if (scrollables.none { it.performAction(action) }) {
+                    // A row scrolled out of view leaves the tree; one drag brings the page back when no node scrolls.
+                    if (dragged) return@repeat
+                    dragged = true
+                    scrollPage(action == AccessibilityNodeInfo.ACTION_SCROLL_FORWARD)
+                    return@repeat
+                }
                 instrumentation.waitForIdleSync()
                 SystemClock.sleep(300)
             }
         }
     }
-    fun click(value: String) {
-        // Keep the node the wait found; a recomposition can drop it before a second lookup.
-        var found: AccessibilityNodeInfo? = null
-        await("missing $value") { reveal(value); found = exact(value); found != null }
-        var target = checkNotNull(found)
-        while (!target.isClickable) target = checkNotNull(target.parent) { "$value is not clickable" }
-        check(target.performAction(AccessibilityNodeInfo.ACTION_CLICK))
+    // False when the node is gone or has no clickable parent by the time it is pressed.
+    fun tap(node: AccessibilityNodeInfo): Boolean {
+        var target = node
+        while (!target.isClickable) target = target.parent ?: return false
+        if (!target.performAction(AccessibilityNodeInfo.ACTION_CLICK)) return false
         instrumentation.waitForIdleSync()
+        return true
+    }
+    fun click(value: String) {
+        // A recomposition after the scroll can drop the node between the lookup and the press,
+        // so a refused press looks the row up again.
+        // A copy in a leftover window is found without scrolling and refuses the press while
+        // the real row is still below the fold, so a refused press scrolls on before the next try.
+        var refused = false
+        await("missing or unpressable $value") {
+            reveal(value, refused)
+            val pressed = copies(value).any(::tap)
+            refused = !pressed
+            pressed
+        }
     }
     // A dropdown that closes again before its menu is read is opened once more.
     fun choose(title: String, option: String) {
@@ -118,10 +180,9 @@ internal fun runMiuixUiTests(instrumentation: Instrumentation, screenshotPrefix:
             click(title)
             val deadline = SystemClock.uptimeMillis() + 3_000L
             while (SystemClock.uptimeMillis() < deadline) {
-                if (exact(option) != null) {
-                    click(option)
-                    return
-                }
+                // An entry still animating in can refuse the press; it is looked up again.
+                // No scrolling here: that would close the menu.
+                if (exact(option)?.let(::tap) == true) return
                 instrumentation.waitForIdleSync()
                 SystemClock.sleep(100)
             }
@@ -146,38 +207,82 @@ internal fun runMiuixUiTests(instrumentation: Instrumentation, screenshotPrefix:
                 )
         } >= 2
     }
+    // Two saved contacts, one verified, show the small cards and the detail page.
+    val contacts = PublicKeyContacts(context, LocalKeyManager(context))
+    val savedContacts = mutableListOf<String>()
     try {
+        val keyDir = File.createTempFile("ci-miuix-contacts-", ".tmp", context.cacheDir).apply { check(delete() && mkdir()) }
+        try {
+            val workflow = SafFileWorkflow(context, LocalKeyManager(context))
+            for ((note, verified) in listOf("Alice" to true, "Bob" to false, "Carol" to false)) {
+                val publicKey = File(keyDir, "$note.key")
+                generateContactTestKeypair(publicKey, File(keyDir, "$note.nkpr"))
+                val key = checkNotNull(workflow.stageTemporaryPublicKey(Uri.fromFile(publicKey), "$note.key").key)
+                val contact = try { checkNotNull(contacts.save(key, note).contact) } finally { workflow.discardTemporaryPublicKey(key) }
+                savedContacts += contact.id
+                if (verified) check(contacts.setVerified(contact.id, contact.fingerprint, true).code == NativeBridge.RESULT_SUCCESS)
+                // Bob is pinned above Alice; Carol waits in the archive.
+                if (note == "Bob") check(contacts.setPinned(contact.id, true).code == NativeBridge.RESULT_SUCCESS)
+                if (note == "Carol") check(contacts.setArchived(contact.id, true).code == NativeBridge.RESULT_SUCCESS)
+            }
+        } finally { keyDir.deleteRecursively() }
         activity = instrumentation.startActivitySync(
             Intent(context, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
         )
         instrumentation.waitForIdleSync()
         // The automatic check runs at launch and offers the newer release.
         val updateTitle = string(R.string.update_available_title).replace("%1\$s", "99.0.0")
-        await("automatic update prompt") { exact(updateTitle) != null }
+        try {
+            await("automatic update prompt") { exact(updateTitle) != null }
+        } catch (failure: IllegalStateException) {
+            // Says whether the check ran at all when the prompt stays away.
+            val stored = UpdateSettingsStore.read(context)
+            error("${failure.message} (auto=${stored.autoCheck}, last=${stored.lastCheckMillis}, ignored=${stored.ignoredVersion})")
+        }
         capture("update-available")
         click(string(R.string.action_later))
         await("update prompt closed") { exact(updateTitle) == null }
         check(UpdateSettingsStore.read(context).lastCheckMillis > 0L) { "The automatic check was not recorded" }
         await("Files page") { exact(string(R.string.navigation_files)) != null }
         capture("files")
-        // Dialogs follow the style: the saved-key picker is a MIUIX dialog.
-        reveal(string(R.string.action_choose_contact))
-        click(string(R.string.action_choose_contact))
-        await("contact picker") { exact(string(R.string.action_cancel)) != null }
-        capture("dialog")
-        click(string(R.string.action_cancel))
-        await("contact picker closed") { exact(string(R.string.action_cancel)) == null }
         val pages = listOf(
             R.string.tab_keys to R.string.navigation_keys,
             R.string.tab_contacts to R.string.navigation_contacts,
             R.string.tab_settings to R.string.navigation_settings,
-            R.string.tab_about to R.string.navigation_about,
         )
         for ((tab, title) in pages) {
             clickNavigationTab(instrumentation, string(tab))
             await("page ${string(title)}") { exact(string(title)) != null }
             capture(string(tab).lowercase())
+            if (tab == R.string.tab_contacts) {
+                // A card opens the contact's page; back returns to the list.
+                var card: AccessibilityNodeInfo? = null
+                await("contact card") { card = containing("Alice"); card != null }
+                var target = checkNotNull(card)
+                while (!target.isClickable) target = checkNotNull(target.parent) { "Contact card is not clickable" }
+                check(target.performAction(AccessibilityNodeInfo.ACTION_CLICK))
+                await("contact page") { exact(string(R.string.contact_verify_title)) != null }
+                capture("contact-detail")
+                // Verification is a page of its own under the contact.
+                click(string(R.string.contact_verify_title))
+                await("verify page") { exact(string(R.string.action_scan_fingerprint)) != null }
+                capture("contact-verify")
+                scrollPage(true)
+                capture("contact-verify-2")
+                instrumentation.runOnMainSync {
+                    (checkNotNull(activity) as androidx.activity.ComponentActivity).onBackPressedDispatcher.onBackPressed()
+                }
+                await("contact page again") { exact(string(R.string.action_use_contact)) != null }
+                instrumentation.runOnMainSync {
+                    (checkNotNull(activity) as androidx.activity.ComponentActivity).onBackPressedDispatcher.onBackPressed()
+                }
+                await("contact list again") { exact(string(title)) != null }
+            }
         }
+        // About is opened from the end of Settings, not from the bar.
+        click(string(R.string.tab_about))
+        await("About page") { reveal(string(R.string.action_check_update)); exact(string(R.string.action_check_update)) != null }
+        capture("about")
         // About checks on demand; skipping the version is remembered.
         click(string(R.string.action_check_update))
         await("manual update prompt") { exact(updateTitle) != null }
@@ -223,7 +328,8 @@ internal fun runMiuixUiTests(instrumentation: Instrumentation, screenshotPrefix:
         // The Material shell opens on Files; its settings picker switches back to MIUIX.
         await("Material Files page") { exact(string(R.string.navigation_files)) != null }
         // Material About checks on demand too.
-        clickNavigationTab(instrumentation, string(R.string.tab_about))
+        clickNavigationTab(instrumentation, string(R.string.tab_settings))
+        click(string(R.string.tab_about))
         click(string(R.string.action_check_update))
         await("Material update prompt") { exact(updateTitle) != null }
         capture("material-update-available")
@@ -273,8 +379,8 @@ internal fun runMiuixUiTests(instrumentation: Instrumentation, screenshotPrefix:
         }
         await("Material Files page again") { exact(string(R.string.navigation_files)) != null }
         clickNavigationTab(instrumentation, string(R.string.tab_settings))
-        click(string(R.string.settings_ui_style_title))
-        click(string(R.string.settings_ui_style_miuix))
+        // Looking for a menu entry that is not drawn yet would scroll the page and close the menu.
+        choose(string(R.string.settings_ui_style_title), string(R.string.settings_ui_style_miuix))
         await("MIUIX style stored") { UiStyles.selection(context) == UiStyle.MIUIX }
         await("MIUIX Files page") { exact(string(R.string.navigation_files)) != null }
     } finally {
@@ -283,6 +389,7 @@ internal fun runMiuixUiTests(instrumentation: Instrumentation, screenshotPrefix:
             AppLanguages.setSelection(context, priorLanguage)
         }
         automation.serviceInfo = priorServiceInfo
+        savedContacts.forEach { contacts.delete(it) }
         useMaterialStyle(context)
         context.getSharedPreferences("signature_settings", Context.MODE_PRIVATE).edit().clear().commit()
         quietUpdateChecks(context)

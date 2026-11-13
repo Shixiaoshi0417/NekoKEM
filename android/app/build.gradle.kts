@@ -152,12 +152,12 @@ kotlin {
 
 dependencies {
     testImplementation("junit:junit:4.13.2")
-    testImplementation("org.robolectric:robolectric:4.14.1")
+    testImplementation("org.robolectric:robolectric:4.17")
 
     implementation(platform("androidx.compose:compose-bom:2026.09.00"))
     implementation("androidx.activity:activity-compose:1.13.0")
     // Material 3 Expressive components; the BOM still pins material3 1.4.
-    implementation("androidx.compose.material3:material3:1.5.0-beta01")
+    implementation("androidx.compose.material3:material3:1.5.0-rc01")
     implementation("androidx.compose.ui:ui")
     // Filled and outlined tab icons for the Material navigation bar.
     implementation("androidx.compose.material:material-icons-core")
@@ -168,6 +168,12 @@ dependencies {
     implementation("top.yukonga.miuix.kmp:miuix-icons-android:0.9.4")
     implementation("top.yukonga.miuix.kmp:miuix-preference-android:0.9.4")
     implementation("top.yukonga.miuix.kmp:miuix-blur-android:0.9.4")
+    // Fingerprint QR codes: ZXing draws and reads them; CameraX supplies the
+    // camera frames for scanning. Neither needs Google Play services.
+    implementation("com.google.zxing:core:3.5.4")
+    implementation("androidx.camera:camera-camera2:1.6.2")
+    implementation("androidx.camera:camera-lifecycle:1.6.2")
+    implementation("androidx.camera:camera-view:1.6.2")
 
     debugImplementation("androidx.compose.ui:ui-tooling")
 }

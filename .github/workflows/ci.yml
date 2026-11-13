@@ -47,10 +47,10 @@ jobs:
       - name: Test atomic performance report saving
         run: python3 scripts/test_profile_reports.py -v
 
-      - name: Build OpenSSL 4.0.3
+      - name: Build OpenSSL 4.1.0
         env:
-          OPENSSL_VERSION: "4.0.3"
-          OPENSSL_SHA256: 325b5c806167c13b40b1ffeadfe0248197c00eccc4cf123ec1e28d2d2fd216d9
+          OPENSSL_VERSION: "4.1.0"
+          OPENSSL_SHA256: 50c17baf54cb008f6ce42d50deb4b28050a1aad711636cabd4b241c7e90cc2fd
         run: |
           set -Eeuo pipefail
           build_root="$RUNNER_TEMP/openssl-build"
@@ -77,14 +77,14 @@ jobs:
 
       - name: Run complete Linux test suite
         env:
-          CPATH: ${{ runner.temp }}/openssl-4.0.3/include
-          LIBRARY_PATH: ${{ runner.temp }}/openssl-4.0.3/lib
+          CPATH: ${{ runner.temp }}/openssl-4.1.0/include
+          LIBRARY_PATH: ${{ runner.temp }}/openssl-4.1.0/lib
         run: make -C linux test
 
       - name: Verify build-only release mode preserves the Linux binary
         run: |
           set -Eeuo pipefail
-          export NEKOKEM_OPENSSL_PREFIX="$RUNNER_TEMP/openssl-4.0.3"
+          export NEKOKEM_OPENSSL_PREFIX="$RUNNER_TEMP/openssl-4.1.0"
           for mode in 1 0; do
             NEKOKEM_BUILD_TESTS="$mode" bash linux/scripts/build-linux-release.sh \
               x86_64 "$RUNNER_TEMP/release-mode-$mode"
@@ -94,8 +94,8 @@ jobs:
 
       - name: Compare Linux throughput against the PR base
         env:
-          CPATH: ${{ runner.temp }}/openssl-4.0.3/include
-          LIBRARY_PATH: ${{ runner.temp }}/openssl-4.0.3/lib
+          CPATH: ${{ runner.temp }}/openssl-4.1.0/include
+          LIBRARY_PATH: ${{ runner.temp }}/openssl-4.1.0/lib
         run: |
           set -Eeuo pipefail
           # Both builds use the same runner, pinned OpenSSL and hardened flags.
@@ -134,8 +134,8 @@ jobs:
           AFL_I_DONT_CARE_ABOUT_MISSING_CRASHES: "1"
           AFL_NO_UI: "1"
           AFL_SKIP_CPUFREQ: "1"
-          CPATH: ${{ runner.temp }}/openssl-4.0.3/include
-          LIBRARY_PATH: ${{ runner.temp }}/openssl-4.0.3/lib
+          CPATH: ${{ runner.temp }}/openssl-4.1.0/include
+          LIBRARY_PATH: ${{ runner.temp }}/openssl-4.1.0/lib
         run: |
           set -Eeuo pipefail
           make -C linux fuzz-build \
@@ -208,7 +208,7 @@ jobs:
         with:
           cache-read-only: ${{ github.event_name == 'pull_request' }}
 
-      - name: Build OpenSSL 4.0.3 for Android arm64
+      - name: Build OpenSSL 4.1.0 for Android arm64
         working-directory: android
         env:
           JOBS: "2"
@@ -477,8 +477,8 @@ jobs:
         id: openssl-cache
         with:
           path: ${{ runner.temp }}/windows-openssl
-          key: windows-ucrt64-openssl-4.0.3-${{ steps.compiler.outputs.version }}-${{ hashFiles('windows/scripts/build-windows-cli.sh') }}
-          restore-keys: windows-ucrt64-openssl-4.0.3-${{ steps.compiler.outputs.version }}-
+          key: windows-ucrt64-openssl-4.1.0-${{ steps.compiler.outputs.version }}-${{ hashFiles('windows/scripts/build-windows-cli.sh') }}
+          restore-keys: windows-ucrt64-openssl-4.1.0-${{ steps.compiler.outputs.version }}-
       - name: Build native x64 EXE with pinned OpenSSL and verify PE mitigations
         shell: msys2 {0}
         run: |
@@ -496,6 +496,9 @@ jobs:
             performance-baseline-source/windows/scripts/build-windows-cli.sh
           cp core/tests/openssl_version_tests.c \
             performance-baseline-source/core/tests/openssl_version_tests.c
+          # The recipe runs its checks from the tree it builds.
+          mkdir -p performance-baseline-source/windows/tests
+          cp windows/tests/check_icon.py performance-baseline-source/windows/tests/check_icon.py
           bash performance-baseline-source/windows/scripts/build-windows-cli.sh \
             "$(cygpath -u "$RUNNER_TEMP")/windows-cli-performance-baseline"
       - uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
@@ -588,7 +591,7 @@ jobs:
           $bin = Join-Path $env:RUNNER_TEMP 'windows-cli'
           # Publish compares this with the release tag.
           $recorded = (Get-Content "$bin/build-metadata.json" -Raw | ConvertFrom-Json).version
-          $expected = (Get-Content desktop/src-tauri/tauri.conf.json -Raw | ConvertFrom-Json).version
+          $expected = (Select-String -Path desktop/bridge/Cargo.toml -Pattern '^version = "(.+)"$' | Select-Object -First 1).Matches[0].Groups[1].Value
           if ($recorded -ne $expected) { throw "Windows CLI metadata records version '$recorded', not $expected" }
           Compress-Archive -Path "$bin/nekokem.exe","$bin/README.md","$bin/SECURITY-DESIGN.md","$bin/LICENSE","$bin/OPENSSL-LICENSE.txt","$bin/SHA256SUMS.txt","$bin/pe-headers.txt","$bin/benchmark.json","$bin/build-metadata.json" -DestinationPath "$env:RUNNER_TEMP/NekoKEM-windows-x86_64.zip"
           (Get-FileHash "$env:RUNNER_TEMP/NekoKEM-windows-x86_64.zip" -Algorithm SHA256).Hash.ToLower() + '  NekoKEM-windows-x86_64.zip' | Set-Content "$env:RUNNER_TEMP/windows-SHA256SUMS.txt" -Encoding ascii
@@ -632,189 +635,6 @@ jobs:
           python3 windows/tests/interop.py verify "$RUNNER_TEMP/baseline-bin/baseline-nekokem" "$RUNNER_TEMP/windows-fixtures"
           python3 macos/tests/interop.py verify "$RUNNER_TEMP/baseline-bin/baseline-nekokem" "$RUNNER_TEMP/macos-fixtures"
 
-  frontend:
-    name: Desktop GUI frontend tests
-    runs-on: ubuntu-24.04
-    timeout-minutes: 15
-    defaults:
-      run:
-        working-directory: desktop
-    steps:
-      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
-      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
-        with:
-          node-version: '24.21.0'
-      - name: Install locked frontend dependencies
-        run: |
-          npm ci --ignore-scripts
-      - run: npm audit --audit-level=moderate
-      - run: npm test
-      - run: npm run build
-      - name: Install screenshot browser
-        run: npx playwright install --with-deps chromium
-      - name: Verify rendered layouts in all five languages
-        run: npx playwright test
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
-        if: always()
-        with:
-          name: windows-gui-frontend-evidence
-          path: |
-            desktop/test-results/
-            desktop/package-lock.json
-          retention-days: 14
-
-  native-windows:
-    name: Windows GUI build and tests
-    runs-on: windows-2022
-    timeout-minutes: 60
-    steps:
-      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
-      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
-        with:
-          node-version: '24.21.0'
-      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
-        id: python
-        with:
-          python-version: '3.13.16'
-      - uses: dtolnay/rust-toolchain@7e38f4b43b4db5c8dd498af069a4f6196df1d067 # master
-        with:
-          toolchain: 1.99.0-x86_64-pc-windows-gnu
-          targets: x86_64-pc-windows-gnu
-      - uses: msys2/setup-msys2@ec48f7c5447b3140e2b088413ae3a55687bccb6e # v2
-        with:
-          msystem: UCRT64
-          # MSYS2 requires a coherent rolling package set; see release/README.md.
-          update: true
-          install: >-
-            make perl curl tar
-            mingw-w64-ucrt-x86_64-gcc
-            mingw-w64-ucrt-x86_64-python
-      - name: Identify native compiler
-        id: compiler
-        shell: msys2 {0}
-        run: |
-          echo "version=$(gcc -dumpfullversion)" >> "$GITHUB_OUTPUT"
-          echo "gcc=$(cygpath -m "$(command -v gcc)")" >> "$GITHUB_OUTPUT"
-      - uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
-        id: openssl-cache
-        with:
-          path: ${{ runner.temp }}/windows-openssl
-          key: windows-ucrt64-openssl-4.0.3-${{ steps.compiler.outputs.version }}-${{ hashFiles('windows/scripts/build-windows-cli.sh') }}
-          restore-keys: windows-ucrt64-openssl-4.0.3-${{ steps.compiler.outputs.version }}-
-      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
-        with:
-          workspaces: desktop/src-tauri
-          cache-on-failure: true
-      - name: Build original CLI and shared C17 native tests with pinned OpenSSL
-        shell: msys2 {0}
-        run: |
-          export NEKOKEM_OPENSSL_PREFIX="$(cygpath -u "$RUNNER_TEMP")/windows-openssl"
-          bash windows/scripts/build-windows-cli.sh "$(cygpath -u "$RUNNER_TEMP")/windows-cli"
-      - uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
-        if: success() && steps.openssl-cache.outputs.cache-hit != 'true'
-        with:
-          path: ${{ runner.temp }}/windows-openssl
-          key: ${{ steps.openssl-cache.outputs.cache-primary-key }}
-      - name: Configure the matching Rust/C ABI and private NTFS test root
-        shell: pwsh
-        run: |
-          $compiler = '${{ steps.compiler.outputs.gcc }}'
-          if (!(Test-Path -LiteralPath $compiler)) { throw "GCC not found: $compiler" }
-          & $compiler --version
-          if ($LASTEXITCODE -ne 0) { throw 'Cannot execute GCC' }
-          $bin = Split-Path $compiler
-          "NEKOKEM_NATIVE_BIN=$bin" >> $env:GITHUB_ENV
-          $bin >> $env:GITHUB_PATH
-          "RC_x86_64_pc_windows_gnu=$bin/windres.exe" >> $env:GITHUB_ENV
-          "CC_x86_64_pc_windows_gnu=$compiler" >> $env:GITHUB_ENV
-          "CARGO_TARGET_X86_64_PC_WINDOWS_GNU_LINKER=$compiler" >> $env:GITHUB_ENV
-          "NEKOKEM_OPENSSL_PREFIX=$env:RUNNER_TEMP\windows-openssl" >> $env:GITHUB_ENV
-          $work = Join-Path ([Environment]::GetFolderPath('LocalApplicationData')) "NekoKEM-gui-ci-$env:GITHUB_RUN_ID"
-          New-Item -ItemType Directory $work | Out-Null
-          "TEMP=$work" >> $env:GITHUB_ENV
-          "TMP=$work" >> $env:GITHUB_ENV
-      - name: Run native C and CLI security gates
-        shell: pwsh
-        run: |
-          $ErrorActionPreference = 'Stop'
-          $bin = Join-Path $env:RUNNER_TEMP 'windows-cli'
-          foreach ($name in @('openssl_version','hybrid_kdf','gcm_limit','parser','windows_core','console')) {
-            $work = Join-Path $env:TEMP $name
-            New-Item -ItemType Directory $work | Out-Null
-            Push-Location $work
-            try { & (Join-Path $bin "${name}_tests.exe"); if ($LASTEXITCODE -ne 0) { throw "$name failed" } } finally { Pop-Location }
-          }
-          & '${{ steps.python.outputs.python-path }}' windows/tests/cli_tests.py (Join-Path $bin 'nekokem.exe')
-          if ($LASTEXITCODE -ne 0) { throw 'CLI gates failed' }
-      - name: Install locked frontend dependencies
-        working-directory: desktop
-        shell: pwsh
-        run: |
-          npm ci --ignore-scripts
-          if ($LASTEXITCODE -ne 0) { throw 'npm install failed' }
-          npm run build
-          if ($LASTEXITCODE -ne 0) { throw 'Frontend build failed' }
-      - name: Run actual Rust to C17 Core integration tests
-        working-directory: desktop/src-tauri
-        shell: pwsh
-        run: |
-          cargo test --locked --target x86_64-pc-windows-gnu --bin nekokem-gui -- --test-threads=1
-          if ($LASTEXITCODE -ne 0) { throw 'Rust/Core tests failed' }
-      - name: Build production native GUI EXE
-        working-directory: desktop
-        shell: pwsh
-        run: |
-          npm run tauri -- build --target x86_64-pc-windows-gnu --no-bundle -- --locked
-          if ($LASTEXITCODE -ne 0) { throw 'GUI build failed' }
-      - name: Check actual GUI executable and native window launch
-        shell: pwsh
-        run: |
-          $exe = 'desktop/src-tauri/target/x86_64-pc-windows-gnu/release/nekokem-gui.exe'
-          & (Join-Path $env:NEKOKEM_NATIVE_BIN 'objdump.exe') -p $exe | Out-File -Encoding utf8 gui-pe.txt
-          $loader = Join-Path (Split-Path $exe) 'WebView2Loader.dll'
-          $sdk = @(Get-ChildItem "$env:CARGO_HOME/registry/src/*/webview2-com-sys-0.39.1/x64/WebView2Loader.dll")
-          if ($sdk.Count -ne 1) { throw 'Locked WebView2 SDK loader reference missing or ambiguous' }
-          & '${{ steps.python.outputs.python-path }}' desktop/tests/check_gui_pe.py $exe gui-pe.txt $sdk[0].FullName
-          if ($LASTEXITCODE -ne 0) { throw 'GUI PE check failed' }
-          $signature = Get-AuthenticodeSignature $loader
-          if ($signature.Status -ne 'Valid' -or $signature.SignerCertificate.Subject -notmatch 'Microsoft Corporation') { throw 'WebView2 SDK loader Microsoft signature verification failed' }
-          @{ sha256=(Get-FileHash $loader -Algorithm SHA256).Hash.ToLowerInvariant(); version='webview2-com-sys 0.39.1'; signature_status=[string]$signature.Status; signer=$signature.SignerCertificate.Subject } | ConvertTo-Json | Set-Content webview2-loader-metadata.json
-          & '${{ steps.python.outputs.python-path }}' desktop/tests/check_icon.py $exe windows/icons/icon.ico
-          if ($LASTEXITCODE -ne 0) { throw 'GUI icon differs from the shared Windows ICO' }
-          & '${{ steps.python.outputs.python-path }}' desktop/tests/launch_windows.py $exe
-          if ($LASTEXITCODE -ne 0) { throw 'GUI native launch failed' }
-      - name: Package unsigned GUI with source metadata
-        shell: pwsh
-        run: |
-          $root = Join-Path $env:RUNNER_TEMP 'NekoKEM-Windows-GUI'
-          New-Item -ItemType Directory $root | Out-Null
-          Copy-Item desktop/src-tauri/target/x86_64-pc-windows-gnu/release/nekokem-gui.exe,desktop/src-tauri/target/x86_64-pc-windows-gnu/release/WebView2Loader.dll,webview2-loader-metadata.json $root
-          Copy-Item desktop/README.md,windows/SECURITY-DESIGN.md,LICENSE,gui-pe.txt,desktop/package-lock.json,desktop/src-tauri/Cargo.lock $root
-          Copy-Item (Join-Path $env:RUNNER_TEMP 'windows-cli/OPENSSL-LICENSE.txt') $root
-          $hash = (Get-FileHash "$root/nekokem-gui.exe" -Algorithm SHA256).Hash.ToLowerInvariant()
-          $loaderHash = (Get-FileHash "$root/WebView2Loader.dll" -Algorithm SHA256).Hash.ToLowerInvariant()
-          "$hash  nekokem-gui.exe","$loaderHash  WebView2Loader.dll" | Set-Content "$root/SHA256SUMS.txt"
-          $version = (Get-Content desktop/src-tauri/tauri.conf.json -Raw | ConvertFrom-Json).version
-          @{ source_sha=$env:GITHUB_SHA; run_id=$env:GITHUB_RUN_ID; version=$version; exe_sha256=$hash; platform='windows-x86_64'; compiler_version='${{ steps.compiler.outputs.version }}'; openssl_version='4.0.3'; authenticode_signed=$false; apk_signing_material_used=$false } | ConvertTo-Json | Set-Content "$root/build-metadata.json"
-          Compress-Archive -Path "$root/*" -DestinationPath "$env:RUNNER_TEMP/NekoKEM-Windows-GUI.zip"
-          Remove-Item $env:TEMP -Recurse -Force
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
-        if: always()
-        with:
-          name: windows-gui-native-evidence
-          path: |
-            desktop/src-tauri/Cargo.lock
-            desktop/package-lock.json
-            gui-pe.txt
-            webview2-loader-metadata.json
-          retention-days: 14
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
-        with:
-          name: NekoKEM-windows-gui-x86_64
-          path: ${{ runner.temp }}/NekoKEM-Windows-GUI.zip
-          retention-days: 14
-          if-no-files-found: error
-
   macos-cli:
     name: Apple Silicon CLI security and interoperability tests
     needs: baseline-linux
@@ -838,7 +658,7 @@ jobs:
       - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
         with:
           path: ${{ runner.temp }}/macos-openssl
-          key: macos-arm64-openssl-4.0.3-${{ steps.compiler.outputs.identity }}-${{ hashFiles('macos/scripts/build-openssl.sh') }}
+          key: macos-arm64-openssl-4.1.0-${{ steps.compiler.outputs.identity }}-${{ hashFiles('macos/scripts/build-openssl.sh') }}
       - name: Build and test native arm64 CLI with ASan and UBSan
         run: bash macos/scripts/build-macos-cli.sh "$RUNNER_TEMP/macos-cli"
       - name: Verify build-only mode preserves the release binary and package
@@ -876,9 +696,10 @@ jobs:
           retention-days: 14
           if-no-files-found: error
 
-  macos-gui:
-    name: Apple Silicon GUI build and native tests
-    runs-on: macos-15
+  macos-swiftui:
+    name: Apple Silicon SwiftUI app build, bridge tests and screenshots
+    # macOS 26 and its SDK: the app adopts Liquid Glass there.
+    runs-on: macos-26
     timeout-minutes: 60
     env:
       MACOSX_DEPLOYMENT_TARGET: '11.0'
@@ -887,9 +708,6 @@ jobs:
       - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
         with:
           python-version: '3.13.16'
-      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
-        with:
-          node-version: '24.21.0'
       - uses: dtolnay/rust-toolchain@7e38f4b43b4db5c8dd498af069a4f6196df1d067 # master
         with:
           toolchain: 1.99.0
@@ -902,55 +720,68 @@ jobs:
           identity=$({ xcrun clang --version; xcrun --sdk macosx --show-sdk-version; } | shasum -a 256 | cut -d ' ' -f 1)
           echo "identity=$identity" >> "$GITHUB_OUTPUT"
           echo "NEKOKEM_OPENSSL_PREFIX=$RUNNER_TEMP/macos-openssl" >> "$GITHUB_ENV"
+          xcrun swift --version
       - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
         with:
           path: ${{ runner.temp }}/macos-openssl
-          key: macos-arm64-openssl-4.0.3-${{ steps.compiler.outputs.identity }}-${{ hashFiles('macos/scripts/build-openssl.sh') }}
+          key: macos26-arm64-openssl-4.1.0-${{ steps.compiler.outputs.identity }}-${{ hashFiles('macos/scripts/build-openssl.sh') }}
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
         with:
-          workspaces: desktop/src-tauri
+          workspaces: desktop/bridge
           cache-on-failure: true
       - name: Build the pinned native static dependency
         run: bash macos/scripts/build-openssl.sh "$NEKOKEM_OPENSSL_PREFIX"
-      - name: Install and build the locked shared frontend
-        working-directory: desktop
+      - name: Run the bridge tests against the C17 Core
+        working-directory: desktop/bridge
+        run: cargo test --locked --release --target aarch64-apple-darwin -- --test-threads=1
+      - name: Build the ad-hoc signed SwiftUI application
+        run: bash macos/gui/scripts/build-app.sh "$RUNNER_TEMP/macos-swiftui"
+      - name: Verify the app starts and reads its settings through the bridge
         run: |
-          npm ci --ignore-scripts
-          npm run build
-      - name: Run actual Rust to C17 Core integration and private staging tests
-        working-directory: desktop/src-tauri
-        run: TAURI_CONFIG="$(cat tauri.macos.conf.json)" cargo test --locked --target aarch64-apple-darwin --bin nekokem-gui -- --test-threads=1
-      - name: Build ad-hoc signed arm64 application and DMG
-        working-directory: desktop
-        run: npm run tauri -- build --target aarch64-apple-darwin --config src-tauri/tauri.macos.conf.json --bundles app,dmg -- --locked
-      - name: Validate application and disk image, then package the GUI
+          set -Eeuo pipefail
+          log="$RUNNER_TEMP/macos-swiftui/startup.log"
+          NEKOKEM_NATIVE_STARTUP_EVIDENCE=1 "$RUNNER_TEMP/macos-swiftui/NekoKEM.app/Contents/MacOS/NekoKEM" > "$log" 2>&1 &
+          pid=$!
+          for attempt in $(seq 1 150); do
+            if grep -Fq 'NekoKEM native startup: settings-ready' "$log"; then break; fi
+            kill -0 "$pid" || { cat "$log"; exit 1; }
+            sleep 0.2
+          done
+          cat "$log"
+          grep -Fq 'NekoKEM native startup: settings-ready' "$log"
+          kill -TERM "$pid"
+          wait "$pid" || true
+      - name: Capture every page of the app
         run: |
-          python3 desktop/scripts/package-macos-gui.py \
-            --bundle-dir desktop/src-tauri/target/aarch64-apple-darwin/release/bundle \
-            --output "$RUNNER_TEMP/macos-gui" --version 5.0.0 --source-sha "$GITHUB_SHA"
-      - name: Verify the actual native macOS window launches
-        run: python3 desktop/tests/launch_macos.py desktop/src-tauri/target/aarch64-apple-darwin/release/bundle/macos/NekoKEM.app --log "$RUNNER_TEMP/macos-gui/startup.log"
+          set -Eeuo pipefail
+          screens="$RUNNER_TEMP/macos-swiftui/screens"
+          "$RUNNER_TEMP/macos-swiftui/NekoKEM.app/Contents/MacOS/NekoKEM" --screenshots "$screens" &
+          pid=$!
+          for attempt in $(seq 1 120); do
+            kill -0 "$pid" 2>/dev/null || break
+            sleep 1
+          done
+          if kill -0 "$pid" 2>/dev/null; then kill -KILL "$pid"; echo 'The screenshot run did not finish' >&2; exit 1; fi
+          for name in files-empty files encrypt-recipients encrypt-warning files-password files-done keys fingerprint contacts contacts-selected settings; do
+            test -s "$screens/$name.png"
+          done
+      - name: Check the application and write its ZIP and disk image
+        run: |
+          # The same command the Release workflow runs.
+          python3 desktop/scripts/package-desktop.py macos --app "$RUNNER_TEMP/macos-swiftui/NekoKEM.app" \
+            --output "$RUNNER_TEMP/macos-gui" --source-sha "$GITHUB_SHA"
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         if: always()
         with:
-          name: macos-gui-native-evidence
+          name: macos-swiftui-app
           path: |
-            ${{ runner.temp }}/macos-gui/gui-build-metadata.json
-            ${{ runner.temp }}/macos-gui/startup.log
-            desktop/src-tauri/Cargo.lock
+            ${{ runner.temp }}/macos-swiftui/screens
+            ${{ runner.temp }}/macos-swiftui/startup.log
+            ${{ runner.temp }}/macos-gui
           retention-days: 14
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
-        with:
-          name: NekoKEM-macos-arm64-gui
-          path: |
-            ${{ runner.temp }}/macos-gui/NekoKEM-macos-arm64-GUI.zip
-            ${{ runner.temp }}/macos-gui/NekoKEM-macos-arm64-GUI.dmg
-            ${{ runner.temp }}/macos-gui/gui-SHA256SUMS.txt
-          retention-days: 14
-          if-no-files-found: error
 
-  linux-gui:
-    name: Linux ${{ matrix.arch }} GUI build and native tests
+  compose-linux:
+    name: Linux ${{ matrix.arch }} Compose desktop build, screenshots and packages
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 60
     strategy:
@@ -959,27 +790,29 @@ jobs:
         include:
           - arch: x86_64
             runner: ubuntu-24.04
+            resources: linux-x64
           - arch: aarch64
             runner: ubuntu-24.04-arm
+            resources: linux-arm64
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
       - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
         with:
           python-version: '3.13.16'
-      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+      - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5
         with:
-          node-version: '24.21.0'
+          distribution: temurin
+          java-version: "25"
       - uses: dtolnay/rust-toolchain@7e38f4b43b4db5c8dd498af069a4f6196df1d067 # master
         with:
           toolchain: 1.99.0
           targets: ${{ matrix.arch }}-unknown-linux-gnu
-      - name: Install native GTK/WebKit and desktop test tools
+      - name: Install native build, packaging and desktop test tools
         run: |
           sudo apt-get update
           sudo apt-get install --yes --no-install-recommends \
-            build-essential ca-certificates curl perl pkg-config binutils \
-            libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev \
-            patchelf rpm xvfb xauth xdotool openbox dbus-x11
+            build-essential ca-certificates curl perl binutils fakeroot rpm \
+            xvfb xauth xdotool libgl1 libegl1 libxrender1 libxtst6 libxi6
       - name: Identify native compiler and libc
         id: compiler
         run: |
@@ -991,68 +824,239 @@ jobs:
       - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
         with:
           path: ${{ runner.temp }}/linux-gui-openssl
-          key: linux-gui-${{ matrix.arch }}-openssl-4.0.3-${{ steps.compiler.outputs.identity }}-${{ hashFiles('desktop/scripts/build-linux-openssl.sh') }}
+          key: linux-gui-${{ matrix.arch }}-openssl-4.1.0-${{ steps.compiler.outputs.identity }}-${{ hashFiles('desktop/scripts/build-linux-openssl.sh') }}
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
         with:
-          workspaces: desktop/src-tauri
+          workspaces: desktop/bridge
           cache-on-failure: true
+      - uses: gradle/actions/setup-gradle@ed408507eac070d1f99cc633dbcf757c94c7933a # v4
       - name: Build and verify the pinned static PIC dependency
         run: bash desktop/scripts/build-linux-openssl.sh '${{ matrix.arch }}' "$NEKOKEM_OPENSSL_PREFIX"
-      - name: Install and build the locked shared frontend
-        working-directory: desktop
-        run: |
-          npm ci --ignore-scripts
-          npm run build
-      - name: Run actual Rust to C17 Core integration and private staging tests
-        working-directory: desktop/src-tauri
-        run: TAURI_CONFIG="$(cat tauri.linux.conf.json)" cargo test --locked --target '${{ matrix.arch }}-unknown-linux-gnu' --bin nekokem-gui -- --test-threads=1
-      - name: Build the native Linux desktop package
-        working-directory: desktop
-        run: |
-          python3 tests/test_linux_bundle_config.py
-          bash scripts/build-linux-gui.sh '${{ matrix.arch }}'
-      - name: Verify ELF hardening and package the exact installed application
-        run: |
-          python3 desktop/scripts/package-linux-gui.py \
-            --bundle-dir 'desktop/src-tauri/target/${{ matrix.arch }}-unknown-linux-gnu/release/bundle' \
-            --output "$RUNNER_TEMP/linux-gui" --arch '${{ matrix.arch }}' \
-            --openssl-prefix "$NEKOKEM_OPENSSL_PREFIX" --source-sha "$GITHUB_SHA"
-      - name: Install the verified native Debian package
-        run: sudo apt-get install --yes "$RUNNER_TEMP/linux-gui/NekoKEM-linux-${{ matrix.arch }}-GUI.deb"
-      - name: Verify the actual installed sandboxed WebKit window and normal close
-        run: |
-          dbus-run-session -- xvfb-run -a -s '-screen 0 1280x1024x24' \
-            python3 desktop/tests/launch_linux.py \
-            /usr/bin/nekokem-gui \
-            --log "$RUNNER_TEMP/linux-gui/startup.log"
-      - name: Install and launch the native RPM on Fedora 44
+      - name: Test and build the bridge library against the C17 Core
+        working-directory: desktop/bridge
         run: |
           set -Eeuo pipefail
-          mkdir -p "$RUNNER_TEMP/linux-gui/rpm-evidence"
-          docker run --rm \
-            --mount "type=bind,src=$GITHUB_WORKSPACE/desktop/tests,dst=/nekokem-tests,readonly" \
-            --mount "type=bind,src=$RUNNER_TEMP/linux-gui,dst=/packages,readonly" \
-            --mount "type=bind,src=$RUNNER_TEMP/linux-gui/rpm-evidence,dst=/evidence" \
-            fedora:44 bash /nekokem-tests/install_rpm_fedora.sh \
-            '/packages/NekoKEM-linux-${{ matrix.arch }}-GUI.rpm' /evidence "$(id -u)"
+          cargo test --locked --release --target '${{ matrix.arch }}-unknown-linux-gnu' -- --test-threads=1
+          cargo build --locked --release --target '${{ matrix.arch }}-unknown-linux-gnu'
+          # The app carries the library and the licences of what is linked into it.
+          python3 "$GITHUB_WORKSPACE/desktop/scripts/package-desktop.py" resources \
+            --library "target/${{ matrix.arch }}-unknown-linux-gnu/release/libnekokem_native.so" \
+            --openssl-license "$NEKOKEM_OPENSSL_PREFIX/LICENSE.txt" \
+            --target "$GITHUB_WORKSPACE/desktop-compose/native/${{ matrix.resources }}"
+      - name: Render every page of both styles with the real bridge
+        working-directory: desktop-compose
+        run: |
+          set -Eeuo pipefail
+          # Named for this run only; the packaged launcher finds the library in its own resources.
+          ./gradlew --no-daemon screenshots "-Pnekokem.bridge=$PWD/native/${{ matrix.resources }}/libnekokem_native.so"
+          test "$(find build/screenshots -name '*.png' -size +0 | wc -l)" -ge 40
+      - name: Build, check and name the Debian, RPM and folder packages
+        working-directory: desktop-compose
+        run: |
+          set -Eeuo pipefail
+          ./gradlew --no-daemon createDistributable packageDeb packageRpm
+          # The same command the Release workflow runs: hardening, licences, versions and font dependencies.
+          python3 ../desktop/scripts/package-desktop.py linux --arch '${{ matrix.arch }}' \
+            --app build/compose/binaries/main/app/NekoKEM \
+            --deb build/compose/binaries/main/deb/*.deb --rpm build/compose/binaries/main/rpm/*.rpm \
+            --output "$RUNNER_TEMP/linux-gui" --source-sha "$GITHUB_SHA"
+          mkdir -p "$RUNNER_TEMP/compose-linux"
+          cp -r build/screenshots "$RUNNER_TEMP/compose-linux/screens"
+      - name: Install the package and verify the installed window opens
+        run: |
+          set -Eeuo pipefail
+          # The package registers its menu entry; a runner image has no desktop menu directories.
+          sudo mkdir -p /usr/share/applications /usr/share/desktop-directories
+          sudo apt-get install --yes "$RUNNER_TEMP/linux-gui/NekoKEM-linux-${{ matrix.arch }}-GUI.deb"
+          test -s /opt/nekokem/lib/app/resources/libnekokem_native.so
+          # Installed as a dependency, for Chinese, Japanese and Korean text.
+          dpkg -s fonts-noto-cjk > /dev/null
+          export XDG_CONFIG_HOME="$RUNNER_TEMP/compose-linux/config"
+          mkdir -p "$XDG_CONFIG_HOME"
+          xvfb-run -a -s '-screen 0 1280x1024x24' bash -c '
+            /opt/nekokem/bin/NekoKEM > "$RUNNER_TEMP/compose-linux/startup.log" 2>&1 &
+            pid=$!
+            for attempt in $(seq 1 60); do
+              if xdotool search --name "^NekoKEM$" > /dev/null 2>&1; then break; fi
+              kill -0 "$pid" || { cat "$RUNNER_TEMP/compose-linux/startup.log"; exit 1; }
+              sleep 1
+            done
+            xdotool search --name "^NekoKEM$" > /dev/null
+            sleep 3
+            kill -0 "$pid"
+            kill -TERM "$pid"
+            wait "$pid" || true
+          '
+          cat "$RUNNER_TEMP/compose-linux/startup.log"
+      - name: Install the RPM on Fedora 44 with its dependencies
+        run: |
+          set -Eeuo pipefail
+          # dnf resolves the package's requirements, the CJK fonts among them, from Fedora's repositories.
+          docker run --rm --volume "$RUNNER_TEMP/linux-gui:/packages:ro" fedora:44 bash -c '
+            set -Eeuo pipefail
+            dnf install --assumeyes "/packages/NekoKEM-linux-${{ matrix.arch }}-GUI.rpm"
+            test -x /opt/nekokem/bin/NekoKEM
+            test -s /opt/nekokem/lib/app/resources/libnekokem_native.so
+            rpm -qa | grep -i "noto-sans-cjk"
+          '
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         if: always()
         with:
-          name: linux-gui-${{ matrix.arch }}-native-evidence
+          name: compose-linux-${{ matrix.arch }}
           path: |
-            ${{ runner.temp }}/linux-gui/gui-build-metadata.json
-            ${{ runner.temp }}/linux-gui/startup.log
-            ${{ runner.temp }}/linux-gui/rpm-evidence/rpm-startup.log
-            desktop/src-tauri/Cargo.lock
+            ${{ runner.temp }}/compose-linux
+            ${{ runner.temp }}/linux-gui
           retention-days: 14
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+
+  compose-windows:
+    name: Windows Compose desktop build, screenshots and installer
+    runs-on: windows-2022
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
         with:
-          name: NekoKEM-linux-${{ matrix.arch }}-gui
+          python-version: '3.13.16'
+      - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5
+        with:
+          distribution: temurin
+          java-version: "25"
+      - uses: dtolnay/rust-toolchain@7e38f4b43b4db5c8dd498af069a4f6196df1d067 # master
+        with:
+          toolchain: 1.99.0-x86_64-pc-windows-gnu
+          targets: x86_64-pc-windows-gnu
+      - uses: msys2/setup-msys2@ec48f7c5447b3140e2b088413ae3a55687bccb6e # v2
+        with:
+          msystem: UCRT64
+          # MSYS2 requires a coherent rolling package set; see release/README.md.
+          update: true
+          install: >-
+            make perl curl tar
+            mingw-w64-ucrt-x86_64-gcc
+            mingw-w64-ucrt-x86_64-python
+      - name: Identify native compiler
+        id: compiler
+        shell: msys2 {0}
+        run: |
+          echo "version=$(gcc -dumpfullversion)" >> "$GITHUB_OUTPUT"
+          echo "gcc=$(cygpath -m "$(command -v gcc)")" >> "$GITHUB_OUTPUT"
+      - uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: ${{ runner.temp }}/windows-openssl
+          key: windows-ucrt64-openssl-4.1.0-${{ steps.compiler.outputs.version }}-${{ hashFiles('windows/scripts/build-windows-cli.sh') }}
+          restore-keys: windows-ucrt64-openssl-4.1.0-${{ steps.compiler.outputs.version }}-
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
+        with:
+          workspaces: desktop/bridge
+          cache-on-failure: true
+      - uses: gradle/actions/setup-gradle@ed408507eac070d1f99cc633dbcf757c94c7933a # v4
+      - name: Build the pinned OpenSSL with the original CLI
+        shell: msys2 {0}
+        run: |
+          export NEKOKEM_OPENSSL_PREFIX="$(cygpath -u "$RUNNER_TEMP")/windows-openssl"
+          bash windows/scripts/build-windows-cli.sh "$(cygpath -u "$RUNNER_TEMP")/windows-cli"
+      - name: Configure the matching Rust/C ABI
+        shell: pwsh
+        run: |
+          $compiler = '${{ steps.compiler.outputs.gcc }}'
+          if (!(Test-Path -LiteralPath $compiler)) { throw "GCC not found: $compiler" }
+          $bin = Split-Path $compiler
+          "NEKOKEM_NATIVE_BIN=$bin" >> $env:GITHUB_ENV
+          "CC_x86_64_pc_windows_gnu=$compiler" >> $env:GITHUB_ENV
+          "CARGO_TARGET_X86_64_PC_WINDOWS_GNU_LINKER=$compiler" >> $env:GITHUB_ENV
+          "NEKOKEM_OPENSSL_PREFIX=$env:RUNNER_TEMP\windows-openssl" >> $env:GITHUB_ENV
+      - name: Test and build the bridge library against the C17 Core
+        shell: pwsh
+        working-directory: desktop/bridge
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $env:PATH = "$env:NEKOKEM_NATIVE_BIN;$env:PATH"
+          cargo test --locked --release --target x86_64-pc-windows-gnu -- --test-threads=1
+          if ($LASTEXITCODE -ne 0) { throw 'Bridge tests failed' }
+          cargo build --locked --release --target x86_64-pc-windows-gnu
+          if ($LASTEXITCODE -ne 0) { throw 'Bridge build failed' }
+          $library = 'target\x86_64-pc-windows-gnu\release\nekokem_native.dll'
+          # One self-contained DLL: no MinGW runtime or OpenSSL DLL beside it.
+          $imports = & "$env:NEKOKEM_NATIVE_BIN\objdump.exe" -p $library | Select-String 'DLL Name'
+          $imports
+          if ($imports -match 'libgcc|libwinpthread|libcrypto|libssl|libstdc') { throw 'The bridge needs a runtime DLL' }
+          # The app carries the library and the licences of what is linked into it.
+          python "$env:GITHUB_WORKSPACE\desktop\scripts\package-desktop.py" resources --library $library `
+            --openssl-license "$env:RUNNER_TEMP\windows-cli\OPENSSL-LICENSE.txt" `
+            --target "$env:GITHUB_WORKSPACE\desktop-compose\native\windows-x64"
+          if ($LASTEXITCODE -ne 0) { throw 'Cannot prepare the application resources' }
+      - name: Render every page of both styles with the real bridge
+        shell: pwsh
+        working-directory: desktop-compose
+        run: |
+          $ErrorActionPreference = 'Stop'
+          # Named for this run only; the packaged launcher finds the library in its own resources.
+          .\gradlew.bat --no-daemon screenshots "-Pnekokem.bridge=$PWD\native\windows-x64\nekokem_native.dll"
+          if ($LASTEXITCODE -ne 0) { throw 'Screenshots failed' }
+          $count = (Get-ChildItem build\screenshots -Filter *.png | Where-Object Length -gt 0).Count
+          if ($count -lt 40) { throw "Only $count screenshots" }
+      - name: Build the application folder and the MSI installer
+        shell: pwsh
+        working-directory: desktop-compose
+        run: |
+          $ErrorActionPreference = 'Stop'
+          .\gradlew.bat --no-daemon createDistributable packageMsi
+          if ($LASTEXITCODE -ne 0) { throw 'Packaging failed' }
+          # The same command the Release workflow runs: licences, the bridge and build records.
+          $msi = (Get-ChildItem build\compose\binaries\main\msi\*.msi | Select-Object -First 1).FullName
+          python ..\desktop\scripts\package-desktop.py windows --app build\compose\binaries\main\app\NekoKEM `
+            --msi $msi --output (Join-Path $env:RUNNER_TEMP 'windows-gui') --source-sha $env:GITHUB_SHA
+          if ($LASTEXITCODE -ne 0) { throw 'Package checks failed' }
+          $out = Join-Path $env:RUNNER_TEMP 'compose-windows'
+          New-Item -ItemType Directory -Force $out | Out-Null
+          Copy-Item -Recurse build\screenshots (Join-Path $out 'screens')
+      - name: Verify the packaged application starts with its own bridge
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $app = 'desktop-compose\build\compose\binaries\main\app\NekoKEM'
+          if (!(Test-Path "$app\app\resources\nekokem_native.dll")) { throw 'The bridge is not in the package' }
+          $env:LOCALAPPDATA = Join-Path $env:RUNNER_TEMP 'compose-windows-config'
+          New-Item -ItemType Directory -Force $env:LOCALAPPDATA | Out-Null
+          $out = Join-Path $env:RUNNER_TEMP 'compose-windows'
+          $process = Start-Process -FilePath "$app\NekoKEM.exe" -PassThru `
+            -RedirectStandardOutput "$out\startup-out.log" -RedirectStandardError "$out\startup-err.log"
+          $shown = $false
+          foreach ($attempt in 1..60) {
+            Start-Sleep -Seconds 1
+            $process.Refresh()
+            if ($process.HasExited) {
+              Get-Content "$out\startup-out.log", "$out\startup-err.log"
+              # The launcher has no console; the same start through java.exe shows the reason.
+              $cfg = Get-Content "$app\app\NekoKEM.cfg"
+              $cfg
+              $base = (Resolve-Path "$app\app").Path
+              $classpath = ($cfg | Where-Object { $_ -like 'app.classpath=*' } | ForEach-Object { $_.Substring(14).Replace('$APPDIR', $base) }) -join ';'
+              $options = @($cfg | Where-Object { $_ -like 'java-options=*' } | ForEach-Object { $_.Substring(13).Replace('$APPDIR', $base) })
+              $main = ($cfg | Where-Object { $_ -like 'app.mainclass=*' }).Substring(14)
+              $java = "$app\runtime\bin\java.exe"
+              if (!(Test-Path $java)) { $java = "$env:JAVA_HOME\bin\java.exe" }
+              $arguments = $options + @('-cp', $classpath, $main)
+              $direct = Start-Process -FilePath $java -ArgumentList $arguments -PassThru -NoNewWindow `
+                -RedirectStandardOutput "$out\direct-out.log" -RedirectStandardError "$out\direct-err.log"
+              if (!$direct.WaitForExit(30000)) { Stop-Process -Id $direct.Id }
+              Get-Content "$out\direct-out.log", "$out\direct-err.log"
+              throw "The application exited with $($process.ExitCode)"
+            }
+            # The launcher may hand over to a child process, which then owns the window.
+            if (Get-Process -Name NekoKEM -ErrorAction SilentlyContinue | Where-Object MainWindowTitle -eq 'NekoKEM') { $shown = $true; break }
+          }
+          if (!$shown) {
+            Get-Process | Where-Object { $_.MainWindowTitle } | Format-Table Name, Id, MainWindowTitle
+            Get-Content "$out\startup-out.log", "$out\startup-err.log"
+            throw 'The window did not open'
+          }
+          Get-Process -Name NekoKEM -ErrorAction SilentlyContinue | Stop-Process
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        if: always()
+        with:
+          name: compose-windows-x86_64
           path: |
-            ${{ runner.temp }}/linux-gui/NekoKEM-linux-${{ matrix.arch }}-GUI.tar.gz
-            ${{ runner.temp }}/linux-gui/NekoKEM-linux-${{ matrix.arch }}-GUI.deb
-            ${{ runner.temp }}/linux-gui/NekoKEM-linux-${{ matrix.arch }}-GUI.rpm
-            ${{ runner.temp }}/linux-gui/gui-SHA256SUMS.txt
-          compression-level: 0
+            ${{ runner.temp }}/compose-windows
+            ${{ runner.temp }}/windows-gui
           retention-days: 14
-          if-no-files-found: error

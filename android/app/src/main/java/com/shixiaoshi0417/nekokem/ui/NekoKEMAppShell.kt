@@ -4,6 +4,11 @@ import android.app.Activity
 import android.os.Build
 import androidx.activity.BackEventCompat
 import androidx.activity.compose.PredictiveBackHandler
+import androidx.compose.foundation.clickable
+import androidx.compose.material3.IconButton
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.activity.compose.BackHandler
 import androidx.annotation.StringRes
 import androidx.compose.animation.core.Animatable
 import androidx.compose.foundation.Image
@@ -146,12 +151,16 @@ data class NekoKEMActions(
     val onDecrypt: () -> Unit,
     val onImportContact: () -> Unit,
     val onChooseContact: () -> Unit,
-    val onSelectContact: (PublicKeyContact) -> Unit,
+    /** Uses one saved contact; [onSelected] runs once it is chosen, after any unverified-key warning. */
+    val onSelectContact: (contact: PublicKeyContact, onSelected: () -> Unit) -> Unit,
     val onEditContact: (PublicKeyContact) -> Unit,
     val onDeleteContact: (PublicKeyContact) -> Unit,
     val onToggleContactSelection: (PublicKeyContact) -> Unit = {},
     val onClearContactSelection: () -> Unit = {},
-    val onEncryptForSelectedContacts: () -> Unit = {},
+    val onEncryptForSelectedContacts: (onSelected: () -> Unit) -> Unit = {},
+    val onSetContactVerified: (PublicKeyContact, Boolean) -> Unit = { _, _ -> },
+    val onSetContactPinned: (PublicKeyContact, Boolean) -> Unit = { _, _ -> },
+    val onSetContactArchived: (PublicKeyContact, Boolean) -> Unit = { _, _ -> },
     val onUiStyleChange: (UiStyle) -> Unit = {},
     val onUpgradeKey: () -> Unit = {},
     val onExportLegacyPublicKey: () -> Unit = {},
@@ -160,6 +169,8 @@ data class NekoKEMActions(
     val onRequireSignatureChange: (Boolean) -> Unit = {},
     val onCheckUpdate: () -> Unit = {},
     val onAutoUpdateChange: (Boolean) -> Unit = {},
+    val onShowFingerprintQr: () -> Unit = {},
+    val onScanContact: (PublicKeyContact) -> Unit = {},
 )
 
 internal enum class AppDestination(
@@ -173,6 +184,13 @@ internal enum class AppDestination(
     ABOUT(R.string.navigation_about, R.string.tab_about),
 }
 
+/** The bottom bar's tabs; About is reached from Settings. */
+internal val BarDestinations = AppDestination.entries - AppDestination.ABOUT
+
+/** The tab that stays highlighted while a page reached from it is open. */
+internal val AppDestination.barTab: AppDestination
+    get() = if (this == AppDestination.ABOUT) AppDestination.SETTINGS else this
+
 private val AppDestination.selectedIcon: ImageVector
     get() = when (this) {
         AppDestination.FILES -> Icons.Filled.Home
@@ -182,14 +200,10 @@ private val AppDestination.selectedIcon: ImageVector
         AppDestination.ABOUT -> Icons.Filled.Info
     }
 
+// Solid icons in both states, so the bar shows as much white as possible; the
+// pill indicator marks the selected tab.
 private val AppDestination.unselectedIcon: ImageVector
-    get() = when (this) {
-        AppDestination.FILES -> Icons.Outlined.Home
-        AppDestination.KEYS -> Icons.Outlined.Lock
-        AppDestination.CONTACTS -> Icons.Outlined.Person
-        AppDestination.SETTINGS -> Icons.Outlined.Settings
-        AppDestination.ABOUT -> Icons.Outlined.Info
-    }
+    get() = selectedIcon
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterial3ExpressiveApi::class)
 @Composable
@@ -213,8 +227,9 @@ fun NekoKEMAppShell(
     val backProgress = remember { Animatable(0f) }
     var backEdge by remember { mutableIntStateOf(BackEventCompat.EDGE_LEFT) }
     val previewingFiles by remember { derivedStateOf { backProgress.value > 0f } }
+    // About goes back to Settings, where it is opened from.
     PredictiveBackHandler(
-        enabled = destination != AppDestination.FILES && !state.running,
+        enabled = destination != AppDestination.FILES && destination != AppDestination.ABOUT && !state.running,
     ) { events ->
         try {
             events.collect { event ->
@@ -232,10 +247,28 @@ fun NekoKEMAppShell(
         }
     }
 
+    BackHandler(enabled = destination == AppDestination.ABOUT && !state.running) {
+        animateNavigation = true
+        destination = AppDestination.SETTINGS
+    }
+
     Scaffold(
         topBar = {
             TopAppBar(
                 expandedHeight = (64f * fontScale).dp,
+                navigationIcon = {
+                    if (destination == AppDestination.ABOUT) {
+                        IconButton(onClick = {
+                            animateNavigation = true
+                            destination = AppDestination.SETTINGS
+                        }) {
+                            Icon(
+                                Icons.AutoMirrored.Filled.ArrowBack,
+                                contentDescription = stringResource(R.string.tab_settings),
+                            )
+                        }
+                    }
+                },
                 title = {
                     Text(
                         text = stringResource(destination.titleResource),
@@ -248,8 +281,8 @@ fun NekoKEMAppShell(
         // selected tab's icon fills and sits in a pill indicator.
         bottomBar = {
             ShortNavigationBar(containerColor = MaterialTheme.colorScheme.surfaceContainer) {
-                AppDestination.entries.forEach { item ->
-                    val selected = destination == item
+                BarDestinations.forEach { item ->
+                    val selected = destination.barTab == item
                     ShortNavigationBarItem(
                         selected = selected,
                         enabled = !state.running,
@@ -321,17 +354,22 @@ fun NekoKEMAppShell(
                                 state,
                                 actions,
                                 onUse = { contact ->
-                                    actions.onSelectContact(contact)
-                                    animateNavigation = true
-                                    destination = AppDestination.FILES
+                                    actions.onSelectContact(contact) {
+                                        animateNavigation = true
+                                        destination = AppDestination.FILES
+                                    }
                                 },
                                 onEncryptSelected = {
-                                    actions.onEncryptForSelectedContacts()
-                                    animateNavigation = true
-                                    destination = AppDestination.FILES
+                                    actions.onEncryptForSelectedContacts {
+                                        animateNavigation = true
+                                        destination = AppDestination.FILES
+                                    }
                                 },
                             )
-                            AppDestination.SETTINGS -> SettingsPage(state, actions)
+                            AppDestination.SETTINGS -> SettingsPage(state, actions) {
+                                animateNavigation = true
+                                destination = AppDestination.ABOUT
+                            }
                             AppDestination.ABOUT -> AboutPage(state, actions)
                         }
                     }
@@ -401,49 +439,7 @@ private fun FileOperationsPage(
             UnsignedWarningText(modifier = Modifier.padding(top = 12.dp))
         }
         Spacer(modifier = Modifier.height(24.dp))
-        val publicKeyActions: @Composable ColumnScope.() -> Unit = {
-            if (state.publicKeyRecipientCount > 0 &&
-                state.publicKeyRecipients.size < state.publicKeyRecipientCount
-            ) {
-                Text(stringResource(R.string.contact_unavailable), color = MaterialTheme.colorScheme.error)
-            }
-            CardAction(
-                labelResource = R.string.action_choose_contact,
-                enabled = canRun,
-                onClick = actions.onChooseContact,
-            )
-            CardAction(
-                labelResource = R.string.action_select_other_public_key,
-                enabled = canRun,
-                onClick = actions.onSelectTemporaryPublicKey,
-            )
-            if (state.publicKeyTemporary || state.publicKeyRecipientCount > 0) {
-                CardAction(
-                    labelResource = R.string.action_restore_default_public_key,
-                    enabled = !state.running,
-                    onClick = actions.onRestoreDefaultPublicKey,
-                    emphasis = ActionEmphasis.OUTLINED,
-                )
-            }
-        }
-        if (state.publicKeyRecipientCount > 1) {
-            RecipientsCard(
-                state.publicKeyRecipients,
-                state.publicKeyRecipientCount,
-                publicKeyActions,
-            )
-        } else {
-            KeySelectionCard(
-                titleResource = R.string.encryption_public_key_title,
-                temporary = state.publicKeyTemporary,
-                fileName = state.publicKeyFileName,
-                fingerprint = state.publicKeyFingerprint,
-                sourceResource = if (state.publicKeyContactId != null) R.string.key_source_contacts else null,
-                note = state.publicKeyNote,
-                actions = publicKeyActions,
-            )
-        }
-        Spacer(modifier = Modifier.height(16.dp))
+        // Public keys are chosen in the dialog that Encrypt opens.
         KeySelectionCard(
             titleResource = R.string.decryption_private_key_title,
             temporary = state.privateKeyTemporary,
@@ -464,43 +460,6 @@ private fun FileOperationsPage(
                 )
             }
         }
-    }
-}
-
-/** Several saved contacts sharing one NKEM v4 file; each is listed with its fingerprint. */
-@Composable
-private fun RecipientsCard(
-    recipients: List<PublicKeyContact>,
-    count: Int,
-    actions: @Composable ColumnScope.() -> Unit,
-) {
-    SectionCard {
-        Text(
-            text = stringResource(R.string.encryption_public_key_title),
-            style = MaterialTheme.typography.titleMediumEmphasized,
-        )
-        Text(
-            text = stringResource(
-                R.string.key_source_line,
-                stringResource(R.string.key_source_contacts_multiple, count),
-            ),
-            style = MaterialTheme.typography.bodyMedium,
-        )
-        recipients.forEach { contact ->
-            Column(modifier = Modifier.padding(top = 4.dp)) {
-                Text(contact.label, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium)
-                Text(
-                    stringResource(R.string.key_fingerprint_line, contact.fingerprint),
-                    style = MaterialTheme.typography.bodySmall,
-                )
-            }
-        }
-        Text(
-            text = stringResource(R.string.contact_recipients_hint),
-            style = MaterialTheme.typography.bodySmall,
-            modifier = Modifier.padding(top = 4.dp),
-        )
-        actions()
     }
 }
 
@@ -611,6 +570,14 @@ private fun KeyManagementPage(
             }
         }
         Spacer(modifier = Modifier.height(16.dp))
+        if (state.fingerprint != null) {
+            ActionButton(
+                labelResource = R.string.action_show_fingerprint_qr,
+                enabled = !state.running,
+                onClick = actions.onShowFingerprintQr,
+                emphasis = ActionEmphasis.TONAL,
+            )
+        }
         ActionButton(
             labelResource = R.string.action_generate_keypair,
             enabled = canRun,
@@ -703,7 +670,7 @@ private fun KeyManagementPage(
 }
 
 @Composable
-private fun SettingsPage(state: NekoKEMUiState, actions: NekoKEMActions) {
+private fun SettingsPage(state: NekoKEMUiState, actions: NekoKEMActions, onOpenAbout: () -> Unit) {
     val running = state.running
     val uiStyle = state.uiStyle
     val onUiStyleChange = actions.onUiStyleChange
@@ -861,6 +828,20 @@ private fun SettingsPage(state: NekoKEMUiState, actions: NekoKEMActions) {
                 running = false,
                 onCheckedChange = actions.onAutoUpdateChange,
             )
+        }
+        SectionCard(modifier = Modifier.padding(top = 24.dp)) {
+            Row(
+                Modifier.fillMaxWidth().clickable(enabled = !state.running, onClick = onOpenAbout)
+                    .padding(horizontal = 20.dp, vertical = 18.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    stringResource(R.string.tab_about),
+                    style = MaterialTheme.typography.titleMedium,
+                    modifier = Modifier.weight(1f),
+                )
+                Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null)
+            }
         }
     }
 }
