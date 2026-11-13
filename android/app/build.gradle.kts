@@ -153,6 +153,11 @@ kotlin {
 dependencies {
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.robolectric:robolectric:4.17")
+    // Renders the password dialogs off device: they are secure windows, so
+    // device screenshots come out blank.
+    testImplementation(platform("androidx.compose:compose-bom:2026.09.00"))
+    testImplementation("androidx.compose.ui:ui-test-junit4")
+    debugImplementation("androidx.compose.ui:ui-test-manifest")
 
     implementation(platform("androidx.compose:compose-bom:2026.09.00"))
     implementation("androidx.activity:activity-compose:1.13.0")
@@ -174,6 +179,10 @@ dependencies {
     implementation("androidx.camera:camera-camera2:1.6.2")
     implementation("androidx.camera:camera-lifecycle:1.6.2")
     implementation("androidx.camera:camera-view:1.6.2")
+    // Saves and fills the private-key password through the system Credential
+    // Manager (Android 14 and later). The Play services bridge for older
+    // versions is left out, so this does not need Google Play services either.
+    implementation("androidx.credentials:credentials:1.6.0")
 
     debugImplementation("androidx.compose.ui:ui-tooling")
 }

@@ -29,7 +29,7 @@
     <string name="error_password_empty">비밀번호를 입력하세요</string>
     <string name="error_passwords_mismatch">비밀번호가 일치하지 않습니다</string>
     <string name="generate_password_title">새 개인 키 보호</string>
-    <string name="generate_password_message">비어 있지 않은 비밀번호를 입력하고 확인하세요. 이번 키 생성에만 사용하며 저장하지 않습니다.</string>
+    <string name="generate_password_message">비어 있지 않은 비밀번호를 입력하고 확인하세요. NekoKEM은 이번 키 생성에만 사용하며 직접 저장하지 않습니다.</string>
     <string name="check_password_title">개인 키 비밀번호 확인</string>
     <string name="check_password_message">암호화된 개인 키의 비밀번호를 입력하세요. 한 번만 확인합니다.</string>
     <string name="import_password_title">암호화된 개인 키 가져오기</string>
@@ -322,4 +322,11 @@
     <string name="recipient_other_file">다른 공개 키 파일…</string>
     <string name="recipient_count">%1$d / %2$d</string>
     <string name="action_share_fingerprint">지문 공유</string>
+    <string name="password_manager_fill">비밀번호 관리자에서 입력</string>
+    <string name="password_manager_save">비밀번호 관리자에 저장</string>
+    <string name="password_manager_not_found">비밀번호 관리자에 이 키의 비밀번호가 없습니다.</string>
+    <string name="password_manager_unavailable">사용할 수 있는 비밀번호 관리자가 없습니다. 시스템 설정의 \'비밀번호 및 계정\'에서 선택하세요.</string>
+    <string name="password_manager_failed">비밀번호 관리자가 응답하지 않습니다. 다시 시도하세요.</string>
+    <string name="snackbar_password_manager_saved">비밀번호를 비밀번호 관리자에 저장했습니다</string>
+    <string name="snackbar_password_manager_not_saved">비밀번호를 비밀번호 관리자에 저장하지 않았습니다</string>
 </resources>

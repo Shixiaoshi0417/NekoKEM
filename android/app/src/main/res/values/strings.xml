@@ -34,7 +34,7 @@
     <string name="error_password_empty">Password must not be empty</string>
     <string name="error_passwords_mismatch">Passwords do not match</string>
     <string name="generate_password_title">Protect new private key</string>
-    <string name="generate_password_message">Enter and confirm a non-empty password. It is used only for this key-generation operation and is not saved.</string>
+    <string name="generate_password_message">Enter and confirm a non-empty password. NekoKEM uses it only for this key-generation operation and does not save it.</string>
     <string name="check_password_title">Verify private-key password</string>
     <string name="check_password_message">Enter the encrypted private-key password for one verification attempt.</string>
     <string name="import_password_title">Import encrypted private key</string>
@@ -337,4 +337,11 @@
     <string name="recipient_other_file">Other Public Key File…</string>
     <string name="recipient_count">%1$d / %2$d</string>
     <string name="action_share_fingerprint">Share fingerprint</string>
+    <string name="password_manager_fill">Fill from password manager</string>
+    <string name="password_manager_save">Save to password manager</string>
+    <string name="password_manager_not_found">No password for this key was found in the password manager.</string>
+    <string name="password_manager_unavailable">No password manager is available. Choose one in system settings under Passwords and accounts.</string>
+    <string name="password_manager_failed">The password manager did not respond. Try again.</string>
+    <string name="snackbar_password_manager_saved">Password saved to password manager</string>
+    <string name="snackbar_password_manager_not_saved">Password was not saved to password manager</string>
 </resources>

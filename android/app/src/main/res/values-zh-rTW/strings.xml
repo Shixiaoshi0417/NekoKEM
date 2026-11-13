@@ -29,7 +29,7 @@
     <string name="error_password_empty">密碼不能留空</string>
     <string name="error_passwords_mismatch">兩次輸入的密碼不一致</string>
     <string name="generate_password_title">保護新私鑰</string>
-    <string name="generate_password_message">請輸入並確認非空密碼。密碼僅用於本次金鑰產生，不會儲存。</string>
+    <string name="generate_password_message">請輸入並確認非空密碼。NekoKEM 僅在本次金鑰產生中使用密碼，不會自行儲存。</string>
     <string name="check_password_title">驗證私鑰密碼</string>
     <string name="check_password_message">請輸入加密私鑰的密碼，僅執行一次驗證。</string>
     <string name="import_password_title">匯入加密私鑰</string>
@@ -322,4 +322,11 @@
     <string name="recipient_other_file">其他公開金鑰檔案…</string>
     <string name="recipient_count">%1$d / %2$d</string>
     <string name="action_share_fingerprint">分享指紋</string>
+    <string name="password_manager_fill">從密碼管理工具填入</string>
+    <string name="password_manager_save">儲存到密碼管理工具</string>
+    <string name="password_manager_not_found">密碼管理工具中沒有這把私鑰的密碼。</string>
+    <string name="password_manager_unavailable">沒有可用的密碼管理工具，請在系統設定的「密碼和帳戶」中選擇一個。</string>
+    <string name="password_manager_failed">密碼管理工具沒有回應，請重試。</string>
+    <string name="snackbar_password_manager_saved">密碼已儲存到密碼管理工具</string>
+    <string name="snackbar_password_manager_not_saved">密碼未儲存到密碼管理工具</string>
 </resources>
