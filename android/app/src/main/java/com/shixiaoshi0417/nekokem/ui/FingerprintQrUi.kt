@@ -138,44 +138,45 @@ fun SafetyNumberCard(
     val matrix = remember(fingerprint) { FingerprintQr.encode(fingerprint) }
     val shareLabel = stringResource(R.string.action_share_fingerprint)
     Column(
-        modifier.fillMaxWidth().clip(RoundedCornerShape(32.dp)).background(container).padding(horizontal = 24.dp, vertical = 20.dp),
+        modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(container).padding(16.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.CenterEnd) {
+        // The share button sits beside the code instead of on a row of its own.
+        Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.TopCenter) {
+            Column(
+                Modifier.widthIn(max = 176.dp).fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(Color.White)
+                    .clickable(enabled = enabled, onClick = onScan).padding(12.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
+                Canvas(Modifier.fillMaxWidth().aspectRatio(1f)) {
+                    val cell = size.width / matrix.width
+                    for (y in 0 until matrix.height) {
+                        for (x in 0 until matrix.width) {
+                            if (matrix[x, y]) drawRect(Color.Black, topLeft = Offset(x * cell, y * cell), size = Size(cell + 0.5f, cell + 0.5f))
+                        }
+                    }
+                }
+                Text(stringResource(R.string.action_scan_fingerprint), color = Color(0xFF3C3C43), fontSize = 14.sp, modifier = Modifier.padding(top = 8.dp))
+            }
             Icon(
                 Icons.Filled.Share,
                 contentDescription = shareLabel,
                 tint = content,
-                modifier = Modifier.clip(CircleShape).clickable {
+                modifier = Modifier.align(Alignment.TopEnd).clip(CircleShape).clickable {
                     val send = Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT, fingerprint)
                     context.startActivity(Intent.createChooser(send, shareLabel))
                 }.padding(8.dp).size(24.dp),
             )
         }
-        Column(
-            Modifier.widthIn(max = 240.dp).fillMaxWidth().clip(RoundedCornerShape(24.dp)).background(Color.White)
-                .clickable(enabled = enabled, onClick = onScan).padding(20.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-        ) {
-            Canvas(Modifier.fillMaxWidth().aspectRatio(1f)) {
-                val cell = size.width / matrix.width
-                for (y in 0 until matrix.height) {
-                    for (x in 0 until matrix.width) {
-                        if (matrix[x, y]) drawRect(Color.Black, topLeft = Offset(x * cell, y * cell), size = Size(cell + 0.5f, cell + 0.5f))
-                    }
-                }
-            }
-            Text(stringResource(R.string.action_scan_fingerprint), color = Color(0xFF3C3C43), fontSize = 16.sp, modifier = Modifier.padding(top = 12.dp))
-        }
-        FingerprintGrid(fingerprint, Modifier.fillMaxWidth().padding(top = 28.dp, bottom = 28.dp), color = content)
+        FingerprintGrid(fingerprint, Modifier.fillMaxWidth().padding(vertical = 16.dp), color = content, maxFontSize = 16.sp)
         Box(
             Modifier.clip(CircleShape).background(Color.White).clickable(enabled = enabled, onClick = onToggleVerified)
-                .padding(horizontal = 32.dp, vertical = 14.dp),
+                .padding(horizontal = 24.dp, vertical = 12.dp),
         ) {
             Text(
                 stringResource(if (verified) R.string.action_unmark_verified else R.string.action_mark_verified),
                 color = Color(0xFF1C1C1E),
-                fontSize = 16.sp,
+                fontSize = 15.sp,
             )
         }
     }

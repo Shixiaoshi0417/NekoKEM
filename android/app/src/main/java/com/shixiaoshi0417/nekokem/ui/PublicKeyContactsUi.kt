@@ -31,6 +31,7 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.unit.TextUnit
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
@@ -441,7 +442,12 @@ internal fun VerifiedMark(verified: Boolean, color: Color, modifier: Modifier = 
 
 /** The fingerprint as four rows of four 4-digit groups, like Signal's safety number. */
 @Composable
-internal fun FingerprintGrid(fingerprint: String, modifier: Modifier = Modifier, color: Color = Color.Unspecified) {
+internal fun FingerprintGrid(
+    fingerprint: String,
+    modifier: Modifier = Modifier,
+    color: Color = Color.Unspecified,
+    maxFontSize: TextUnit = 18.sp,
+) {
     Column(
         modifier.clearAndSetSemantics { contentDescription = fingerprint },
         horizontalAlignment = Alignment.CenterHorizontally,
@@ -451,10 +457,10 @@ internal fun FingerprintGrid(fingerprint: String, modifier: Modifier = Modifier,
         fingerprintRows(fingerprint).forEach { row ->
             BasicText(
                 row,
-                style = TextStyle(color = color, fontFamily = FontFamily.Monospace, fontSize = 18.sp, letterSpacing = 1.sp, textAlign = TextAlign.Center),
+                style = TextStyle(color = color, fontFamily = FontFamily.Monospace, fontSize = maxFontSize, letterSpacing = 1.sp, textAlign = TextAlign.Center),
                 maxLines = 1,
                 softWrap = false,
-                autoSize = TextAutoSize.StepBased(minFontSize = 8.sp, maxFontSize = 18.sp, stepSize = 0.5.sp),
+                autoSize = TextAutoSize.StepBased(minFontSize = 8.sp, maxFontSize = maxFontSize, stepSize = 0.5.sp),
                 modifier = Modifier.fillMaxWidth(),
             )
         }
