@@ -54,7 +54,7 @@ class TemporaryKeyInstrumentation : Instrumentation() {
             if (languagePhase == null) runPredictiveBackUiTests(this)
             if (languagePhase == null || languagePhase == "layout") runMiuixUiTests(this, screenshotPrefix)
             // The MIUIX pages again in Chinese, for screenshots at a common phone size.
-            if (languagePhase == "phone") runMiuixUiTests(this, screenshotPrefix, "zh-CN")
+            if (languagePhase == "phone") runMiuixUiTests(this, screenshotPrefix, "zh-CN", pagesOnly = true)
             results.putString(RESULT_KEY, RESULT_SUCCESS)
             results.putString(PUBLIC_KEY_TRACE_KEY, publicKeyTrace)
             Activity.RESULT_OK

@@ -32,7 +32,12 @@ internal fun useMaterialStyle(context: Context) {
  * and captured, dialogs open and close as MIUIX dialogs, and the interface
  * style switches to Material and back from either style's settings page.
  */
-internal fun runMiuixUiTests(instrumentation: Instrumentation, screenshotPrefix: String, language: String = "en") {
+internal fun runMiuixUiTests(
+    instrumentation: Instrumentation,
+    screenshotPrefix: String,
+    language: String = "en",
+    pagesOnly: Boolean = false,
+) {
     val context = instrumentation.targetContext
     val priorLanguage = AppLanguages.selection(context)
     val automation = instrumentation.uiAutomation
@@ -284,6 +289,8 @@ internal fun runMiuixUiTests(instrumentation: Instrumentation, screenshotPrefix:
         click(string(R.string.tab_about))
         await("About page") { reveal(string(R.string.action_check_update)); exact(string(R.string.action_check_update)) != null }
         capture("about")
+        // A screenshot run ends here; dialogs and the style switch are covered by the full run.
+        if (pagesOnly) return
         // About checks on demand; skipping the version is remembered.
         click(string(R.string.action_check_update))
         await("manual update prompt") { exact(updateTitle) != null }
