@@ -67,6 +67,20 @@ internal fun runMiuixUiTests(instrumentation: Instrumentation, screenshotPrefix:
             find(root) { it.text?.toString() == value || it.contentDescription?.toString() == value }
         }
     }
+    // Every copy on screen. A window left over from the other shell can hold one that
+    // cannot be pressed, so a press tries each of them.
+    fun copies(value: String): List<AccessibilityNodeInfo> {
+        val roots = listOfNotNull(automation.rootInActiveWindow) +
+            runCatching { automation.windows.mapNotNull { it.root } }.getOrDefault(emptyList())
+        val found = mutableListOf<AccessibilityNodeInfo>()
+        fun collect(node: AccessibilityNodeInfo?) {
+            if (node == null) return
+            if (node.text?.toString() == value || node.contentDescription?.toString() == value) found += node
+            for (index in 0 until node.childCount) collect(node.getChild(index))
+        }
+        roots.forEach(::collect)
+        return found
+    }
     fun containing(value: String): AccessibilityNodeInfo? {
         val roots = listOfNotNull(automation.rootInActiveWindow) +
             runCatching { automation.windows.mapNotNull { it.root } }.getOrDefault(emptyList())
@@ -109,13 +123,16 @@ internal fun runMiuixUiTests(instrumentation: Instrumentation, screenshotPrefix:
             SystemClock.sleep(100)
         }
     }
-    fun reveal(value: String) {
+    // [past] scrolls one step before looking: the copy already found refused the press.
+    fun reveal(value: String, past: Boolean = false) {
+        var skip = past
         // On small screens the row can sit below the fold or under the floating bar.
         // A lazy list drops rows scrolled past, so look back up once the end is reached.
         for (action in listOf(AccessibilityNodeInfo.ACTION_SCROLL_FORWARD, AccessibilityNodeInfo.ACTION_SCROLL_BACKWARD)) {
             var dragged = false
             repeat(6) {
-                if (exact(value) != null) return
+                if (!skip && exact(value) != null) return
+                skip = false
                 // The page is not always the first scrollable node, so each one is asked in turn.
                 val scrollables = mutableListOf<AccessibilityNodeInfo>()
                 fun collect(node: AccessibilityNodeInfo?) {
@@ -147,7 +164,15 @@ internal fun runMiuixUiTests(instrumentation: Instrumentation, screenshotPrefix:
     fun click(value: String) {
         // A recomposition after the scroll can drop the node between the lookup and the press,
         // so a refused press looks the row up again.
-        await("missing or unpressable $value") { reveal(value); exact(value)?.let(::tap) == true }
+        // A copy in a leftover window is found without scrolling and refuses the press while
+        // the real row is still below the fold, so a refused press scrolls on before the next try.
+        var refused = false
+        await("missing or unpressable $value") {
+            reveal(value, refused)
+            val pressed = copies(value).any(::tap)
+            refused = !pressed
+            pressed
+        }
     }
     // A dropdown that closes again before its menu is read is opened once more.
     fun choose(title: String, option: String) {
