@@ -1,4 +1,4 @@
-# NekoKEM Android v5.0.0
+# NekoKEM Android v5.1.0
 
 <p align="center">
   <img src="../docs/icon-rounded.png" alt="NekoKEM App icon" width="160">
@@ -9,13 +9,13 @@ JNI 不实现或解析 X448、ML-KEM-1024、HKDF、AES-GCM、NKEM 或 NKPR。
 Core 处理 NKEM v3 单接收方、NKEM v4 多接收方和带签名的 NKEM v5 文件容器；NKEM v1/v2 已不再支持。NKPR 是独立的
 私钥容器，由 Core 处理：新身份密钥为 NKPR v2，旧版 NKPR v1 仍可读取并可就地升级。
 
-当前正式 App 版本为 `5.0.0`，Core 版本为 `5.0`，Android application ID
+当前正式 App 版本为 `5.1.0`，Core 版本为 `5.0`，Android application ID
 与 namespace 均为 `com.shixiaoshi0417.nekokem`。默认写入的协议容器为带签名的
 **NKEM v5**；「设置 → 不签名加密（兼容旧版）」开启后写入 **NKEM v3**（单接收方）或 **NKEM v4**（多接收方）。容器版本与 App 版本号相互独立。
 
 签名与验签都在 Core 中完成：加密前 App 询问私钥密码，用本机身份密钥签名；解密时把本机公钥和已保存的身份联系人作为可信签名者交给 Core，由 Core 判定“可信 / 签名有效但不在联系人中 / 未签名”，并强制执行「只接受已签名文件」。签名无效或不满足策略时不会写出明文。
 
-v5.0.0 沿用 v3.2.0 发布签名，可直接覆盖升级。升级前建议导出公钥和加密 NKPR 私钥，验证备份并保存私钥密码。仅旧签名 v3.1.x 用户需要在完成备份后卸载重装；卸载会删除内部密钥。详见 [v5.0.0 中英双语更新日志](../release/v5.0.0.md)，历史签名迁移记录保留在 [v3.2.0](../release/v3.2.0.md)。
+v5.1.0 沿用 v3.2.0 发布签名，可直接覆盖升级。升级前建议导出公钥和加密 NKPR 私钥，验证备份并保存私钥密码。仅旧签名 v3.1.x 用户需要在完成备份后卸载重装；卸载会删除内部密钥。详见 [v5.1.0 中英双语更新日志](../release/v5.1.0.md)，历史签名迁移记录保留在 [v3.2.0](../release/v3.2.0.md)。
 
 README 图标仅使用专用圆角展示图，Android launcher 继续使用现有方形白底图案。应用是未经独立专业安全审计的实验性工具，不应用于保护重要或敏感数据。
 

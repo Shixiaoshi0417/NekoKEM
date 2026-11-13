@@ -274,5 +274,5 @@ protect important or sensitive data.
 Download the packages from the [Releases page](https://github.com/Shixiaoshi0417/NekoKEM/releases)
 and verify them against the release's top-level `SHA256SUMS.txt`. Releases up to
 v5.0.0 carry the earlier Tauri desktop app; the apps described here ship from
-the release after it. 请从 Releases 页面下载并先校验 SHA-256。v5.0.0 及更早版本的桌面端是旧的
-Tauri 应用，本文描述的应用从其后的版本开始提供。
+v5.1.0. 请从 Releases 页面下载并先校验 SHA-256。v5.0.0 及更早版本的桌面端是旧的
+Tauri 应用，本文描述的应用从 v5.1.0 开始提供。
