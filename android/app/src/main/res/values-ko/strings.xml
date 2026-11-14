@@ -13,7 +13,7 @@
     <string name="about_description">재사용 가능한 NekoKEM C17 Core와 OpenSSL EVP를 사용하는 실험적 양자 내성 하이브리드 파일 암호화 도구입니다.</string>
     <string name="private_key_exists">개인 키: 있음</string>
     <string name="private_key_not_found">개인 키: 찾을 수 없음</string>
-    <string name="fingerprint_label">SHA-256 공개 키 지문</string>
+    <string name="fingerprint_label">지문</string>
     <string name="selected_file_label">선택한 파일</string>
     <string name="selected_file_none">선택한 파일이 없습니다</string>
     <string name="settings_appearance_title">화면 및 언어</string>
@@ -29,7 +29,7 @@
     <string name="error_password_empty">비밀번호를 입력하세요</string>
     <string name="error_passwords_mismatch">비밀번호가 일치하지 않습니다</string>
     <string name="generate_password_title">새 개인 키 보호</string>
-    <string name="generate_password_message">비어 있지 않은 비밀번호를 입력하고 확인하세요. 이번 키 생성에만 사용하며 저장하지 않습니다.</string>
+    <string name="generate_password_message">비어 있지 않은 비밀번호를 입력하고 확인하세요. NekoKEM은 이번 키 생성에만 사용하며 직접 저장하지 않습니다.</string>
     <string name="check_password_title">개인 키 비밀번호 확인</string>
     <string name="check_password_message">암호화된 개인 키의 비밀번호를 입력하세요. 한 번만 확인합니다.</string>
     <string name="import_password_title">암호화된 개인 키 가져오기</string>
@@ -40,7 +40,7 @@
     <string name="select_temporary_private_key_password_title">선택한 개인 키 확인</string>
     <string name="select_temporary_private_key_password_message">임시 NKPR 개인 키의 비밀번호를 입력하세요. Core가 컨테이너를 검증하고 공개 키 지문을 표시합니다. 키를 가져오거나 기본 키를 교체하지 않습니다.</string>
     <string name="confirm_temporary_public_key_title">이 공개 키를 사용할까요?</string>
-    <string name="confirm_temporary_public_key_message">파일: %1$s\n\nSHA-256 지문:\n%2$s\n\n이 키는 한 번만 사용하며 앱의 기본 공개 키를 교체하지 않습니다.</string>
+    <string name="confirm_temporary_public_key_message">파일: %1$s\n\n지문:\n%2$s\n\n이 키는 한 번만 사용하며 앱의 기본 공개 키를 교체하지 않습니다.</string>
     <string name="delete_private_key_title">개인 키를 영구적으로 삭제할까요?</string>
     <string name="delete_private_key_message">로컬 NKPR 개인 키와 관련 임시 캐시를 삭제합니다. 공개 키는 유지합니다.</string>
     <string name="delete_public_key_title">공개 키를 영구적으로 삭제할까요?</string>
@@ -76,11 +76,8 @@
     <string name="action_cancel">취소</string>
     <string name="action_close">닫기</string>
     <string name="action_use_key">키 사용</string>
-    <string name="action_select_other_public_key">다른 공개 키 선택</string>
-    <string name="action_restore_default_public_key">기본 공개 키로 복원</string>
     <string name="action_select_other_private_key">다른 개인 키 선택</string>
     <string name="action_restore_default_private_key">기본 개인 키로 복원</string>
-    <string name="encryption_public_key_title">암호화용 공개 키</string>
     <string name="decryption_private_key_title">복호화용 개인 키</string>
     <string name="key_source_app_default">앱 기본 키</string>
     <string name="key_source_temporary_saf">SAF 임시 선택</string>
@@ -105,24 +102,18 @@
     <string name="completion_result">결과</string>
     <string name="completion_success">성공</string>
     <string name="completion_file">파일</string>
-    <string name="completion_fingerprint">SHA-256 지문</string>
+    <string name="completion_fingerprint">지문</string>
     <string name="completion_keypair_files">%1$s 및 %2$s</string>
     <string name="completion_elapsed">경과 시간</string>
     <string name="completion_average_speed">평균 속도</string>
     <string name="error_dialog_title">작업 실패</string>
     <string name="error_dialog_reason">원인</string>
     <string name="result_line">%1$s: %2$s</string>
-    <string name="snackbar_file_selected">파일을 선택했습니다</string>
-    <string name="snackbar_output_selection_cancelled">출력 위치 선택을 취소했습니다</string>
-    <string name="snackbar_key_selection_cancelled">키 선택을 취소했습니다</string>
     <string name="snackbar_operation_cancelled">작업을 취소했습니다</string>
-    <string name="snackbar_operation_success">%1$s 완료</string>
-    <string name="snackbar_temporary_public_key_selected">임시 공개 키를 확인했습니다</string>
     <string name="snackbar_temporary_private_key_selected">임시 개인 키를 검증했습니다</string>
     <string name="snackbar_default_public_key_restored">기본 공개 키로 복원했습니다</string>
     <string name="snackbar_default_private_key_restored">기본 개인 키로 복원했습니다</string>
     <string name="error_select_file_first">먼저 파일을 선택하세요</string>
-    <string name="error_public_key_not_found">공개 키를 찾을 수 없습니다</string>
     <string name="error_private_key_not_found">개인 키를 찾을 수 없습니다</string>
     <string name="error_reason_storage">파일 제공자 또는 앱 전용 저장소 작업에 실패했습니다.</string>
     <string name="error_reason_invalid_argument">경로, 비밀번호 또는 작업 인수가 잘못되었습니다.</string>
@@ -137,7 +128,6 @@
     <string name="error_reason_delete">로컬 키 파일 또는 관련 임시 파일을 안전하게 삭제할 수 없습니다.</string>
     <string name="error_reason_delete_residue">개인 키는 삭제했지만, 중단된 키 생성 또는 교체가 남긴 개인 키 임시 사본은 다른 작업이 아직 쓰는 중일 수 있어 보존했습니다. 이 사본은 해당 비밀번호로 잠금 해제될 수 있습니다. 복구 백업에서 확인하고 Android README를 참고한 뒤 처리하세요.</string>
     <string name="error_reason_core">NekoKEM Core가 작업을 거부했습니다.</string>
-    <string name="error_reason_unexpected">예기치 않은 Android 작업 오류가 발생했습니다.</string>
     <string name="error_reason_fingerprint_mismatch">확인 후 임시 키가 변경되었거나 지문이 더 이상 일치하지 않습니다.</string>
     <string name="error_reason_key_pair_mismatch">이 키는 이 기기에 저장된 다른 키와 한 쌍이 아닙니다. 다른 키 쌍으로 바꾸려면 현재 키 쌍을 먼저 삭제한 뒤 두 키를 모두 가져오세요.</string>
     <string name="error_reason_public_key_copy">SAF 공개 키 데이터를 완전히 복사할 수 없습니다.</string>
@@ -171,7 +161,6 @@
     <!-- Saved public-key contacts -->
     <string name="navigation_contacts">공개키 주소록</string>
     <string name="action_import_contact">공개키 추가</string>
-    <string name="action_choose_contact">저장된 공개키 선택</string>
     <string name="action_edit_contact_note">메모 편집</string>
     <string name="action_save_contact">저장</string>
     <string name="action_use_contact">암호화에 사용</string>
@@ -190,13 +179,11 @@
     <string name="contact_selected">저장된 공개키를 선택했습니다</string>
     <string name="contact_load_failed">공개키 주소록을 읽을 수 없습니다</string>
     <string name="contact_unreadable_entries">저장된 항목 %1$d개를 읽을 수 없습니다</string>
-    <string name="contact_unavailable">선택한 공개키를 사용할 수 없습니다. 다른 공개키를 선택하세요.</string>
     <string name="contact_delete_title">저장된 공개키를 삭제할까요?</string>
     <string name="contact_delete_message">주소록에서 %1$s 항목을 삭제할까요? 선택된 항목이면 암호화 키를 다시 선택하세요. 기본 키는 유지됩니다.</string>
     <string name="contact_save_title">공개키 저장</string>
     <string name="contact_edit_title">메모 편집</string>
     <string name="contact_picker_title">저장된 공개키 선택</string>
-    <string name="key_source_contacts">공개키 주소록</string>
     <string name="operation_save_contact">공개키 저장</string>
     <string name="operation_update_contact">공개키 메모 갱신</string>
     <string name="operation_delete_contact">저장된 공개키 삭제</string>
@@ -206,7 +193,6 @@
     <string name="action_encrypt_for_selected">선택한 수신자용으로 암호화</string>
     <string name="contact_selection_limit">수신자는 최대 %1$d명까지 선택할 수 있습니다</string>
     <string name="contact_recipients_hint">선택한 수신자는 각자 자신의 개인 키로 파일을 복호화할 수 있으며 다른 사람은 복호화할 수 없습니다. 여러 수신자용 파일은 NKEM v4를 사용하며 NekoKEM v3.3.2 이하에서는 열 수 없습니다.</string>
-    <string name="key_source_contacts_multiple">공개키 주소록(수신자 %1$d명)</string>
     <string name="contact_recipients_selected">수신자를 선택했습니다</string>
     <string name="contact_failed_recipient">사용할 수 없는 수신자: %1$s</string>
     <string name="recovery_backups_title">복구 백업 보존됨</string>
@@ -250,9 +236,7 @@
     <string name="error_reason_signer_not_trusted">서명자가 신뢰하는 키가 아닙니다. 아무것도 쓰지 않았습니다.</string>
     <string name="error_reason_already_identity">이 키는 이미 서명할 수 있어 업그레이드할 필요가 없습니다.</string>
     <string name="error_reason_upgrade">키를 업그레이드할 수 없습니다. 암호가 틀렸거나 키 파일이 일치하지 않습니다. 파일은 그대로입니다.</string>
-    <string name="key_identity_status">신원 키 · 서명 및 서명 확인 가능</string>
     <string name="key_legacy_status">이전 형식 키 · 서명할 수 없습니다. 업그레이드하면 서명할 수 있습니다.</string>
-    <string name="legacy_fingerprint_label">이전 형식 지문(NekoKEM 4.x 이하)</string>
     <string name="action_upgrade_key">키 업그레이드</string>
     <string name="action_export_legacy_public_key">이전 형식 공개 키 내보내기</string>
     <string name="operation_upgrade_key">키 업그레이드</string>
@@ -298,12 +282,10 @@
     <string name="action_mark_verified">확인됨으로 표시</string>
     <string name="action_unmark_verified">확인 표시 해제</string>
     <string name="contact_verify_title">지문 확인</string>
-    <string name="contact_verify_hint">위 지문을 %1$s의 기기 “키” 페이지에 표시된 지문과 비교하거나 상대의 지문 QR 코드를 스캔하세요. 모든 문자가 같을 때만 확인됨으로 표시하세요.</string>
     <string name="contact_unverified_title">확인되지 않은 연락처</string>
     <string name="contact_unverified_message">%1$s의 지문이 확인되지 않았습니다. 공개 키가 전달 중에 바뀌었다면 이 키로 암호화한 파일을 다른 사람이 열 수 있습니다. 먼저 상대와 지문을 비교하거나 그대로 계속하세요.</string>
     <string name="contact_name_separator">", "</string>
     <string name="action_use_anyway">그대로 사용</string>
-    <string name="action_open_contact">세부정보 열기</string>
     <string name="action_back_to_contacts">모든 연락처</string>
     <string name="operation_verify_contact">연락처 확인</string>
     <string name="fingerprint_scan_camera_unavailable">사용할 수 있는 카메라가 없어 이 기기에서는 스캔할 수 없습니다. 대신 상대와 전체 지문을 눈으로 비교하세요.</string>
@@ -322,4 +304,11 @@
     <string name="recipient_other_file">다른 공개 키 파일…</string>
     <string name="recipient_count">%1$d / %2$d</string>
     <string name="action_share_fingerprint">지문 공유</string>
+    <string name="password_manager_fill">비밀번호 관리자에서 입력</string>
+    <string name="password_manager_save">비밀번호 관리자에 저장</string>
+    <string name="password_manager_not_found">비밀번호 관리자에 이 키의 비밀번호가 없습니다.</string>
+    <string name="password_manager_unavailable">사용할 수 있는 비밀번호 관리자가 없습니다. 시스템 설정의 \'비밀번호 및 계정\'에서 선택하세요.</string>
+    <string name="password_manager_failed">비밀번호 관리자가 응답하지 않습니다. 다시 시도하세요.</string>
+    <string name="snackbar_password_manager_saved">비밀번호를 비밀번호 관리자에 저장했습니다</string>
+    <string name="snackbar_password_manager_not_saved">비밀번호를 비밀번호 관리자에 저장하지 않았습니다</string>
 </resources>

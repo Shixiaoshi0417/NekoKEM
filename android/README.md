@@ -187,11 +187,10 @@ UI 每 150 ms 至多更新一次，速度使用最近两秒的滑动平均，并
 
 - `nativeGenerateKeypairWithPassword(publicPath, privatePath, password)`：已有密钥文件时失败，从不覆盖
 - `nativeReplaceKeypairWithPassword(publicPath, privatePath, password)`：仅在用户确认替换后使用
-- `nativeUnlockPrivateKey(privatePath, password)`
 - `nativeCheckPassword(privatePath, password)`
 - `nativeHasPrivateKey(privatePath)`
 - `nativeExportPublicKey(publicPath, outputPath)`
-- `nativeDeletePrivateKey(privatePath)`
+- `nativeAcquirePairLock(keyPath)` / `nativeReleasePairLock(descriptor)`、`nativeDeletePrivateKeyUnderPairLock(privatePath)`：持有目录锁时删除私钥
 - `nativeGetFingerprint(publicPath)`
 - `nativeEncryptFileWithProgress(inputPath, outputPath, publicPath, callback)`
 - `nativeDecryptFileWithProgress(inputPath, outputPath, privatePath, password, callback)`

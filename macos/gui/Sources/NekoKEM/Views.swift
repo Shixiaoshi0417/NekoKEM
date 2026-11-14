@@ -148,6 +148,25 @@ private struct SecretInput: View {
     }
 }
 
+/// Under a private-key password field: save it to the login keychain once it
+/// is accepted, and fill in the one saved earlier.
+private struct KeychainOptions: View {
+    @ObservedObject var state: AppState
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Toggle(state.t("keychainSave"), isOn: $state.saveToKeychain).disabled(!state.editable)
+            Spacer()
+            if state.keychainFillOffered {
+                Button(state.t("keychainFill")) { state.fillFromKeychain() }.disabled(!state.editable || state.keychainKeyPath.isEmpty)
+            }
+        }
+        if let notice = state.keychainNotice, notice == "keychainMissing" || notice == "keychainFailed" {
+            Text(state.t(notice)).font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+        }
+    }
+}
+
 private struct PasteInput: View {
     @ObservedObject var state: AppState
     var label: String
@@ -315,6 +334,7 @@ private struct OperationFooter: View {
             if state.screen == .keygen && state.keyMode == .generate {
                 SecretInput(state: state, label: state.t("confirmation"), name: "confirmation", text: $state.confirmation)
             }
+            KeychainOptions(state: state)
         }
         if state.busy { ProgressBlock(state: state) }
         UpgradeConfirm(state: state)
@@ -348,6 +368,9 @@ private struct FormFeedback: View {
             Toggle(state.t("overwriteOutput"), isOn: $state.overwrite).disabled(!state.editable)
             Text(state.t("overwriteOutputHint")).font(.callout).foregroundStyle(danger)
         }
+        if let notice = state.keychainNotice, notice == "keychainSaved" || notice == "keychainNotSaved" {
+            Text(state.t(notice)).font(.callout).foregroundStyle(notice == "keychainSaved" ? Color.secondary : danger)
+        }
         // The recipient and password sheets show their own errors.
         if let failure = state.failure, state.invalidField != "contacts", state.invalidField != "password" {
             Notice(title: state.t(failure), warn: failure != "cancelled") {
@@ -362,10 +385,6 @@ private struct FormFeedback: View {
                 if let fingerprint = result.fingerprint {
                     Detail(text: fingerprint, mono: true)
                     if FingerprintQr.isFingerprint(fingerprint) { Button(state.t("showQr")) { state.qrFingerprint = fingerprint } }
-                }
-                if let legacy = result.legacyFingerprint, legacy != result.fingerprint {
-                    Detail(text: state.t("legacyFingerprint"))
-                    Detail(text: legacy, mono: true)
                 }
                 if result.canVerify == false { Text(state.t("legacyKeyHint")).font(.callout).foregroundStyle(danger) }
             }
@@ -653,6 +672,7 @@ private struct PasswordSheet: View {
             if encrypting { Text(state.t("signPasswordHint")).font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true) }
             SecureField("", text: $state.password).textFieldStyle(.roundedBorder).accessibilityLabel(state.t("password"))
             if state.invalidField == "password", let failure = state.failure { Text(state.t(failure)).font(.callout).foregroundStyle(danger) }
+            KeychainOptions(state: state)
             HStack {
                 Spacer()
                 Button(state.t("cancel"), role: .cancel) { state.cancelPassword() }.keyboardShortcut(.cancelAction)

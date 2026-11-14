@@ -7,11 +7,8 @@
 //! are parsed straight into `Zeroizing` fields: requests are externally tagged
 //! so serde never buffers them in an intermediate copy.
 #![allow(clippy::missing_safety_doc)]
-#[allow(dead_code)]
 mod core;
-#[allow(dead_code)]
 mod contacts;
-#[allow(dead_code)]
 mod update;
 mod preferences;
 

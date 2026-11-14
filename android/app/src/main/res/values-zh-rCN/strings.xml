@@ -16,7 +16,7 @@
 
     <string name="private_key_exists">私钥：已存在</string>
     <string name="private_key_not_found">私钥：未找到</string>
-    <string name="fingerprint_label">SHA-256 公钥指纹</string>
+    <string name="fingerprint_label">指纹</string>
     <string name="selected_file_label">已选择文件</string>
     <string name="selected_file_none">尚未选择文件</string>
 
@@ -34,7 +34,7 @@
     <string name="error_password_empty">密码不能为空</string>
     <string name="error_passwords_mismatch">两次输入的密码不一致</string>
     <string name="generate_password_title">保护新私钥</string>
-    <string name="generate_password_message">请输入并确认非空密码。密码仅用于本次密钥生成，不会保存。</string>
+    <string name="generate_password_message">请输入并确认非空密码。NekoKEM 仅在本次密钥生成中使用密码，不会自行保存。</string>
     <string name="check_password_title">验证私钥密码</string>
     <string name="check_password_message">请输入加密私钥密码，仅执行一次验证。</string>
     <string name="import_password_title">导入加密私钥</string>
@@ -45,7 +45,7 @@
     <string name="select_temporary_private_key_password_title">验证所选私钥</string>
     <string name="select_temporary_private_key_password_message">请输入此临时 NKPR 私钥的密码。Core 会验证容器并显示其公钥指纹，不会导入或替换默认私钥。</string>
     <string name="confirm_temporary_public_key_title">使用此公钥？</string>
-    <string name="confirm_temporary_public_key_message">文件：%1$s\n\nSHA-256 指纹：\n%2$s\n\n此密钥仅使用一次，不会替换 App 默认公钥。</string>
+    <string name="confirm_temporary_public_key_message">文件：%1$s\n\n指纹：\n%2$s\n\n此密钥仅使用一次，不会替换 App 默认公钥。</string>
 
     <string name="delete_private_key_title">永久删除私钥？</string>
     <string name="delete_private_key_message">将删除本地 NKPR 私钥和相关临时缓存。公钥会保留。</string>
@@ -83,12 +83,9 @@
     <string name="action_cancel">取消</string>
     <string name="action_close">关闭</string>
     <string name="action_use_key">使用此密钥</string>
-    <string name="action_select_other_public_key">选择其他公钥</string>
-    <string name="action_restore_default_public_key">恢复默认公钥</string>
     <string name="action_select_other_private_key">选择其他私钥</string>
     <string name="action_restore_default_private_key">恢复默认私钥</string>
 
-    <string name="encryption_public_key_title">加密公钥</string>
     <string name="decryption_private_key_title">解密私钥</string>
     <string name="key_source_app_default">App 内默认密钥</string>
     <string name="key_source_temporary_saf">SAF 临时选择</string>
@@ -118,7 +115,7 @@
     <string name="completion_result">结果</string>
     <string name="completion_success">成功</string>
     <string name="completion_file">文件名</string>
-    <string name="completion_fingerprint">SHA-256 指纹</string>
+    <string name="completion_fingerprint">指纹</string>
     <string name="completion_keypair_files">%1$s 和 %2$s</string>
     <string name="completion_elapsed">耗时</string>
     <string name="completion_average_speed">平均速度</string>
@@ -126,18 +123,12 @@
     <string name="error_dialog_reason">原因</string>
     <string name="result_line">%1$s：%2$s</string>
 
-    <string name="snackbar_file_selected">已选择文件</string>
-    <string name="snackbar_output_selection_cancelled">已取消选择输出文件</string>
-    <string name="snackbar_key_selection_cancelled">已取消选择密钥文件</string>
     <string name="snackbar_operation_cancelled">操作已取消</string>
-    <string name="snackbar_operation_success">%1$s已完成</string>
-    <string name="snackbar_temporary_public_key_selected">已确认临时公钥</string>
     <string name="snackbar_temporary_private_key_selected">已验证临时私钥</string>
     <string name="snackbar_default_public_key_restored">已恢复默认公钥</string>
     <string name="snackbar_default_private_key_restored">已恢复默认私钥</string>
 
     <string name="error_select_file_first">请先选择文件</string>
-    <string name="error_public_key_not_found">未找到公钥</string>
     <string name="error_private_key_not_found">未找到私钥</string>
     <string name="error_reason_storage">文件提供程序或应用私有存储操作失败。</string>
     <string name="error_reason_invalid_argument">文件路径、密码或操作参数无效。</string>
@@ -152,7 +143,6 @@
     <string name="error_reason_delete">无法安全删除一个或多个本地密钥文件或相关临时文件。</string>
     <string name="error_reason_delete_residue">私钥已删除，但保留了一份由中断的密钥生成或替换留下的私钥暂存副本，因为它可能仍在被其他操作写入。这份副本仍可能用对应的口令解锁。请在恢复备份中查看，并参阅 Android README 后再处理。</string>
     <string name="error_reason_core">NekoKEM Core 拒绝了此操作。</string>
-    <string name="error_reason_unexpected">发生了意外的 Android 操作错误。</string>
     <string name="error_reason_fingerprint_mismatch">临时密钥在确认后发生变化，或其指纹已不匹配。</string>
     <string name="error_reason_key_pair_mismatch">该密钥与本机已存储的另一把密钥不配对。如需改用其他密钥对，请先删除当前密钥对，再分别导入两把密钥。</string>
     <string name="error_reason_public_key_copy">无法完整复制 SAF 公钥数据。</string>
@@ -185,7 +175,6 @@
     <!-- Saved public-key contacts -->
     <string name="navigation_contacts">公钥通讯录</string>
     <string name="action_import_contact">添加公钥</string>
-    <string name="action_choose_contact">选择通讯录公钥</string>
     <string name="action_edit_contact_note">编辑备注</string>
     <string name="action_save_contact">保存</string>
     <string name="action_use_contact">用于加密</string>
@@ -204,13 +193,11 @@
     <string name="contact_selected">已选择通讯录公钥</string>
     <string name="contact_load_failed">无法读取公钥通讯录</string>
     <string name="contact_unreadable_entries">有 %1$d 个条目无法读取</string>
-    <string name="contact_unavailable">所选通讯录公钥不可用，请选择其他公钥。</string>
     <string name="contact_delete_title">删除通讯录公钥？</string>
     <string name="contact_delete_message">从通讯录删除 %1$s？若此条目已被选中，需要重新选择加密公钥。默认密钥将保留。</string>
     <string name="contact_save_title">保存公钥</string>
     <string name="contact_edit_title">编辑备注</string>
     <string name="contact_picker_title">选择通讯录公钥</string>
-    <string name="key_source_contacts">公钥通讯录</string>
     <string name="operation_save_contact">保存公钥</string>
     <string name="operation_update_contact">更新公钥备注</string>
     <string name="operation_delete_contact">删除通讯录公钥</string>
@@ -220,7 +207,6 @@
     <string name="action_encrypt_for_selected">加密给所选接收方</string>
     <string name="contact_selection_limit">最多选择 %1$d 位接收方</string>
     <string name="contact_recipients_hint">每位所选接收方都能用自己的私钥解密此文件，其他人无法解密。多人加密使用 NKEM v4，NekoKEM v3.3.2 及更早版本无法打开。</string>
-    <string name="key_source_contacts_multiple">公钥通讯录（%1$d 位接收方）</string>
     <string name="contact_recipients_selected">已选择接收方</string>
     <string name="contact_failed_recipient">无法使用的接收方：%1$s</string>
     <string name="recovery_backups_title">已保留恢复备份</string>
@@ -264,9 +250,7 @@
     <string name="error_reason_signer_not_trusted">签名者不在你信任的密钥中，未写入任何内容。</string>
     <string name="error_reason_already_identity">此密钥已可签名，无需升级。</string>
     <string name="error_reason_upgrade">无法升级密钥：密码错误或密钥文件不匹配，文件保持不变。</string>
-    <string name="key_identity_status">身份密钥 · 可签名和验证签名</string>
     <string name="key_legacy_status">旧版密钥 · 无法签名。升级后即可签名文件。</string>
-    <string name="legacy_fingerprint_label">旧版指纹（NekoKEM 4.x 及更早版本）</string>
     <string name="action_upgrade_key">升级密钥</string>
     <string name="action_export_legacy_public_key">导出旧版公钥</string>
     <string name="operation_upgrade_key">升级密钥</string>
@@ -312,12 +296,10 @@
     <string name="action_mark_verified">标记为已核对</string>
     <string name="action_unmark_verified">清除核对标记</string>
     <string name="contact_verify_title">核对指纹</string>
-    <string name="contact_verify_hint">请对照 %1$s 在其设备「密钥」页看到的指纹，或扫描对方的指纹二维码。每一位都一致时，再标记为已核对。</string>
     <string name="contact_unverified_title">联系人未核对</string>
     <string name="contact_unverified_message">%1$s 的指纹尚未核对。如果公钥在传给你的途中被替换，用它加密的文件可能会被别人打开。建议先与对方核对指纹，也可以仍然继续。</string>
     <string name="contact_name_separator">、</string>
     <string name="action_use_anyway">仍然使用</string>
-    <string name="action_open_contact">查看详情</string>
     <string name="action_back_to_contacts">全部联系人</string>
     <string name="operation_verify_contact">核对联系人</string>
     <string name="fingerprint_scan_camera_unavailable">未找到可用的相机，此设备无法扫码。请改为与对方逐字核对完整指纹。</string>
@@ -336,4 +318,11 @@
     <string name="recipient_other_file">其他公钥文件…</string>
     <string name="recipient_count">%1$d / %2$d</string>
     <string name="action_share_fingerprint">分享指纹</string>
+    <string name="password_manager_fill">从密码管理器填入</string>
+    <string name="password_manager_save">保存到密码管理器</string>
+    <string name="password_manager_not_found">密码管理器中没有这个私钥的密码。</string>
+    <string name="password_manager_unavailable">没有可用的密码管理器，请在系统设置的「密码和账号」中选择一个。</string>
+    <string name="password_manager_failed">密码管理器没有响应，请重试。</string>
+    <string name="snackbar_password_manager_saved">密码已保存到密码管理器</string>
+    <string name="snackbar_password_manager_not_saved">密码未保存到密码管理器</string>
 </resources>

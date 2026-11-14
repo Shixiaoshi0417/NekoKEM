@@ -16,7 +16,7 @@
 
     <string name="private_key_exists">Private key: Exists</string>
     <string name="private_key_not_found">Private key: Not found</string>
-    <string name="fingerprint_label">SHA-256 public-key fingerprint</string>
+    <string name="fingerprint_label">Fingerprint</string>
     <string name="selected_file_label">Selected file</string>
     <string name="selected_file_none">No file selected</string>
 
@@ -34,7 +34,7 @@
     <string name="error_password_empty">Password must not be empty</string>
     <string name="error_passwords_mismatch">Passwords do not match</string>
     <string name="generate_password_title">Protect new private key</string>
-    <string name="generate_password_message">Enter and confirm a non-empty password. It is used only for this key-generation operation and is not saved.</string>
+    <string name="generate_password_message">Enter and confirm a non-empty password. NekoKEM uses it only for this key-generation operation and does not save it.</string>
     <string name="check_password_title">Verify private-key password</string>
     <string name="check_password_message">Enter the encrypted private-key password for one verification attempt.</string>
     <string name="import_password_title">Import encrypted private key</string>
@@ -45,7 +45,7 @@
     <string name="select_temporary_private_key_password_title">Verify selected private key</string>
     <string name="select_temporary_private_key_password_message">Enter the password for this temporary NKPR key. Core validates the container and shows its public fingerprint without importing it.</string>
     <string name="confirm_temporary_public_key_title">Use this public key?</string>
-    <string name="confirm_temporary_public_key_message">File: %1$s\n\nSHA-256 fingerprint:\n%2$s\n\nThe key is used once and will not replace the App default.</string>
+    <string name="confirm_temporary_public_key_message">File: %1$s\n\nFingerprint:\n%2$s\n\nThe key is used once and will not replace the App default.</string>
 
     <string name="delete_private_key_title">Delete private key permanently?</string>
     <string name="delete_private_key_message">The local NKPR private key and related temporary cache will be deleted. The public key is kept.</string>
@@ -83,12 +83,9 @@
     <string name="action_cancel">Cancel</string>
     <string name="action_close">Close</string>
     <string name="action_use_key">Use Key</string>
-    <string name="action_select_other_public_key">Select Other Public Key</string>
-    <string name="action_restore_default_public_key">Restore Default Public Key</string>
     <string name="action_select_other_private_key">Select Other Private Key</string>
     <string name="action_restore_default_private_key">Restore Default Private Key</string>
 
-    <string name="encryption_public_key_title">Encryption public key</string>
     <string name="decryption_private_key_title">Decryption private key</string>
     <string name="key_source_app_default">App default</string>
     <string name="key_source_temporary_saf">Temporary SAF selection</string>
@@ -119,7 +116,7 @@
     <string name="completion_result">Result</string>
     <string name="completion_success">Success</string>
     <string name="completion_file">File</string>
-    <string name="completion_fingerprint">SHA-256 fingerprint</string>
+    <string name="completion_fingerprint">Fingerprint</string>
     <string name="completion_keypair_files">%1$s and %2$s</string>
     <string name="completion_elapsed">Elapsed</string>
     <string name="completion_average_speed">Average speed</string>
@@ -127,18 +124,12 @@
     <string name="error_dialog_reason">Reason</string>
     <string name="result_line">%1$s: %2$s</string>
 
-    <string name="snackbar_file_selected">File selected</string>
-    <string name="snackbar_output_selection_cancelled">Output selection cancelled</string>
-    <string name="snackbar_key_selection_cancelled">Key selection cancelled</string>
     <string name="snackbar_operation_cancelled">Operation cancelled</string>
-    <string name="snackbar_operation_success">%1$s completed</string>
-    <string name="snackbar_temporary_public_key_selected">Temporary public key confirmed</string>
     <string name="snackbar_temporary_private_key_selected">Temporary private key verified</string>
     <string name="snackbar_default_public_key_restored">Default public key restored</string>
     <string name="snackbar_default_private_key_restored">Default private key restored</string>
 
     <string name="error_select_file_first">Select a file first</string>
-    <string name="error_public_key_not_found">Public key not found</string>
     <string name="error_private_key_not_found">Private key not found</string>
     <string name="error_reason_storage">The file provider or private storage operation failed.</string>
     <string name="error_reason_invalid_argument">An invalid path, password, or operation argument was supplied.</string>
@@ -153,7 +144,6 @@
     <string name="error_reason_delete">One or more local key files or related temporary files could not be deleted safely.</string>
     <string name="error_reason_delete_residue">The private key was deleted, but a staged private-key copy left by an interrupted key generation or replacement was kept, since another operation may still be writing it. It may still unlock with that key\'s password. Check it under recovery backups and see the Android README before removing it.</string>
     <string name="error_reason_core">NekoKEM Core rejected the operation.</string>
-    <string name="error_reason_unexpected">An unexpected Android operation error occurred.</string>
     <string name="error_reason_fingerprint_mismatch">The temporary key changed after confirmation or its fingerprint no longer matches.</string>
     <string name="error_reason_key_pair_mismatch">This key does not belong to the other key stored on this device. To switch to another key pair, delete the current key pair first, then import both keys.</string>
     <string name="error_reason_public_key_copy">The SAF public-key transfer could not be copied completely.</string>
@@ -186,7 +176,6 @@
     <!-- Saved public-key contacts -->
     <string name="navigation_contacts">Public-key Contacts</string>
     <string name="action_import_contact">Add Public Key</string>
-    <string name="action_choose_contact">Choose Saved Public Key</string>
     <string name="action_edit_contact_note">Edit Note</string>
     <string name="action_save_contact">Save</string>
     <string name="action_use_contact">Use for Encryption</string>
@@ -205,13 +194,11 @@
     <string name="contact_selected">Saved public key selected</string>
     <string name="contact_load_failed">Could not read public-key contacts</string>
     <string name="contact_unreadable_entries">%1$d saved entries could not be read</string>
-    <string name="contact_unavailable">The selected saved public key is unavailable. Choose another key.</string>
     <string name="contact_delete_title">Delete saved public key?</string>
     <string name="contact_delete_message">Delete %1$s from contacts? Choose another encryption key if this entry is selected. Your default keys are kept.</string>
     <string name="contact_save_title">Save Public Key</string>
     <string name="contact_edit_title">Edit Note</string>
     <string name="contact_picker_title">Choose Saved Public Key</string>
-    <string name="key_source_contacts">Saved public-key contacts</string>
     <string name="operation_save_contact">Save Public Key</string>
     <string name="operation_update_contact">Update Public-Key Note</string>
     <string name="operation_delete_contact">Delete Saved Public Key</string>
@@ -221,7 +208,6 @@
     <string name="action_encrypt_for_selected">Encrypt for Selected Recipients</string>
     <string name="contact_selection_limit">Choose at most %1$d recipients</string>
     <string name="contact_recipients_hint">Each selected recipient can decrypt the file with their own private key, and no one else can. Files for several recipients use NKEM v4, which NekoKEM v3.3.2 and earlier cannot open.</string>
-    <string name="key_source_contacts_multiple">Saved public-key contacts (%1$d recipients)</string>
     <string name="contact_recipients_selected">Recipients selected</string>
     <string name="contact_failed_recipient">Unavailable recipient: %1$s</string>
     <string name="recovery_backups_title">Recovery backups retained</string>
@@ -265,9 +251,7 @@
     <string name="error_reason_signer_not_trusted">The signer is not one of your trusted keys. Nothing was written.</string>
     <string name="error_reason_already_identity">This key can already sign; there is nothing to upgrade.</string>
     <string name="error_reason_upgrade">The key could not be upgraded: the password is incorrect or the key files do not match. They were left unchanged.</string>
-    <string name="key_identity_status">Identity key · signs and verifies signatures</string>
     <string name="key_legacy_status">Legacy key · cannot sign. Upgrade it to sign your files.</string>
-    <string name="legacy_fingerprint_label">Legacy fingerprint (NekoKEM 4.x and earlier)</string>
     <string name="action_upgrade_key">Upgrade key</string>
     <string name="action_export_legacy_public_key">Export legacy public key</string>
     <string name="operation_upgrade_key">Upgrade key</string>
@@ -313,12 +297,10 @@
     <string name="action_mark_verified">Mark as Verified</string>
     <string name="action_unmark_verified">Clear Verification</string>
     <string name="contact_verify_title">Verify Fingerprint</string>
-    <string name="contact_verify_hint">Compare the fingerprint above with the one %1$s sees on the Keys page of their device, or scan their fingerprint QR code. Mark the contact as verified only when every character matches.</string>
     <string name="contact_unverified_title">Unverified contact</string>
     <string name="contact_unverified_message">The fingerprint of %1$s has not been verified. If a public key was replaced on its way to you, someone else can open the files you encrypt with it. Compare the fingerprint with the owner first, or continue anyway.</string>
     <string name="contact_name_separator">", "</string>
     <string name="action_use_anyway">Use Anyway</string>
-    <string name="action_open_contact">Open details</string>
     <string name="action_back_to_contacts">All Contacts</string>
     <string name="operation_verify_contact">Verify contact</string>
     <string name="fingerprint_scan_camera_unavailable">No usable camera was found, so this device cannot scan. Compare the full fingerprint with the owner by eye instead.</string>
@@ -337,4 +319,11 @@
     <string name="recipient_other_file">Other Public Key File…</string>
     <string name="recipient_count">%1$d / %2$d</string>
     <string name="action_share_fingerprint">Share fingerprint</string>
+    <string name="password_manager_fill">Fill from password manager</string>
+    <string name="password_manager_save">Save to password manager</string>
+    <string name="password_manager_not_found">No password for this key was found in the password manager.</string>
+    <string name="password_manager_unavailable">No password manager is available. Choose one in system settings under Passwords and accounts.</string>
+    <string name="password_manager_failed">The password manager did not respond. Try again.</string>
+    <string name="snackbar_password_manager_saved">Password saved to password manager</string>
+    <string name="snackbar_password_manager_not_saved">Password was not saved to password manager</string>
 </resources>

@@ -24,15 +24,22 @@ dependencies {
     implementation("top.yukonga.miuix.kmp:miuix-icons-desktop:0.9.4")
     implementation("top.yukonga.miuix.kmp:miuix-preference-desktop:0.9.4")
     // The Material 3 Expressive style; its Expressive widgets ship only in the alphas.
-    implementation("org.jetbrains.compose.material3:material3:1.12.0-alpha03")
+    implementation("org.jetbrains.compose.material3:material3:1.13.0-beta02")
     // The filled navigation icons the Android app uses.
     implementation("org.jetbrains.compose.material:material-icons-core:1.7.3")
     // The fingerprint QR code, the same encoder as the Android app.
     implementation("com.google.zxing:core:3.5.4")
-    implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.9.0")
+    implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.12.0")
     // Dispatchers.Main on the Swing event thread, where Compose runs.
-    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-swing:1.9.0")
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-swing:1.11.0")
     testImplementation(kotlin("test"))
+}
+
+// Compose 1.13's ui-skiko pulls in skiko-awt-runtime-all, which bundles Skia for
+// all six desktop platforms (about 45 MB). compose.desktop.currentOs already
+// brings the runtime for the platform being packaged, so leave the bundle out.
+configurations.configureEach {
+    exclude(group = "org.jetbrains.skiko", module = "skiko-awt-runtime-all")
 }
 
 tasks.test {

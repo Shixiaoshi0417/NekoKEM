@@ -25,10 +25,10 @@ jobs:
 
     steps:
       - name: Check out source
-        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Check out performance baseline
-        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ github.event.pull_request.base.sha || 'main' }}
           path: performance-baseline-source
@@ -47,7 +47,22 @@ jobs:
       - name: Test atomic performance report saving
         run: python3 scripts/test_profile_reports.py -v
 
+      # The build below depends only on the pinned source, this step's flags
+      # and the runner's compiler, so a cached prefix is reused until any of
+      # those changes.
+      - name: Identify the native compiler for the OpenSSL cache
+        id: compiler
+        run: echo "identity=$(gcc --version | sha256sum | cut -d ' ' -f 1)" >> "$GITHUB_OUTPUT"
+
+      - name: Restore the pinned OpenSSL build
+        id: openssl-cache
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ runner.temp }}/openssl-4.1.0
+          key: linux-tests-openssl-4.1.0-${{ steps.compiler.outputs.identity }}-${{ hashFiles('.github/workflows/ci.yml') }}
+
       - name: Build OpenSSL 4.1.0
+        if: steps.openssl-cache.outputs.cache-hit != 'true'
         env:
           OPENSSL_VERSION: "4.1.0"
           OPENSSL_SHA256: 50c17baf54cb008f6ce42d50deb4b28050a1aad711636cabd4b241c7e90cc2fd
@@ -107,7 +122,7 @@ jobs:
 
       - name: Preserve Linux before-and-after throughput measurements
         if: always()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: linux-throughput-comparison
           path: ${{ runner.temp }}/linux-throughput-comparison.json
@@ -157,7 +172,7 @@ jobs:
 
       - name: Preserve fuzz logs, statistics and samples
         if: always()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: parser-fuzz-results
           path: ${{ runner.temp }}/parser-fuzz-results.tar.gz
@@ -171,12 +186,12 @@ jobs:
 
     steps:
       - name: Check out source
-        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       # Robolectric loads the miuix classes on the JVM; they are Java 21
       # class files. The App itself still compiles for Java 17.
       - name: Set up Java 21
-        uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5
+        uses: actions/setup-java@77dd5b2ce225ea11469928ac317850245a74ae78 # v6.2.0
         with:
           distribution: temurin
           java-version: "21"
@@ -204,11 +219,19 @@ jobs:
             "$sdk_root" >> "$GITHUB_ENV"
 
       - name: Set up Gradle cache
-        uses: gradle/actions/setup-gradle@ed408507eac070d1f99cc633dbcf757c94c7933a # v4
+        uses: gradle/actions/setup-gradle@8da46b539cd8fe6ab27ca75128919a18d757604c # v6.4.1
         with:
           cache-read-only: ${{ github.event_name == 'pull_request' }}
 
+      - name: Restore the pinned Android OpenSSL build
+        id: android-openssl-cache
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: android/app/src/main/cpp/third_party/openssl/arm64-v8a
+          # The script pins the OpenSSL source, NDK and flags.
+          key: android-openssl-arm64-v8a-${{ hashFiles('android/scripts/build-openssl-android.sh') }}
       - name: Build OpenSSL 4.1.0 for Android arm64
+        if: steps.android-openssl-cache.outputs.cache-hit != 'true'
         working-directory: android
         env:
           JOBS: "2"
@@ -242,12 +265,13 @@ jobs:
 
       - name: Preserve executed JVM test reports
         if: always()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: android-jvm-test-results
           path: |
             android/app/build/test-results/testDebugUnitTest/
             android/app/build/reports/tests/testDebugUnitTest/
+            android/app/build/test-results/password-manager-screens/
           if-no-files-found: warn
           retention-days: 14
 
@@ -261,8 +285,8 @@ jobs:
         # API 29 sits between the oldest and newest app seccomp and storage policies.
         api: [26, 29, 35, 36]
     steps:
-      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
-      - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-java@77dd5b2ce225ea11469928ac317850245a74ae78 # v6.2.0
         with:
           distribution: temurin
           java-version: "17"
@@ -286,10 +310,18 @@ jobs:
           printf 'ANDROID_NDK_ROOT=%s/ndk/28.2.13676358\n' \
             "$sdk_root" >> "$GITHUB_ENV"
 
-      - uses: gradle/actions/setup-gradle@ed408507eac070d1f99cc633dbcf757c94c7933a # v4
+      - uses: gradle/actions/setup-gradle@8da46b539cd8fe6ab27ca75128919a18d757604c # v6.4.1
         with:
           cache-read-only: ${{ github.event_name == 'pull_request' }}
+      - name: Restore the pinned Android OpenSSL build
+        id: android-openssl-cache
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: android/app/src/main/cpp/third_party/openssl/x86_64
+          # The script pins the OpenSSL source, NDK and flags.
+          key: android-openssl-x86_64-${{ hashFiles('android/scripts/build-openssl-android.sh') }}
       - name: Build pinned OpenSSL for the test emulator
+        if: steps.android-openssl-cache.outputs.cache-hit != 'true'
         working-directory: android
         env:
           JOBS: "2"
@@ -340,7 +372,7 @@ jobs:
             bash .github/scripts/run_android_minified_device_tests.sh android/device-reports/minified
       - name: Preserve actual device test results
         if: always()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: android-device-api-${{ matrix.api }}
           path: android/device-reports/
@@ -362,7 +394,7 @@ jobs:
 
     steps:
       - name: Check out source
-        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Install build tools
         run: |
@@ -388,7 +420,7 @@ jobs:
           python3 linux/tests/i18n_tests.py "$release_test_dir/nekokem"
 
       - name: Upload Linux archive
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: NekoKEM-linux-${{ matrix.arch }}
           path: dist/NekoKEM-linux-${{ matrix.arch }}.tar.gz
@@ -402,8 +434,8 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
-      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: 3ce869eea9384859cc5808918d4672c43eab8c92
           path: baseline-source
@@ -417,7 +449,7 @@ jobs:
           cp "$executable" "$RUNNER_TEMP/baseline-nekokem"
           python3 windows/tests/interop.py generate "$RUNNER_TEMP/baseline-nekokem" "$RUNNER_TEMP/linux-fixtures"
       - name: Download current Linux CLI build
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: NekoKEM-linux-x86_64
           path: ${{ runner.temp }}/current-linux-dist
@@ -428,13 +460,13 @@ jobs:
             --strip-components=1 -C "$RUNNER_TEMP/current-linux-bin"
           python3 windows/tests/interop.py contract \
             "$RUNNER_TEMP/current-linux-bin/nekokem" "$RUNNER_TEMP/linux-fixtures"
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: pre-port-linux-cli
           path: ${{ runner.temp }}/baseline-nekokem
           retention-days: 14
           if-no-files-found: error
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: public-linux-interop-fixtures
           path: |
@@ -454,9 +486,9 @@ jobs:
     runs-on: windows-2022
     timeout-minutes: 45
     steps:
-      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Check out performance baseline
-        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ github.event.pull_request.base.sha || 'main' }}
           path: performance-baseline-source
@@ -473,7 +505,7 @@ jobs:
         id: compiler
         shell: msys2 {0}
         run: echo "version=$(gcc -dumpfullversion)" >> "$GITHUB_OUTPUT"
-      - uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+      - uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         id: openssl-cache
         with:
           path: ${{ runner.temp }}/windows-openssl
@@ -501,12 +533,12 @@ jobs:
           cp windows/tests/check_icon.py performance-baseline-source/windows/tests/check_icon.py
           bash performance-baseline-source/windows/scripts/build-windows-cli.sh \
             "$(cygpath -u "$RUNNER_TEMP")/windows-cli-performance-baseline"
-      - uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+      - uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         if: success() && steps.openssl-cache.outputs.cache-hit != 'true'
         with:
           path: ${{ runner.temp }}/windows-openssl
           key: ${{ steps.openssl-cache.outputs.cache-primary-key }}
-      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: public-linux-interop-fixtures
           path: ${{ runner.temp }}/linux-fixtures
@@ -558,7 +590,7 @@ jobs:
           } finally { Remove-Item $work -Recurse -Force }
       - name: Preserve Windows before-and-after throughput measurements
         if: always()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: windows-throughput-comparison
           path: ${{ runner.temp }}/windows-throughput-comparison.json
@@ -595,7 +627,7 @@ jobs:
           if ($recorded -ne $expected) { throw "Windows CLI metadata records version '$recorded', not $expected" }
           Compress-Archive -Path "$bin/nekokem.exe","$bin/README.md","$bin/SECURITY-DESIGN.md","$bin/LICENSE","$bin/OPENSSL-LICENSE.txt","$bin/SHA256SUMS.txt","$bin/pe-headers.txt","$bin/benchmark.json","$bin/build-metadata.json" -DestinationPath "$env:RUNNER_TEMP/NekoKEM-windows-x86_64.zip"
           (Get-FileHash "$env:RUNNER_TEMP/NekoKEM-windows-x86_64.zip" -Algorithm SHA256).Hash.ToLower() + '  NekoKEM-windows-x86_64.zip' | Set-Content "$env:RUNNER_TEMP/windows-SHA256SUMS.txt" -Encoding ascii
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: NekoKEM-windows-x86_64
           path: |
@@ -603,7 +635,7 @@ jobs:
             ${{ runner.temp }}/windows-SHA256SUMS.txt
           retention-days: 14
           if-no-files-found: error
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: public-windows-interop-fixtures
           path: ${{ runner.temp }}/windows-fixtures/
@@ -616,16 +648,16 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
-      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: pre-port-linux-cli
           path: ${{ runner.temp }}/baseline-bin
-      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: public-windows-interop-fixtures
           path: ${{ runner.temp }}/windows-fixtures
-      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: public-macos-interop-fixtures
           path: ${{ runner.temp }}/macos-fixtures
@@ -643,8 +675,8 @@ jobs:
     env:
       MACOSX_DEPLOYMENT_TARGET: '11.0'
     steps:
-      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
-      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: '3.13.16'
       - name: Identify native Apple compiler and SDK
@@ -655,7 +687,7 @@ jobs:
           identity=$({ xcrun clang --version; xcrun --sdk macosx --show-sdk-version; } | shasum -a 256 | cut -d ' ' -f 1)
           echo "identity=$identity" >> "$GITHUB_OUTPUT"
           echo "NEKOKEM_OPENSSL_PREFIX=$RUNNER_TEMP/macos-openssl" >> "$GITHUB_ENV"
-      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ${{ runner.temp }}/macos-openssl
           key: macos-arm64-openssl-4.1.0-${{ steps.compiler.outputs.identity }}-${{ hashFiles('macos/scripts/build-openssl.sh') }}
@@ -669,13 +701,13 @@ jobs:
           bash macos/scripts/build-macos-cli.sh "$RUNNER_TEMP/macos-cli-build-only"
           cmp "$RUNNER_TEMP/macos-cli/nekokem" "$RUNNER_TEMP/macos-cli-build-only/nekokem"
           cmp "$RUNNER_TEMP/macos-cli/NekoKEM-macos-arm64.tar.gz" "$RUNNER_TEMP/macos-cli-build-only/NekoKEM-macos-arm64.tar.gz"
-      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: public-linux-interop-fixtures
           path: ${{ runner.temp }}/macos-fixtures
       - name: Compare all current CLI options and exchange historical Linux containers
         run: python3 macos/tests/interop.py macos "$RUNNER_TEMP/macos-cli/nekokem" "$RUNNER_TEMP/macos-fixtures"
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: NekoKEM-macos-arm64
           path: |
@@ -683,7 +715,7 @@ jobs:
             ${{ runner.temp }}/macos-cli/macos-SHA256SUMS.txt
           retention-days: 14
           if-no-files-found: error
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: public-macos-interop-fixtures
           path: |
@@ -704,11 +736,11 @@ jobs:
     env:
       MACOSX_DEPLOYMENT_TARGET: '11.0'
     steps:
-      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
-      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: '3.13.16'
-      - uses: dtolnay/rust-toolchain@7e38f4b43b4db5c8dd498af069a4f6196df1d067 # master
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master
         with:
           toolchain: 1.99.0
           targets: aarch64-apple-darwin
@@ -721,11 +753,11 @@ jobs:
           echo "identity=$identity" >> "$GITHUB_OUTPUT"
           echo "NEKOKEM_OPENSSL_PREFIX=$RUNNER_TEMP/macos-openssl" >> "$GITHUB_ENV"
           xcrun swift --version
-      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ${{ runner.temp }}/macos-openssl
           key: macos26-arm64-openssl-4.1.0-${{ steps.compiler.outputs.identity }}-${{ hashFiles('macos/scripts/build-openssl.sh') }}
-      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
         with:
           workspaces: desktop/bridge
           cache-on-failure: true
@@ -770,7 +802,7 @@ jobs:
           # The same command the Release workflow runs.
           python3 desktop/scripts/package-desktop.py macos --app "$RUNNER_TEMP/macos-swiftui/NekoKEM.app" \
             --output "$RUNNER_TEMP/macos-gui" --source-sha "$GITHUB_SHA"
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: always()
         with:
           name: macos-swiftui-app
@@ -795,18 +827,19 @@ jobs:
             runner: ubuntu-24.04-arm
             resources: linux-arm64
     steps:
-      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
-      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: '3.13.16'
-      - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5
+      - uses: actions/setup-java@77dd5b2ce225ea11469928ac317850245a74ae78 # v6.2.0
         with:
           distribution: temurin
           java-version: "25"
-      - uses: dtolnay/rust-toolchain@7e38f4b43b4db5c8dd498af069a4f6196df1d067 # master
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master
         with:
           toolchain: 1.99.0
           targets: ${{ matrix.arch }}-unknown-linux-gnu
+          components: clippy
       - name: Install native build, packaging and desktop test tools
         run: |
           sudo apt-get update
@@ -821,21 +854,22 @@ jobs:
           identity=$({ gcc --version; getconf GNU_LIBC_VERSION; } | sha256sum | cut -d ' ' -f 1)
           echo "identity=$identity" >> "$GITHUB_OUTPUT"
           echo "NEKOKEM_OPENSSL_PREFIX=$RUNNER_TEMP/linux-gui-openssl" >> "$GITHUB_ENV"
-      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ${{ runner.temp }}/linux-gui-openssl
           key: linux-gui-${{ matrix.arch }}-openssl-4.1.0-${{ steps.compiler.outputs.identity }}-${{ hashFiles('desktop/scripts/build-linux-openssl.sh') }}
-      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
         with:
           workspaces: desktop/bridge
           cache-on-failure: true
-      - uses: gradle/actions/setup-gradle@ed408507eac070d1f99cc633dbcf757c94c7933a # v4
+      - uses: gradle/actions/setup-gradle@8da46b539cd8fe6ab27ca75128919a18d757604c # v6.4.1
       - name: Build and verify the pinned static PIC dependency
         run: bash desktop/scripts/build-linux-openssl.sh '${{ matrix.arch }}' "$NEKOKEM_OPENSSL_PREFIX"
       - name: Test and build the bridge library against the C17 Core
         working-directory: desktop/bridge
         run: |
           set -Eeuo pipefail
+          cargo clippy --locked --release --all-targets --target '${{ matrix.arch }}-unknown-linux-gnu' -- -D warnings
           cargo test --locked --release --target '${{ matrix.arch }}-unknown-linux-gnu' -- --test-threads=1
           cargo build --locked --release --target '${{ matrix.arch }}-unknown-linux-gnu'
           # The app carries the library and the licences of what is linked into it.
@@ -899,7 +933,7 @@ jobs:
             test -s /opt/nekokem/lib/app/resources/libnekokem_native.so
             rpm -qa | grep -i "noto-sans-cjk"
           '
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: always()
         with:
           name: compose-linux-${{ matrix.arch }}
@@ -913,15 +947,15 @@ jobs:
     runs-on: windows-2022
     timeout-minutes: 60
     steps:
-      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
-      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: '3.13.16'
-      - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5
+      - uses: actions/setup-java@77dd5b2ce225ea11469928ac317850245a74ae78 # v6.2.0
         with:
           distribution: temurin
           java-version: "25"
-      - uses: dtolnay/rust-toolchain@7e38f4b43b4db5c8dd498af069a4f6196df1d067 # master
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master
         with:
           toolchain: 1.99.0-x86_64-pc-windows-gnu
           targets: x86_64-pc-windows-gnu
@@ -940,16 +974,16 @@ jobs:
         run: |
           echo "version=$(gcc -dumpfullversion)" >> "$GITHUB_OUTPUT"
           echo "gcc=$(cygpath -m "$(command -v gcc)")" >> "$GITHUB_OUTPUT"
-      - uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+      - uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ${{ runner.temp }}/windows-openssl
           key: windows-ucrt64-openssl-4.1.0-${{ steps.compiler.outputs.version }}-${{ hashFiles('windows/scripts/build-windows-cli.sh') }}
           restore-keys: windows-ucrt64-openssl-4.1.0-${{ steps.compiler.outputs.version }}-
-      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
         with:
           workspaces: desktop/bridge
           cache-on-failure: true
-      - uses: gradle/actions/setup-gradle@ed408507eac070d1f99cc633dbcf757c94c7933a # v4
+      - uses: gradle/actions/setup-gradle@8da46b539cd8fe6ab27ca75128919a18d757604c # v6.4.1
       - name: Build the pinned OpenSSL with the original CLI
         shell: msys2 {0}
         run: |
@@ -1052,7 +1086,7 @@ jobs:
             throw 'The window did not open'
           }
           Get-Process -Name NekoKEM -ErrorAction SilentlyContinue | Stop-Process
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: always()
         with:
           name: compose-windows-x86_64

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Native Apple Silicon dependency used by both the CLI and Tauri application.
+# Native Apple Silicon dependency used by both the CLI and the SwiftUI application.
 set -Eeuo pipefail
 
 readonly OPENSSL_VERSION=4.1.0

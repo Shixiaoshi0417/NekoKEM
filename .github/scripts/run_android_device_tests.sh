@@ -82,6 +82,24 @@ adb shell am instrument -w -e languagePhase layout -e screenshotPrefix small-lig
 grep -Fx 'INSTRUMENTATION_RESULT: result=temporary-key-tests-passed' "$report_dir/layout-small-light.txt"
 grep -Fx 'INSTRUMENTATION_CODE: -1' "$report_dir/layout-small-light.txt"
 
+# The MIUIX pages as a 6.7-inch phone shows them (393x873 dp, as 1080x2400 at 440 dpi), default font
+# size, dark, Chinese. Screenshots fail on a display taller than the emulator's own 1080x1920, so the
+# same dp size is rendered at 864x1920 and 352 dpi.
+# The display returns to the small light layout for the minified run that follows.
+adb shell am force-stop com.shixiaoshi0417.nekokem
+adb shell wm size 864x1920
+adb shell wm density 352
+adb shell settings put system font_scale 1.0
+adb shell cmd uimode night yes
+adb shell am instrument -w -e languagePhase phone -e screenshotPrefix phone-dark "$runner" | tee "$report_dir/phone-dark.txt"
+grep -Fx 'INSTRUMENTATION_RESULT: result=temporary-key-tests-passed' "$report_dir/phone-dark.txt"
+grep -Fx 'INSTRUMENTATION_CODE: -1' "$report_dir/phone-dark.txt"
+adb shell am force-stop com.shixiaoshi0417.nekokem
+adb shell wm size 1080x1920
+adb shell wm density 480
+adb shell settings put system font_scale 1.5
+adb shell cmd uimode night no
+
 collect_evidence
 python3 - "$report_dir/screens.tar.gz" <<'PY'
 import sys
@@ -98,6 +116,9 @@ with tarfile.open(sys.argv[1], 'r:gz') as archive:
         for name in ('files', 'keys', 'contacts', 'settings', 'about'):
             image = archive.extractfile(f'i18n-screens/{prefix}-miuix-{name}.png')
             assert image is not None and image.read(8) == b'\x89PNG\r\n\x1a\n'
+    for name in ('contact-detail', 'contact-verify', 'keys', 'settings'):
+        image = archive.extractfile(f'i18n-screens/phone-dark-miuix-{name}.png')
+        assert image is not None and image.read(8) == b'\x89PNG\r\n\x1a\n'
     for name in ('contacts-selected', 'contacts-multi-select', 'predictive-back'):
         image = archive.extractfile(f'i18n-screens/{name}.png')
         assert image is not None and image.read(8) == b'\x89PNG\r\n\x1a\n'

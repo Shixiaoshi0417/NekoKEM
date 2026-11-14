@@ -47,12 +47,6 @@ object NativeBridge {
 
     external fun nativeCoreTest(): String
 
-    external fun nativeGenerateKeypair(
-        publicKeyPath: String,
-        privateKeyPath: String,
-        password: ByteArray,
-    ): Int
-
     /** Never overwrites: fails if either key file already exists. */
     external fun nativeGenerateKeypairWithPassword(
         publicKeyPath: String,
@@ -63,11 +57,6 @@ object NativeBridge {
     /** Rotation after explicit confirmation: replaces both key files. */
     external fun nativeReplaceKeypairWithPassword(
         publicKeyPath: String,
-        privateKeyPath: String,
-        password: ByteArray,
-    ): Int
-
-    external fun nativeUnlockPrivateKey(
         privateKeyPath: String,
         password: ByteArray,
     ): Int
@@ -88,8 +77,6 @@ object NativeBridge {
         publicKeyPath: String,
         outputPath: String,
     ): Int
-
-    external fun nativeDeletePrivateKey(privateKeyPath: String): Int
 
     /** A directory flock shared with Core commits; callers must release it. */
     external fun nativeAcquirePairLock(keyPath: String): Int
