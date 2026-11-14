@@ -47,7 +47,7 @@ SIGKILL 等强制终止仍可能留下暂存文件，确认无进程使用后仅
 
 导入 NKPR 必须是当前用户拥有、权限为 `0600`、只有一个硬链接的普通文件，且没有扩展 ACL 的 allow 条目；不能用宽松权限替代这些检查。私有目录要求当前用户所有、`0700`，扩展 ACL 只允许空或 deny-only。普通文件先 `fsync` 再强制 `F_FULLFSYNC`，父目录使用 `fsync`；失败或不支持时拒绝，不静默降级。文件系统大小写或 Unicode 等价名称导致的密钥输出别名会触发拒绝及进程内回滚。细节、失败边界和原生测试范围见 [SECURITY-DESIGN.md](SECURITY-DESIGN.md)。
 
-Core 4.0 新增 NKEM v4 多接收方容器；NKEM v3、NKPR v1、密码算法、KDF 参数与 64 KiB 流式分块均保持不变。CLI 和 GUI 使用 ad-hoc hardened-runtime 签名，用于结构完整性检查，未使用 Developer ID，也未进行 Apple 公证；不能证明发布者身份或保证下载后通过 Gatekeeper。本项目仍是未经独立专业安全审计的实验性工具，不应用于保护重要或敏感数据。
+Core 5.0 读写 NKEM v3、v4、v5 和 NKPR v1、v2；密码算法、KDF 参数与 64 KiB 流式分块与其他平台相同。CLI 和 GUI 使用 ad-hoc hardened-runtime 签名，用于结构完整性检查，未使用 Developer ID，也未进行 Apple 公证；不能证明发布者身份或保证下载后通过 Gatekeeper。本项目仍是未经独立专业安全审计的实验性工具，不应用于保护重要或敏感数据。
 
 ---
 
@@ -101,4 +101,4 @@ Simplified Chinese, Traditional Chinese, English, Japanese and Korean are suppor
 
 An imported NKPR must be a current-user-owned regular file with mode `0600`, one hard link and no allow entries in its extended ACL. Broad permissions cannot replace these checks. Private directories require current-user ownership and mode `0700`; only empty or deny-only extended ACLs are accepted. Regular files require `fsync` followed by `F_FULLFSYNC`; parent directories require `fsync`. Failure or lack of support rejects the operation rather than silently downgrading. Filesystem case/Unicode-equivalent key-output aliases are rejected with process-local rollback. See [SECURITY-DESIGN.md](SECURITY-DESIGN.md) for details, failure boundaries and native test coverage.
 
-Core 4.0 adds the NKEM v4 multi-recipient container; NKEM v3, NKPR v1, algorithms, KDF parameters and 64 KiB streaming chunks are unchanged. CLI and GUI use ad-hoc hardened-runtime signing for structural integrity checks, without Developer ID or Apple notarization. This neither authenticates the publisher nor guarantees Gatekeeper acceptance after downloading. The project remains experimental, without an independent professional security audit, and must not protect important or sensitive data.
+Core 5.0 reads and writes NKEM v3, v4 and v5 and NKPR v1 and v2; algorithms, KDF parameters and 64 KiB streaming chunks match the other platforms. CLI and GUI use ad-hoc hardened-runtime signing for structural integrity checks, without Developer ID or Apple notarization. This neither authenticates the publisher nor guarantees Gatekeeper acceptance after downloading. The project remains experimental, without an independent professional security audit, and must not protect important or sensitive data.

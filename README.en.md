@@ -6,12 +6,13 @@
   <img src="docs/icon-rounded.png" alt="NekoKEM project icon" width="160">
 </p>
 
-NekoKEM is an experimental post-quantum file encryption tool for learning the OpenSSL EVP API. It supports NKEM v3 (one recipient) and NKEM v4 (several recipients) Hybrid file containers.
+NekoKEM is an experimental post-quantum file encryption tool for learning the OpenSSL EVP API. By default it writes NKEM v5 file containers signed by the sender (1 to 64 recipients); unsigned encryption writes NKEM v3 (one recipient) or NKEM v4 (several recipients) Hybrid file containers.
 
 | Mode | Key establishment | KDF | File encryption | Container |
 |---|---|---|---|---|
-| v3 hybrid (default) | X448 + ML-KEM-1024 | HKDF-SHA512 | AES-256-GCM | version 3 / algorithm id 3 |
-| v4 multi-recipient | X448 + ML-KEM-1024 per recipient | HKDF-SHA512 | AES-256-GCM key wrap and data, HMAC-SHA512 header MAC | version 4 / algorithm id 4 |
+| v5 signed (default) | X448 + ML-KEM-1024 per recipient | HKDF-SHA512 | As v4, plus an encrypted Ed448 + ML-DSA-87 sender signature | version 5 / algorithm id 5 |
+| v3 hybrid (unsigned, one recipient) | X448 + ML-KEM-1024 | HKDF-SHA512 | AES-256-GCM | version 3 / algorithm id 3 |
+| v4 multi-recipient (unsigned) | X448 + ML-KEM-1024 per recipient | HKDF-SHA512 | AES-256-GCM key wrap and data, HMAC-SHA512 header MAC | version 4 / algorithm id 4 |
 
 The project does not implement cryptographic algorithms itself and does not depend on liboqs. **It has not undergone a security audit, must not be considered production-grade software, and must not be used to protect important or sensitive data.**
 
@@ -102,7 +103,7 @@ interface languages are updated. Cryptographic parameters, file formats and secr
 remain unchanged. See the [desktop GUI documentation](desktop/README.md#public-key-contacts--公钥通讯录).
 This feature is available from v3.3.2; v3.3.1 and earlier do not include it.
 
-Desktop encryption and decryption report an existing output before writing; confirm replacement and retry, re-entering the decryption password. Unconfirmed operations publish atomically without replacement, so a target created during the operation is also preserved; on volumes with neither hard links nor a no-replace rename (FAT or exFAT on macOS, some network mounts), the commit instead checks the target immediately before an ordinary rename. The backend accepts replacement only at the exact paths from its preceding `key-exists` or `output-exists` response in the same session, once within five minutes and consumed by the next operation. POSIX pasted keys prefer a safe `$XDG_RUNTIME_DIR`, then on macOS the per-user temporary directory (outside Time Machine), then private `~/.nekokem-tmp`; staging disables stdio buffering and omits `fsync`. Capabilities grant only event listening, unlistening and native open/save dialogs. Navigation allows only the platform local origin, rejecting HTTPS and new windows. Recipient lists show full fingerprints; names drop controls, separators and every Unicode format character, keeping a zero-width joiner or non-joiner only between two visible non-ASCII characters.
+Desktop encryption and decryption report an existing output before writing; confirm replacement and retry, re-entering the decryption password. Unconfirmed operations publish atomically without replacement, so a target created during the operation is also preserved; on volumes with neither hard links nor a no-replace rename (FAT or exFAT on macOS, some network mounts), the commit instead checks the target immediately before an ordinary rename. The backend accepts replacement only at the exact paths from its preceding `key-exists` or `output-exists` response in the same session, once within five minutes and consumed by the next operation. POSIX pasted keys prefer a safe `$XDG_RUNTIME_DIR`, then on macOS the per-user temporary directory (outside Time Machine), then private `~/.nekokem-tmp`; staging disables stdio buffering and omits `fsync`. Recipient lists show full fingerprints; names drop controls, separators and every Unicode format character, keeping a zero-width joiner or non-joiner only between two visible non-ASCII characters.
 
 ## Historical release v3.2.0
 
@@ -167,7 +168,7 @@ v5.1.0 provides a native `arm64` CLI and a native SwiftUI GUI for M-series Apple
 
 The CLI shares Linux's argument parser, five-option menu and language catalogs. The GUI uses Apple's Liquid Glass design on macOS 26, runs on macOS 13 or newer, and has a fallback appearance on earlier systems. Both statically link pinned OpenSSL 4.1.0 and keep its arm64 assembly acceleration; they still depend on macOS system libraries and frameworks. The CLI is built with a macOS 11.0 deployment target and its native CI runs on `macos-15`; the GUI is built with the macOS 26 SDK and its CI runs on `macos-26`. This does not establish testing on real machines with earlier systems, or the compatibility and performance of every M-series generation.
 
-The macOS file layer preserves strict ownership, permissions, symbolic-link and hard-link checks, permits only empty or deny-only extended ACLs on protected files/directories, and checks APFS/HFS+ case and Unicode name aliases. Regular output files require `fsync` and `F_FULLFSYNC`; commits require parent-directory `fsync`, without silent fallback on failure. See the [macOS filesystem design](macos/SECURITY-DESIGN.md) for limits and test boundaries. Core 4.0 adds the NKEM v4 multi-recipient container; NKEM v3, NKPR v1, cryptographic parameters and 64 KiB streaming chunks are unchanged. Packages use ad-hoc signing only, without Developer ID or Apple notarization; this neither authenticates the publisher nor guarantees Gatekeeper acceptance.
+The macOS file layer preserves strict ownership, permissions, symbolic-link and hard-link checks, permits only empty or deny-only extended ACLs on protected files/directories, and checks APFS/HFS+ case and Unicode name aliases. Regular output files require `fsync` and `F_FULLFSYNC`; commits require parent-directory `fsync`, without silent fallback on failure. See the [macOS filesystem design](macos/SECURITY-DESIGN.md) for limits and test boundaries. Core 5.0 reads and writes NKEM v3, v4 and v5 and NKPR v1 and v2, with the same cryptographic parameters and 64 KiB streaming chunks as the other platforms. Packages use ad-hoc signing only, without Developer ID or Apple notarization; this neither authenticates the publisher nor guarantees Gatekeeper acceptance.
 
 ## Linux GUI
 
@@ -385,6 +386,10 @@ v3 uses X448, ML-KEM-1024, combined shared secrets, and HKDF-SHA512, separating 
 ## NKEM v4 multi-recipient file format
 
 v4 encrypts the file data once under a random 32-byte file key and stores one entry per recipient, up to 64: an X448 ephemeral public key, an ML-KEM-1024 ciphertext and the file key wrapped with AES-256-GCM. The wrap key is derived with HKDF-SHA512 from that recipient's two shared secrets and binds the X448 ephemeral and recipient public keys. An HMAC-SHA512 header MAC covers the header, salt and every recipient entry and commits to the file key, so all recipients decrypt the same content. Entries carry no fingerprint and decryption tries every entry. Unlinkability applies only to non-recipients without the corresponding private key: recipients can recognize their own entries and confirm their participation across files. Uniform errors and full trial decryption do not prevent recipients from doing so. See [`docs/NKEM-v4.md`](docs/NKEM-v4.md) for the full layout. `nekokem_encrypt_file_multi_with_progress()` writes v4 for two or more public keys and v3 for one.
+
+## NKEM v5 signed file format
+
+v5 adds sender authentication to the v4 multi-recipient construction: the sender signs the whole container with a four-component identity key (X448, ML-KEM-1024, Ed448, ML-DSA-87) using a hybrid Ed448 + ML-DSA-87 signature, and a file is accepted only when both signatures verify. The signature and the sender's identity are encrypted under the file key, so only recipients learn who sent the file. One format covers 1 to 64 recipients; identity private keys are stored as NKPR v2, and older two-component keys can be upgraded. See [`docs/NKEM-v5.md`](docs/NKEM-v5.md) for the layout, signature policy and upgrade rules. `nekokem_encrypt_file_v5_with_progress()` writes v5 by default; `nekokem_decrypt_file_verified_with_progress()` decrypts v3, v4 and v5 and checks the signature against the policy.
 
 ## Security implementation
 
