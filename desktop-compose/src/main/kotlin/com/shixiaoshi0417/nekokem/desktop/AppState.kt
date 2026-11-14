@@ -35,7 +35,7 @@ class AppState(private val scope: CoroutineScope, private val files: FileChooser
     var view by mutableStateOf(View.Files); private set
     var language by mutableStateOf("en"); private set
     var selectedLanguage by mutableStateOf("system"); private set
-    var version by mutableStateOf("5.0.0"); private set
+    var version by mutableStateOf("5.1.0"); private set
     var loaded by mutableStateOf(false); private set
     var busy by mutableStateOf(false); private set
     var cancelling by mutableStateOf(false); private set

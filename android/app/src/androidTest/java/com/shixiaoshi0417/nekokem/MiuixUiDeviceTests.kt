@@ -32,7 +32,12 @@ internal fun useMaterialStyle(context: Context) {
  * and captured, dialogs open and close as MIUIX dialogs, and the interface
  * style switches to Material and back from either style's settings page.
  */
-internal fun runMiuixUiTests(instrumentation: Instrumentation, screenshotPrefix: String) {
+internal fun runMiuixUiTests(
+    instrumentation: Instrumentation,
+    screenshotPrefix: String,
+    language: String = "en",
+    pagesOnly: Boolean = false,
+) {
     val context = instrumentation.targetContext
     val priorLanguage = AppLanguages.selection(context)
     val automation = instrumentation.uiAutomation
@@ -50,7 +55,7 @@ internal fun runMiuixUiTests(instrumentation: Instrumentation, screenshotPrefix:
     check(context.getSharedPreferences("update_settings", Context.MODE_PRIVATE).edit().clear().commit())
     check(UpdateSettingsStore.read(context).autoCheck) { "Automatic update checks are off by default" }
     Releases.source = releaseStub("99.0.0")
-    instrumentation.runOnMainSync { check(AppLanguages.setSelection(context, "en")) }
+    instrumentation.runOnMainSync { check(AppLanguages.setSelection(context, language)) }
     var activity: Activity? = null
     fun find(root: AccessibilityNodeInfo?, predicate: (AccessibilityNodeInfo) -> Boolean): AccessibilityNodeInfo? {
         if (root == null) return null
@@ -246,14 +251,15 @@ internal fun runMiuixUiTests(instrumentation: Instrumentation, screenshotPrefix:
         await("Files page") { exact(string(R.string.navigation_files)) != null }
         capture("files")
         val pages = listOf(
-            R.string.tab_keys to R.string.navigation_keys,
-            R.string.tab_contacts to R.string.navigation_contacts,
-            R.string.tab_settings to R.string.navigation_settings,
+            Triple(R.string.tab_keys, R.string.navigation_keys, "keys"),
+            Triple(R.string.tab_contacts, R.string.navigation_contacts, "contacts"),
+            Triple(R.string.tab_settings, R.string.navigation_settings, "settings"),
         )
-        for ((tab, title) in pages) {
+        // The file names stay the same in every language.
+        for ((tab, title, name) in pages) {
             clickNavigationTab(instrumentation, string(tab))
             await("page ${string(title)}") { exact(string(title)) != null }
-            capture(string(tab).lowercase())
+            capture(name)
             if (tab == R.string.tab_contacts) {
                 // A card opens the contact's page; back returns to the list.
                 var card: AccessibilityNodeInfo? = null
@@ -283,6 +289,8 @@ internal fun runMiuixUiTests(instrumentation: Instrumentation, screenshotPrefix:
         click(string(R.string.tab_about))
         await("About page") { reveal(string(R.string.action_check_update)); exact(string(R.string.action_check_update)) != null }
         capture("about")
+        // A screenshot run ends here; dialogs and the style switch are covered by the full run.
+        if (pagesOnly) return
         // About checks on demand; skipping the version is remembered.
         click(string(R.string.action_check_update))
         await("manual update prompt") { exact(updateTitle) != null }

@@ -41,7 +41,7 @@ class LanguageTests(unittest.TestCase):
                 self.assertEqual(0, r.returncode); self.assertIn(errors[tag], r.stderr)
                 self.assertNotIn(errors[tag], r.stdout)
                 r = self.cli('--lang', tag, '--version')
-                self.assertEqual((0, 'NekoKEM 5.0.0\n', ''), (r.returncode, r.stdout, r.stderr))
+                self.assertEqual((0, 'NekoKEM 5.1.0\n', ''), (r.returncode, r.stdout, r.stderr))
                 r = self.cli('--lang', tag, 'unknown')
                 self.assertEqual(1, r.returncode); self.assertIn(LABELS[tag], r.stderr); self.assertEqual('', r.stdout)
     def test_posix_regions_and_unsupported_fallback(self):
@@ -111,8 +111,8 @@ class LanguageTests(unittest.TestCase):
             fingerprint = self.cli('--lang',tag,input='4\n1\nkeys/public.key\n5\n')
             self.assertEqual(0,fingerprint.returncode)
             matched = re.findall(r'(?:[0-9A-F]{2}:){31}[0-9A-F]{2}',fingerprint.stdout)
-            # An identity key shows its identity fingerprint, then the legacy one.
-            self.assertEqual(2,len(matched)); fingerprints.append(tuple(matched))
+            # An identity key shows only its identity fingerprint.
+            self.assertEqual(1,len(matched)); fingerprints.append(tuple(matched))
             encrypted = self.cli('--lang',tag,'encrypt','hybrid','input',tag+'.nkem','keys/public.key',input=password+'\n')
             self.assertEqual(0,encrypted.returncode,encrypted.stderr)
             header=(self.root/(tag+'.nkem')).read_bytes()

@@ -94,6 +94,7 @@ fun main(args: Array<String>): Unit = runBlocking(Dispatchers.Main) {
         state.switchTab(View.Fingerprint); settle()
         state.setPath(PathField.KeyPath, file("alice.public.key"))
         state.submit(); settle()
+        shot("fingerprint")
         state.result?.fingerprint?.let(state::showQr)
         shot("fingerprint-qr")
         state.closeQr()

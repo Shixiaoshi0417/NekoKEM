@@ -70,7 +70,6 @@ pub struct Outcome {
     #[serde(skip_serializing_if="Option::is_none")] pub format:Option<i32>,
     #[serde(skip_serializing_if="Option::is_none")] pub signature:Option<Signature>,
     // Fingerprint and upgrade: the X448 + ML-KEM-1024 fingerprint NekoKEM 4.x shows.
-    #[serde(skip_serializing_if="Option::is_none")] pub legacy_fingerprint:Option<String>,
     #[serde(skip_serializing_if="Option::is_none")] pub can_verify:Option<bool>,
 }
 // Core decides the status and matches the signer; the GUI only reports it.
@@ -305,7 +304,7 @@ unsafe extern "C" fn progress<F:Fn(u64,u64)>(done:u64,total:u64,data:*mut c_void
     // Core borrows this stack-owned context synchronously; it never retains the pointer.
     let state=unsafe{&mut *(data as *mut ProgressContext<F>)};
     if state.job.cancelled.load(Ordering::Acquire) {return 0;}
-    if done==total || state.last_emit.map_or(true,|at|at.elapsed()>=Duration::from_millis(100)) {
+    if done==total || state.last_emit.is_none_or(|at|at.elapsed()>=Duration::from_millis(100)) {
         // Release uses panic=abort, so catch_unwind cannot recover a panic here.
         // The emitter must remain non-panicking; IPC errors are ignored by its caller.
         (state.emit)(done,total); state.last_emit=Some(Instant::now());
@@ -358,7 +357,7 @@ pub fn execute<F:Fn(u64,u64)>(backend:&Backend,request:Request,job:Arc<Job>,emit
         if unsafe{nekokem_upgrade_to_identity_keys(public.as_ptr(),private.as_ptr(),request.password.as_ptr(),request.password.len())}!=1 {
             return Err(Failure::new("core-error"));
         }
-        return Ok(Outcome{output:Some(request.public_path.clone()),fingerprint:fingerprint(&public),legacy_fingerprint:legacy_fingerprint(&public),can_verify:Some(true),..Outcome::default()});
+        return Ok(Outcome{output:Some(request.public_path.clone()),fingerprint:fingerprint(&public),can_verify:Some(true),..Outcome::default()});
     }
     let mut staged_output=if request.stage {Some(Staged::file_output()?)} else {None};
     let target=match &staged_output {
@@ -374,10 +373,9 @@ pub fn execute<F:Fn(u64,u64)>(backend:&Backend,request:Request,job:Arc<Job>,emit
         if same_file(&path(&target)?,&path(&request.sign_key_path)?)==Some(true) {return Err(Failure::new("output-is-key"));}
     }
     // Core refuses an output that is the key in use; this names the reason.
-    if matches!(request.kind,Kind::Encrypt|Kind::Decrypt|Kind::ExportLegacy) && !request.key_path.is_empty() && !request.paste {
-        if same_file(&path(&target)?,&path(&request.key_path)?)==Some(true) {
-            return Err(Failure::new("output-is-key"));
-        }
+    if matches!(request.kind,Kind::Encrypt|Kind::Decrypt|Kind::ExportLegacy) && !request.key_path.is_empty() && !request.paste
+        && same_file(&path(&target)?,&path(&request.key_path)?)==Some(true) {
+        return Err(Failure::new("output-is-key"));
     }
     for key in &request.key_paths {
         if same_file(&path(&target)?,&path(key)?)==Some(true) {return Err(Failure::new("output-is-key"));}
@@ -410,7 +408,7 @@ pub fn execute<F:Fn(u64,u64)>(backend:&Backend,request:Request,job:Arc<Job>,emit
     let result=(|| {
         if request.kind==Kind::Fingerprint {
             let fingerprint=fingerprint(&keys[0]).ok_or_else(||Failure::new("core-error"))?;
-            return Ok(Outcome{fingerprint:Some(fingerprint),legacy_fingerprint:legacy_fingerprint(&keys[0]),can_verify:Some(can_verify(&keys[0])),..Outcome::default()});
+            return Ok(Outcome{fingerprint:Some(fingerprint),can_verify:Some(can_verify(&keys[0])),..Outcome::default()});
         }
         // Exporting a legacy key reads only the key and writes the output.
         let input=if request.kind==Kind::ExportLegacy {CString::default()} else {path(&request.input)?};
@@ -537,7 +535,7 @@ mod tests {
     fn request(kind:Kind)->Request {Request{stage:false,id:"test-job".into(),input:String::new(),output:String::new(),key_path:String::new(),public_path:String::new(),private_path:String::new(),password:Zeroizing::new(String::new()),confirmation:Zeroizing::new(String::new()),key_text:Zeroizing::new(String::new()),paste:false,replace:false,overwrite:false,contacts:Vec::new(),key_paths:Vec::new(),
         // Signing has its own tests; the others check one behaviour of all formats.
         sign_key_path:String::new(),unsigned:kind==Kind::Encrypt,require_signature:false,kind}}
-    fn run(backend:&Arc<Backend>,r:Request)->Result<Outcome,Failure>{let job=backend.reserve(&r)?;let _hold=Reservation{backend:backend.clone(),job:job.clone()};execute(&backend,r,job,|_,_|{})}
+    fn run(backend:&Arc<Backend>,r:Request)->Result<Outcome,Failure>{let job=backend.reserve(&r)?;let _hold=Reservation{backend:backend.clone(),job:job.clone()};execute(backend,r,job,|_,_|{})}
     struct Directory(PathBuf);
     impl Directory{fn new()->Self{let path=std::env::temp_dir().join(format!("nekokem-rust-{}-{}",std::process::id(),SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_nanos()));let name=super::path(path.to_str().unwrap()).unwrap();assert_eq!(unsafe{desktop_private_directory(name.as_ptr())},1);Self(path)}fn file(&self,name:&str)->String{self.0.join(name).to_str().unwrap().into()}}
     impl Drop for Directory {fn drop(&mut self){let _=fs::remove_dir_all(&self.0);}}
@@ -894,14 +892,14 @@ mod tests {
         run(&backend,decrypt("group.nkem","group.out")).unwrap();
         assert_eq!(fs::read(keys.file("group.out")).unwrap(),data);
 
-        // Both fingerprints; the exported legacy key cannot verify.
+        // The exported legacy key cannot verify.
         let mut r=request(Kind::Fingerprint);r.key_path=alice.clone();let outcome=run(&backend,r).unwrap();
         assert_eq!((outcome.fingerprint.as_deref(),outcome.can_verify),(Some(alice_fingerprint.as_str()),Some(true)));
-        let legacy=outcome.legacy_fingerprint.unwrap();
+        let legacy=legacy_fingerprint(&path(&alice).unwrap()).unwrap();
         let mut r=request(Kind::ExportLegacy);r.key_path=alice.clone();r.output=keys.file("alice-legacy.pub");run(&backend,r).unwrap();
         let mut r=request(Kind::ExportLegacy);r.key_path=alice.clone();r.output=keys.file("alice-legacy.pub");assert_eq!(run(&backend,r).err().unwrap().code,"output-exists");
         let mut r=request(Kind::Fingerprint);r.key_path=keys.file("alice-legacy.pub");let outcome=run(&backend,r).unwrap();
-        assert_eq!((outcome.fingerprint,outcome.legacy_fingerprint,outcome.can_verify),(Some(legacy.clone()),Some(legacy),Some(false)));
+        assert_eq!((outcome.fingerprint,outcome.can_verify),(Some(legacy),Some(false)));
         assert_eq!(staging_entries(),staged);
     }
     #[test]
@@ -922,7 +920,7 @@ mod tests {
         assert_eq!(run(&backend,upgrade("")).err().unwrap().code,"password-empty");
         assert_eq!(run(&backend,upgrade("wrong")).err().unwrap().code,"core-error");
         let outcome=run(&backend,upgrade("public test password")).unwrap();
-        assert_eq!((outcome.legacy_fingerprint.as_deref(),outcome.can_verify),(Some(legacy.as_str()),Some(true)));
+        assert_eq!((legacy_fingerprint(&path(&public).unwrap()),outcome.can_verify),(Some(legacy.clone()),Some(true)));
         assert_ne!(outcome.fingerprint.as_deref(),Some(legacy.as_str()));
         assert_eq!(run(&backend,upgrade("public test password")).err().unwrap().code,"already-identity");
         // Old files still decrypt with the same password; the key now signs.

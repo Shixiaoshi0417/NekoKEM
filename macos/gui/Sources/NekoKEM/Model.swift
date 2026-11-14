@@ -33,7 +33,6 @@ struct Outcome {
     var recipients: [String] = []
     var format: Int? = nil
     var signature: Signature? = nil
-    var legacyFingerprint: String? = nil
     var canVerify: Bool? = nil
 
     init(fingerprint: String? = nil) { self.fingerprint = fingerprint }
@@ -43,7 +42,6 @@ struct Outcome {
         fingerprint = fields["fingerprint"] as? String
         recipients = fields["recipients"] as? [String] ?? []
         format = fields["format"] as? Int
-        legacyFingerprint = fields["legacyFingerprint"] as? String
         canVerify = fields["canVerify"] as? Bool
         if let signed = fields["signature"] as? [String: Any] {
             signature = Signature(status: signed["status"] as? String ?? "unsigned", fingerprint: signed["fingerprint"] as? String,

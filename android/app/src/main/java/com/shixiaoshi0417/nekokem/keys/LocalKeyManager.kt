@@ -186,22 +186,6 @@ class LocalKeyManager internal constructor(
         password.fill(0)
     }
 
-    /** One-shot unlock check; Core frees the parsed EVP keys before return. */
-    fun unlockPrivateKey(password: ByteArray): Int = try {
-        if (password.isEmpty()) {
-            NativeBridge.RESULT_INVALID_ARGUMENT
-        } else {
-            NativeBridge.nativeUnlockPrivateKey(
-                privateKey.absolutePath,
-                password,
-            )
-        }
-    } catch (_: Exception) {
-        RESULT_STORAGE_ERROR
-    } finally {
-        password.fill(0)
-    }
-
     fun encryptFile(input: File, output: File): Int = try {
         NativeBridge.nativeEncryptFile(
             input.absolutePath,

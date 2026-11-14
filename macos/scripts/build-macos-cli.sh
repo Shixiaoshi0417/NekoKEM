@@ -51,8 +51,8 @@ version_probe="$build_root/openssl-version-check"
 xcrun strip -x "$output/nekokem"
 codesign --force --sign - --timestamp=none --options runtime "$output/nekokem"
 python3 "$repo_root/macos/tests/check_macho.py" "$output/nekokem"
-[[ $("$output/nekokem" --version) == 'NekoKEM 5.0.0' ]] || {
-    echo 'CLI version does not match 5.0.0' >&2; exit 1;
+[[ $("$output/nekokem" --version) == 'NekoKEM 5.1.0' ]] || {
+    echo 'CLI version does not match 5.1.0' >&2; exit 1;
 }
 
 if [[ "$build_tests" == 1 ]]; then
@@ -122,7 +122,7 @@ root, repo, cc = Path(sys.argv[1]), Path(sys.argv[2]), sys.argv[3]
 metadata = {
     'source_sha': os.environ.get('GITHUB_SHA') or subprocess.check_output(['git', '-C', str(repo), 'rev-parse', 'HEAD'], text=True).strip(),
     'run_id': os.environ.get('GITHUB_RUN_ID'), 'platform': 'macos-arm64',
-    'version': '5.0.0', 'minimum_macos': '11.0', 'openssl_version': '4.1.0',
+    'version': '5.1.0', 'minimum_macos': '11.0', 'openssl_version': '4.1.0',
     'openssl_source_sha256': '50c17baf54cb008f6ce42d50deb4b28050a1aad711636cabd4b241c7e90cc2fd',
     'compiler': subprocess.check_output([cc, '--version'], text=True).splitlines()[0],
     'sdk_version': subprocess.check_output(['xcrun', '--sdk', 'macosx', '--show-sdk-version'], text=True).strip(),

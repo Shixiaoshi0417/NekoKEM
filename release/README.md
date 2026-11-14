@@ -1,15 +1,15 @@
 # Build workflows and Android signing
 
-GitHub Actions has three workflow definitions:
+GitHub Actions has four workflow definitions:
 
 - `ci.yml` (`CI`) builds and tests pull requests targeting any branch, pushes to
   `main`, and manual runs. It contains the Linux Core/analyzer/sanitizer/fuzz
   suite, x86_64/aarch64 release-package and installer tests, Android JVM and
   API 26/29/35/36 device tests, native Windows CLI security/interoperability/performance
-  checks, Windows GUI frontend/Rust/Core/EXE-launch checks, and native macOS
+  checks, the Windows Compose GUI bridge/screenshot/installer checks, and native macOS
   arm64 CLI/Core/sanitizer/filesystem/interoperability and GUI/app/package checks,
-  plus Linux x86_64/ARM64 GUI Rust/Core, private staging, ELF/package and actual
-  WebKit window/normal-close checks.
+  plus Linux x86_64/ARM64 Compose GUI bridge, screenshot, ELF/package and
+  installed-window checks.
 - `release.yml` (`Release`) builds artifacts only when run by hand. It
   produces Linux x86_64/aarch64 archives, a signed Android arm64 APK, and Windows
   CLI/GUI packages, macOS arm64 CLI/GUI packages and Linux x86_64/ARM64 GUI
@@ -25,6 +25,9 @@ GitHub Actions has three workflow definitions:
   or its attestation.
 - `publish.yml` (`Publish`) turns one successful Release run of `main` into a
   GitHub Release. It runs only from `main` and only by hand.
+- `fuzz.yml` (`Fuzz`) runs long AFL++ sessions against the four parser and
+  decryption harnesses every Sunday, by hand, or for one minute per target when
+  the workflow itself changes.
 
 The shared Linux/Windows/macOS CLI build scripts default to `NEKOKEM_BUILD_TESTS=1`.
 Release sets it to `0`, which omits the Linux cryptographic smoke test and Windows
@@ -39,7 +42,7 @@ uploads artifacts to Actions. Publishing is a separate maintainer step:
    with the `<!-- RELEASE_ZH_METADATA -->` and `<!-- RELEASE_EN_METADATA -->`
    placeholders) into `main`, then wait for that commit's CI run.
 2. Run Release on `main` for the same commit.
-3. Run Publish: `gh workflow run publish.yml --ref main -f tag=v5.0.0 -f ci_run=<CI run ID> -f release_run=<Release run ID>`.
+3. Run Publish: `gh workflow run publish.yml --ref main -f tag=v5.1.0 -f ci_run=<CI run ID> -f release_run=<Release run ID>`.
 
 Publish checks that both runs succeeded on the same `main` commit, that the CI
 run came from a push to `main` or a manual run and the Release run from a manual
@@ -129,8 +132,8 @@ it promptly and let the artifact expire. Plaintext signing keys/passwords and
 the recovery private key must never be uploaded. Plaintext signing material is
 removed even when the job fails.
 
-The v5.0.0 public release contains 14 packages, with the earlier Tauri desktop app.
-From the release after it, the desktop packages are the Compose (Windows, Linux) and
+Releases up to v5.0.0 contain 14 packages, with the earlier Tauri desktop app.
+From v5.1.0, the desktop packages are the Compose (Windows, Linux) and
 SwiftUI (macOS) apps, and the Windows installer joins them, for 15 packages:
 
 | Platform | Public assets |
@@ -145,13 +148,13 @@ Publish only packages from the successful Release run for the exact CI-validated
 source; the Publish workflow enforces this. One more asset, top-level
 `SHA256SUMS.txt`, lists all the packages. The notes record the source commit,
 CI/Release run links, Android signer and public asset hashes, as in the
-[Chinese-then-English v5.0.0 notes](v5.0.0.md). Releases after v4.1.0 also carry
+[Chinese-then-English v5.1.0 notes](v5.1.0.md). Releases after v4.1.0 also carry
 build provenance attestations; v4.1.0 and earlier do not.
 A rotation's encrypted signing recovery envelope is never selected for
 publication; **do not attach it to the public GitHub Release**. Windows application EXEs and
 the installer are unsigned.
 
-Android v5.0.0 uses versionCode `14`, keeps the v3.2.0/v3.3.0 signing identity and
+Android v5.1.0 uses versionCode `16`, keeps the v3.2.0/v3.3.0 signing identity and
 supports an in-place update. Only old-signer v3.1.x installations need backup
 verification and uninstall/reinstall. Keep the existing square artwork for Android,
 use transparent outer white areas for Windows EXE icons, reuse those PNGs for

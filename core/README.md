@@ -1,14 +1,14 @@
 # NekoKEM Core Library
 
 `libnekokem_core.a` 是 NekoKEM 的可复用 C17 Core。CLI、Android JNI 和
-未来的桌面 UI 可以包含 `include/nekokem.h` 并链接该静态库；Core 不依赖
+桌面桥接库（`desktop/bridge`）包含 `include/nekokem.h` 并链接该静态库；Core 不依赖
 `main.c`，也不读取终端或显示交互菜单。
 
 ```sh
 make core
 ```
 
-Core 使用 OpenSSL EVP、NKEM v3（单接收方）、NKEM v4（多接收方）和 NKPR；固定依赖为 OpenSSL 4.1.0。NKEM v3 使用独立的
+Core 使用 OpenSSL EVP、NKEM v3（单接收方）、NKEM v4（多接收方）、带发送方签名的 NKEM v5 和 NKPR v1/v2；固定依赖为 OpenSSL 4.1.0。NKEM v3 使用独立的
 32-byte HKDF salt；NKPR 作为独立私钥容器继续维护。
 
 ## 公共 API
@@ -16,9 +16,9 @@ Core 使用 OpenSSL EVP、NKEM v3（单接收方）、NKEM v4（多接收方）�
 原有函数成功返回 `1`、失败返回 `0`。路径和输出缓冲区由调用者拥有；
 口令只在调用期间借用，Core 不会保存或释放调用者的口令缓冲区。
 
-- `nekokem_generate_keypair()`：生成 X448 + ML-KEM-1024 Hybrid 公钥和
-  受口令保护的 NKPR 私钥。
-- `nekokem_encrypt_file()`：默认生成 NKEM v3 Hybrid 文件。
+- `nekokem_generate_keypair()`：生成四段式身份公钥和受口令保护的 NKPR v2 私钥
+  （其中的 X448 + ML-KEM-1024 用于加解密，见下文 v5 部分）。
+- `nekokem_encrypt_file()`：写出不签名的 NKEM v3 Hybrid 文件；签名的 v5 见下文。
 - `nekokem_decrypt_file()`：接受 NKEM v3 与 v4，其他版本一律拒绝；v4 尝试全部接收方记录
   （匹配后也不提前停止），验证头部 MAC 后才解密数据。Hybrid 路径同时兼容 NKPR
   私钥和旧式明文 Hybrid PEM 私钥。
@@ -47,6 +47,22 @@ Core 使用 OpenSSL EVP、NKEM v3（单接收方）、NKEM v4（多接收方）�
   `NEKOKEM_DELETE_RESIDUE_RETAINED`，调用方必须把它报告为未完整删除；失败返回 0。
 - `nekokem_private_key_requires_password()`：供 UI 在调用解密 API 前决定
   是否显示口令输入框。
+
+签名的 NKEM v5 与四段式身份密钥（X448、ML-KEM-1024、Ed448、ML-DSA-87，
+私钥为 NKPR v2）见 [`docs/NKEM-v5.md`](../docs/NKEM-v5.md)：
+
+- `nekokem_generate_keypair()` 与 `nekokem_replace_keypair()` 写出身份密钥；
+  `nekokem_replace_keypair()` 会覆盖已有密钥，只应在用户明确确认后调用。
+- `nekokem_upgrade_to_identity_keys()`：为 NKPR v1 密钥对补上 Ed448 与 ML-DSA-87，
+  保留原 X448/ML-KEM-1024 密钥和口令，原子替换两个文件。
+- `nekokem_encrypt_file_v5_with_progress()`：默认为 1 至 64 位接收方写出签名的 v5；
+  设置 `NEKOKEM_ENCRYPT_UNSIGNED` 时与 `nekokem_encrypt_file_multi_with_progress()`
+  相同地写出 v3 或 v4。发送方密钥缺失或只有两段时报错，不会静默改为不签名。
+- `nekokem_decrypt_file_verified_with_progress()`：解密 v3、v4、v5，并按
+  `NekoKEMVerifyPolicy`（要求签名、只信任指定签名者）检查；全部检查通过后才提交输出。
+- `nekokem_public_key_can_verify()`、`nekokem_public_key_legacy_fingerprint()`、
+  `nekokem_export_legacy_public_key()`：判断公钥能否验证签名、计算只含两段加密分量的
+  旧版指纹，以及导出 NekoKEM 4.x 可读的两段式公钥。
 
 进度 API 使用 `NEKOKEM_OPERATION_SUCCESS`、`NEKOKEM_OPERATION_ERROR` 和
 `NEKOKEM_OPERATION_CANCELLED`。v3、v4 文件数据均以 64 KiB 流式处理；错误或取消

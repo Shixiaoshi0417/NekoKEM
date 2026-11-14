@@ -411,13 +411,7 @@ private fun LazyListScope.keysPage(state: NekoKEMUiState, actions: NekoKEMAction
             summary = buildList {
                 add(stringResource(R.string.fingerprint_label))
                 add(state.fingerprint ?: stringResource(R.string.not_available))
-                if (state.fingerprint != null) {
-                    add(stringResource(if (state.canSign) R.string.key_identity_status else R.string.key_legacy_status))
-                }
-                state.legacyFingerprint?.let { legacy ->
-                    add(stringResource(R.string.legacy_fingerprint_label))
-                    add(legacy)
-                }
+                if (state.fingerprint != null && !state.canSign) add(stringResource(R.string.key_legacy_status))
             }.joinToString("\n"),
         )
         ButtonPair(
@@ -640,7 +634,7 @@ private fun LazyListScope.contactVerifyPage(contact: PublicKeyContact, state: Ne
             content = MiuixTheme.colorScheme.onPrimary,
             onScan = { actions.onScanContact(contact) },
             onToggleVerified = { actions.onSetContactVerified(contact, !contact.verified) },
-            modifier = Modifier.padding(12.dp),
+            modifier = Modifier.padding(horizontal = 40.dp, vertical = 12.dp),
         )
     }
 }

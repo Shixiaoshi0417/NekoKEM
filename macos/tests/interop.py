@@ -31,17 +31,11 @@ def run(*args, password=b'', cwd=root):
     return process
 
 
-def fingerprints(path):
-    """The key's fingerprint, then the legacy one for an identity key."""
+def fingerprint(path):
+    """The key's only fingerprint: identity for an identity key, legacy otherwise."""
     process = run(password=b'4\n1\n'+str(path).encode('utf-8')+b'\n5\n')
     matches = re.findall(rb'(?<![0-9A-F])(?:[0-9A-F]{2}:){31}[0-9A-F]{2}(?![0-9A-F])', process.stdout)
-    assert len(matches) in (1, 2), (process.stdout, process.stderr)
-    return matches
-
-
-def fingerprint(path):
-    matches = fingerprints(path)
-    assert len(matches) == 1, matches
+    assert len(matches) == 1, (process.stdout, process.stderr)
     return matches[0]
 
 
@@ -65,9 +59,10 @@ if phase == 'macos':
         shutil.copyfile(Path(work)/'keys/public.key', root/'macos-public.key')
         shutil.copyfile(Path(work)/'keys/private.key.enc', root/'macos-private.enc')
     (root/'macos-private.enc').chmod(0o600)
-    identity, macos_legacy = fingerprints('macos-public.key')
+    identity = fingerprint('macos-public.key')
     run('export-legacy-public-key', 'macos-public.key', 'macos-legacy.key')
-    assert fingerprint('macos-legacy.key') == macos_legacy
+    macos_legacy = fingerprint('macos-legacy.key')
+    assert macos_legacy != identity
     (root/'macos-legacy-fingerprint.txt').write_bytes(macos_legacy)
     for name in ['binary', 'empty']:
         run('decrypt', 'hybrid', name+'.linux.nkem', name+'.from-linux', 'linux-private.enc', password=PASSWORD)
@@ -87,8 +82,8 @@ if phase == 'macos':
     shutil.copyfile(root/'linux-private.enc', root/'upgraded.enc')
     (root/'upgraded.enc').chmod(0o600)
     run('upgrade-key', 'upgraded-public.key', 'upgraded.enc', password=PASSWORD)
-    upgraded, upgraded_legacy = fingerprints('upgraded-public.key')
-    assert upgraded_legacy == legacy and upgraded != legacy
+    run('export-legacy-public-key', 'upgraded-public.key', 'upgraded-legacy.key')
+    assert fingerprint('upgraded-legacy.key') == legacy and fingerprint('upgraded-public.key') != legacy
     run('decrypt', 'hybrid', 'binary.linux.nkem', 'binary.upgraded', 'upgraded.enc', password=PASSWORD)
     assert (root/'binary.upgraded').read_bytes() == (root/'binary').read_bytes()
     print('macOS decrypted historical Linux NKEM v3/NKPR v1, signed v5, upgraded the historical key and matched fingerprints')
