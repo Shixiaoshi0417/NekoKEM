@@ -65,7 +65,22 @@ jobs:
           sudo apt-get install --yes --no-install-recommends \
             afl++ build-essential ca-certificates curl perl
 
+      # The build below depends only on the pinned source, this step's flags
+      # and the runner's compiler, so a cached prefix is reused until any of
+      # those changes.
+      - name: Identify the native compiler for the OpenSSL cache
+        id: compiler
+        run: echo "identity=$(gcc --version | sha256sum | cut -d ' ' -f 1)" >> "$GITHUB_OUTPUT"
+
+      - name: Restore the pinned OpenSSL build
+        id: openssl-cache
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: ${{ runner.temp }}/openssl-4.1.0
+          key: fuzz-openssl-4.1.0-${{ steps.compiler.outputs.identity }}-${{ hashFiles('.github/workflows/fuzz.yml') }}
+
       - name: Build OpenSSL 4.1.0
+        if: steps.openssl-cache.outputs.cache-hit != 'true'
         env:
           OPENSSL_VERSION: "4.1.0"
           OPENSSL_SHA256: 50c17baf54cb008f6ce42d50deb4b28050a1aad711636cabd4b241c7e90cc2fd
