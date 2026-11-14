@@ -92,19 +92,9 @@ Windows、macOS 与 Linux 的桌面 GUI 提供“公钥通讯录”页面：
 
 桌面端加解密遇到已有输出时先提示，确认覆盖后重试；解密重试需要重新输入口令。未经确认的操作最终采用原子“不覆盖”提交，操作途中出现的目标也不会被覆盖；在既不支持硬链接也不支持不覆盖重命名的卷上（如 macOS 上的 FAT、exFAT 和部分网络挂载），改为在普通重命名前一刻检查目标。后端仅接受同一会话上次 `key-exists` 或 `output-exists` 返回的完全相同路径，确认在五分钟内有效且被下一次操作消耗。POSIX 粘贴密钥优先使用安全的 `$XDG_RUNTIME_DIR`，macOS 上其次使用不进入 Time Machine 的用户临时目录，最后使用私有 `~/.nekokem-tmp`；暂存文件关闭 stdio 缓冲、不执行 `fsync`。多选列表显示完整指纹，名称过滤控制字符、分隔符和全部 Unicode 格式字符，零宽连接符和非连接符只在两个可见的非 ASCII 字符之间保留。
 
-## 历史版本 v3.2.0
+## Linux CLI 安装
 
-v3.2.0 引入五种界面语言、跟随系统选项和安全修复，并更换 Android 发布签名。该次迁移说明与历史构建记录见 [v3.2.0 更新日志](release/v3.2.0.md)；从 v3.2.0 升级至 v3.3.0 不需要再次卸载。
-
-## 历史版本 v3.1.1
-
-Android App 版本为 `3.1.1`，Core 版本保持 `3.1`，application ID 为
-`com.shixiaoshi0417.nekokem`。Android 工程及构建说明见
-[`android/README.md`](android/README.md)。App 版本 3.1.1 不改变
-协议编号：默认文件容器仍为 **NKEM v3**，NKPR 格式保持不变。
-
-v3.1.1 新增无需运行时共享库依赖的 Linux x86_64/aarch64 CLI 发行包、
-自动安装脚本和 GitHub Actions 构建流程。当前安装脚本下载最新已发布
+Linux x86_64/aarch64 CLI 发行包没有运行时共享库依赖。安装脚本下载最新已发布
 Release 中与本机架构匹配的包（只解析一次，所有下载都来自同一发布；
 `NEKOKEM_RELEASE_TAG=v5.1.0 sh install.sh` 安装指定版本，安装的程序必须报告该版本），先使用 Release 顶层 `SHA256SUMS.txt` 验证
 归档，再验证包内文件的 SHA-256：
@@ -117,6 +107,19 @@ sh install.sh
 ```
 
 校验和只能检查下载完整性，不能证明来源。`NEKOKEM_VERIFY_ATTESTATION=1 sh install.sh` 还会使用 `gh attestation verify` 校验来源证明；仅适用于 `v4.1.0` 之后带证明的发布，`v4.1.0` 及更早版本没有来源证明，会拒绝安装。
+
+## 历史版本 v3.2.0
+
+v3.2.0 引入五种界面语言、跟随系统选项和安全修复，并更换 Android 发布签名。该次迁移说明与历史构建记录见 [v3.2.0 更新日志](release/v3.2.0.md)；从 v3.2.0 升级至 v3.3.0 不需要再次卸载。
+
+## 历史版本 v3.1.1
+
+Android App 版本为 `3.1.1`，Core 版本保持 `3.1`，application ID 为
+`com.shixiaoshi0417.nekokem`。Android 工程及构建说明见
+[`android/README.md`](android/README.md)。App 版本 3.1.1 不改变
+协议编号：默认文件容器仍为 **NKEM v3**，NKPR 格式保持不变。
+
+v3.1.1 新增上述 Linux CLI 发行包、自动安装脚本和 GitHub Actions 构建流程，安装方法见 [Linux CLI 安装](#linux-cli-安装)。
 
 Linux CLI 支持 `nekokem --version`。此发行补丁不改变 Core API、密码参数、
 NKEM v3 或 NKPR 格式。
