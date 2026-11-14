@@ -6,12 +6,13 @@
   <img src="docs/icon-rounded.png" alt="NekoKEM 项目图标" width="160">
 </p>
 
-NekoKEM 是一个用于学习 OpenSSL EVP API 的实验性后量子文件加密工具。支持 NKEM v3（单接收方）和 NKEM v4（多接收方）Hybrid 文件容器。
+NekoKEM 是一个用于学习 OpenSSL EVP API 的实验性后量子文件加密工具。默认写出带发送方签名的 NKEM v5 文件容器（1 至 64 位接收方）；选择不签名时写出 NKEM v3（单接收方）或 NKEM v4（多接收方）Hybrid 文件容器。
 
 | 模式 | 密钥建立 | KDF | 文件加密 | 容器 |
 |---|---|---|---|---|
-| v3 hybrid（默认） | X448 + ML-KEM-1024 | HKDF-SHA512 | AES-256-GCM | version 3 / algorithm id 3 |
-| v4 多人 | 每位接收方 X448 + ML-KEM-1024 | HKDF-SHA512 | AES-256-GCM 包装文件密钥与加密数据，HMAC-SHA512 头部 MAC | version 4 / algorithm id 4 |
+| v5 签名（默认） | 每位接收方 X448 + ML-KEM-1024 | HKDF-SHA512 | 同 v4，另加加密的 Ed448 + ML-DSA-87 发送方签名 | version 5 / algorithm id 5 |
+| v3 hybrid（不签名，单接收方） | X448 + ML-KEM-1024 | HKDF-SHA512 | AES-256-GCM | version 3 / algorithm id 3 |
+| v4 多人（不签名） | 每位接收方 X448 + ML-KEM-1024 | HKDF-SHA512 | AES-256-GCM 包装文件密钥与加密数据，HMAC-SHA512 头部 MAC | version 4 / algorithm id 4 |
 
 本项目不自行实现任何密码算法，也不依赖 liboqs。**它没有经过安全审计，不应被视为生产级软件，也不应用来保护重要或敏感数据。**
 
@@ -89,21 +90,11 @@ Windows、macOS 与 Linux 的桌面 GUI 提供“公钥通讯录”页面：
 密码参数、文件格式和秘密清理机制不变。详见 [桌面 GUI 文档](desktop/README.md#public-key-contacts--公钥通讯录)。
 此功能自 v3.3.2 起提供；v3.3.1 及更早版本不包含。
 
-桌面端加解密遇到已有输出时先提示，确认覆盖后重试；解密重试需要重新输入口令。未经确认的操作最终采用原子“不覆盖”提交，操作途中出现的目标也不会被覆盖；在既不支持硬链接也不支持不覆盖重命名的卷上（如 macOS 上的 FAT、exFAT 和部分网络挂载），改为在普通重命名前一刻检查目标。后端仅接受同一会话上次 `key-exists` 或 `output-exists` 返回的完全相同路径，确认在五分钟内有效且被下一次操作消耗。POSIX 粘贴密钥优先使用安全的 `$XDG_RUNTIME_DIR`，macOS 上其次使用不进入 Time Machine 的用户临时目录，最后使用私有 `~/.nekokem-tmp`；暂存文件关闭 stdio 缓冲、不执行 `fsync`。权限仅开放事件监听、取消监听及原生打开和保存对话框；导航只允许平台本地来源，拒绝 HTTPS 和新窗口。多选列表显示完整指纹，名称过滤控制字符、分隔符和全部 Unicode 格式字符，零宽连接符和非连接符只在两个可见的非 ASCII 字符之间保留。
+桌面端加解密遇到已有输出时先提示，确认覆盖后重试；解密重试需要重新输入口令。未经确认的操作最终采用原子“不覆盖”提交，操作途中出现的目标也不会被覆盖；在既不支持硬链接也不支持不覆盖重命名的卷上（如 macOS 上的 FAT、exFAT 和部分网络挂载），改为在普通重命名前一刻检查目标。后端仅接受同一会话上次 `key-exists` 或 `output-exists` 返回的完全相同路径，确认在五分钟内有效且被下一次操作消耗。POSIX 粘贴密钥优先使用安全的 `$XDG_RUNTIME_DIR`，macOS 上其次使用不进入 Time Machine 的用户临时目录，最后使用私有 `~/.nekokem-tmp`；暂存文件关闭 stdio 缓冲、不执行 `fsync`。多选列表显示完整指纹，名称过滤控制字符、分隔符和全部 Unicode 格式字符，零宽连接符和非连接符只在两个可见的非 ASCII 字符之间保留。
 
-## 历史版本 v3.2.0
+## Linux CLI 安装
 
-v3.2.0 引入五种界面语言、跟随系统选项和安全修复，并更换 Android 发布签名。该次迁移说明与历史构建记录见 [v3.2.0 更新日志](release/v3.2.0.md)；从 v3.2.0 升级至 v3.3.0 不需要再次卸载。
-
-## 历史版本 v3.1.1
-
-Android App 版本为 `3.1.1`，Core 版本保持 `3.1`，application ID 为
-`com.shixiaoshi0417.nekokem`。Android 工程及构建说明见
-[`android/README.md`](android/README.md)。App 版本 3.1.1 不改变
-协议编号：默认文件容器仍为 **NKEM v3**，NKPR 格式保持不变。
-
-v3.1.1 新增无需运行时共享库依赖的 Linux x86_64/aarch64 CLI 发行包、
-自动安装脚本和 GitHub Actions 构建流程。当前安装脚本下载最新已发布
+Linux x86_64/aarch64 CLI 发行包没有运行时共享库依赖。安装脚本下载最新已发布
 Release 中与本机架构匹配的包（只解析一次，所有下载都来自同一发布；
 `NEKOKEM_RELEASE_TAG=v5.1.0 sh install.sh` 安装指定版本，安装的程序必须报告该版本），先使用 Release 顶层 `SHA256SUMS.txt` 验证
 归档，再验证包内文件的 SHA-256：
@@ -116,6 +107,19 @@ sh install.sh
 ```
 
 校验和只能检查下载完整性，不能证明来源。`NEKOKEM_VERIFY_ATTESTATION=1 sh install.sh` 还会使用 `gh attestation verify` 校验来源证明；仅适用于 `v4.1.0` 之后带证明的发布，`v4.1.0` 及更早版本没有来源证明，会拒绝安装。
+
+## 历史版本 v3.2.0
+
+v3.2.0 引入五种界面语言、跟随系统选项和安全修复，并更换 Android 发布签名。该次迁移说明与历史构建记录见 [v3.2.0 更新日志](release/v3.2.0.md)；从 v3.2.0 升级至 v3.3.0 不需要再次卸载。
+
+## 历史版本 v3.1.1
+
+Android App 版本为 `3.1.1`，Core 版本保持 `3.1`，application ID 为
+`com.shixiaoshi0417.nekokem`。Android 工程及构建说明见
+[`android/README.md`](android/README.md)。App 版本 3.1.1 不改变
+协议编号：默认文件容器仍为 **NKEM v3**，NKPR 格式保持不变。
+
+v3.1.1 新增上述 Linux CLI 发行包、自动安装脚本和 GitHub Actions 构建流程，安装方法见 [Linux CLI 安装](#linux-cli-安装)。
 
 Linux CLI 支持 `nekokem --version`。此发行补丁不改变 Core API、密码参数、
 NKEM v3 或 NKPR 格式。
@@ -162,7 +166,7 @@ v5.1.0 提供面向 M 系列 Apple Silicon Mac 的原生 `arm64` CLI 和原生 S
 
 CLI 与 Linux 共用参数解析、五项菜单和语言目录。GUI 在 macOS 26 上采用 Apple 的液态玻璃设计，最低支持 macOS 13，更早的系统使用回退外观。两者静态链接固定 OpenSSL 4.1.0，保留其 arm64 汇编加速；运行仍依赖 macOS 系统库与框架。CLI 构建设置 macOS 11.0 deployment target，原生 CI 在 `macos-15` 上运行；GUI 使用 macOS 26 SDK 构建并在 `macos-26` 上运行 CI。这不代表已验证更早系统的实机或每代 M 系列芯片的兼容性、性能。
 
-macOS 文件层保留严格的所有者、权限、符号链接和硬链接检查，受保护文件与目录只允许空或 deny-only 扩展 ACL，并检查 APFS/HFS+ 大小写及 Unicode 名称别名。普通输出文件要求 `fsync` 与 `F_FULLFSYNC`，提交后要求父目录 `fsync`，失败时不静默降级；详细限制与测试边界见 [macOS 文件安全设计](macos/SECURITY-DESIGN.md)。Core 4.0 新增 NKEM v4 多接收方容器；NKEM v3、NKPR v1、密码参数及 64 KiB 流式分块不变。包只有 ad-hoc 签名，未使用 Developer ID，也未进行 Apple 公证；这不能证明发布者身份或保证通过 Gatekeeper。
+macOS 文件层保留严格的所有者、权限、符号链接和硬链接检查，受保护文件与目录只允许空或 deny-only 扩展 ACL，并检查 APFS/HFS+ 大小写及 Unicode 名称别名。普通输出文件要求 `fsync` 与 `F_FULLFSYNC`，提交后要求父目录 `fsync`，失败时不静默降级；详细限制与测试边界见 [macOS 文件安全设计](macos/SECURITY-DESIGN.md)。Core 5.0 读写 NKEM v3、v4、v5 和 NKPR v1、v2，密码参数及 64 KiB 流式分块与其他平台相同。包只有 ad-hoc 签名，未使用 Developer ID，也未进行 Apple 公证；这不能证明发布者身份或保证通过 Gatekeeper。
 
 ## Linux GUI
 
@@ -380,6 +384,10 @@ v3 使用 X448、ML-KEM-1024、共享秘密组合和 HKDF-SHA512，并将 HKDF s
 ## NKEM v4 多接收方文件格式
 
 v4 用随机 32 字节文件密钥只加密一次文件数据，并为每位接收方（最多 64 位）各保存一条记录：X448 临时公钥、ML-KEM-1024 密文和用 AES-256-GCM 包装的文件密钥。包装密钥由 HKDF-SHA512 从该接收方的两个共享秘密派生，并绑定 X448 临时公钥与接收方 X448 公钥。HMAC-SHA512 头部 MAC 覆盖头部、salt 和全部接收方记录，承诺文件密钥，使所有接收方解出相同内容；记录不含指纹，解密时尝试全部记录。不可关联性仅面向不持有相应私钥的非收件人：收件人可以识别自己的记录，并跨文件确认自己参与；统一错误和完整试解不会阻止收件人进行这种识别。完整布局见 [`docs/NKEM-v4.md`](docs/NKEM-v4.md)。`nekokem_encrypt_file_multi_with_progress()` 为两个及以上公钥写出 v4，只有一个公钥时写出 v3。
+
+## NKEM v5 签名文件格式
+
+v5 在 v4 多接收方结构上加入发送方认证：发送方用四段式身份密钥（X448、ML-KEM-1024、Ed448、ML-DSA-87）对整个容器做 Ed448 + ML-DSA-87 混合签名，两个签名都通过才接受文件。签名和发送方身份用文件密钥加密，只有接收方能看到是谁发送的。一个格式覆盖 1 至 64 位接收方；身份私钥保存为 NKPR v2，旧的两段式密钥可升级。完整布局、签名策略和升级规则见 [`docs/NKEM-v5.md`](docs/NKEM-v5.md)。`nekokem_encrypt_file_v5_with_progress()` 默认写出 v5，`nekokem_decrypt_file_verified_with_progress()` 解密 v3、v4、v5 并按策略检查签名。
 
 ## 安全实现说明
 

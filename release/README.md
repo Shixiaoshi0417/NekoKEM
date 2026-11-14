@@ -1,6 +1,6 @@
 # Build workflows and Android signing
 
-GitHub Actions has three workflow definitions:
+GitHub Actions has four workflow definitions:
 
 - `ci.yml` (`CI`) builds and tests pull requests targeting any branch, pushes to
   `main`, and manual runs. It contains the Linux Core/analyzer/sanitizer/fuzz
@@ -25,6 +25,9 @@ GitHub Actions has three workflow definitions:
   or its attestation.
 - `publish.yml` (`Publish`) turns one successful Release run of `main` into a
   GitHub Release. It runs only from `main` and only by hand.
+- `fuzz.yml` (`Fuzz`) runs long AFL++ sessions against the four parser and
+  decryption harnesses every Sunday, by hand, or for one minute per target when
+  the workflow itself changes.
 
 The shared Linux/Windows/macOS CLI build scripts default to `NEKOKEM_BUILD_TESTS=1`.
 Release sets it to `0`, which omits the Linux cryptographic smoke test and Windows

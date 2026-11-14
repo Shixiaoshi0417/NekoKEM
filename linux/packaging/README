@@ -53,21 +53,24 @@ From this directory, run:
 Basic use
 ---------
 
-Generate an encrypted Hybrid private key and matching public key:
+Generate an encrypted identity private key (NKPR v2) and matching public key:
 
     ./nekokem keygen
 
-Encrypt with the default NKEM v3 Hybrid protocol:
+Encrypt for one or more recipients. The file is signed NKEM v5 by default,
+signed with keys/private.key.enc (or --sign-key), whose password is asked for:
 
-    ./nekokem encrypt hybrid input.bin output.nkem keys/public.key
+    ./nekokem encrypt hybrid input.bin output.nkem recipient.key
 
-Decrypt an NKEM v3 Hybrid container:
+Decrypt; the signature status and the signer's fingerprint are shown:
 
     ./nekokem decrypt hybrid output.nkem recovered.bin keys/private.key.enc
 
 The key-establishment construction is X448 + ML-KEM-1024, followed by
-HKDF-SHA512 and AES-256-GCM. One recipient uses NKEM v3; two or more recipient
-public keys use NKEM v4. NKEM v1 and v2 containers are rejected. NKPR private-key storage is unchanged.
+HKDF-SHA512 and AES-256-GCM; NKEM v5 adds an Ed448 + ML-DSA-87 sender
+signature. With --unsigned, one recipient uses NKEM v3 and two or more use
+NKEM v4, which NekoKEM 4.x can also read. NKEM v1 and v2 containers are
+rejected. Run ./nekokem --help for every option.
 
 The default interactive interface creates keys/, plaintext/, and encrypted/
 under the current working directory. Keep private-key passwords and generated
