@@ -112,28 +112,6 @@ static int deletion_result(int core_result)
     return MANAGED_JNI_CORE_ERROR;
 }
 
-JNIEXPORT jint JNICALL
-Java_com_shixiaoshi0417_nekokem_nativecore_NativeBridge_nativeDeletePrivateKey(
-    JNIEnv *env,
-    jobject bridge,
-    jstring private_key_path)
-{
-    ManagedUtfPath private_path = {0};
-    int result = MANAGED_JNI_INVALID_ARGUMENT;
-
-    (void)bridge;
-    result = managed_utf_path_acquire(env, private_key_path,
-                                      &private_path);
-    if (result != MANAGED_JNI_SUCCESS) {
-        goto cleanup;
-    }
-    result = deletion_result(nekokem_delete_private_key(private_path.value));
-
-cleanup:
-    managed_utf_path_release(env, &private_path);
-    return (jint)result;
-}
-
 JNIEXPORT jstring JNICALL
 Java_com_shixiaoshi0417_nekokem_nativecore_NativeBridge_nativeGetFingerprint(
     JNIEnv *env,
