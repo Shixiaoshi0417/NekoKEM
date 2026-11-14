@@ -17,12 +17,16 @@ enum PrivateKeyKeychain {
         [kSecClass as String: kSecClassGenericPassword, kSecAttrService as String: service, kSecAttrAccount as String: account(path)]
     }
 
-    /// Adds the password, or replaces the one saved for this key file.
+    /// Saves the password as a new item, replacing any saved for this key file.
+    /// An existing item is never updated in place: another program of the same
+    /// user could have created it first, with an access list that lets that
+    /// program read it. A new item is readable only by NekoKEM until the user
+    /// allows more. If an item comes back between the delete and the add, the
+    /// save fails rather than write into it.
     static func save(_ path: String, _ password: String) -> Bool {
         let data = Data(password.utf8)
-        let update = SecItemUpdate(query(path) as CFDictionary, [kSecValueData as String: data] as CFDictionary)
-        if update == errSecSuccess { return true }
-        if update != errSecItemNotFound { return false }
+        let removed = SecItemDelete(query(path) as CFDictionary)
+        if removed != errSecSuccess && removed != errSecItemNotFound { return false }
         var item = query(path)
         item[kSecValueData as String] = data
         item[kSecAttrLabel as String] = "NekoKEM (\((path as NSString).lastPathComponent))"
