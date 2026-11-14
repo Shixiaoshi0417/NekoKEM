@@ -185,18 +185,6 @@ cleanup:
 }
 
 JNIEXPORT jint JNICALL
-Java_com_shixiaoshi0417_nekokem_nativecore_NativeBridge_nativeUnlockPrivateKey(
-    JNIEnv *env,
-    jobject bridge,
-    jstring private_key_path,
-    jbyteArray password_array)
-{
-    (void)bridge;
-    return check_private_key_password(env, private_key_path,
-                                      password_array);
-}
-
-JNIEXPORT jint JNICALL
 Java_com_shixiaoshi0417_nekokem_nativecore_NativeBridge_nativeCheckPassword(
     JNIEnv *env,
     jobject bridge,

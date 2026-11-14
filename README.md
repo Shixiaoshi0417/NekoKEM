@@ -6,38 +6,38 @@
   <img src="docs/icon-rounded.png" alt="NekoKEM 项目图标" width="160">
 </p>
 
-NekoKEM 是一个用于学习 OpenSSL EVP API 的实验性后量子文件加密工具。支持 NKEM v3（单接收方）和 NKEM v4（多接收方）Hybrid 文件容器。
+NekoKEM 是一个用于学习 OpenSSL EVP API 的实验性后量子文件加密工具。默认写出带发送方签名的 NKEM v5 文件容器（1 至 64 位接收方）；选择不签名时写出 NKEM v3（单接收方）或 NKEM v4（多接收方）Hybrid 文件容器。
 
 | 模式 | 密钥建立 | KDF | 文件加密 | 容器 |
 |---|---|---|---|---|
-| v3 hybrid（默认） | X448 + ML-KEM-1024 | HKDF-SHA512 | AES-256-GCM | version 3 / algorithm id 3 |
-| v4 多人 | 每位接收方 X448 + ML-KEM-1024 | HKDF-SHA512 | AES-256-GCM 包装文件密钥与加密数据，HMAC-SHA512 头部 MAC | version 4 / algorithm id 4 |
+| v5 签名（默认） | 每位接收方 X448 + ML-KEM-1024 | HKDF-SHA512 | 同 v4，另加加密的 Ed448 + ML-DSA-87 发送方签名 | version 5 / algorithm id 5 |
+| v3 hybrid（不签名，单接收方） | X448 + ML-KEM-1024 | HKDF-SHA512 | AES-256-GCM | version 3 / algorithm id 3 |
+| v4 多人（不签名） | 每位接收方 X448 + ML-KEM-1024 | HKDF-SHA512 | AES-256-GCM 包装文件密钥与加密数据，HMAC-SHA512 头部 MAC | version 4 / algorithm id 4 |
 
 本项目不自行实现任何密码算法，也不依赖 liboqs。**它没有经过安全审计，不应被视为生产级软件，也不应用来保护重要或敏感数据。**
 
-## 发布版本 v5.0.0
+## 发布版本 v5.1.0
 
-Android 和各平台 CLI/GUI 统一为 `5.0.0`，Core 升级为 `5.0`：
+Android 和各平台 CLI/GUI 统一为 `5.1.0`，Core 仍为 `5.0`，文件格式与密码参数不变：
 
-- 新加密的文件默认是带签名的 [NKEM v5](docs/NKEM-v5.md)：身份密钥用 Ed448 + ML-DSA-87 混合签名，签名者身份使用明确的二进制规范编码（NKID）。Core 负责验签，并强制执行「只接受已签名文件」等策略；签名无效时不写入任何输出。解密结果会显示签名来自本机、已保存的联系人，还是未知签名者。
-- 「不签名加密（兼容旧版）」只在设置中提供，默认关闭，开启需确认红色警告，开启期间显示红字“接收方无法确认文件来自你”。CLI 对应 `encrypt --unsigned`。
-- NekoKEM 4.x 密钥对可就地升级为身份密钥（加密密钥与密码不变），也可导出 4.x 能读取的旧版公钥。
+- 桌面端重写：Windows 与 Linux 改用 Compose Multiplatform 应用，界面与 Android 一致（MIUIX 默认，可切换 Material 3 Expressive），自带 Java 运行时；macOS 改用原生 SwiftUI 应用，在 macOS 26 上采用液态玻璃设计。原来的 Tauri 应用已删除，Windows 新增 MSI 安装包。
+- 桌面文件页与 Android 一致：选择文件后按「加密」或「解密」，处理完成后再在系统对话框中选择保存位置。
+- 指纹二维码核对：密钥页显示只含指纹的二维码，Android 可扫码核对已保存的联系人；联系人显示核对标记，使用未核对的联系人加密前会警告。
+- OpenSSL 由 4.0.3 升级为 4.1.0。
 
-NKEM v3/v4 和 NKPR v1 仍可解密和读取，OpenSSL 仍固定为 4.0.3。**4.x 及更早版本无法读取 NKEM v5、NKPR v2 和四段式公钥**，给旧版接收方发送文件时请开启不签名加密并使用旧版公钥。完整双语说明见 [v5.0.0](release/v5.0.0.md) 和 [GitHub Release](https://github.com/Shixiaoshi0417/NekoKEM/releases/tag/v5.0.0)。
+5.1.0 与 5.0.0 可互相读取对方的文件和密钥；**4.x 及更早版本无法读取 NKEM v5、NKPR v2 和四段式公钥**，给旧版接收方发送文件时请开启不签名加密并使用旧版公钥。完整双语说明见 [v5.1.0](release/v5.1.0.md) 和 [GitHub Release](https://github.com/Shixiaoshi0417/NekoKEM/releases/tag/v5.1.0)。
 
-Android v5.0.0 沿用 v3.2.0/v3.3.0 签名，可直接覆盖升级；建议先备份公钥、加密 NKPR 私钥和私钥密码，升级密钥前尤其需要备份。仅使用旧签名的 v3.1.x 用户需要在验证备份后卸载重装；卸载会删除应用内部密钥。NKEM v1/v2 不再支持。
+Android v5.1.0 沿用 v3.2.0/v3.3.0 签名，可直接覆盖升级；建议先备份公钥、加密 NKPR 私钥和私钥密码，升级密钥前尤其需要备份。仅使用旧签名的 v3.1.x 用户需要在验证备份后卸载重装；卸载会删除应用内部密钥。NKEM v1/v2 不再支持。
 
 | 平台与架构 | CLI / Android | GUI |
 |---|---|---|
-| Android 8.0+ ARM64 | [APK](https://github.com/Shixiaoshi0417/NekoKEM/releases/download/v5.0.0/app-release.apk) | APK 内置界面 |
-| Windows 10/11 x64 | [CLI ZIP](https://github.com/Shixiaoshi0417/NekoKEM/releases/download/v5.0.0/NekoKEM-windows-x86_64.zip) | [GUI ZIP](https://github.com/Shixiaoshi0417/NekoKEM/releases/download/v5.0.0/NekoKEM-Windows-GUI.zip) |
-| macOS Apple Silicon arm64 | [CLI TAR.GZ](https://github.com/Shixiaoshi0417/NekoKEM/releases/download/v5.0.0/NekoKEM-macos-arm64.tar.gz) | [GUI ZIP](https://github.com/Shixiaoshi0417/NekoKEM/releases/download/v5.0.0/NekoKEM-macos-arm64-GUI.zip) · [DMG](https://github.com/Shixiaoshi0417/NekoKEM/releases/download/v5.0.0/NekoKEM-macos-arm64-GUI.dmg) |
-| Linux x86_64 | [静态 CLI](https://github.com/Shixiaoshi0417/NekoKEM/releases/download/v5.0.0/NekoKEM-linux-x86_64.tar.gz) | [DEB](https://github.com/Shixiaoshi0417/NekoKEM/releases/download/v5.0.0/NekoKEM-linux-x86_64-GUI.deb) · [RPM](https://github.com/Shixiaoshi0417/NekoKEM/releases/download/v5.0.0/NekoKEM-linux-x86_64-GUI.rpm) · [便携包](https://github.com/Shixiaoshi0417/NekoKEM/releases/download/v5.0.0/NekoKEM-linux-x86_64-GUI.tar.gz) |
-| Linux ARM64 / aarch64 | [静态 CLI](https://github.com/Shixiaoshi0417/NekoKEM/releases/download/v5.0.0/NekoKEM-linux-aarch64.tar.gz) | [DEB](https://github.com/Shixiaoshi0417/NekoKEM/releases/download/v5.0.0/NekoKEM-linux-aarch64-GUI.deb) · [RPM](https://github.com/Shixiaoshi0417/NekoKEM/releases/download/v5.0.0/NekoKEM-linux-aarch64-GUI.rpm) · [便携包](https://github.com/Shixiaoshi0417/NekoKEM/releases/download/v5.0.0/NekoKEM-linux-aarch64-GUI.tar.gz) |
+| Android 8.0+ ARM64 | [APK](https://github.com/Shixiaoshi0417/NekoKEM/releases/download/v5.1.0/app-release.apk) | APK 内置界面 |
+| Windows 10/11 x64 | [CLI ZIP](https://github.com/Shixiaoshi0417/NekoKEM/releases/download/v5.1.0/NekoKEM-windows-x86_64.zip) | [MSI](https://github.com/Shixiaoshi0417/NekoKEM/releases/download/v5.1.0/NekoKEM-Windows-GUI.msi) · [ZIP](https://github.com/Shixiaoshi0417/NekoKEM/releases/download/v5.1.0/NekoKEM-Windows-GUI.zip) |
+| macOS Apple Silicon arm64 | [CLI TAR.GZ](https://github.com/Shixiaoshi0417/NekoKEM/releases/download/v5.1.0/NekoKEM-macos-arm64.tar.gz) | [GUI ZIP](https://github.com/Shixiaoshi0417/NekoKEM/releases/download/v5.1.0/NekoKEM-macos-arm64-GUI.zip) · [DMG](https://github.com/Shixiaoshi0417/NekoKEM/releases/download/v5.1.0/NekoKEM-macos-arm64-GUI.dmg) |
+| Linux x86_64 | [静态 CLI](https://github.com/Shixiaoshi0417/NekoKEM/releases/download/v5.1.0/NekoKEM-linux-x86_64.tar.gz) | [DEB](https://github.com/Shixiaoshi0417/NekoKEM/releases/download/v5.1.0/NekoKEM-linux-x86_64-GUI.deb) · [RPM](https://github.com/Shixiaoshi0417/NekoKEM/releases/download/v5.1.0/NekoKEM-linux-x86_64-GUI.rpm) · [便携包](https://github.com/Shixiaoshi0417/NekoKEM/releases/download/v5.1.0/NekoKEM-linux-x86_64-GUI.tar.gz) |
+| Linux ARM64 / aarch64 | [静态 CLI](https://github.com/Shixiaoshi0417/NekoKEM/releases/download/v5.1.0/NekoKEM-linux-aarch64.tar.gz) | [DEB](https://github.com/Shixiaoshi0417/NekoKEM/releases/download/v5.1.0/NekoKEM-linux-aarch64-GUI.deb) · [RPM](https://github.com/Shixiaoshi0417/NekoKEM/releases/download/v5.1.0/NekoKEM-linux-aarch64-GUI.rpm) · [便携包](https://github.com/Shixiaoshi0417/NekoKEM/releases/download/v5.1.0/NekoKEM-linux-aarch64-GUI.tar.gz) |
 
-下载后先用 [SHA256SUMS.txt](https://github.com/Shixiaoshi0417/NekoKEM/releases/download/v5.0.0/SHA256SUMS.txt) 校验对应归档，再校验包内文件。Linux GUI 需要 glibc 2.39+、GTK3 和 WebKitGTK 4.1；macOS 实际验证于 macOS 15，部署目标为 11.0。安装步骤与签名限制见下文各平台说明。
-
-> 桌面端说明：v5.0.0 的桌面 GUI 是 Tauri 应用，下文各平台的 GUI 小节描述的是该版本。主分支已改为 Compose Multiplatform（Windows、Linux）和 SwiftUI（macOS）应用，随下一个版本发布，说明见 [桌面 GUI 文档](desktop/README.md)。
+下载后先用 [SHA256SUMS.txt](https://github.com/Shixiaoshi0417/NekoKEM/releases/download/v5.1.0/SHA256SUMS.txt) 校验对应归档，再校验包内文件。Linux GUI 需要 glibc 2.39+，DEB/RPM 依赖 Noto Sans CJK 字体和 `curl`；macOS GUI 需要 macOS 13 或更新版本，CLI 的部署目标为 11.0。安装步骤与签名限制见下文各平台说明。
 
 v4.1.0 之后发布的版本，每个附件还带有 GitHub 构建来源证明，可用 GitHub CLI 确认文件由本仓库 `main` 分支上的 Release 工作流构建（把文件名换成实际下载的附件）：
 
@@ -81,7 +81,7 @@ Android 所有本机密钥变更在进程内串行，并与 Core 共用目录锁
 
 ## 桌面 GUI 公钥通讯录
 
-Windows、macOS 与 Linux 共用的 Rust + Tauri 2 + Vue 3 + TypeScript GUI 新增“公钥通讯录”页面：
+Windows、macOS 与 Linux 的桌面 GUI 提供“公钥通讯录”页面：
 可从文件或粘贴内容保存接收方公钥，添加、编辑备注，确认后删除；加密页可选择“通讯录”中的条目，
 条目上的“用于加密”会打开加密页并选中该条目。列表和选择框显示完整 SHA-256 指纹，相同指纹只保存一次。
 条目保存在语言设置旁的私有 `contacts` 目录，仅包含 Core 规范化后的公钥、指纹、来源文件名和备注。
@@ -90,7 +90,23 @@ Windows、macOS 与 Linux 共用的 Rust + Tauri 2 + Vue 3 + TypeScript GUI 新�
 密码参数、文件格式和秘密清理机制不变。详见 [桌面 GUI 文档](desktop/README.md#public-key-contacts--公钥通讯录)。
 此功能自 v3.3.2 起提供；v3.3.1 及更早版本不包含。
 
-桌面端加解密遇到已有输出时先提示，确认覆盖后重试；解密重试需要重新输入口令。未经确认的操作最终采用原子“不覆盖”提交，操作途中出现的目标也不会被覆盖；在既不支持硬链接也不支持不覆盖重命名的卷上（如 macOS 上的 FAT、exFAT 和部分网络挂载），改为在普通重命名前一刻检查目标。后端仅接受同一会话上次 `key-exists` 或 `output-exists` 返回的完全相同路径，确认在五分钟内有效且被下一次操作消耗。POSIX 粘贴密钥优先使用安全的 `$XDG_RUNTIME_DIR`，macOS 上其次使用不进入 Time Machine 的用户临时目录，最后使用私有 `~/.nekokem-tmp`；暂存文件关闭 stdio 缓冲、不执行 `fsync`。权限仅开放事件监听、取消监听及原生打开和保存对话框；导航只允许平台本地来源，拒绝 HTTPS 和新窗口。多选列表显示完整指纹，名称过滤控制字符、分隔符和全部 Unicode 格式字符，零宽连接符和非连接符只在两个可见的非 ASCII 字符之间保留。
+桌面端加解密遇到已有输出时先提示，确认覆盖后重试；解密重试需要重新输入口令。未经确认的操作最终采用原子“不覆盖”提交，操作途中出现的目标也不会被覆盖；在既不支持硬链接也不支持不覆盖重命名的卷上（如 macOS 上的 FAT、exFAT 和部分网络挂载），改为在普通重命名前一刻检查目标。后端仅接受同一会话上次 `key-exists` 或 `output-exists` 返回的完全相同路径，确认在五分钟内有效且被下一次操作消耗。POSIX 粘贴密钥优先使用安全的 `$XDG_RUNTIME_DIR`，macOS 上其次使用不进入 Time Machine 的用户临时目录，最后使用私有 `~/.nekokem-tmp`；暂存文件关闭 stdio 缓冲、不执行 `fsync`。多选列表显示完整指纹，名称过滤控制字符、分隔符和全部 Unicode 格式字符，零宽连接符和非连接符只在两个可见的非 ASCII 字符之间保留。
+
+## Linux CLI 安装
+
+Linux x86_64/aarch64 CLI 发行包没有运行时共享库依赖。安装脚本下载最新已发布
+Release 中与本机架构匹配的包（只解析一次，所有下载都来自同一发布；
+`NEKOKEM_RELEASE_TAG=v5.1.0 sh install.sh` 安装指定版本，安装的程序必须报告该版本），先使用 Release 顶层 `SHA256SUMS.txt` 验证
+归档，再验证包内文件的 SHA-256：
+
+```sh
+curl --fail --location --output install.sh \
+    https://raw.githubusercontent.com/Shixiaoshi0417/NekoKEM/main/linux/install.sh
+less install.sh
+sh install.sh
+```
+
+校验和只能检查下载完整性，不能证明来源。`NEKOKEM_VERIFY_ATTESTATION=1 sh install.sh` 还会使用 `gh attestation verify` 校验来源证明；仅适用于 `v4.1.0` 之后带证明的发布，`v4.1.0` 及更早版本没有来源证明，会拒绝安装。
 
 ## 历史版本 v3.2.0
 
@@ -103,20 +119,7 @@ Android App 版本为 `3.1.1`，Core 版本保持 `3.1`，application ID 为
 [`android/README.md`](android/README.md)。App 版本 3.1.1 不改变
 协议编号：默认文件容器仍为 **NKEM v3**，NKPR 格式保持不变。
 
-v3.1.1 新增无需运行时共享库依赖的 Linux x86_64/aarch64 CLI 发行包、
-自动安装脚本和 GitHub Actions 构建流程。当前安装脚本下载最新已发布
-Release 中与本机架构匹配的包（只解析一次，所有下载都来自同一发布；
-`NEKOKEM_RELEASE_TAG=v5.0.0 sh install.sh` 安装指定版本，安装的程序必须报告该版本），先使用 Release 顶层 `SHA256SUMS.txt` 验证
-归档，再验证包内文件的 SHA-256：
-
-```sh
-curl --fail --location --output install.sh \
-    https://raw.githubusercontent.com/Shixiaoshi0417/NekoKEM/main/linux/install.sh
-less install.sh
-sh install.sh
-```
-
-校验和只能检查下载完整性，不能证明来源。`NEKOKEM_VERIFY_ATTESTATION=1 sh install.sh` 还会使用 `gh attestation verify` 校验来源证明；仅适用于 `v4.1.0` 之后带证明的发布，`v4.1.0` 及更早版本没有来源证明，会拒绝安装。
+v3.1.1 新增上述 Linux CLI 发行包、自动安装脚本和 GitHub Actions 构建流程，安装方法见 [Linux CLI 安装](#linux-cli-安装)。
 
 Linux CLI 支持 `nekokem --version`。此发行补丁不改变 Core API、密码参数、
 NKEM v3 或 NKPR 格式。
@@ -151,27 +154,27 @@ GitHub Actions 统一使用 [CI](.github/workflows/ci.yml) 和 [Release](.github
 
 ## Windows CLI 与 GUI
 
-v5.0.0 提供原生 Windows 10/11 x64 `nekokem.exe` 和 `nekokem-gui.exe` 便携包。CLI 与 Linux 共用完整参数解析和五项菜单；双击 EXE 或不带参数运行即可进入菜单。构建、使用和导入私钥权限说明见 [Windows CLI 文档](windows/README.md)，文件安全设计见 [Windows 文件层说明](windows/SECURITY-DESIGN.md)。CLI 运行不需要 MSYS2 或 OpenSSL DLL；构建使用 MSYS2 UCRT64 与固定 OpenSSL 4.1.0。
+v5.1.0 提供原生 Windows 10/11 x64 CLI 便携包 `nekokem.exe`，以及 GUI 的 MSI 安装包和 ZIP 便携包。CLI 与 Linux 共用完整参数解析和五项菜单；双击 EXE 或不带参数运行即可进入菜单。构建、使用和导入私钥权限说明见 [Windows CLI 文档](windows/README.md)，文件安全设计见 [Windows 文件层说明](windows/SECURITY-DESIGN.md)。CLI 运行不需要 MSYS2 或 OpenSSL DLL；构建使用 MSYS2 UCRT64 与固定 OpenSSL 4.1.0。
 
-GUI 使用 Rust + Tauri 2 + Vue 3 + TypeScript，通过窄接口调用同一 C17 Core，提供原生文件选择、进度、取消、键盘导航和遵循系统减少动态效果设置的过渡动画。运行需要 Microsoft Edge WebView2 Runtime，并将包内 `WebView2Loader.dll` 放在 EXE 旁；详见 [Windows GUI 文档](desktop/README.md)。两种 Windows 应用均未进行 Authenticode 签名；构建时单独验证 Microsoft SDK loader 的签名与来源。
+GUI 是 Compose Multiplatform 应用，界面与 Android 一致，提供 MIUIX（默认）和 Material 3 Expressive 两种风格；通过桥接库调用同一 C17 Core，提供系统文件选择、进度和取消。应用自带 Java 运行时，不需要 WebView2 Runtime；详见 [桌面 GUI 文档](desktop/README.md)。CLI、GUI 和 MSI 安装包均未进行 Authenticode 签名。
 
 Windows 仅支持本地固定 NTFS，检查所有者与 ACL，并拒绝网络、设备、替代数据流及重解析点路径。协议、密码参数及 64 KiB 流式分块不变；Windows 断电持久性不能当作 POSIX 目录 fsync 已验证。Windows 语言配置使用系统 LocalAppData/NekoKEM；无 Locale 环境覆盖时读取 Windows 显示语言。下文的 POSIX 配置路径适用于 Linux 和 macOS CLI。
 
 ## macOS Apple Silicon CLI 与 GUI
 
-v5.0.0 提供面向 M 系列 Apple Silicon Mac 的原生 `arm64` CLI 和 Rust + Tauri 2 + Vue 3 + TypeScript GUI。CLI 包名为 `NekoKEM-macos-arm64.tar.gz`；GUI 包为 `NekoKEM-macos-arm64-GUI.zip`（包含 `.app`）和 `NekoKEM-macos-arm64-GUI.dmg`，可从本版 Release 下载。详见 [macOS 构建与使用说明](macos/README.md) 和 [桌面 GUI 文档](desktop/README.md)。不提供 Intel/Rosetta 构建。
+v5.1.0 提供面向 M 系列 Apple Silicon Mac 的原生 `arm64` CLI 和原生 SwiftUI GUI。CLI 包名为 `NekoKEM-macos-arm64.tar.gz`；GUI 包为 `NekoKEM-macos-arm64-GUI.zip`（包含 `.app`）和 `NekoKEM-macos-arm64-GUI.dmg`，可从本版 Release 下载。详见 [macOS 构建与使用说明](macos/README.md) 和 [桌面 GUI 文档](desktop/README.md)。不提供 Intel/Rosetta 构建。
 
-CLI 与 Linux 共用参数解析、五项菜单和语言目录。GUI 使用系统 WKWebView，不需要 Windows 的 WebView2 Runtime 或 loader。两者静态链接固定 OpenSSL 4.1.0，保留其 arm64 汇编加速；运行仍依赖 macOS 系统库与框架。构建设置 macOS 11.0 deployment target；原生 CI 在 `macos-15` 上运行，这不代表已验证 macOS 11.0 实机或每代 M 系列芯片的兼容性、性能。
+CLI 与 Linux 共用参数解析、五项菜单和语言目录。GUI 在 macOS 26 上采用 Apple 的液态玻璃设计，最低支持 macOS 13，更早的系统使用回退外观。两者静态链接固定 OpenSSL 4.1.0，保留其 arm64 汇编加速；运行仍依赖 macOS 系统库与框架。CLI 构建设置 macOS 11.0 deployment target，原生 CI 在 `macos-15` 上运行；GUI 使用 macOS 26 SDK 构建并在 `macos-26` 上运行 CI。这不代表已验证更早系统的实机或每代 M 系列芯片的兼容性、性能。
 
-macOS 文件层保留严格的所有者、权限、符号链接和硬链接检查，受保护文件与目录只允许空或 deny-only 扩展 ACL，并检查 APFS/HFS+ 大小写及 Unicode 名称别名。普通输出文件要求 `fsync` 与 `F_FULLFSYNC`，提交后要求父目录 `fsync`，失败时不静默降级；详细限制与测试边界见 [macOS 文件安全设计](macos/SECURITY-DESIGN.md)。Core 4.0 新增 NKEM v4 多接收方容器；NKEM v3、NKPR v1、密码参数及 64 KiB 流式分块不变。包只有 ad-hoc 签名，未使用 Developer ID，也未进行 Apple 公证；这不能证明发布者身份或保证通过 Gatekeeper。
+macOS 文件层保留严格的所有者、权限、符号链接和硬链接检查，受保护文件与目录只允许空或 deny-only 扩展 ACL，并检查 APFS/HFS+ 大小写及 Unicode 名称别名。普通输出文件要求 `fsync` 与 `F_FULLFSYNC`，提交后要求父目录 `fsync`，失败时不静默降级；详细限制与测试边界见 [macOS 文件安全设计](macos/SECURITY-DESIGN.md)。Core 5.0 读写 NKEM v3、v4、v5 和 NKPR v1、v2，密码参数及 64 KiB 流式分块与其他平台相同。包只有 ad-hoc 签名，未使用 Developer ID，也未进行 Apple 公证；这不能证明发布者身份或保证通过 Gatekeeper。
 
 ## Linux GUI
 
-Linux 原生 GUI 支持 `x86_64` 与 `aarch64`（ARM64），复用 Rust + Tauri 2 + Vue 3 + TypeScript 界面、五语言自动检测、原生文件选择、进度/取消、键盘导航和遵循系统减少动态效果设置的动画。每种架构提供 `NekoKEM-linux-<架构>-GUI.deb`、`NekoKEM-linux-<架构>-GUI.rpm` 和 `NekoKEM-linux-<架构>-GUI.tar.gz`。Ubuntu 使用 `sudo apt install ./NekoKEM-linux-x86_64-GUI.deb`；Fedora 使用 `sudo dnf install ./NekoKEM-linux-x86_64-GUI.rpm`，ARM64 将文件名中的架构换为 `aarch64`。安装后可从系统应用菜单打开；便携包使用 `NekoKEM-GUI.sh` 启动。图标直接使用现有透明外部白色区域的方形 PNG，README 仍用圆角展示图。
+Linux GUI 支持 `x86_64` 与 `aarch64`（ARM64），与 Windows 使用同一个 Compose Multiplatform 应用：MIUIX 与 Material 3 Expressive 两种风格、五语言自动检测、系统文件选择、进度和取消。每种架构提供 `NekoKEM-linux-<架构>-GUI.deb`、`NekoKEM-linux-<架构>-GUI.rpm` 和 `NekoKEM-linux-<架构>-GUI.tar.gz`。Ubuntu 使用 `sudo apt install ./NekoKEM-linux-x86_64-GUI.deb`；Fedora 使用 `sudo dnf install ./NekoKEM-linux-x86_64-GUI.rpm`，ARM64 将文件名中的架构换为 `aarch64`。安装后可从系统应用菜单打开。图标直接使用现有透明外部白色区域的方形 PNG，README 仍用圆角展示图。
 
-构建与原生 CI 基线为 Ubuntu 24.04，CI 另在同架构 Fedora 44 容器中安装并启动 RPM。RPM 原生构建，以共享库能力声明依赖，并包含对应架构的动态加载器；运行需要系统 GTK3、WebKitGTK 4.1 和 glibc 2.39 或更新版本，GUI 便携包仍依赖这些系统库。OpenSSL 4.1.0 静态链接并隐藏符号，避免影响 WebKit 系统 TLS 库，保留汇编、线程、Fortify、栈保护、PIE 和完整 RELRO。Linux 文件权限、认证后提交及取消清理沿用 CLI/Core；Core 4.0 新增 NKEM v4 多接收方容器，NKEM v3、NKPR v1、KDF 参数与 64 KiB 流式处理不变。详见 [Linux 安装与构建](desktop/README.md#install--安装)。
+构建与原生 CI 基线为 Ubuntu 24.04，CI 另在同架构 Fedora 44 容器中安装并启动 RPM。应用自带 Java 运行时；运行需要 glibc 2.39 或更新版本，DEB/RPM 依赖 Noto Sans CJK 字体和 `curl`（检查更新）。OpenSSL 4.1.0 静态链接进桥接库并隐藏符号，保留完整 RELRO、立即绑定和不可执行栈。Linux 文件权限、认证后提交及取消清理沿用 CLI/Core；NKEM、NKPR、KDF 参数与 64 KiB 流式处理不变。详见 [桌面 GUI 文档](desktop/README.md)。
 
-v5.0.0 Release 包含上述两种架构的全部 Linux GUI 安装包和便携包，现有静态 Linux CLI 包继续保留。原生窗口测试使用 X11 会话，不代表已验证所有 Linux 发行版或 Wayland 实机。
+v5.1.0 Release 包含上述两种架构的全部 Linux GUI 安装包和便携包，现有静态 Linux CLI 包继续保留。原生窗口测试使用 X11 会话，不代表已验证所有 Linux 发行版或 Wayland 实机。
 
 ## 语言设置
 
@@ -381,6 +384,10 @@ v3 使用 X448、ML-KEM-1024、共享秘密组合和 HKDF-SHA512，并将 HKDF s
 ## NKEM v4 多接收方文件格式
 
 v4 用随机 32 字节文件密钥只加密一次文件数据，并为每位接收方（最多 64 位）各保存一条记录：X448 临时公钥、ML-KEM-1024 密文和用 AES-256-GCM 包装的文件密钥。包装密钥由 HKDF-SHA512 从该接收方的两个共享秘密派生，并绑定 X448 临时公钥与接收方 X448 公钥。HMAC-SHA512 头部 MAC 覆盖头部、salt 和全部接收方记录，承诺文件密钥，使所有接收方解出相同内容；记录不含指纹，解密时尝试全部记录。不可关联性仅面向不持有相应私钥的非收件人：收件人可以识别自己的记录，并跨文件确认自己参与；统一错误和完整试解不会阻止收件人进行这种识别。完整布局见 [`docs/NKEM-v4.md`](docs/NKEM-v4.md)。`nekokem_encrypt_file_multi_with_progress()` 为两个及以上公钥写出 v4，只有一个公钥时写出 v3。
+
+## NKEM v5 签名文件格式
+
+v5 在 v4 多接收方结构上加入发送方认证：发送方用四段式身份密钥（X448、ML-KEM-1024、Ed448、ML-DSA-87）对整个容器做 Ed448 + ML-DSA-87 混合签名，两个签名都通过才接受文件。签名和发送方身份用文件密钥加密，只有接收方能看到是谁发送的。一个格式覆盖 1 至 64 位接收方；身份私钥保存为 NKPR v2，旧的两段式密钥可升级。完整布局、签名策略和升级规则见 [`docs/NKEM-v5.md`](docs/NKEM-v5.md)。`nekokem_encrypt_file_v5_with_progress()` 默认写出 v5，`nekokem_decrypt_file_verified_with_progress()` 解密 v3、v4、v5 并按策略检查签名。
 
 ## 安全实现说明
 

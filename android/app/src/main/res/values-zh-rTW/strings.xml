@@ -1,7 +1,7 @@
 <?xml version='1.0' encoding='utf-8'?>
 <resources>
     <string name="app_name">NekoKEM</string>
-    <string name="app_version">NekoKEM v5.0.0</string>
+    <string name="app_version">NekoKEM v5.1.0</string>
     <string name="navigation_files">檔案加密與解密</string>
     <string name="navigation_keys">金鑰管理</string>
     <string name="navigation_settings">設定</string>
@@ -13,7 +13,7 @@
     <string name="about_description">使用可重用的 NekoKEM C17 Core 與 OpenSSL EVP 提供密碼學功能的實驗性後量子混合檔案加密工具。</string>
     <string name="private_key_exists">私鑰：已存在</string>
     <string name="private_key_not_found">私鑰：找不到</string>
-    <string name="fingerprint_label">SHA-256 公鑰指紋</string>
+    <string name="fingerprint_label">指紋</string>
     <string name="selected_file_label">已選取檔案</string>
     <string name="selected_file_none">尚未選取檔案</string>
     <string name="settings_appearance_title">外觀與語言</string>
@@ -29,7 +29,7 @@
     <string name="error_password_empty">密碼不能留空</string>
     <string name="error_passwords_mismatch">兩次輸入的密碼不一致</string>
     <string name="generate_password_title">保護新私鑰</string>
-    <string name="generate_password_message">請輸入並確認非空密碼。密碼僅用於本次金鑰產生，不會儲存。</string>
+    <string name="generate_password_message">請輸入並確認非空密碼。NekoKEM 僅在本次金鑰產生中使用密碼，不會自行儲存。</string>
     <string name="check_password_title">驗證私鑰密碼</string>
     <string name="check_password_message">請輸入加密私鑰的密碼，僅執行一次驗證。</string>
     <string name="import_password_title">匯入加密私鑰</string>
@@ -40,7 +40,7 @@
     <string name="select_temporary_private_key_password_title">驗證所選私鑰</string>
     <string name="select_temporary_private_key_password_message">請輸入此暫存 NKPR 私鑰的密碼。Core 會驗證容器並顯示其公鑰指紋，不會匯入或取代預設私鑰。</string>
     <string name="confirm_temporary_public_key_title">使用此公鑰？</string>
-    <string name="confirm_temporary_public_key_message">檔案：%1$s\n\nSHA-256 指紋：\n%2$s\n\n此金鑰僅使用一次，不會取代 App 預設公鑰。</string>
+    <string name="confirm_temporary_public_key_message">檔案：%1$s\n\n指紋：\n%2$s\n\n此金鑰僅使用一次，不會取代 App 預設公鑰。</string>
     <string name="delete_private_key_title">永久刪除私鑰？</string>
     <string name="delete_private_key_message">將刪除本機 NKPR 私鑰及相關暫存快取。公鑰會保留。</string>
     <string name="delete_public_key_title">永久刪除公鑰？</string>
@@ -76,11 +76,8 @@
     <string name="action_cancel">取消</string>
     <string name="action_close">關閉</string>
     <string name="action_use_key">使用此金鑰</string>
-    <string name="action_select_other_public_key">選取其他公鑰</string>
-    <string name="action_restore_default_public_key">還原預設公鑰</string>
     <string name="action_select_other_private_key">選取其他私鑰</string>
     <string name="action_restore_default_private_key">還原預設私鑰</string>
-    <string name="encryption_public_key_title">加密公鑰</string>
     <string name="decryption_private_key_title">解密私鑰</string>
     <string name="key_source_app_default">App 預設金鑰</string>
     <string name="key_source_temporary_saf">SAF 暫存選取</string>
@@ -105,24 +102,18 @@
     <string name="completion_result">結果</string>
     <string name="completion_success">成功</string>
     <string name="completion_file">檔案名稱</string>
-    <string name="completion_fingerprint">SHA-256 指紋</string>
+    <string name="completion_fingerprint">指紋</string>
     <string name="completion_keypair_files">%1$s 和 %2$s</string>
     <string name="completion_elapsed">耗時</string>
     <string name="completion_average_speed">平均速度</string>
     <string name="error_dialog_title">操作失敗</string>
     <string name="error_dialog_reason">原因</string>
     <string name="result_line">%1$s：%2$s</string>
-    <string name="snackbar_file_selected">已選取檔案</string>
-    <string name="snackbar_output_selection_cancelled">已取消選取輸出檔案</string>
-    <string name="snackbar_key_selection_cancelled">已取消選取金鑰檔案</string>
     <string name="snackbar_operation_cancelled">操作已取消</string>
-    <string name="snackbar_operation_success">%1$s已完成</string>
-    <string name="snackbar_temporary_public_key_selected">已確認暫存公鑰</string>
     <string name="snackbar_temporary_private_key_selected">已驗證暫存私鑰</string>
     <string name="snackbar_default_public_key_restored">已還原預設公鑰</string>
     <string name="snackbar_default_private_key_restored">已還原預設私鑰</string>
     <string name="error_select_file_first">請先選取檔案</string>
-    <string name="error_public_key_not_found">找不到公鑰</string>
     <string name="error_private_key_not_found">找不到私鑰</string>
     <string name="error_reason_storage">檔案提供者或應用程式私有儲存空間操作失敗。</string>
     <string name="error_reason_invalid_argument">檔案路徑、密碼或操作參數無效。</string>
@@ -137,7 +128,6 @@
     <string name="error_reason_delete">無法安全刪除一個或多個本機金鑰檔案或相關暫存檔案。</string>
     <string name="error_reason_delete_residue">私鑰已刪除，但保留了一份由中斷的金鑰產生或替換留下的私鑰暫存副本，因為它可能仍在被其他操作寫入。這份副本仍可能用對應的密碼解鎖。請在復原備份中查看，並參閱 Android README 後再處理。</string>
     <string name="error_reason_core">NekoKEM Core 拒絕了此操作。</string>
-    <string name="error_reason_unexpected">發生非預期的 Android 操作錯誤。</string>
     <string name="error_reason_fingerprint_mismatch">暫存金鑰在確認後發生變化，或其指紋已不匹配。</string>
     <string name="error_reason_key_pair_mismatch">此金鑰與本機已儲存的另一把金鑰不配對。如需改用其他金鑰對，請先刪除目前金鑰對，再分別匯入兩把金鑰。</string>
     <string name="error_reason_public_key_copy">無法完整複製 SAF 公鑰資料。</string>
@@ -171,7 +161,6 @@
     <!-- Saved public-key contacts -->
     <string name="navigation_contacts">公鑰通訊錄</string>
     <string name="action_import_contact">新增公鑰</string>
-    <string name="action_choose_contact">選擇通訊錄公鑰</string>
     <string name="action_edit_contact_note">編輯備註</string>
     <string name="action_save_contact">儲存</string>
     <string name="action_use_contact">用於加密</string>
@@ -190,13 +179,11 @@
     <string name="contact_selected">已選擇通訊錄公鑰</string>
     <string name="contact_load_failed">無法讀取公鑰通訊錄</string>
     <string name="contact_unreadable_entries">有 %1$d 個項目無法讀取</string>
-    <string name="contact_unavailable">所選通訊錄公鑰無法使用，請選擇其他公鑰。</string>
     <string name="contact_delete_title">刪除通訊錄公鑰？</string>
     <string name="contact_delete_message">從通訊錄刪除 %1$s？若此項目已被選取，需重新選擇加密公鑰。預設金鑰將保留。</string>
     <string name="contact_save_title">儲存公鑰</string>
     <string name="contact_edit_title">編輯備註</string>
     <string name="contact_picker_title">選擇通訊錄公鑰</string>
-    <string name="key_source_contacts">公鑰通訊錄</string>
     <string name="operation_save_contact">儲存公鑰</string>
     <string name="operation_update_contact">更新公鑰備註</string>
     <string name="operation_delete_contact">刪除通訊錄公鑰</string>
@@ -206,7 +193,6 @@
     <string name="action_encrypt_for_selected">加密給所選接收者</string>
     <string name="contact_selection_limit">最多選擇 %1$d 位接收者</string>
     <string name="contact_recipients_hint">每位所選接收者都能用自己的私鑰解密此檔案，其他人無法解密。多人加密使用 NKEM v4，NekoKEM v3.3.2 及更早版本無法開啟。</string>
-    <string name="key_source_contacts_multiple">公鑰通訊錄（%1$d 位接收者）</string>
     <string name="contact_recipients_selected">已選擇接收者</string>
     <string name="contact_failed_recipient">無法使用的接收者：%1$s</string>
     <string name="recovery_backups_title">已保留復原備份</string>
@@ -250,9 +236,7 @@
     <string name="error_reason_signer_not_trusted">簽章者不在你信任的金鑰中，未寫入任何內容。</string>
     <string name="error_reason_already_identity">此金鑰已可簽章，無需升級。</string>
     <string name="error_reason_upgrade">無法升級金鑰：密碼錯誤或金鑰檔案不相符，檔案保持不變。</string>
-    <string name="key_identity_status">身分金鑰 · 可簽章和驗證簽章</string>
     <string name="key_legacy_status">舊版金鑰 · 無法簽章。升級後即可簽章檔案。</string>
-    <string name="legacy_fingerprint_label">舊版指紋（NekoKEM 4.x 及更早版本）</string>
     <string name="action_upgrade_key">升級金鑰</string>
     <string name="action_export_legacy_public_key">匯出舊版公開金鑰</string>
     <string name="operation_upgrade_key">升級金鑰</string>
@@ -298,12 +282,10 @@
     <string name="action_mark_verified">標記為已核對</string>
     <string name="action_unmark_verified">清除核對標記</string>
     <string name="contact_verify_title">核對指紋</string>
-    <string name="contact_verify_hint">請對照 %1$s 在其裝置「金鑰」頁看到的指紋，或掃描對方的指紋 QR 碼。每一位都一致時，再標記為已核對。</string>
     <string name="contact_unverified_title">聯絡人未核對</string>
     <string name="contact_unverified_message">%1$s 的指紋尚未核對。如果公鑰在傳給你的途中被替換，用它加密的檔案可能會被別人開啟。建議先與對方核對指紋，也可以仍然繼續。</string>
     <string name="contact_name_separator">、</string>
     <string name="action_use_anyway">仍然使用</string>
-    <string name="action_open_contact">查看詳情</string>
     <string name="action_back_to_contacts">全部聯絡人</string>
     <string name="operation_verify_contact">核對聯絡人</string>
     <string name="fingerprint_scan_camera_unavailable">找不到可用的相機，此裝置無法掃碼。請改為與對方逐字核對完整指紋。</string>
@@ -322,4 +304,11 @@
     <string name="recipient_other_file">其他公開金鑰檔案…</string>
     <string name="recipient_count">%1$d / %2$d</string>
     <string name="action_share_fingerprint">分享指紋</string>
+    <string name="password_manager_fill">從密碼管理工具填入</string>
+    <string name="password_manager_save">儲存到密碼管理工具</string>
+    <string name="password_manager_not_found">密碼管理工具中沒有這把私鑰的密碼。</string>
+    <string name="password_manager_unavailable">沒有可用的密碼管理工具，請在系統設定的「密碼和帳戶」中選擇一個。</string>
+    <string name="password_manager_failed">密碼管理工具沒有回應，請重試。</string>
+    <string name="snackbar_password_manager_saved">密碼已儲存到密碼管理工具</string>
+    <string name="snackbar_password_manager_not_saved">密碼未儲存到密碼管理工具</string>
 </resources>

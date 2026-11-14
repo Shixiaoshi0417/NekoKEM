@@ -29,7 +29,7 @@ class OperationRequest(
 data class Signature(val status: String, val fingerprint: String?, val contact: String?, val signerKey: String?)
 data class Outcome(
     val output: String? = null, val fingerprint: String? = null, val recipients: List<String> = emptyList(),
-    val format: Int? = null, val signature: Signature? = null, val legacyFingerprint: String? = null, val canVerify: Boolean? = null,
+    val format: Int? = null, val signature: Signature? = null, val canVerify: Boolean? = null,
 )
 data class Contact(val id: String, val fingerprint: String, val name: String, val note: String, val canVerify: Boolean, val legacyFingerprint: String?, val pinned: Boolean = false, val verified: Boolean = false)
 data class ContactList(val contacts: List<Contact>, val unreadable: Int)
@@ -87,7 +87,7 @@ object Backend {
             output = it.text("output"), fingerprint = it.text("fingerprint"),
             recipients = (it["recipients"] as? JsonArray)?.mapNotNull { (it as? JsonPrimitive)?.content } ?: emptyList(),
             format = (it["format"] as? JsonPrimitive)?.intOrNull, signature = signature,
-            legacyFingerprint = it.text("legacyFingerprint"), canVerify = it.flag("canVerify"),
+            canVerify = it.flag("canVerify"),
         )
     }
 

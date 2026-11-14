@@ -42,7 +42,7 @@ final class AppState: ObservableObject {
     @Published private(set) var screen = Screen.files
     @Published private(set) var language = "en"
     @Published private(set) var selectedLanguage = "system"
-    @Published private(set) var version = "5.0.0"
+    @Published private(set) var version = "5.1.0"
     @Published private(set) var loaded = false
     @Published private(set) var busy = false
     @Published private(set) var cancelling = false
@@ -62,6 +62,10 @@ final class AppState: ObservableObject {
     @Published var privatePath = "" { didSet { if privatePath != oldValue { withdrawReplace() }; edited("privatePath") } }
     @Published var password = "" { didSet { edited("password") } }
     @Published var confirmation = "" { didSet { edited("confirmation") } }
+    // Ticked to hand the password to the login keychain once the operation accepts it.
+    @Published var saveToKeychain = false
+    // What the keychain last answered: saved, not saved, or nothing saved for this key.
+    @Published private(set) var keychainNotice: String?
     @Published var keyText = "" { didSet { edited("keyText") } }
     @Published private(set) var pasteKey = false
     // Saved-contact recipients, in selection order: shared by the Contacts page and the recipient sheet.
@@ -156,6 +160,34 @@ final class AppState: ObservableObject {
     }
     var signing: Bool { fileAction == .encrypt && !unsigned }
     var passwordRequired: Bool { screen == .keygen && keyMode != .export }
+    /// The private key whose password the visible password field asks for.
+    var keychainKeyPath: String {
+        if screen == .keygen { return privatePath }
+        return fileAction == .encrypt ? signKeyPath : decryptKey
+    }
+    /// A new key has no saved password to fill in.
+    var keychainFillOffered: Bool { askingPassword || (screen == .keygen && keyMode == .upgrade) }
+
+    /// Reads the saved password into the field, after Touch ID or the login password.
+    func fillFromKeychain() {
+        let path = keychainKeyPath
+        if locked || path.isEmpty { return }
+        keychainNotice = nil
+        if demo { return }
+        Task {
+            guard await PrivateKeyKeychain.authenticate(t("keychainReason")) else { return }
+            // The question may have been closed, or moved to another key, meanwhile.
+            guard !locked, keychainFillOffered, keychainKeyPath == path else { return }
+            switch PrivateKeyKeychain.read(path) {
+            case .password(let saved): password = saved
+            case .missing: keychainNotice = "keychainMissing"
+            case .failed: keychainNotice = "keychainFailed"
+            }
+        }
+    }
+    private func rememberPassword(_ path: String, _ value: String) {
+        keychainNotice = PrivateKeyKeychain.save(path, value) ? "keychainSaved" : "keychainNotSaved"
+    }
     var percent: Int? {
         guard let progress, progress.total > 0 else { return nil }
         return min(100, Int(progress.processed * 100 / progress.total))
@@ -276,12 +308,12 @@ final class AppState: ObservableObject {
 
     // Pasted contact text should be public, but is cleared like key text in
     // case a private key was pasted by mistake.
-    func clearSecrets() { password = ""; confirmation = ""; keyText = ""; contactKeyText = "" }
+    func clearSecrets() { password = ""; confirmation = ""; keyText = ""; contactKeyText = ""; saveToKeychain = false }
 
     private func resetFeedback() {
         result = nil; failure = nil; invalidField = nil; progress = nil
         recipients = []; ownRecipient = false; otherRecipients = []; failedContact = nil; signerSaved = false
-        upgradePrompt = nil
+        upgradePrompt = nil; keychainNotice = nil
         feedback = .form; successMessage = "success"
     }
 
@@ -433,6 +465,7 @@ final class AppState: ObservableObject {
         request.replace = kind == .keygen && replaceOffered && replace
         request.overwrite = exporting && overwriteOffered && overwrite
         withdrawReplace(); withdrawOverwrite()
+        let remember = keys && saveToKeychain
         // The native layer keeps its own copy until it finishes; the fields are cleared now.
         clearSecrets()
         let id = jobId
@@ -450,6 +483,7 @@ final class AppState: ObservableObject {
                 result = outcome
                 // A new or upgraded key pair becomes the user's own keys.
                 if keys { ownPublicKey = request.publicPath; signKeyPath = request.privatePath; storePreferences() }
+                if remember { rememberPassword(request.privatePath, request.password) }
                 switch kind {
                 case .upgrade: successMessage = "keyUpgraded"
                 case .exportLegacy: successMessage = "legacyExported"
@@ -511,7 +545,7 @@ final class AppState: ObservableObject {
         askingPassword = false
         runFile()
     }
-    func cancelPassword() { if !locked { password = ""; closeRecipients() } }
+    func cancelPassword() { if !locked { password = ""; saveToKeychain = false; keychainNotice = nil; closeRecipients() } }
 
     private func runFile() {
         guard let action = fileAction else { return }
@@ -532,6 +566,8 @@ final class AppState: ObservableObject {
         request.unsigned = encrypting && unsigned
         request.requireSignature = !encrypting && requireSignature
         request.stage = true
+        let remember = saveToKeychain && !request.password.isEmpty
+        let passwordKey = sign ? signKeyPath : decryptKey
         closeRecipientsNow()
         busy = true; cancelling = false
         // The native layer keeps its own copy until it finishes; the field is cleared now.
@@ -550,6 +586,8 @@ final class AppState: ObservableObject {
                     }
                 }
                 staged = Unsaved(outcome: outcome, kind: action, source: source, contacts: chosen, own: own, others: others)
+                // The password opened the key, wherever the output ends up.
+                if remember { rememberPassword(passwordKey, request.password) }
                 // Every encryption starts with nothing ticked.
                 if encrypting { selected = [] }
             } catch {
@@ -816,7 +854,7 @@ final class AppState: ObservableObject {
         demoContacts()
         choosingRecipients = false; askingPassword = false; fileAction = nil
         ownSelected = false; selected = []; otherKeys = []; unverifiedWarned = false
-        input = ""; output = ""; password = ""; otherPrivateKey = ""
+        input = ""; output = ""; password = ""; otherPrivateKey = ""; saveToKeychain = false
         resetFeedback()
         switch name {
         case "files-empty": screen = .files
@@ -825,7 +863,7 @@ final class AppState: ObservableObject {
             input = name == "files-password" ? "/Users/shawn/Downloads/report.pdf.nkem" : "/Users/shawn/Documents/report.pdf"
             if name == "encrypt-recipients" || name == "encrypt-warning" { fileAction = .encrypt; choosingRecipients = true; ownSelected = true; selected = ["alice"] }
             if name == "encrypt-warning" { selected = ["alice", "carol"]; unverifiedWarned = true }
-            if name == "files-password" { fileAction = .decrypt; askingPassword = true; password = "demo-password" }
+            if name == "files-password" { fileAction = .decrypt; askingPassword = true; password = "demo-password"; saveToKeychain = true }
             if name == "files-done" {
                 var done = Outcome()
                 done.output = "/Users/shawn/Documents/report.pdf.nkem"; done.format = 5

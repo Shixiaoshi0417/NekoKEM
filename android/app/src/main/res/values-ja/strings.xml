@@ -1,7 +1,7 @@
 <?xml version='1.0' encoding='utf-8'?>
 <resources>
     <string name="app_name">NekoKEM</string>
-    <string name="app_version">NekoKEM v5.0.0</string>
+    <string name="app_version">NekoKEM v5.1.0</string>
     <string name="navigation_files">ファイルの暗号化・復号</string>
     <string name="navigation_keys">鍵の管理</string>
     <string name="navigation_settings">設定</string>
@@ -13,7 +13,7 @@
     <string name="about_description">再利用可能な NekoKEM C17 Core と OpenSSL EVP を使用した、実験的な耐量子ハイブリッドファイル暗号化ツールです。</string>
     <string name="private_key_exists">秘密鍵：あり</string>
     <string name="private_key_not_found">秘密鍵：見つかりません</string>
-    <string name="fingerprint_label">SHA-256 公開鍵フィンガープリント</string>
+    <string name="fingerprint_label">フィンガープリント</string>
     <string name="selected_file_label">選択したファイル</string>
     <string name="selected_file_none">ファイルが選択されていません</string>
     <string name="settings_appearance_title">表示と言語</string>
@@ -29,7 +29,7 @@
     <string name="error_password_empty">パスワードを入力してください</string>
     <string name="error_passwords_mismatch">パスワードが一致しません</string>
     <string name="generate_password_title">新しい秘密鍵の保護</string>
-    <string name="generate_password_message">空でないパスワードを入力して確認してください。この鍵生成でのみ使用し、保存しません。</string>
+    <string name="generate_password_message">空でないパスワードを入力して確認してください。NekoKEM はこの鍵生成でのみ使用し、自分では保存しません。</string>
     <string name="check_password_title">秘密鍵のパスワードを確認</string>
     <string name="check_password_message">暗号化された秘密鍵のパスワードを入力してください。確認は一度だけ行います。</string>
     <string name="import_password_title">暗号化された秘密鍵をインポート</string>
@@ -40,7 +40,7 @@
     <string name="select_temporary_private_key_password_title">選択した秘密鍵を確認</string>
     <string name="select_temporary_private_key_password_message">一時的な NKPR 秘密鍵のパスワードを入力してください。Core がコンテナーを検証して公開鍵フィンガープリントを表示します。インポートや既定の鍵の置き換えは行いません。</string>
     <string name="confirm_temporary_public_key_title">この公開鍵を使用しますか？</string>
-    <string name="confirm_temporary_public_key_message">ファイル：%1$s\n\nSHA-256 フィンガープリント：\n%2$s\n\nこの鍵は一度だけ使用し、アプリの既定の公開鍵は置き換えません。</string>
+    <string name="confirm_temporary_public_key_message">ファイル：%1$s\n\nフィンガープリント：\n%2$s\n\nこの鍵は一度だけ使用し、アプリの既定の公開鍵は置き換えません。</string>
     <string name="delete_private_key_title">秘密鍵を完全に削除しますか？</string>
     <string name="delete_private_key_message">ローカルの NKPR 秘密鍵と関連する一時キャッシュを削除します。公開鍵は保持します。</string>
     <string name="delete_public_key_title">公開鍵を完全に削除しますか？</string>
@@ -76,11 +76,8 @@
     <string name="action_cancel">キャンセル</string>
     <string name="action_close">閉じる</string>
     <string name="action_use_key">この鍵を使用</string>
-    <string name="action_select_other_public_key">別の公開鍵を選択</string>
-    <string name="action_restore_default_public_key">既定の公開鍵に戻す</string>
     <string name="action_select_other_private_key">別の秘密鍵を選択</string>
     <string name="action_restore_default_private_key">既定の秘密鍵に戻す</string>
-    <string name="encryption_public_key_title">暗号化用の公開鍵</string>
     <string name="decryption_private_key_title">復号用の秘密鍵</string>
     <string name="key_source_app_default">アプリの既定の鍵</string>
     <string name="key_source_temporary_saf">SAF の一時的な選択</string>
@@ -105,24 +102,18 @@
     <string name="completion_result">結果</string>
     <string name="completion_success">成功</string>
     <string name="completion_file">ファイル</string>
-    <string name="completion_fingerprint">SHA-256 フィンガープリント</string>
+    <string name="completion_fingerprint">フィンガープリント</string>
     <string name="completion_keypair_files">%1$s と %2$s</string>
     <string name="completion_elapsed">経過時間</string>
     <string name="completion_average_speed">平均速度</string>
     <string name="error_dialog_title">操作に失敗しました</string>
     <string name="error_dialog_reason">原因</string>
     <string name="result_line">%1$s：%2$s</string>
-    <string name="snackbar_file_selected">ファイルを選択しました</string>
-    <string name="snackbar_output_selection_cancelled">出力先の選択をキャンセルしました</string>
-    <string name="snackbar_key_selection_cancelled">鍵の選択をキャンセルしました</string>
     <string name="snackbar_operation_cancelled">操作をキャンセルしました</string>
-    <string name="snackbar_operation_success">%1$sが完了しました</string>
-    <string name="snackbar_temporary_public_key_selected">一時的な公開鍵を確認しました</string>
     <string name="snackbar_temporary_private_key_selected">一時的な秘密鍵を検証しました</string>
     <string name="snackbar_default_public_key_restored">既定の公開鍵に戻しました</string>
     <string name="snackbar_default_private_key_restored">既定の秘密鍵に戻しました</string>
     <string name="error_select_file_first">先にファイルを選択してください</string>
-    <string name="error_public_key_not_found">公開鍵が見つかりません</string>
     <string name="error_private_key_not_found">秘密鍵が見つかりません</string>
     <string name="error_reason_storage">ファイルプロバイダーまたはアプリの非公開ストレージの操作に失敗しました。</string>
     <string name="error_reason_invalid_argument">パス、パスワード、または操作の引数が無効です。</string>
@@ -137,7 +128,6 @@
     <string name="error_reason_delete">ローカルの鍵ファイルまたは関連する一時ファイルを安全に削除できませんでした。</string>
     <string name="error_reason_delete_residue">秘密鍵は削除しましたが、中断された鍵の生成または置き換えが残した秘密鍵の一時コピーは、別の操作が書き込み中の可能性があるため残しました。このコピーは対応するパスワードで解除できる場合があります。復旧用バックアップで確認し、Android README を参照してから対処してください。</string>
     <string name="error_reason_core">NekoKEM Core が操作を拒否しました。</string>
-    <string name="error_reason_unexpected">Android の操作中に予期しないエラーが発生しました。</string>
     <string name="error_reason_fingerprint_mismatch">確認後に一時的な鍵が変更されたか、フィンガープリントが一致しなくなりました。</string>
     <string name="error_reason_key_pair_mismatch">この鍵は、この端末に保存されているもう一方の鍵と対になっていません。別の鍵ペアに切り替えるには、現在の鍵ペアを削除してから両方の鍵をインポートしてください。</string>
     <string name="error_reason_public_key_copy">SAF 公開鍵データを完全にコピーできませんでした。</string>
@@ -171,7 +161,6 @@
     <!-- Saved public-key contacts -->
     <string name="navigation_contacts">公開鍵アドレス帳</string>
     <string name="action_import_contact">公開鍵を追加</string>
-    <string name="action_choose_contact">保存済みの公開鍵を選択</string>
     <string name="action_edit_contact_note">メモを編集</string>
     <string name="action_save_contact">保存</string>
     <string name="action_use_contact">暗号化に使用</string>
@@ -190,13 +179,11 @@
     <string name="contact_selected">保存済みの公開鍵を選択しました</string>
     <string name="contact_load_failed">公開鍵アドレス帳を読み込めません</string>
     <string name="contact_unreadable_entries">%1$d 件の保存済み項目を読み込めません</string>
-    <string name="contact_unavailable">選択した公開鍵を使用できません。別の公開鍵を選択してください。</string>
     <string name="contact_delete_title">保存済みの公開鍵を削除しますか？</string>
     <string name="contact_delete_message">アドレス帳から %1$s を削除しますか？選択中の場合は暗号化用の鍵を選び直してください。既定の鍵は保持されます。</string>
     <string name="contact_save_title">公開鍵を保存</string>
     <string name="contact_edit_title">メモを編集</string>
     <string name="contact_picker_title">保存済みの公開鍵を選択</string>
-    <string name="key_source_contacts">公開鍵アドレス帳</string>
     <string name="operation_save_contact">公開鍵を保存</string>
     <string name="operation_update_contact">公開鍵のメモを更新</string>
     <string name="operation_delete_contact">保存済みの公開鍵を削除</string>
@@ -206,7 +193,6 @@
     <string name="action_encrypt_for_selected">選択した受信者向けに暗号化</string>
     <string name="contact_selection_limit">受信者は最大 %1$d 人まで選択できます</string>
     <string name="contact_recipients_hint">選択した受信者はそれぞれ自分の秘密鍵で復号でき、それ以外の人は復号できません。複数の受信者向けファイルは NKEM v4 を使用し、NekoKEM v3.3.2 以前では開けません。</string>
-    <string name="key_source_contacts_multiple">公開鍵アドレス帳（受信者 %1$d 人）</string>
     <string name="contact_recipients_selected">受信者を選択しました</string>
     <string name="contact_failed_recipient">使用できない受信者：%1$s</string>
     <string name="recovery_backups_title">復旧用バックアップを保持</string>
@@ -250,9 +236,7 @@
     <string name="error_reason_signer_not_trusted">署名者は信頼済みの鍵ではありません。何も書き込んでいません。</string>
     <string name="error_reason_already_identity">この鍵は既に署名できます。アップグレードは不要です。</string>
     <string name="error_reason_upgrade">鍵をアップグレードできませんでした。パスワードが正しくないか、鍵ファイルが一致しません。ファイルは変更していません。</string>
-    <string name="key_identity_status">ID 鍵 · 署名と検証ができます</string>
     <string name="key_legacy_status">旧形式の鍵 · 署名できません。アップグレードすると署名できます。</string>
-    <string name="legacy_fingerprint_label">旧形式の指紋（NekoKEM 4.x 以前）</string>
     <string name="action_upgrade_key">鍵をアップグレード</string>
     <string name="action_export_legacy_public_key">旧形式の公開鍵を書き出す</string>
     <string name="operation_upgrade_key">鍵のアップグレード</string>
@@ -298,12 +282,10 @@
     <string name="action_mark_verified">照合済みにする</string>
     <string name="action_unmark_verified">照合済みを解除</string>
     <string name="contact_verify_title">フィンガープリントを照合</string>
-    <string name="contact_verify_hint">上のフィンガープリントを、%1$s の端末の「鍵」ページに表示されるものと比べるか、相手のフィンガープリント QR コードを読み取ってください。すべての文字が一致した場合にのみ照合済みにしてください。</string>
     <string name="contact_unverified_title">未照合の連絡先</string>
     <string name="contact_unverified_message">%1$s のフィンガープリントは照合されていません。公開鍵が途中ですり替えられていると、その鍵で暗号化したファイルを他人が開けます。先に相手とフィンガープリントを照合するか、このまま続けてください。</string>
     <string name="contact_name_separator">、</string>
     <string name="action_use_anyway">このまま使用</string>
-    <string name="action_open_contact">詳細を開く</string>
     <string name="action_back_to_contacts">すべての連絡先</string>
     <string name="operation_verify_contact">連絡先の照合</string>
     <string name="fingerprint_scan_camera_unavailable">使用できるカメラが見つからないため、この端末では読み取れません。代わりに完全なフィンガープリントを相手と目で照合してください。</string>
@@ -322,4 +304,11 @@
     <string name="recipient_other_file">その他の公開鍵ファイル…</string>
     <string name="recipient_count">%1$d / %2$d</string>
     <string name="action_share_fingerprint">フィンガープリントを共有</string>
+    <string name="password_manager_fill">パスワード マネージャーから入力</string>
+    <string name="password_manager_save">パスワード マネージャーに保存</string>
+    <string name="password_manager_not_found">この鍵のパスワードはパスワード マネージャーにありません。</string>
+    <string name="password_manager_unavailable">使用できるパスワード マネージャーがありません。システム設定の「パスワードとアカウント」で選択してください。</string>
+    <string name="password_manager_failed">パスワード マネージャーが応答しません。もう一度お試しください。</string>
+    <string name="snackbar_password_manager_saved">パスワード マネージャーに保存しました</string>
+    <string name="snackbar_password_manager_not_saved">パスワード マネージャーに保存されませんでした</string>
 </resources>

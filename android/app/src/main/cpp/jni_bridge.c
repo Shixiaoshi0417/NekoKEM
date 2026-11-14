@@ -117,48 +117,6 @@ Java_com_shixiaoshi0417_nekokem_nativecore_NativeBridge_nativeCoreTest(
 }
 
 JNIEXPORT jint JNICALL
-Java_com_shixiaoshi0417_nekokem_nativecore_NativeBridge_nativeGenerateKeypair(
-    JNIEnv *env,
-    jobject bridge,
-    jstring public_key_path,
-    jstring private_key_path,
-    jbyteArray password_array)
-{
-    UtfPath public_path = {0};
-    UtfPath private_path = {0};
-    unsigned char *password = NULL;
-    size_t password_len = 0U;
-    int result = JNI_RESULT_INVALID_ARGUMENT;
-
-    (void)bridge;
-    result = utf_path_acquire(env, public_key_path, &public_path);
-    if (result != JNI_RESULT_SUCCESS) {
-        goto cleanup;
-    }
-    result = utf_path_acquire(env, private_key_path, &private_path);
-    if (result != JNI_RESULT_SUCCESS) {
-        goto cleanup;
-    }
-    result = password_copy(env, password_array, 1,
-                           &password, &password_len);
-    if (result != JNI_RESULT_SUCCESS) {
-        goto cleanup;
-    }
-    result = nekokem_generate_keypair(public_path.value,
-                                      private_path.value,
-                                      password,
-                                      password_len) == 1
-                 ? JNI_RESULT_SUCCESS
-                 : JNI_RESULT_CORE_ERROR;
-
-cleanup:
-    OPENSSL_clear_free(password, password_len);
-    utf_path_release(env, &private_path);
-    utf_path_release(env, &public_path);
-    return (jint)result;
-}
-
-JNIEXPORT jint JNICALL
 Java_com_shixiaoshi0417_nekokem_nativecore_NativeBridge_nativeEncryptFile(
     JNIEnv *env,
     jobject bridge,

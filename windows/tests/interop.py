@@ -27,16 +27,11 @@ def run(*args, password=b'', ok=True):
     assert (p.returncode == 0) == ok, (args,p.returncode,p.stdout,p.stderr)
     return p
 
-def fingerprints(path):
-    """The key's fingerprint, then the legacy one for an identity key."""
+def fingerprint(path):
+    """The key's only fingerprint: identity for an identity key, legacy otherwise."""
     p = run(password=b'4\n1\n'+str(path).encode('utf-8')+b'\n5\n')
     found = re.findall(rb'(?<![0-9A-F])(?:[0-9A-F]{2}:){31}[0-9A-F]{2}(?![0-9A-F])', p.stdout)
-    assert len(found) in (1, 2), (p.stdout,p.stderr)
-    return found
-
-def fingerprint(path):
-    found = fingerprints(path)
-    assert len(found) == 1, found
+    assert len(found) == 1, (p.stdout,p.stderr)
     return found[0]
 
 def cli_contract():
@@ -79,9 +74,10 @@ elif phase == 'windows':
     # keygen never replaces keys; the Linux phase may have left keys/ behind.
     run('keygen', '--replace', password=PASSWORD*2)
     shutil.copyfile(root/'keys/public.key',root/'windows-public.key')
-    identity, windows_legacy = fingerprints('windows-public.key')
+    identity = fingerprint('windows-public.key')
     run('export-legacy-public-key','windows-public.key','windows-legacy.key')
-    assert fingerprint('windows-legacy.key') == windows_legacy
+    windows_legacy = fingerprint('windows-legacy.key')
+    assert windows_legacy != identity
     (root/'windows-legacy-fingerprint.txt').write_bytes(windows_legacy)
     for name in ['binary','empty']:
         run('decrypt','hybrid',name+'.linux.nkem',name+'.from-linux','imported.enc',password=PASSWORD)
@@ -102,8 +98,8 @@ elif phase == 'windows':
         subprocess.run([harness,'secure-copy',str(root/source),str(root/target)],
                        cwd=root, check=True, timeout=30)
     run('upgrade-key','upgraded-public.key','upgraded.enc',password=PASSWORD)
-    upgraded, upgraded_legacy = fingerprints('upgraded-public.key')
-    assert upgraded_legacy == legacy and upgraded != legacy
+    run('export-legacy-public-key','upgraded-public.key','upgraded-legacy.key')
+    assert fingerprint('upgraded-legacy.key') == legacy and fingerprint('upgraded-public.key') != legacy
     run('decrypt','hybrid','binary.linux.nkem','binary.upgraded','upgraded.enc',password=PASSWORD)
     assert (root/'binary.upgraded').read_bytes() == (root/'binary').read_bytes()
     print('Windows decrypted pre-port Linux v3/NKPR, signed v5, upgraded the historical key and matched fingerprints')

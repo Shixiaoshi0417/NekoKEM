@@ -7,41 +7,68 @@ import androidx.annotation.StringRes
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.Checkbox
+import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.ExperimentalComposeUiApi
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.InterceptPlatformTextInput
 import androidx.compose.ui.platform.PlatformTextInputInterceptor
 import androidx.compose.ui.platform.PlatformTextInputMethodRequest
 import androidx.compose.ui.platform.PlatformTextInputSession
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.state.ToggleableState
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.DialogProperties
 import androidx.compose.ui.window.SecureFlagPolicy
 import com.shixiaoshi0417.nekokem.R
+import com.shixiaoshi0417.nekokem.keys.PasswordManagerCredentials
 import java.security.MessageDigest
+import kotlinx.coroutines.launch
+import top.yukonga.miuix.kmp.theme.MiuixTheme
+
+/**
+ * What a password dialog offers around the system password manager.
+ * [credentialIds] picks the saved entries to fill from (null offers every
+ * NekoKEM entry); [offerSave] adds the "save after it succeeds" choice.
+ */
+data class PasswordManagerOptions(
+    val credentialIds: Set<String>?,
+    val canFill: Boolean = true,
+    val offerSave: Boolean = false,
+)
 
 @Composable
 fun GeneratePasswordDialog(
     onDismiss: () -> Unit,
-    onConfirm: (ByteArray) -> Unit,
+    /** The password, and whether to save it to the password manager once the key exists. */
+    onConfirm: (ByteArray, Boolean) -> Unit,
 ) {
     var password by remember { mutableStateOf(ByteArray(0)) }
     var confirmation by remember { mutableStateOf(ByteArray(0)) }
     var errorResource by remember { mutableStateOf<Int?>(null) }
+    var saveToPasswordManager by remember { mutableStateOf(false) }
 
     DisposableEffect(Unit) {
         onDispose {
@@ -86,6 +113,11 @@ fun GeneratePasswordDialog(
                 errorResource?.let { resource ->
                     DialogError(resource)
                 }
+                if (PasswordManagerCredentials.isSupported) {
+                    SaveToPasswordManagerOption(saveToPasswordManager) {
+                        saveToPasswordManager = it
+                    }
+                }
             }
         },
         confirmButton = {
@@ -107,7 +139,7 @@ fun GeneratePasswordDialog(
                             confirmation.fill(0)
                             password = ByteArray(0)
                             confirmation = ByteArray(0)
-                            onConfirm(submitted)
+                            onConfirm(submitted, saveToPasswordManager)
                         }
                     }
                 },
@@ -133,11 +165,18 @@ fun SinglePasswordDialog(
     @StringRes titleResource: Int,
     @StringRes messageResource: Int,
     @StringRes labelResource: Int = R.string.password_label,
+    passwordManager: PasswordManagerOptions? = null,
     onDismiss: () -> Unit,
-    onConfirm: (ByteArray) -> Unit,
+    /** The password, and whether to save it to the password manager after it is accepted. */
+    onConfirm: (ByteArray, Boolean) -> Unit,
 ) {
     var password by remember { mutableStateOf(ByteArray(0)) }
     var showEmptyError by remember { mutableStateOf(false) }
+    var managerMessage by remember { mutableStateOf<Int?>(null) }
+    var saveToPasswordManager by remember { mutableStateOf(false) }
+    val manager = passwordManager?.takeIf { PasswordManagerCredentials.isSupported }
+    val activity = LocalContext.current.findActivity()
+    val scope = rememberCoroutineScope()
 
     DisposableEffect(Unit) {
         onDispose { password.fill(0) }
@@ -160,12 +199,45 @@ fun SinglePasswordDialog(
                         password.fill(0)
                         password = updated
                         showEmptyError = false
+                        managerMessage = null
                     },
                     labelResource = labelResource,
                     isError = showEmptyError,
                 )
                 if (showEmptyError) {
                     DialogError(R.string.error_password_empty)
+                }
+                managerMessage?.let { DialogError(it) }
+                if (manager != null && manager.canFill && activity != null) {
+                    FillFromPasswordManagerButton {
+                        scope.launch {
+                            when (
+                                val result = PasswordManagerCredentials.fill(
+                                    activity,
+                                    manager.credentialIds,
+                                )
+                            ) {
+                                is PasswordManagerCredentials.FillResult.Filled -> {
+                                    password.fill(0)
+                                    password = result.password
+                                    showEmptyError = false
+                                    managerMessage = null
+                                }
+                                PasswordManagerCredentials.FillResult.Cancelled -> Unit
+                                PasswordManagerCredentials.FillResult.NotFound ->
+                                    managerMessage = R.string.password_manager_not_found
+                                PasswordManagerCredentials.FillResult.Unavailable ->
+                                    managerMessage = R.string.password_manager_unavailable
+                                PasswordManagerCredentials.FillResult.Failed ->
+                                    managerMessage = R.string.password_manager_failed
+                            }
+                        }
+                    }
+                }
+                if (manager != null && manager.offerSave) {
+                    SaveToPasswordManagerOption(saveToPasswordManager) {
+                        saveToPasswordManager = it
+                    }
                 }
             }
         },
@@ -179,7 +251,7 @@ fun SinglePasswordDialog(
                         val submitted = password.copyOf()
                         password.fill(0)
                         password = ByteArray(0)
-                        onConfirm(submitted)
+                        onConfirm(submitted, manager?.offerSave == true && saveToPasswordManager)
                     }
                 },
             )
@@ -273,6 +345,57 @@ private fun PasswordKeyboard(content: @Composable () -> Unit) {
         },
         content = content,
     )
+}
+
+/** A secondary action under the field that asks the password manager for the password. */
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
+@Composable
+private fun FillFromPasswordManagerButton(onClick: () -> Unit) {
+    val text = stringResource(R.string.password_manager_fill)
+    if (isMiuixStyle()) {
+        top.yukonga.miuix.kmp.basic.TextButton(
+            text = text,
+            onClick = onClick,
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(top = 12.dp),
+        )
+        return
+    }
+    TextButton(
+        onClick = onClick,
+        shapes = ButtonDefaults.shapes(),
+        modifier = Modifier.padding(top = 4.dp),
+    ) {
+        Text(text)
+    }
+}
+
+/** A check box: save the password to the password manager once it is accepted. */
+@Composable
+private fun SaveToPasswordManagerOption(checked: Boolean, onChange: (Boolean) -> Unit) {
+    val miuix = isMiuixStyle()
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .padding(top = 8.dp)
+            .toggleable(value = checked, role = Role.Checkbox, onValueChange = onChange)
+            .padding(vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        if (miuix) {
+            top.yukonga.miuix.kmp.basic.Checkbox(state = ToggleableState(checked), onClick = null)
+        } else {
+            Checkbox(checked = checked, onCheckedChange = null)
+        }
+        Text(
+            text = stringResource(R.string.password_manager_save),
+            modifier = Modifier
+                .weight(1f)
+                .padding(start = 12.dp),
+            color = if (miuix) MiuixTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurface,
+        )
+    }
 }
 
 @Composable

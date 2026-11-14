@@ -6,38 +6,38 @@
   <img src="docs/icon-rounded.png" alt="NekoKEM project icon" width="160">
 </p>
 
-NekoKEM is an experimental post-quantum file encryption tool for learning the OpenSSL EVP API. It supports NKEM v3 (one recipient) and NKEM v4 (several recipients) Hybrid file containers.
+NekoKEM is an experimental post-quantum file encryption tool for learning the OpenSSL EVP API. By default it writes NKEM v5 file containers signed by the sender (1 to 64 recipients); unsigned encryption writes NKEM v3 (one recipient) or NKEM v4 (several recipients) Hybrid file containers.
 
 | Mode | Key establishment | KDF | File encryption | Container |
 |---|---|---|---|---|
-| v3 hybrid (default) | X448 + ML-KEM-1024 | HKDF-SHA512 | AES-256-GCM | version 3 / algorithm id 3 |
-| v4 multi-recipient | X448 + ML-KEM-1024 per recipient | HKDF-SHA512 | AES-256-GCM key wrap and data, HMAC-SHA512 header MAC | version 4 / algorithm id 4 |
+| v5 signed (default) | X448 + ML-KEM-1024 per recipient | HKDF-SHA512 | As v4, plus an encrypted Ed448 + ML-DSA-87 sender signature | version 5 / algorithm id 5 |
+| v3 hybrid (unsigned, one recipient) | X448 + ML-KEM-1024 | HKDF-SHA512 | AES-256-GCM | version 3 / algorithm id 3 |
+| v4 multi-recipient (unsigned) | X448 + ML-KEM-1024 per recipient | HKDF-SHA512 | AES-256-GCM key wrap and data, HMAC-SHA512 header MAC | version 4 / algorithm id 4 |
 
 The project does not implement cryptographic algorithms itself and does not depend on liboqs. **It has not undergone a security audit, must not be considered production-grade software, and must not be used to protect important or sensitive data.**
 
-## Release v5.0.0
+## Release v5.1.0
 
-Android and every CLI/GUI application are `5.0.0`; Core moves to `5.0`:
+Android and every CLI/GUI application are `5.1.0`; Core stays at `5.0`, with unchanged file formats and cryptographic parameters:
 
-- Newly encrypted files are signed [NKEM v5](docs/NKEM-v5.md) by default: identity keys sign with Ed448 + ML-DSA-87, and the signer identity has an explicit canonical binary encoding (NKID). Core verifies the signature and enforces policies such as Accept only signed files; an invalid signature writes no output. Decryption shows whether the signer is this device, a saved contact or unknown.
-- Encrypt without signing (legacy compatible) is a Settings option, off by default. Turning it on needs a confirmed red warning, and while it is on the red warning "Recipients cannot confirm the file came from you" is shown. The CLI equivalent is `encrypt --unsigned`.
-- A NekoKEM 4.x key pair upgrades in place to an identity key (same encryption keys and password), and an identity key exports a legacy public key that 4.x reads.
+- Rewritten desktop apps: Windows and Linux move to a Compose Multiplatform app that looks like the Android app (MIUIX by default, Material 3 Expressive as an option) and carries its own Java runtime; macOS moves to a native SwiftUI app in the Liquid Glass design on macOS 26. The earlier Tauri app is removed, and Windows gains an MSI installer.
+- The desktop file page works as on Android: choose a file, press Encrypt or Decrypt, and choose where to save in the system dialog once the work is done.
+- Fingerprint QR verification: the Keys page shows a QR code holding only the fingerprint, and Android scans it to verify a saved contact. Contacts show a verification mark, and encrypting for an unverified contact asks first.
+- OpenSSL moves from 4.0.3 to 4.1.0.
 
-NKEM v3/v4 and NKPR v1 still decrypt and load; OpenSSL remains pinned to 4.0.3. **NekoKEM 4.x and earlier cannot read NKEM v5, NKPR v2 or four-component public keys**; for recipients on an old version, turn on unsigned encryption and use the legacy public key. See the [bilingual v5.0.0 notes](release/v5.0.0.md) and [GitHub Release](https://github.com/Shixiaoshi0417/NekoKEM/releases/tag/v5.0.0).
+5.1.0 and 5.0.0 read each other's files and keys. **NekoKEM 4.x and earlier cannot read NKEM v5, NKPR v2 or four-component public keys**; for recipients on an old version, turn on unsigned encryption and use the legacy public key. See the [bilingual v5.1.0 notes](release/v5.1.0.md) and [GitHub Release](https://github.com/Shixiaoshi0417/NekoKEM/releases/tag/v5.1.0).
 
-Android v5.0.0 retains the v3.2.0/v3.3.0 signing identity and supports an in-place update; back up the public key, encrypted NKPR private key and its password, especially before upgrading the key. Only v3.1.x installations with the old signer need backup verification followed by uninstall/reinstall; uninstalling deletes app-private keys. NKEM v1/v2 are no longer supported.
+Android v5.1.0 retains the v3.2.0/v3.3.0 signing identity and supports an in-place update; back up the public key, encrypted NKPR private key and its password, especially before upgrading the key. Only v3.1.x installations with the old signer need backup verification followed by uninstall/reinstall; uninstalling deletes app-private keys. NKEM v1/v2 are no longer supported.
 
 | Platform and architecture | CLI / Android | GUI |
 |---|---|---|
-| Android 8.0+ ARM64 | [APK](https://github.com/Shixiaoshi0417/NekoKEM/releases/download/v5.0.0/app-release.apk) | Interface included in APK |
-| Windows 10/11 x64 | [CLI ZIP](https://github.com/Shixiaoshi0417/NekoKEM/releases/download/v5.0.0/NekoKEM-windows-x86_64.zip) | [GUI ZIP](https://github.com/Shixiaoshi0417/NekoKEM/releases/download/v5.0.0/NekoKEM-Windows-GUI.zip) |
-| macOS Apple Silicon arm64 | [CLI TAR.GZ](https://github.com/Shixiaoshi0417/NekoKEM/releases/download/v5.0.0/NekoKEM-macos-arm64.tar.gz) | [GUI ZIP](https://github.com/Shixiaoshi0417/NekoKEM/releases/download/v5.0.0/NekoKEM-macos-arm64-GUI.zip) · [DMG](https://github.com/Shixiaoshi0417/NekoKEM/releases/download/v5.0.0/NekoKEM-macos-arm64-GUI.dmg) |
-| Linux x86_64 | [Static CLI](https://github.com/Shixiaoshi0417/NekoKEM/releases/download/v5.0.0/NekoKEM-linux-x86_64.tar.gz) | [DEB](https://github.com/Shixiaoshi0417/NekoKEM/releases/download/v5.0.0/NekoKEM-linux-x86_64-GUI.deb) · [RPM](https://github.com/Shixiaoshi0417/NekoKEM/releases/download/v5.0.0/NekoKEM-linux-x86_64-GUI.rpm) · [Portable](https://github.com/Shixiaoshi0417/NekoKEM/releases/download/v5.0.0/NekoKEM-linux-x86_64-GUI.tar.gz) |
-| Linux ARM64 / aarch64 | [Static CLI](https://github.com/Shixiaoshi0417/NekoKEM/releases/download/v5.0.0/NekoKEM-linux-aarch64.tar.gz) | [DEB](https://github.com/Shixiaoshi0417/NekoKEM/releases/download/v5.0.0/NekoKEM-linux-aarch64-GUI.deb) · [RPM](https://github.com/Shixiaoshi0417/NekoKEM/releases/download/v5.0.0/NekoKEM-linux-aarch64-GUI.rpm) · [Portable](https://github.com/Shixiaoshi0417/NekoKEM/releases/download/v5.0.0/NekoKEM-linux-aarch64-GUI.tar.gz) |
+| Android 8.0+ ARM64 | [APK](https://github.com/Shixiaoshi0417/NekoKEM/releases/download/v5.1.0/app-release.apk) | Interface included in APK |
+| Windows 10/11 x64 | [CLI ZIP](https://github.com/Shixiaoshi0417/NekoKEM/releases/download/v5.1.0/NekoKEM-windows-x86_64.zip) | [MSI](https://github.com/Shixiaoshi0417/NekoKEM/releases/download/v5.1.0/NekoKEM-Windows-GUI.msi) · [ZIP](https://github.com/Shixiaoshi0417/NekoKEM/releases/download/v5.1.0/NekoKEM-Windows-GUI.zip) |
+| macOS Apple Silicon arm64 | [CLI TAR.GZ](https://github.com/Shixiaoshi0417/NekoKEM/releases/download/v5.1.0/NekoKEM-macos-arm64.tar.gz) | [GUI ZIP](https://github.com/Shixiaoshi0417/NekoKEM/releases/download/v5.1.0/NekoKEM-macos-arm64-GUI.zip) · [DMG](https://github.com/Shixiaoshi0417/NekoKEM/releases/download/v5.1.0/NekoKEM-macos-arm64-GUI.dmg) |
+| Linux x86_64 | [Static CLI](https://github.com/Shixiaoshi0417/NekoKEM/releases/download/v5.1.0/NekoKEM-linux-x86_64.tar.gz) | [DEB](https://github.com/Shixiaoshi0417/NekoKEM/releases/download/v5.1.0/NekoKEM-linux-x86_64-GUI.deb) · [RPM](https://github.com/Shixiaoshi0417/NekoKEM/releases/download/v5.1.0/NekoKEM-linux-x86_64-GUI.rpm) · [Portable](https://github.com/Shixiaoshi0417/NekoKEM/releases/download/v5.1.0/NekoKEM-linux-x86_64-GUI.tar.gz) |
+| Linux ARM64 / aarch64 | [Static CLI](https://github.com/Shixiaoshi0417/NekoKEM/releases/download/v5.1.0/NekoKEM-linux-aarch64.tar.gz) | [DEB](https://github.com/Shixiaoshi0417/NekoKEM/releases/download/v5.1.0/NekoKEM-linux-aarch64-GUI.deb) · [RPM](https://github.com/Shixiaoshi0417/NekoKEM/releases/download/v5.1.0/NekoKEM-linux-aarch64-GUI.rpm) · [Portable](https://github.com/Shixiaoshi0417/NekoKEM/releases/download/v5.1.0/NekoKEM-linux-aarch64-GUI.tar.gz) |
 
-Verify each downloaded archive against [SHA256SUMS.txt](https://github.com/Shixiaoshi0417/NekoKEM/releases/download/v5.0.0/SHA256SUMS.txt), then verify its internal checksums. Linux GUI requires glibc 2.39+, GTK3 and WebKitGTK 4.1. macOS tests run on macOS 15 with an 11.0 deployment target. Platform installation steps and signing limitations follow below.
-
-> Desktop note: the v5.0.0 desktop GUI is a Tauri app, and the GUI sections below describe that release. The main branch has moved to a Compose Multiplatform app (Windows, Linux) and a SwiftUI app (macOS), which ship with the next release; see the [desktop GUI documentation](desktop/README.md).
+Verify each downloaded archive against [SHA256SUMS.txt](https://github.com/Shixiaoshi0417/NekoKEM/releases/download/v5.1.0/SHA256SUMS.txt), then verify its internal checksums. The Linux GUI requires glibc 2.39+, and its DEB/RPM depend on Noto Sans CJK fonts and `curl`. The macOS GUI needs macOS 13 or newer; the CLI has an 11.0 deployment target. Platform installation steps and signing limits are described in the platform sections below.
 
 Releases after v4.1.0 also carry GitHub build provenance for every asset. With the GitHub CLI, confirm that a file was built by this repository's Release workflow on `main` (substitute the asset you downloaded):
 
@@ -89,7 +89,7 @@ Android serializes local-key mutations within the process and shares Core's dire
 
 ## Desktop GUI public-key contacts
 
-The Rust + Tauri 2 + Vue 3 + TypeScript GUI shared by Windows, macOS and Linux adds a
+The desktop GUI on Windows, macOS and Linux has a
 Public-key contacts page. Save a recipient's public key from a file or pasted text, add or
 edit a note, and delete entries after confirmation. The encryption page can choose a saved
 contact, and a contact's Use for encryption action opens that page with it selected. Lists
@@ -103,17 +103,11 @@ interface languages are updated. Cryptographic parameters, file formats and secr
 remain unchanged. See the [desktop GUI documentation](desktop/README.md#public-key-contacts--公钥通讯录).
 This feature is available from v3.3.2; v3.3.1 and earlier do not include it.
 
-Desktop encryption and decryption report an existing output before writing; confirm replacement and retry, re-entering the decryption password. Unconfirmed operations publish atomically without replacement, so a target created during the operation is also preserved; on volumes with neither hard links nor a no-replace rename (FAT or exFAT on macOS, some network mounts), the commit instead checks the target immediately before an ordinary rename. The backend accepts replacement only at the exact paths from its preceding `key-exists` or `output-exists` response in the same session, once within five minutes and consumed by the next operation. POSIX pasted keys prefer a safe `$XDG_RUNTIME_DIR`, then on macOS the per-user temporary directory (outside Time Machine), then private `~/.nekokem-tmp`; staging disables stdio buffering and omits `fsync`. Capabilities grant only event listening, unlistening and native open/save dialogs. Navigation allows only the platform local origin, rejecting HTTPS and new windows. Recipient lists show full fingerprints; names drop controls, separators and every Unicode format character, keeping a zero-width joiner or non-joiner only between two visible non-ASCII characters.
+Desktop encryption and decryption report an existing output before writing; confirm replacement and retry, re-entering the decryption password. Unconfirmed operations publish atomically without replacement, so a target created during the operation is also preserved; on volumes with neither hard links nor a no-replace rename (FAT or exFAT on macOS, some network mounts), the commit instead checks the target immediately before an ordinary rename. The backend accepts replacement only at the exact paths from its preceding `key-exists` or `output-exists` response in the same session, once within five minutes and consumed by the next operation. POSIX pasted keys prefer a safe `$XDG_RUNTIME_DIR`, then on macOS the per-user temporary directory (outside Time Machine), then private `~/.nekokem-tmp`; staging disables stdio buffering and omits `fsync`. Recipient lists show full fingerprints; names drop controls, separators and every Unicode format character, keeping a zero-width joiner or non-joiner only between two visible non-ASCII characters.
 
-## Historical release v3.2.0
+## Linux CLI installation
 
-v3.2.0 introduced five interface languages, system-language selection and security fixes, and changed the Android release signer. Its migration instructions and historical build records remain in the [v3.2.0 notes](release/v3.2.0.md). Updating from v3.2.0 to v3.3.0 does not require another uninstall.
-
-## Historical release v3.1.1
-
-The Android App version is `3.1.1`; the Core version remains `3.1`, and the application ID is `com.shixiaoshi0417.nekokem`. See [`android/README.md`](android/README.md) for the Android project and build instructions. App version 3.1.1 does not change protocol numbering: the default file container remains **NKEM v3**, and the NKPR format is unchanged.
-
-v3.1.1 adds Linux x86_64/aarch64 CLI packages without runtime shared-library dependencies, an automatic installation script, and GitHub Actions builds. The current installer selects the package for the local architecture from the latest published Release, resolved once so every download comes from the same release; `NEKOKEM_RELEASE_TAG=v5.0.0 sh install.sh` installs a specific release, and the installed binary must report that version. It first verifies the archive against the release's top-level `SHA256SUMS.txt`, then verifies SHA-256 hashes of the files inside the package:
+The Linux x86_64/aarch64 CLI packages have no runtime shared-library dependencies. The installer selects the package for the local architecture from the latest published Release, resolved once so every download comes from the same release; `NEKOKEM_RELEASE_TAG=v5.1.0 sh install.sh` installs a specific release, and the installed binary must report that version. It first verifies the archive against the release's top-level `SHA256SUMS.txt`, then verifies SHA-256 hashes of the files inside the package:
 
 ```sh
 curl --fail --location --output install.sh \
@@ -123,6 +117,16 @@ sh install.sh
 ```
 
 Checksums verify download integrity, not provenance. `NEKOKEM_VERIFY_ATTESTATION=1 sh install.sh` additionally invokes `gh attestation verify`; this applies to attested releases after `v4.1.0` and refuses installation of `v4.1.0` and earlier, which carry no provenance attestation.
+
+## Historical release v3.2.0
+
+v3.2.0 introduced five interface languages, system-language selection and security fixes, and changed the Android release signer. Its migration instructions and historical build records remain in the [v3.2.0 notes](release/v3.2.0.md). Updating from v3.2.0 to v3.3.0 does not require another uninstall.
+
+## Historical release v3.1.1
+
+The Android App version is `3.1.1`; the Core version remains `3.1`, and the application ID is `com.shixiaoshi0417.nekokem`. See [`android/README.md`](android/README.md) for the Android project and build instructions. App version 3.1.1 does not change protocol numbering: the default file container remains **NKEM v3**, and the NKPR format is unchanged.
+
+v3.1.1 added these Linux CLI packages, the automatic installation script and GitHub Actions builds; see [Linux CLI installation](#linux-cli-installation).
 
 The Linux CLI supports `nekokem --version`. This release patch does not change the Core API, cryptographic parameters, NKEM v3, or the NKPR format.
 
@@ -156,27 +160,27 @@ GitHub Actions uses [CI](.github/workflows/ci.yml) and [Release](.github/workflo
 
 ## Windows CLI and GUI
 
-v5.0.0 provides native Windows 10/11 x64 portable packages for `nekokem.exe` and `nekokem-gui.exe`. The CLI shares Linux's complete argument parser and five-option menu; double-clicking the EXE or running it without arguments opens the menu. See the [Windows CLI documentation](windows/README.md) for building, use and imported-key permissions, and the [filesystem design](windows/SECURITY-DESIGN.md) for its boundaries. Running the CLI requires no MSYS2 runtime or OpenSSL DLL; building uses MSYS2 UCRT64 and pinned OpenSSL 4.1.0.
+v5.1.0 provides the native Windows 10/11 x64 CLI `nekokem.exe` as a portable package, and the GUI as an MSI installer and a ZIP folder. The CLI shares Linux's complete argument parser and five-option menu; double-clicking the EXE or running it without arguments opens the menu. See the [Windows CLI documentation](windows/README.md) for building, use and imported-key permissions, and the [filesystem design](windows/SECURITY-DESIGN.md) for its boundaries. Running the CLI requires no MSYS2 runtime or OpenSSL DLL; building uses MSYS2 UCRT64 and pinned OpenSSL 4.1.0.
 
-The Rust + Tauri 2 + Vue 3 + TypeScript GUI calls the same C17 Core through a narrow interface, with native file dialogs, progress, cancellation, keyboard navigation and transitions that follow the system's reduced-motion preference. It requires Microsoft Edge WebView2 Runtime and the bundled `WebView2Loader.dll` beside the EXE; see the [Windows GUI documentation](desktop/README.md). Neither Windows application is Authenticode signed; the build separately verifies the Microsoft SDK loader's signature and provenance.
+The GUI is a Compose Multiplatform app that looks like the Android app, in the MIUIX style (the default) or Material 3 Expressive. It calls the same C17 Core through the bridge library, with system file dialogs, progress and cancellation. It carries its own Java runtime and needs no WebView2 Runtime; see the [desktop GUI documentation](desktop/README.md). The CLI, the GUI and the MSI installer are not Authenticode signed.
 
 Windows accepts local fixed NTFS only, checks ownership and ACLs, and rejects network/device/ADS/reparse paths. Protocols, cryptographic parameters and 64 KiB streaming chunks are unchanged; Windows power-loss durability is not presented as verified POSIX directory fsync. Windows stores language preferences in OS LocalAppData/NekoKEM and reads the Windows display language when no locale environment override exists. The POSIX configuration paths below apply to the Linux and macOS CLI.
 
 ## macOS Apple Silicon CLI and GUI
 
-v5.0.0 provides a native `arm64` CLI and Rust + Tauri 2 + Vue 3 + TypeScript GUI for M-series Apple Silicon Macs. Download `NekoKEM-macos-arm64.tar.gz`, `NekoKEM-macos-arm64-GUI.zip` (containing the `.app`) or `NekoKEM-macos-arm64-GUI.dmg` from this release. See the [macOS build and usage instructions](macos/README.md) and [desktop GUI documentation](desktop/README.md). Intel/Rosetta builds are not provided.
+v5.1.0 provides a native `arm64` CLI and a native SwiftUI GUI for M-series Apple Silicon Macs. Download `NekoKEM-macos-arm64.tar.gz`, `NekoKEM-macos-arm64-GUI.zip` (containing the `.app`) or `NekoKEM-macos-arm64-GUI.dmg` from this Release. See the [macOS build and usage guide](macos/README.md) and the [desktop GUI documentation](desktop/README.md). No Intel/Rosetta build is provided.
 
-The CLI shares Linux's argument parser, five-option menu and language catalogs. The GUI uses system WKWebView and needs no Windows WebView2 Runtime or loader. Both statically link pinned OpenSSL 4.1.0 with its arm64 assembly acceleration retained; macOS system libraries and frameworks are still runtime dependencies. Builds set a macOS 11.0 deployment target. Native CI runs on `macos-15`; this does not establish compatibility on a physical macOS 11.0 installation or performance and compatibility for every M-series generation.
+The CLI shares Linux's argument parser, five-option menu and language catalogs. The GUI uses Apple's Liquid Glass design on macOS 26, runs on macOS 13 or newer, and has a fallback appearance on earlier systems. Both statically link pinned OpenSSL 4.1.0 and keep its arm64 assembly acceleration; they still depend on macOS system libraries and frameworks. The CLI is built with a macOS 11.0 deployment target and its native CI runs on `macos-15`; the GUI is built with the macOS 26 SDK and its CI runs on `macos-26`. This does not establish testing on real machines with earlier systems, or the compatibility and performance of every M-series generation.
 
-The macOS file layer preserves strict ownership, permissions, symbolic-link and hard-link checks, permits only empty or deny-only extended ACLs on protected files/directories, and checks APFS/HFS+ case and Unicode name aliases. Regular output files require `fsync` and `F_FULLFSYNC`; commits require parent-directory `fsync`, without silent fallback on failure. See the [macOS filesystem design](macos/SECURITY-DESIGN.md) for limits and test boundaries. Core 4.0 adds the NKEM v4 multi-recipient container; NKEM v3, NKPR v1, cryptographic parameters and 64 KiB streaming chunks are unchanged. Packages use ad-hoc signing only, without Developer ID or Apple notarization; this neither authenticates the publisher nor guarantees Gatekeeper acceptance.
+The macOS file layer preserves strict ownership, permissions, symbolic-link and hard-link checks, permits only empty or deny-only extended ACLs on protected files/directories, and checks APFS/HFS+ case and Unicode name aliases. Regular output files require `fsync` and `F_FULLFSYNC`; commits require parent-directory `fsync`, without silent fallback on failure. See the [macOS filesystem design](macos/SECURITY-DESIGN.md) for limits and test boundaries. Core 5.0 reads and writes NKEM v3, v4 and v5 and NKPR v1 and v2, with the same cryptographic parameters and 64 KiB streaming chunks as the other platforms. Packages use ad-hoc signing only, without Developer ID or Apple notarization; this neither authenticates the publisher nor guarantees Gatekeeper acceptance.
 
 ## Linux GUI
 
-The native Linux GUI supports `x86_64` and `aarch64` (ARM64), reusing Rust + Tauri 2 + Vue 3 + TypeScript, five-language automatic detection, native file dialogs, progress/cancellation, keyboard navigation and animations honoring reduced motion. Each architecture provides `NekoKEM-linux-<architecture>-GUI.deb`, `NekoKEM-linux-<architecture>-GUI.rpm` and `NekoKEM-linux-<architecture>-GUI.tar.gz`. On Ubuntu use `sudo apt install ./NekoKEM-linux-x86_64-GUI.deb`; on Fedora use `sudo dnf install ./NekoKEM-linux-x86_64-GUI.rpm`, replacing the architecture with `aarch64` for ARM64. The installed app opens from the system application menu; the portable package uses `NekoKEM-GUI.sh`. Icons directly reuse the existing square PNG artwork with transparent outer white areas; README keeps its rounded display image.
+The Linux GUI supports `x86_64` and `aarch64` (ARM64) and is the same Compose Multiplatform app as on Windows: the MIUIX and Material 3 Expressive styles, five-language automatic detection, system file dialogs, progress and cancellation. Each architecture has `NekoKEM-linux-<arch>-GUI.deb`, `NekoKEM-linux-<arch>-GUI.rpm` and `NekoKEM-linux-<arch>-GUI.tar.gz`. On Ubuntu use `sudo apt install ./NekoKEM-linux-x86_64-GUI.deb`; on Fedora use `sudo dnf install ./NekoKEM-linux-x86_64-GUI.rpm`; for ARM64 replace the architecture in the file name with `aarch64`. After installation the app opens from the system application menu. The icon uses the existing square PNG with transparent outer white areas; the README keeps the rounded display image.
 
-Builds and native CI use Ubuntu 24.04, with additional native RPM installation and startup in Fedora 44 containers. RPMs are built directly and declare shared-library capabilities, including the architecture’s dynamic loader, as dependencies. Running requires system GTK3, WebKitGTK 4.1 and glibc 2.39 or newer; portable GUI packages retain these runtime dependencies. OpenSSL 4.1.0 is statically linked with hidden symbols to avoid interposing on WebKit's system TLS libraries, retaining assembly, threads, Fortify, stack protection, PIE and full RELRO. Linux permissions, authenticated commit and cancellation cleanup reuse the CLI/Core. Core 4.0 adds the NKEM v4 multi-recipient container; NKEM v3, NKPR v1, KDF parameters and 64 KiB streaming are unchanged. See [Linux installation and building](desktop/README.md#install--安装).
+Builds and native CI use Ubuntu 24.04, and CI also installs and starts the RPM in Fedora 44 containers of the same architecture. The app carries its own Java runtime; it requires glibc 2.39 or newer, and the DEB/RPM depend on Noto Sans CJK fonts and `curl` (for the update check). OpenSSL 4.1.0 is linked statically into the bridge library with hidden symbols, full RELRO, immediate binding and a non-executable stack. Linux file permissions, authenticated commit and cancellation cleanup follow the CLI/Core; NKEM, NKPR, KDF parameters and 64 KiB streaming are unchanged. See the [desktop GUI documentation](desktop/README.md).
 
-The v5.0.0 Release includes every Linux GUI installation and portable package for both architectures, alongside the existing static CLI packages. Native window tests use X11 and do not establish testing on every Linux distribution or physical Wayland session.
+The v5.1.0 Release includes every Linux GUI installation and portable package for both architectures, alongside the existing static CLI packages. Native window tests use X11 and do not establish testing on every Linux distribution or a physical Wayland session.
 
 ## Language settings
 
@@ -386,6 +390,10 @@ v3 uses X448, ML-KEM-1024, combined shared secrets, and HKDF-SHA512, separating 
 ## NKEM v4 multi-recipient file format
 
 v4 encrypts the file data once under a random 32-byte file key and stores one entry per recipient, up to 64: an X448 ephemeral public key, an ML-KEM-1024 ciphertext and the file key wrapped with AES-256-GCM. The wrap key is derived with HKDF-SHA512 from that recipient's two shared secrets and binds the X448 ephemeral and recipient public keys. An HMAC-SHA512 header MAC covers the header, salt and every recipient entry and commits to the file key, so all recipients decrypt the same content. Entries carry no fingerprint and decryption tries every entry. Unlinkability applies only to non-recipients without the corresponding private key: recipients can recognize their own entries and confirm their participation across files. Uniform errors and full trial decryption do not prevent recipients from doing so. See [`docs/NKEM-v4.md`](docs/NKEM-v4.md) for the full layout. `nekokem_encrypt_file_multi_with_progress()` writes v4 for two or more public keys and v3 for one.
+
+## NKEM v5 signed file format
+
+v5 adds sender authentication to the v4 multi-recipient construction: the sender signs the whole container with a four-component identity key (X448, ML-KEM-1024, Ed448, ML-DSA-87) using a hybrid Ed448 + ML-DSA-87 signature, and a file is accepted only when both signatures verify. The signature and the sender's identity are encrypted under the file key, so only recipients learn who sent the file. One format covers 1 to 64 recipients; identity private keys are stored as NKPR v2, and older two-component keys can be upgraded. See [`docs/NKEM-v5.md`](docs/NKEM-v5.md) for the layout, signature policy and upgrade rules. `nekokem_encrypt_file_v5_with_progress()` writes v5 by default; `nekokem_decrypt_file_verified_with_progress()` decrypts v3, v4 and v5 and checks the signature against the policy.
 
 ## Security implementation
 
