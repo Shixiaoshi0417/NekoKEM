@@ -64,4 +64,20 @@ class DisplayNameTest {
         assertEquals("default.nkem", encryptedOutputName("\u0085\u202E\u200B", "default"))
     }
 
+    @Test
+    fun encryptedSaveRequestsRoundTripToTheOriginalNameAndType() {
+        for ((original, mimeType) in listOf(
+            "photo.jpg" to "image/jpeg",
+            "video.mp4" to "video/mp4",
+            "notes.txt" to "text/plain",
+        )) {
+            val encrypted = encryptedDocumentRequest(original, "fallback")
+            assertEquals("$original.nkem", encrypted.displayName)
+            assertEquals(BINARY_MIME_TYPE, encrypted.mimeType)
+            val decrypted = decryptedDocumentRequest(encrypted.displayName, "fallback", "decrypted-file")
+            assertEquals(original, decrypted.displayName)
+            assertEquals(mimeType, decrypted.mimeType)
+        }
+        assertEquals("decrypted_photo.jpg", decryptedOutputName("photo.jpg", "fallback", "decrypted-file"))
+    }
 }

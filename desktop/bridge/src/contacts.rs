@@ -131,11 +131,12 @@ impl Store {
         Ok(Contacts { contacts, unreadable })
     }
 
+    #[cfg(test)]
     pub fn save(&self, source: Source<'_>, note: &str) -> Result<Contact, Failure> {
         self.save_confirmed(source, note, "")
     }
 
-    /// Like [save]; an identity key replaces a legacy contact only when
+    /// Saves a contact; an identity key replaces a legacy contact only when
     /// [confirmed] is its full fingerprint, which the user checked.
     pub fn save_confirmed(&self, source: Source<'_>, note: &str, confirmed: &str) -> Result<Contact, Failure> {
         let note = clean_note(note)?;

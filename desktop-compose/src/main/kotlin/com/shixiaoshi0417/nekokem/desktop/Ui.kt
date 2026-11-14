@@ -426,7 +426,6 @@ private fun FormFeedback(state: AppState, first: Boolean = false) {
             Detail(fingerprint, mono = true)
             if (FingerprintQr.isFingerprint(fingerprint)) { Spacer(Modifier.height(8.dp)); kit.SecondaryButton(state.t("showQr")) { state.showQr(fingerprint) } }
         }
-        result.legacyFingerprint?.takeIf { it != result.fingerprint }?.let { Detail(state.t("legacyFingerprint")); Detail(it, mono = true) }
         if (result.canVerify == false) Hint(state.t("legacyKeyHint"), danger = true)
     }
     val signature = result.signature ?: return

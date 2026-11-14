@@ -1,9 +1,7 @@
 package com.shixiaoshi0417.nekokem.ui
 
 import androidx.compose.foundation.text.BasicText
-import androidx.compose.foundation.text.TextAutoSize
 import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.text.style.TextAlign
 import com.shixiaoshi0417.nekokem.keys.TemporaryPublicKey
 import androidx.compose.ui.state.ToggleableState
 import androidx.activity.compose.BackHandler
@@ -33,6 +31,8 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
@@ -313,6 +313,7 @@ private fun PublicKeyContactVerify(
                 content = MaterialTheme.colorScheme.onPrimary,
                 onScan = { actions.onScanContact(contact) },
                 onToggleVerified = { actions.onSetContactVerified(contact, !contact.verified) },
+                modifier = Modifier.padding(horizontal = 20.dp),
             )
         }
     }
@@ -439,24 +440,26 @@ internal fun VerifiedMark(verified: Boolean, color: Color, modifier: Modifier = 
     }
 }
 
-/** The fingerprint as four rows of four 4-digit groups, like Signal's safety number. */
+/**
+ * The fingerprint as four columns of 4-digit groups read row by row, like
+ * Signal's safety number. The columns spread across the width and each keeps
+ * its own left edge.
+ */
 @Composable
 internal fun FingerprintGrid(fingerprint: String, modifier: Modifier = Modifier, color: Color = Color.Unspecified) {
-    Column(
-        modifier.clearAndSetSemantics { contentDescription = fingerprint },
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(6.dp),
-    ) {
-        // Each row of four groups stays on one line; the text shrinks on narrow screens or large font scales.
-        fingerprintRows(fingerprint).forEach { row ->
-            BasicText(
-                row,
-                style = TextStyle(color = color, fontFamily = FontFamily.Monospace, fontSize = 18.sp, letterSpacing = 1.sp, textAlign = TextAlign.Center),
-                maxLines = 1,
-                softWrap = false,
-                autoSize = TextAutoSize.StepBased(minFontSize = 8.sp, maxFontSize = 18.sp, stepSize = 0.5.sp),
-                modifier = Modifier.fillMaxWidth(),
-            )
+    val groups = fingerprint.replace(":", "").chunked(4)
+    BoxWithConstraints(modifier.clearAndSetSemantics { contentDescription = fingerprint }) {
+        // Four groups and the gaps between them need about 13 em, so the text
+        // shrinks on a narrow card or a large font scale instead of clipping.
+        val fontSize = with(LocalDensity.current) { minOf(16.sp.toDp(), maxWidth / 13).toSp() }
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+            for (column in 0 until 4) {
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    groups.filterIndexed { index, _ -> index % 4 == column }.forEach { group ->
+                        BasicText(group, style = TextStyle(color = color, fontSize = fontSize), maxLines = 1, softWrap = false)
+                    }
+                }
+            }
         }
     }
 }
