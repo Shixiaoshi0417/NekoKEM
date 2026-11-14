@@ -491,7 +491,7 @@ CI 在每个 PR 上对每个 harness 只跑 15 秒；[Fuzz workflow](.github/wor
 
 Android 和桌面 GUI 可以检查是否有新版本：「设置 > 关于」页（Android）或「设置」页（桌面）有「检查更新」按钮；自动检查默认开启，启动时每天最多检查一次，可在设置中关闭。发现新版本时只提示版本号，「前往下载」打开 GitHub Release 页面，由用户自己下载并按发布说明校验，App 不会自动下载或安装任何内容。可以「忽略此版本」，之后自动检查不再提示该版本。
 
-检查只向固定地址 `https://api.github.com/repos/Shixiaoshi0417/NekoKEM/releases/latest` 发送一次 HTTPS GET，不附带密钥、指纹、文件或设置信息；响应超过 1 MiB、不是正式版本或版本号格式不符时视为失败，发布页地址由版本号拼出，不取自响应。GitHub 能看到请求的 IP 地址和时间。Android 为此增加了 INTERNET 权限，用系统 HTTPS；桌面由后端调用系统 curl（Windows `System32\curl.exe`，macOS/Linux `/usr/bin/curl`），前端仍无法发起网络请求。该请求失败时（例如同一 IP 的 GitHub 匿名 API 每小时额度用完），再向 `https://github.com/Shixiaoshi0417/NekoKEM/releases/latest` 发送一次 HTTPS HEAD，从重定向地址读出版本号，不跟随重定向；只接受本仓库正式版本 `vX.Y.Z` 的发布页地址。CLI 不检查更新。
+检查只向固定地址 `https://api.github.com/repos/Shixiaoshi0417/NekoKEM/releases/latest` 发送一次 HTTPS GET，不附带密钥、指纹、文件或设置信息；响应超过 1 MiB、不是正式版本或版本号格式不符时视为失败，发布页地址由版本号拼出，不取自响应。GitHub 能看到请求的 IP 地址和时间。Android 为此增加了 INTERNET 权限，用系统 HTTPS；桌面由桥接库调用系统 curl（Windows `System32\curl.exe`，macOS/Linux `/usr/bin/curl`），Compose 和 SwiftUI 界面本身不发起网络请求。该请求失败时（例如同一 IP 的 GitHub 匿名 API 每小时额度用完），再向 `https://github.com/Shixiaoshi0417/NekoKEM/releases/latest` 发送一次 HTTPS HEAD，从重定向地址读出版本号，不跟随重定向；只接受本仓库正式版本 `vX.Y.Z` 的发布页地址。CLI 不检查更新。
 
 ## 指纹二维码
 

@@ -91,10 +91,10 @@ pub fn classify(body:&[u8],current:&str)->UpdateStatus{
 pub fn classify_redirect(headers:&[u8],current:&str)->UpdateStatus{
     let Some(local)=parse_version(current) else {return UpdateStatus::Failed};
     let Ok(text)=std::str::from_utf8(headers) else {return UpdateStatus::Failed};
-    let location=text.lines().filter_map(|line|{
+    let location=text.lines().rev().find_map(|line|{
         let (name,value)=line.split_once(':')?;
         name.trim().eq_ignore_ascii_case("location").then(||value.trim())
-    }).last();
+    });
     let Some(remote)=location.and_then(|value|value.strip_prefix(PAGE_PREFIX)).and_then(parse_version) else {return UpdateStatus::Failed};
     if remote>local{UpdateStatus::Available{version:format!("{}.{}.{}",remote[0],remote[1],remote[2])}}else{UpdateStatus::Current}
 }
