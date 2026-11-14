@@ -13,7 +13,7 @@
     <string name="about_description">再利用可能な NekoKEM C17 Core と OpenSSL EVP を使用した、実験的な耐量子ハイブリッドファイル暗号化ツールです。</string>
     <string name="private_key_exists">秘密鍵：あり</string>
     <string name="private_key_not_found">秘密鍵：見つかりません</string>
-    <string name="fingerprint_label">SHA-256 公開鍵フィンガープリント</string>
+    <string name="fingerprint_label">フィンガープリント</string>
     <string name="selected_file_label">選択したファイル</string>
     <string name="selected_file_none">ファイルが選択されていません</string>
     <string name="settings_appearance_title">表示と言語</string>
@@ -40,7 +40,7 @@
     <string name="select_temporary_private_key_password_title">選択した秘密鍵を確認</string>
     <string name="select_temporary_private_key_password_message">一時的な NKPR 秘密鍵のパスワードを入力してください。Core がコンテナーを検証して公開鍵フィンガープリントを表示します。インポートや既定の鍵の置き換えは行いません。</string>
     <string name="confirm_temporary_public_key_title">この公開鍵を使用しますか？</string>
-    <string name="confirm_temporary_public_key_message">ファイル：%1$s\n\nSHA-256 フィンガープリント：\n%2$s\n\nこの鍵は一度だけ使用し、アプリの既定の公開鍵は置き換えません。</string>
+    <string name="confirm_temporary_public_key_message">ファイル：%1$s\n\nフィンガープリント：\n%2$s\n\nこの鍵は一度だけ使用し、アプリの既定の公開鍵は置き換えません。</string>
     <string name="delete_private_key_title">秘密鍵を完全に削除しますか？</string>
     <string name="delete_private_key_message">ローカルの NKPR 秘密鍵と関連する一時キャッシュを削除します。公開鍵は保持します。</string>
     <string name="delete_public_key_title">公開鍵を完全に削除しますか？</string>
@@ -105,7 +105,7 @@
     <string name="completion_result">結果</string>
     <string name="completion_success">成功</string>
     <string name="completion_file">ファイル</string>
-    <string name="completion_fingerprint">SHA-256 フィンガープリント</string>
+    <string name="completion_fingerprint">フィンガープリント</string>
     <string name="completion_keypair_files">%1$s と %2$s</string>
     <string name="completion_elapsed">経過時間</string>
     <string name="completion_average_speed">平均速度</string>
@@ -250,9 +250,7 @@
     <string name="error_reason_signer_not_trusted">署名者は信頼済みの鍵ではありません。何も書き込んでいません。</string>
     <string name="error_reason_already_identity">この鍵は既に署名できます。アップグレードは不要です。</string>
     <string name="error_reason_upgrade">鍵をアップグレードできませんでした。パスワードが正しくないか、鍵ファイルが一致しません。ファイルは変更していません。</string>
-    <string name="key_identity_status">ID 鍵 · 署名と検証ができます</string>
     <string name="key_legacy_status">旧形式の鍵 · 署名できません。アップグレードすると署名できます。</string>
-    <string name="legacy_fingerprint_label">旧形式の指紋（NekoKEM 4.x 以前）</string>
     <string name="action_upgrade_key">鍵をアップグレード</string>
     <string name="action_export_legacy_public_key">旧形式の公開鍵を書き出す</string>
     <string name="operation_upgrade_key">鍵のアップグレード</string>

@@ -386,10 +386,6 @@ private struct FormFeedback: View {
                     Detail(text: fingerprint, mono: true)
                     if FingerprintQr.isFingerprint(fingerprint) { Button(state.t("showQr")) { state.qrFingerprint = fingerprint } }
                 }
-                if let legacy = result.legacyFingerprint, legacy != result.fingerprint {
-                    Detail(text: state.t("legacyFingerprint"))
-                    Detail(text: legacy, mono: true)
-                }
                 if result.canVerify == false { Text(state.t("legacyKeyHint")).font(.callout).foregroundStyle(danger) }
             }
             if let signature = result.signature {

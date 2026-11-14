@@ -1206,13 +1206,6 @@
    "旧形式の公開鍵を書き出しました",
    "이전 형식 공개 키를 내보냈습니다"
   ],
-  "legacyFingerprint": [
-   "Legacy fingerprint (NekoKEM 4.x and earlier)",
-   "旧版指纹（NekoKEM 4.x 及更早版本）",
-   "舊版指紋（NekoKEM 4.x 及更早版本）",
-   "旧形式の指紋（NekoKEM 4.x 以前）",
-   "이전 형식 지문(NekoKEM 4.x 이하)"
-  ],
   "legacyKeyHint": [
    "This legacy key cannot sign or verify signatures. Its owner can upgrade it on the key page.",
    "此旧版密钥无法签名或验证签名，持有人可在密钥页面升级。",

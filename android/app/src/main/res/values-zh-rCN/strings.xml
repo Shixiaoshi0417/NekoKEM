@@ -16,7 +16,7 @@
 
     <string name="private_key_exists">私钥：已存在</string>
     <string name="private_key_not_found">私钥：未找到</string>
-    <string name="fingerprint_label">SHA-256 公钥指纹</string>
+    <string name="fingerprint_label">指纹</string>
     <string name="selected_file_label">已选择文件</string>
     <string name="selected_file_none">尚未选择文件</string>
 
@@ -45,7 +45,7 @@
     <string name="select_temporary_private_key_password_title">验证所选私钥</string>
     <string name="select_temporary_private_key_password_message">请输入此临时 NKPR 私钥的密码。Core 会验证容器并显示其公钥指纹，不会导入或替换默认私钥。</string>
     <string name="confirm_temporary_public_key_title">使用此公钥？</string>
-    <string name="confirm_temporary_public_key_message">文件：%1$s\n\nSHA-256 指纹：\n%2$s\n\n此密钥仅使用一次，不会替换 App 默认公钥。</string>
+    <string name="confirm_temporary_public_key_message">文件：%1$s\n\n指纹：\n%2$s\n\n此密钥仅使用一次，不会替换 App 默认公钥。</string>
 
     <string name="delete_private_key_title">永久删除私钥？</string>
     <string name="delete_private_key_message">将删除本地 NKPR 私钥和相关临时缓存。公钥会保留。</string>
@@ -118,7 +118,7 @@
     <string name="completion_result">结果</string>
     <string name="completion_success">成功</string>
     <string name="completion_file">文件名</string>
-    <string name="completion_fingerprint">SHA-256 指纹</string>
+    <string name="completion_fingerprint">指纹</string>
     <string name="completion_keypair_files">%1$s 和 %2$s</string>
     <string name="completion_elapsed">耗时</string>
     <string name="completion_average_speed">平均速度</string>
@@ -264,9 +264,7 @@
     <string name="error_reason_signer_not_trusted">签名者不在你信任的密钥中，未写入任何内容。</string>
     <string name="error_reason_already_identity">此密钥已可签名，无需升级。</string>
     <string name="error_reason_upgrade">无法升级密钥：密码错误或密钥文件不匹配，文件保持不变。</string>
-    <string name="key_identity_status">身份密钥 · 可签名和验证签名</string>
     <string name="key_legacy_status">旧版密钥 · 无法签名。升级后即可签名文件。</string>
-    <string name="legacy_fingerprint_label">旧版指纹（NekoKEM 4.x 及更早版本）</string>
     <string name="action_upgrade_key">升级密钥</string>
     <string name="action_export_legacy_public_key">导出旧版公钥</string>
     <string name="operation_upgrade_key">升级密钥</string>
