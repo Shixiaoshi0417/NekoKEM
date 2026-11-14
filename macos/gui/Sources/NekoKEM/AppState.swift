@@ -854,7 +854,7 @@ final class AppState: ObservableObject {
         demoContacts()
         choosingRecipients = false; askingPassword = false; fileAction = nil
         ownSelected = false; selected = []; otherKeys = []; unverifiedWarned = false
-        input = ""; output = ""; password = ""; otherPrivateKey = ""
+        input = ""; output = ""; password = ""; otherPrivateKey = ""; saveToKeychain = false
         resetFeedback()
         switch name {
         case "files-empty": screen = .files
