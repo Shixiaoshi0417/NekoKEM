@@ -304,7 +304,7 @@ unsafe extern "C" fn progress<F:Fn(u64,u64)>(done:u64,total:u64,data:*mut c_void
     // Core borrows this stack-owned context synchronously; it never retains the pointer.
     let state=unsafe{&mut *(data as *mut ProgressContext<F>)};
     if state.job.cancelled.load(Ordering::Acquire) {return 0;}
-    if done==total || state.last_emit.map_or(true,|at|at.elapsed()>=Duration::from_millis(100)) {
+    if done==total || state.last_emit.is_none_or(|at|at.elapsed()>=Duration::from_millis(100)) {
         // Release uses panic=abort, so catch_unwind cannot recover a panic here.
         // The emitter must remain non-panicking; IPC errors are ignored by its caller.
         (state.emit)(done,total); state.last_emit=Some(Instant::now());
@@ -373,10 +373,9 @@ pub fn execute<F:Fn(u64,u64)>(backend:&Backend,request:Request,job:Arc<Job>,emit
         if same_file(&path(&target)?,&path(&request.sign_key_path)?)==Some(true) {return Err(Failure::new("output-is-key"));}
     }
     // Core refuses an output that is the key in use; this names the reason.
-    if matches!(request.kind,Kind::Encrypt|Kind::Decrypt|Kind::ExportLegacy) && !request.key_path.is_empty() && !request.paste {
-        if same_file(&path(&target)?,&path(&request.key_path)?)==Some(true) {
-            return Err(Failure::new("output-is-key"));
-        }
+    if matches!(request.kind,Kind::Encrypt|Kind::Decrypt|Kind::ExportLegacy) && !request.key_path.is_empty() && !request.paste
+        && same_file(&path(&target)?,&path(&request.key_path)?)==Some(true) {
+        return Err(Failure::new("output-is-key"));
     }
     for key in &request.key_paths {
         if same_file(&path(&target)?,&path(key)?)==Some(true) {return Err(Failure::new("output-is-key"));}
@@ -536,7 +535,7 @@ mod tests {
     fn request(kind:Kind)->Request {Request{stage:false,id:"test-job".into(),input:String::new(),output:String::new(),key_path:String::new(),public_path:String::new(),private_path:String::new(),password:Zeroizing::new(String::new()),confirmation:Zeroizing::new(String::new()),key_text:Zeroizing::new(String::new()),paste:false,replace:false,overwrite:false,contacts:Vec::new(),key_paths:Vec::new(),
         // Signing has its own tests; the others check one behaviour of all formats.
         sign_key_path:String::new(),unsigned:kind==Kind::Encrypt,require_signature:false,kind}}
-    fn run(backend:&Arc<Backend>,r:Request)->Result<Outcome,Failure>{let job=backend.reserve(&r)?;let _hold=Reservation{backend:backend.clone(),job:job.clone()};execute(&backend,r,job,|_,_|{})}
+    fn run(backend:&Arc<Backend>,r:Request)->Result<Outcome,Failure>{let job=backend.reserve(&r)?;let _hold=Reservation{backend:backend.clone(),job:job.clone()};execute(backend,r,job,|_,_|{})}
     struct Directory(PathBuf);
     impl Directory{fn new()->Self{let path=std::env::temp_dir().join(format!("nekokem-rust-{}-{}",std::process::id(),SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_nanos()));let name=super::path(path.to_str().unwrap()).unwrap();assert_eq!(unsafe{desktop_private_directory(name.as_ptr())},1);Self(path)}fn file(&self,name:&str)->String{self.0.join(name).to_str().unwrap().into()}}
     impl Drop for Directory {fn drop(&mut self){let _=fs::remove_dir_all(&self.0);}}

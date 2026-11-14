@@ -16,13 +16,6 @@
   "ko": "한국어"
  },
  "messages": {
-  "subtitle": [
-   "File encryption, kept on your device",
-   "文件加密，始终留在你的设备上",
-   "檔案加密，始終留在你的裝置上",
-   "ファイル暗号化を、このデバイスで",
-   "파일 암호화, 내 기기 안에서"
-  ],
   "keygen": [
    "Generate keys",
    "生成密钥",
@@ -51,13 +44,6 @@
    "公開鍵の指紋",
    "공개 키 지문"
   ],
-  "exit": [
-   "Exit",
-   "退出",
-   "結束",
-   "終了",
-   "종료"
-  ],
   "language": [
    "Language",
    "语言",
@@ -72,61 +58,12 @@
    "システムに従う",
    "시스템 언어 사용"
   ],
-  "navigation": [
-   "Operations",
-   "操作菜单",
-   "操作選單",
-   "操作メニュー",
-   "작업 메뉴"
-  ],
-  "keySource": [
-   "Key source",
-   "密钥来源",
-   "金鑰來源",
-   "鍵の入力方法",
-   "키 입력 방법"
-  ],
-  "loading": [
-   "Loading…",
-   "正在加载…",
-   "載入中…",
-   "読み込み中…",
-   "불러오는 중…"
-  ],
   "choosing": [
    "Choosing a file…",
    "正在选择文件…",
    "正在選擇檔案…",
    "ファイルを選択中…",
    "파일 선택 중…"
-  ],
-  "keygenHelp": [
-   "Create identity keys: a public key to share, and an encrypted private key that decrypts and signs.",
-   "生成身份密钥：可分享的公钥，以及用于解密和签名的加密私钥。",
-   "產生身分金鑰：可分享的公開金鑰，以及用於解密和簽章的加密私密金鑰。",
-   "ID 鍵を作成します。共有用の公開鍵と、復号と署名に使う暗号化秘密鍵です。",
-   "신원 키를 생성합니다. 공유할 공개 키와 복호화·서명에 쓰는 암호화된 개인 키입니다."
-  ],
-  "encryptHelp": [
-   "Select a file and the recipient’s public key, or several saved contacts. Files are signed with your identity key.",
-   "选择文件及接收方的公钥，或多位已保存的联系人。文件将用你的身份密钥签名。",
-   "選擇檔案及接收者的公開金鑰，或多位已儲存的聯絡人。檔案將以你的身分金鑰簽章。",
-   "ファイルと受信者の公開鍵、または保存済みの複数の連絡先を選択します。ファイルはあなたの ID 鍵で署名されます。",
-   "파일과 수신자의 공개 키 또는 저장된 여러 연락처를 선택하세요. 파일은 내 신원 키로 서명됩니다."
-  ],
-  "decryptHelp": [
-   "Restore an .nkem file with your private key and see who signed it.",
-   "使用你的私钥还原 .nkem 文件，并查看签名者。",
-   "使用你的私密金鑰還原 .nkem 檔案，並查看簽章者。",
-   "秘密鍵で .nkem ファイルを復元し、署名者を確認します。",
-   "개인 키로 .nkem 파일을 복원하고 서명자를 확인하세요."
-  ],
-  "fingerprintHelp": [
-   "Compare this fingerprint with the key owner through a trusted channel.",
-   "通过可信渠道与公钥持有人核对指纹。",
-   "透過可信管道與公開金鑰持有人核對指紋。",
-   "信頼できる方法で鍵の所有者と指紋を照合してください。",
-   "신뢰할 수 있는 방법으로 키 소유자와 지문을 확인하세요."
   ],
   "publicPath": [
    "Save public key",
@@ -205,20 +142,6 @@
    "パスワードを確認",
    "암호 확인"
   ],
-  "passwordHint": [
-   "Encrypted private keys require a password. Keep it safe; it cannot be recovered.",
-   "加密私钥需要密码。请妥善保存，密码无法找回。",
-   "加密私密金鑰需要密碼。請妥善保存，密碼無法找回。",
-   "暗号化秘密鍵にはパスワードが必要です。安全に保管してください。復元はできません。",
-   "암호화된 개인 키에는 암호가 필요합니다. 복구할 수 없으므로 안전하게 보관하세요."
-  ],
-  "ready": [
-   "Ready",
-   "就绪",
-   "就緒",
-   "準備完了",
-   "준비 완료"
-  ],
   "working": [
    "Working…",
    "正在处理…",
@@ -274,13 +197,6 @@
    "展開側邊欄",
    "サイドバーを展開",
    "사이드바 펼치기"
-  ],
-  "languageHint": [
-   "Used for menus and messages.",
-   "用于菜单和提示文字。",
-   "用於選單和提示文字。",
-   "メニューとメッセージに使います。",
-   "메뉴와 메시지에 사용됩니다."
   ],
   "navFiles": [
    "Files",
@@ -415,13 +331,6 @@
    "スタイル",
    "스타일"
   ],
-  "uiStyleHint": [
-   "How buttons, lists and dialogs look.",
-   "按钮、列表和对话框的外观。",
-   "按鈕、清單和對話框的外觀。",
-   "ボタン、リスト、ダイアログの見た目。",
-   "버튼, 목록, 대화 상자의 모양."
-  ],
   "settingsGeneral": [
    "General",
    "通用",
@@ -442,34 +351,6 @@
    "更新",
    "アップデート",
    "업데이트"
-  ],
-  "local": [
-   "Local processing",
-   "本地处理",
-   "本機處理",
-   "ローカル処理",
-   "로컬 처리"
-  ],
-  "localHint": [
-   "Your files and passwords are processed locally.",
-   "文件与密码均在本机处理。",
-   "檔案與密碼均在本機處理。",
-   "ファイルとパスワードはこのデバイスで処理します。",
-   "파일과 암호는 이 기기에서 처리됩니다."
-  ],
-  "storage": [
-   "Choose local NTFS storage",
-   "请选择本地 NTFS 存储位置",
-   "請選擇本機 NTFS 儲存位置",
-   "ローカル NTFS ストレージを選択",
-   "로컬 NTFS 저장소를 선택하세요"
-  ],
-  "storageHint": [
-   "Unsafe paths or permissions are refused. Existing output is preserved if an operation fails or is cancelled.",
-   "不安全的路径或权限会被拒绝。操作失败或取消时，原有输出文件保持完整。",
-   "不安全的路徑或權限會被拒絕。操作失敗或取消時，原有輸出檔案保持完整。",
-   "安全でないパスや権限は拒否されます。失敗やキャンセル時は既存の出力を保持します。",
-   "안전하지 않은 경로나 권한은 거부됩니다. 실패하거나 취소하면 기존 출력 파일이 보존됩니다."
   ],
   "invalid-path": [
    "Choose all required file paths.",
@@ -597,13 +478,6 @@
    "公開鍵の連絡先",
    "공개 키 연락처"
   ],
-  "contactsHelp": [
-   "Save recipients’ public keys with notes, then choose one or more when encrypting.",
-   "保存接收方公钥并添加备注，加密时可选择一位或多位。",
-   "儲存接收者的公開金鑰並加上備註，加密時可選擇一位或多位。",
-   "受信者の公開鍵をメモ付きで保存し、暗号化時に 1 件以上選択します。",
-   "수신자 공개 키를 메모와 함께 저장하고 암호화할 때 하나 이상 선택하세요."
-  ],
   "savedContact": [
    "Saved contacts",
    "通讯录",
@@ -653,26 +527,12 @@
    "選択を解除",
    "선택 해제"
   ],
-  "multiRecipientHint": [
-   "Each selected recipient can decrypt the file with their own private key, and no one else can. Signed files use NKEM v5, which NekoKEM 4.x and earlier cannot open.",
-   "每位所选接收方都能用自己的私钥解密此文件，其他人无法解密。签名文件使用 NKEM v5，NekoKEM 4.x 及更早版本无法打开。",
-   "每位所選接收者都能用自己的私密金鑰解密此檔案，其他人無法解密。簽章檔案使用 NKEM v5，NekoKEM 4.x 及更早版本無法開啟。",
-   "選択した受信者はそれぞれ自分の秘密鍵で復号でき、それ以外の人は復号できません。署名済みファイルは NKEM v5 を使用し、NekoKEM 4.x 以前では開けません。",
-   "선택한 수신자는 각자 자신의 개인 키로 파일을 복호화할 수 있으며 다른 사람은 복호화할 수 없습니다. 서명된 파일은 NKEM v5를 사용하며 NekoKEM 4.x 이하에서는 열 수 없습니다."
-  ],
   "noContacts": [
    "No public keys are saved yet.",
    "尚未保存任何公钥。",
    "尚未儲存任何公開金鑰。",
    "保存済みの公開鍵はまだありません。",
    "저장된 공개 키가 아직 없습니다."
-  ],
-  "manageContacts": [
-   "Manage contacts",
-   "管理通讯录",
-   "管理通訊錄",
-   "連絡先を管理",
-   "연락처 관리"
   ],
   "publicKey": [
    "Public key file",
@@ -694,13 +554,6 @@
    "備註（選填）",
    "メモ（任意）",
    "메모(선택)"
-  ],
-  "noteHint": [
-   "Notes only help you find a key. Always verify the full fingerprint with its owner through a trusted channel.",
-   "备注仅用于识别。请务必通过可信渠道与公钥持有人核对完整指纹。",
-   "備註僅用於識別。請務必透過可信管道與公開金鑰持有人核對完整指紋。",
-   "メモは識別用です。完全な指紋を信頼できる方法で鍵の所有者と必ず照合してください。",
-   "메모는 식별용입니다. 전체 지문을 신뢰할 수 있는 방법으로 키 소유자와 반드시 확인하세요."
   ],
   "saveContact": [
    "Save public key",
@@ -891,40 +744,12 @@
    "デスクトップアプリに接続できません。",
    "데스크톱 앱에 연결할 수 없습니다."
   ],
-  "upgradeHelp": [
-   "Add signing keys to a NekoKEM 4.x key pair. Its encryption keys, password and old files stay unchanged.",
-   "为 NekoKEM 4.x 密钥对添加签名密钥。加密密钥、密码和旧文件都保持不变。",
-   "為 NekoKEM 4.x 金鑰對加入簽章金鑰。加密金鑰、密碼和舊檔案都保持不變。",
-   "NekoKEM 4.x の鍵ペアに署名鍵を追加します。暗号化鍵、パスワード、既存ファイルはそのままです。",
-   "NekoKEM 4.x 키 쌍에 서명 키를 추가합니다. 암호화 키, 암호, 기존 파일은 그대로입니다."
-  ],
-  "exportHelp": [
-   "Write a public key that NekoKEM 4.x and earlier can read. It cannot verify signatures.",
-   "导出 NekoKEM 4.x 及更早版本可读取的公钥。它无法验证签名。",
-   "匯出 NekoKEM 4.x 及更早版本可讀取的公開金鑰。它無法驗證簽章。",
-   "NekoKEM 4.x 以前で読める公開鍵を書き出します。署名の検証には使えません。",
-   "NekoKEM 4.x 이하에서 읽을 수 있는 공개 키를 내보냅니다. 서명 확인에는 쓸 수 없습니다."
-  ],
   "settings": [
    "Settings",
    "设置",
    "設定",
    "設定",
    "설정"
-  ],
-  "settingsHelp": [
-   "Choose how files are signed, which files you accept, and how updates are checked.",
-   "设置文件如何签名、接受哪些文件，以及如何检查更新。",
-   "設定檔案如何簽章、接受哪些檔案，以及如何檢查更新。",
-   "ファイルの署名方法、受け入れるファイル、アップデートの確認方法を設定します。",
-   "파일 서명 방식, 받을 파일, 업데이트 확인 방식을 설정합니다."
-  ],
-  "keyMode": [
-   "Key action",
-   "密钥操作",
-   "金鑰操作",
-   "鍵の操作",
-   "키 작업"
   ],
   "upgradeKey": [
    "Upgrade key",
@@ -954,13 +779,6 @@
    "暗号化秘密鍵",
    "암호화된 개인 키"
   ],
-  "signKey": [
-   "Your signing key (encrypted private key)",
-   "你的签名密钥（加密私钥）",
-   "你的簽章金鑰（加密私密金鑰）",
-   "あなたの署名鍵（暗号化秘密鍵）",
-   "내 서명 키(암호화된 개인 키)"
-  ],
   "signPasswordHint": [
    "The password opens your private key to sign this file. It is not stored.",
    "密码用于打开你的私钥为文件签名，不会被保存。",
@@ -968,33 +786,12 @@
    "パスワードは秘密鍵を開いて署名するためだけに使い、保存しません。",
    "암호는 개인 키를 열어 서명하는 데만 쓰며 저장하지 않습니다."
   ],
-  "upgradePasswordHint": [
-   "Enter the key’s current password; it stays the same. Back up both files first.",
-   "请输入该密钥的当前密码，密码保持不变。请先备份这两个文件。",
-   "請輸入該金鑰的目前密碼，密碼保持不變。請先備份這兩個檔案。",
-   "鍵の現在のパスワードを入力してください。パスワードは変わりません。先に両方のファイルをバックアップしてください。",
-   "키의 현재 암호를 입력하세요. 암호는 바뀌지 않습니다. 먼저 두 파일을 백업하세요."
-  ],
-  "unsignedMark": [
-   "Unsigned",
-   "未签名",
-   "未簽章",
-   "未署名",
-   "서명 없음"
-  ],
   "unsignedSetting": [
    "Encrypt without signing (legacy compatible)",
    "不签名加密（兼容旧版）",
    "不簽章加密（相容舊版）",
    "署名せずに暗号化（旧バージョン互換）",
    "서명 없이 암호화(이전 버전 호환)"
-  ],
-  "unsignedSettingHint": [
-   "Off: every file is signed with your identity key (NKEM v5). Turn on only for recipients using NekoKEM 4.x or earlier.",
-   "关闭时：所有文件都用你的身份密钥签名（NKEM v5）。仅在接收方使用 NekoKEM 4.x 或更早版本时开启。",
-   "關閉時：所有檔案都以你的身分金鑰簽章（NKEM v5）。僅在接收者使用 NekoKEM 4.x 或更早版本時開啟。",
-   "オフ: すべてのファイルを ID 鍵で署名します（NKEM v5）。受信者が NekoKEM 4.x 以前を使う場合のみオンにしてください。",
-   "끄면 모든 파일을 내 신원 키로 서명합니다(NKEM v5). 수신자가 NekoKEM 4.x 이하를 쓸 때만 켜세요."
   ],
   "unsignedWarning": [
    "Recipients cannot confirm the file came from you.",
@@ -1066,33 +863,12 @@
    "署名済みファイルのみ受け入れる",
    "서명된 파일만 받기"
   ],
-  "requireSignatureHint": [
-   "Decryption refuses NKEM v3/v4 files without a signature. No output is written for them.",
-   "解密时拒绝没有签名的 NKEM v3/v4 文件，不会写入输出。",
-   "解密時拒絕沒有簽章的 NKEM v3/v4 檔案，不會寫入輸出。",
-   "署名のない NKEM v3/v4 ファイルの復号を拒否し、出力を書き込みません。",
-   "서명 없는 NKEM v3/v4 파일은 복호화를 거부하며 출력을 쓰지 않습니다."
-  ],
-  "updates": [
-   "Updates",
-   "更新",
-   "更新",
-   "アップデート",
-   "업데이트"
-  ],
   "autoUpdate": [
    "Check for updates automatically",
    "自动检查更新",
    "自動檢查更新",
    "アップデートを自動で確認",
    "업데이트 자동 확인"
-  ],
-  "autoUpdateHint": [
-   "At most once a day. Only asks GitHub for the latest version number; no keys or file details are sent.",
-   "每天最多一次，只向 GitHub 查询最新版本号，不发送任何密钥或文件信息。",
-   "每天最多一次，只向 GitHub 查詢最新版本號，不傳送任何金鑰或檔案資訊。",
-   "1 日に最大 1 回、GitHub に最新のバージョン番号だけを問い合わせます。鍵やファイルの情報は送信しません。",
-   "하루에 최대 한 번 GitHub에 최신 버전 번호만 확인하며, 키나 파일 정보는 보내지 않습니다."
   ],
   "checkUpdate": [
    "Check for updates",
@@ -1255,13 +1031,6 @@
    "署名者",
    "서명자"
   ],
-  "signerFingerprint": [
-   "Signer fingerprint",
-   "签名者指纹",
-   "簽章者指紋",
-   "署名者の指紋",
-   "서명자 지문"
-  ],
   "saveSigner": [
    "Fingerprint verified: save signer as contact",
    "已核对指纹，保存为联系人",
@@ -1338,13 +1107,6 @@
    "指紋 QR 碼",
    "指紋の QR コード",
    "지문 QR 코드"
-  ],
-  "qrHint": [
-   "A contact can scan this code with “Scan to verify” in NekoKEM for Android to check that the key they saved has this fingerprint. The code holds only the fingerprint, not the key.",
-   "联系人可以在 NekoKEM Android 中用「扫码核对」扫描此码，确认其保存的公钥就是这个指纹。二维码只包含指纹，不包含密钥。",
-   "聯絡人可以在 NekoKEM Android 中用「掃碼核對」掃描此碼，確認其儲存的公開金鑰就是這個指紋。QR 碼只包含指紋，不包含金鑰。",
-   "連絡先は Android 版 NekoKEM の「読み取って照合」でこのコードを読み取り、保存した鍵がこの指紋か確認できます。コードに含まれるのは指紋だけで、鍵は含まれません。",
-   "연락처는 Android용 NekoKEM의 “스캔해서 확인”으로 이 코드를 스캔해 저장한 키가 이 지문인지 확인할 수 있습니다. 코드에는 키가 아니라 지문만 들어 있습니다."
   ],
   "close": [
    "Close",
