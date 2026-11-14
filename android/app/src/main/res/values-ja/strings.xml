@@ -29,7 +29,7 @@
     <string name="error_password_empty">パスワードを入力してください</string>
     <string name="error_passwords_mismatch">パスワードが一致しません</string>
     <string name="generate_password_title">新しい秘密鍵の保護</string>
-    <string name="generate_password_message">空でないパスワードを入力して確認してください。この鍵生成でのみ使用し、保存しません。</string>
+    <string name="generate_password_message">空でないパスワードを入力して確認してください。NekoKEM はこの鍵生成でのみ使用し、自分では保存しません。</string>
     <string name="check_password_title">秘密鍵のパスワードを確認</string>
     <string name="check_password_message">暗号化された秘密鍵のパスワードを入力してください。確認は一度だけ行います。</string>
     <string name="import_password_title">暗号化された秘密鍵をインポート</string>
@@ -320,4 +320,11 @@
     <string name="recipient_other_file">その他の公開鍵ファイル…</string>
     <string name="recipient_count">%1$d / %2$d</string>
     <string name="action_share_fingerprint">フィンガープリントを共有</string>
+    <string name="password_manager_fill">パスワード マネージャーから入力</string>
+    <string name="password_manager_save">パスワード マネージャーに保存</string>
+    <string name="password_manager_not_found">この鍵のパスワードはパスワード マネージャーにありません。</string>
+    <string name="password_manager_unavailable">使用できるパスワード マネージャーがありません。システム設定の「パスワードとアカウント」で選択してください。</string>
+    <string name="password_manager_failed">パスワード マネージャーが応答しません。もう一度お試しください。</string>
+    <string name="snackbar_password_manager_saved">パスワード マネージャーに保存しました</string>
+    <string name="snackbar_password_manager_not_saved">パスワード マネージャーに保存されませんでした</string>
 </resources>

@@ -51,6 +51,7 @@ import com.shixiaoshi0417.nekokem.ui.UnsignedEncryptionWarningDialog
 import com.shixiaoshi0417.nekokem.ui.UpdateAvailableDialog
 import com.shixiaoshi0417.nekokem.keys.LocalKeyManager
 import com.shixiaoshi0417.nekokem.keys.LocalKeyState
+import com.shixiaoshi0417.nekokem.keys.PasswordManagerCredentials
 import com.shixiaoshi0417.nekokem.keys.PublicKeyContact
 import com.shixiaoshi0417.nekokem.keys.PublicKeyContacts
 import com.shixiaoshi0417.nekokem.keys.PublicKeyContactsState
@@ -63,6 +64,8 @@ import com.shixiaoshi0417.nekokem.progress.OperationProgressTracker
 import com.shixiaoshi0417.nekokem.ui.AppAlertDialog
 import com.shixiaoshi0417.nekokem.ui.DialogButton
 import com.shixiaoshi0417.nekokem.ui.GeneratePasswordDialog
+import com.shixiaoshi0417.nekokem.ui.PasswordManagerOptions
+import com.shixiaoshi0417.nekokem.ui.findActivity
 import com.shixiaoshi0417.nekokem.ui.FileInputState
 import com.shixiaoshi0417.nekokem.ui.InputSelectionEvent
 import com.shixiaoshi0417.nekokem.ui.NekoKEMActions
@@ -452,9 +455,40 @@ private fun NekoKEMRoute(
         }
     }
 
+    /**
+     * Hands [password] to the system password manager under the current key's
+     * name and reports the outcome. Takes ownership of [password].
+     */
+    suspend fun saveToPasswordManager(password: ByteArray) {
+        try {
+            val activity = context.findActivity() ?: return
+            val result = PasswordManagerCredentials.save(
+                activity,
+                PasswordManagerCredentials.credentialId(keyState.fingerprint),
+                password,
+            )
+            when (result) {
+                PasswordManagerCredentials.SaveResult.SAVED ->
+                    showSnackbar(R.string.snackbar_password_manager_saved)
+                PasswordManagerCredentials.SaveResult.CANCELLED -> Unit
+                PasswordManagerCredentials.SaveResult.UNAVAILABLE ->
+                    showSnackbar(R.string.password_manager_unavailable)
+                PasswordManagerCredentials.SaveResult.FAILED ->
+                    showSnackbar(R.string.snackbar_password_manager_not_saved)
+            }
+        } finally {
+            password.fill(0)
+        }
+    }
+
+    /**
+     * [passwordToSave] is a copy of the password that the operation accepted;
+     * it goes to the password manager after success and is cleared either way.
+     */
     fun runKeyOperation(
         @StringRes operationResource: Int,
         sensitiveInput: ByteArray? = null,
+        passwordToSave: ByteArray? = null,
         completionDetails: (LocalKeyState) -> List<OperationResultDetail> = {
             emptyList()
         },
@@ -462,6 +496,7 @@ private fun NekoKEMRoute(
     ) {
         if (running) {
             sensitiveInput?.fill(0)
+            passwordToSave?.fill(0)
             return
         }
         scope.launch {
@@ -475,6 +510,7 @@ private fun NekoKEMRoute(
             } catch (_: Exception) {
                 LocalKeyManager.RESULT_STORAGE_ERROR
             }
+            if (result != NativeBridge.RESULT_SUCCESS) passwordToSave?.fill(0)
             if (result == NativeBridge.RESULT_SUCCESS) {
                 completedOperation = CompletedOperation(
                     operationResource = operationResource,
@@ -489,6 +525,7 @@ private fun NekoKEMRoute(
                     operationResource = operationResource,
                     details = completionDetails(keyState),
                 )
+                passwordToSave?.let { saveToPasswordManager(it) }
             }
         }
     }
@@ -1111,13 +1148,14 @@ private fun NekoKEMRoute(
                 showGeneratePasswordDialog = false
                 replaceKeypair = false
             },
-            onConfirm = { password ->
+            onConfirm = { password, savePassword ->
                 showGeneratePasswordDialog = false
                 val replace = replaceKeypair
                 replaceKeypair = false
                 runKeyOperation(
                     operationResource = R.string.operation_generate_keypair,
                     sensitiveInput = password,
+                    passwordToSave = if (savePassword) password.copyOf() else null,
                     completionDetails = { state ->
                         keyCompletionDetails(
                             context.getString(
@@ -1165,10 +1203,29 @@ private fun NekoKEMRoute(
         } else {
             R.string.password_label
         }
+        // Every prompt but the temporary key asks for a NekoKEM private key's
+        // password: the one on this device, or the one being imported.
+        val passwordManager = when (prompt) {
+            PasswordPrompt.SELECT_TEMPORARY_PRIVATE_KEY -> null
+            PasswordPrompt.IMPORT_PRIVATE_KEY -> PasswordManagerOptions(
+                credentialIds = null,
+                offerSave = true,
+            )
+            // Upgrading to an identity key changes the fingerprint and keeps
+            // the password, so an entry saved under the 4.x fingerprint still fits.
+            else -> PasswordManagerOptions(
+                credentialIds = setOfNotNull(
+                    PasswordManagerCredentials.credentialId(keyState.fingerprint),
+                    keyState.legacyFingerprint?.let(PasswordManagerCredentials::credentialId),
+                ),
+                offerSave = prompt == PasswordPrompt.CHECK_PRIVATE_KEY,
+            )
+        }
         SinglePasswordDialog(
             titleResource = title,
             messageResource = message,
             labelResource = label,
+            passwordManager = passwordManager,
             onDismiss = {
                 if (prompt == PasswordPrompt.IMPORT_PRIVATE_KEY) {
                     pendingPrivateImportUri = null
@@ -1185,12 +1242,13 @@ private fun NekoKEMRoute(
                 }
                 passwordPrompt = null
             },
-            onConfirm = { password ->
+            onConfirm = { password, savePassword ->
                 passwordPrompt = null
                 when (prompt) {
                     PasswordPrompt.CHECK_PRIVATE_KEY -> runKeyOperation(
                         operationResource = R.string.operation_check_password,
                         sensitiveInput = password,
+                        passwordToSave = if (savePassword) password.copyOf() else null,
                         completionDetails = {
                             keyCompletionDetails(
                                 context.getString(
@@ -1214,6 +1272,7 @@ private fun NekoKEMRoute(
                                 operationResource =
                                     R.string.operation_import_private_key,
                                 sensitiveInput = password,
+                                passwordToSave = if (savePassword) password.copyOf() else null,
                                 completionDetails = {
                                     keyCompletionDetails(displayName)
                                 },

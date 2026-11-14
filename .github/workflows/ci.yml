@@ -248,6 +248,7 @@ jobs:
           path: |
             android/app/build/test-results/testDebugUnitTest/
             android/app/build/reports/tests/testDebugUnitTest/
+            android/app/build/test-results/password-manager-screens/
           if-no-files-found: warn
           retention-days: 14
 

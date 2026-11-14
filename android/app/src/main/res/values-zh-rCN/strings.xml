@@ -34,7 +34,7 @@
     <string name="error_password_empty">密码不能为空</string>
     <string name="error_passwords_mismatch">两次输入的密码不一致</string>
     <string name="generate_password_title">保护新私钥</string>
-    <string name="generate_password_message">请输入并确认非空密码。密码仅用于本次密钥生成，不会保存。</string>
+    <string name="generate_password_message">请输入并确认非空密码。NekoKEM 仅在本次密钥生成中使用密码，不会自行保存。</string>
     <string name="check_password_title">验证私钥密码</string>
     <string name="check_password_message">请输入加密私钥密码，仅执行一次验证。</string>
     <string name="import_password_title">导入加密私钥</string>
@@ -334,4 +334,11 @@
     <string name="recipient_other_file">其他公钥文件…</string>
     <string name="recipient_count">%1$d / %2$d</string>
     <string name="action_share_fingerprint">分享指纹</string>
+    <string name="password_manager_fill">从密码管理器填入</string>
+    <string name="password_manager_save">保存到密码管理器</string>
+    <string name="password_manager_not_found">密码管理器中没有这个私钥的密码。</string>
+    <string name="password_manager_unavailable">没有可用的密码管理器，请在系统设置的「密码和账号」中选择一个。</string>
+    <string name="password_manager_failed">密码管理器没有响应，请重试。</string>
+    <string name="snackbar_password_manager_saved">密码已保存到密码管理器</string>
+    <string name="snackbar_password_manager_not_saved">密码未保存到密码管理器</string>
 </resources>
