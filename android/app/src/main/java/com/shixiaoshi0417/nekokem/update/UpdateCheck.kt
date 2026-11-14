@@ -24,8 +24,15 @@ fun interface ReleaseSource {
     fun latestRelease(): String
 }
 
+/** Reads where GitHub's "latest release" page redirects to. */
+fun interface ReleasePageSource {
+    /** Returns the redirect's Location, or throws [IOException]. */
+    fun latestLocation(): String
+}
+
 object Releases {
     const val LATEST_URL = "https://api.github.com/repos/Shixiaoshi0417/NekoKEM/releases/latest"
+    const val LATEST_PAGE_URL = "https://github.com/Shixiaoshi0417/NekoKEM/releases/latest"
     const val PAGE_PREFIX = "https://github.com/Shixiaoshi0417/NekoKEM/releases/tag/"
 
     /** A release document is a few KiB; anything larger is refused unread. */
@@ -52,8 +59,33 @@ object Releases {
         }
     }
 
+    /**
+     * The website's "latest release" address, which answers with a redirect to
+     * the newest full release. It is not part of the API, so the API's hourly
+     * limit on anonymous requests from one address does not apply to it.
+     */
+    val githubPage = ReleasePageSource {
+        val connection = URL(LATEST_PAGE_URL).openConnection() as HttpsURLConnection
+        try {
+            connection.instanceFollowRedirects = false
+            connection.requestMethod = "HEAD"
+            connection.connectTimeout = TIMEOUT_MS
+            connection.readTimeout = TIMEOUT_MS
+            connection.useCaches = false
+            connection.setRequestProperty("User-Agent", "NekoKEM-Android")
+            if (connection.responseCode !in 301..308) throw IOException("HTTP ${connection.responseCode}")
+            connection.getHeaderField("Location") ?: throw IOException("No redirect")
+        } finally {
+            connection.disconnect()
+        }
+    }
+
     @Volatile
     var source: ReleaseSource = github
+
+    /** Asked only when [source] fails, for example once the API limit is used up. */
+    @Volatile
+    var pageSource: ReleasePageSource = githubPage
 
     fun readBounded(input: InputStream): String {
         val output = ByteArrayOutputStream()
@@ -99,20 +131,39 @@ object Releases {
         null
     }
 
-    /** Asks [source] for the latest release; blocks, so call it off the main thread. */
-    fun check(currentVersion: String, source: ReleaseSource = this.source): UpdateResult = try {
-        val release = parseLatest(source.latestRelease())
-        when {
-            release == null -> UpdateResult.Failed
-            isNewer(release.version, currentVersion) -> UpdateResult.Available(release)
-            else -> UpdateResult.UpToDate
-        }
+    /**
+     * The release a redirect [location] names, or null unless it is exactly
+     * this repository's release page for a plain version.
+     */
+    fun parseLocation(location: String): ReleaseInfo? {
+        if (!location.startsWith(PAGE_PREFIX)) return null
+        val name = parseVersion(location.removePrefix(PAGE_PREFIX))?.joinToString(".") ?: return null
+        return ReleaseInfo(version = name, pageUrl = PAGE_PREFIX + "v" + name)
+    }
+
+    private fun <T> attempt(read: () -> T?): T? = try {
+        read()
     } catch (_: IOException) {
-        UpdateResult.Failed
+        null
     } catch (_: SecurityException) {
-        UpdateResult.Failed
+        null
     } catch (_: ClassCastException) {
-        UpdateResult.Failed
+        null
+    }
+
+    /**
+     * Asks [source] for the latest release and, if that fails, [pageSource];
+     * blocks, so call it off the main thread.
+     */
+    fun check(
+        currentVersion: String,
+        source: ReleaseSource = this.source,
+        pageSource: ReleasePageSource = this.pageSource,
+    ): UpdateResult {
+        val release = attempt { parseLatest(source.latestRelease()) }
+            ?: attempt { parseLocation(pageSource.latestLocation()) }
+            ?: return UpdateResult.Failed
+        return if (isNewer(release.version, currentVersion)) UpdateResult.Available(release) else UpdateResult.UpToDate
     }
 }
 
