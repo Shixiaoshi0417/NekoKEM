@@ -80,6 +80,8 @@ final class AppState: ObservableObject {
     // Unsigned output is never saved: every launch signs again.
     @Published private(set) var unsigned = false
     @Published private(set) var requireSignature = false
+    // Signed files record the input's name; off keeps them readable by NekoKEM 5.1.
+    @Published private(set) var recordName = true
     // The user's own key pair. The private key is the only default: it signs and
     // decrypts. The public key is offered first when choosing recipients, never ticked.
     @Published var signKeyPath = "" { didSet { edited("signKeyPath") } }
@@ -222,6 +224,7 @@ final class AppState: ObservableObject {
                 if let saved = try? await native({ try Backend.desktopPreferences() }) {
                     stored = saved
                     requireSignature = saved.requireSignature; signKeyPath = saved.signKeyPath; ownPublicKey = saved.publicKeyPath
+                    recordName = saved.recordName
                 }
                 loaded = true
                 if ProcessInfo.processInfo.environment["NEKOKEM_NATIVE_STARTUP_EVIDENCE"] == "1" {
@@ -237,6 +240,7 @@ final class AppState: ObservableObject {
     private func storePreferences() {
         guard !demo else { return }
         stored.requireSignature = requireSignature; stored.signKeyPath = signKeyPath; stored.publicKeyPath = ownPublicKey
+        stored.recordName = recordName
         let value = stored
         Task { _ = try? await native { try Backend.save(value) } }
     }
@@ -247,6 +251,7 @@ final class AppState: ObservableObject {
     }
 
     func changeRequireSignature(_ value: Bool) { requireSignature = value; storePreferences() }
+    func changeRecordName(_ value: Bool) { recordName = value; storePreferences() }
     func changeAutoUpdate(_ value: Bool) { autoUpdate = value; update.auto = value; storeUpdate() }
     func toggleUnsigned(_ value: Bool) {
         if !value { unsigned = false; confirmingUnsigned = false; return }
@@ -565,6 +570,7 @@ final class AppState: ObservableObject {
         request.signKeyPath = sign ? signKeyPath : ""
         request.unsigned = encrypting && unsigned
         request.requireSignature = !encrypting && requireSignature
+        request.omitName = sign && !recordName
         request.stage = true
         let remember = saveToKeychain && !request.password.isEmpty
         let passwordKey = sign ? signKeyPath : decryptKey

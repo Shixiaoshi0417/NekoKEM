@@ -21,9 +21,11 @@ extern "C" {
 #[serde(rename_all = "camelCase", default, deny_unknown_fields)]
 // The user's own key pair: the public key is offered first as a recipient, the
 // private key signs and decrypts by default.
-pub struct Preferences { pub require_signature: bool, pub sign_key_path: String, pub public_key_path: String, pub sidebar_open: bool, pub style: String }
+// `record_name`: signed files keep the input's file name (NekoKEM 5.1 cannot
+// open those), on unless the user turned it off.
+pub struct Preferences { pub require_signature: bool, pub sign_key_path: String, pub public_key_path: String, pub sidebar_open: bool, pub style: String, pub record_name: bool }
 impl Default for Preferences {
-    fn default() -> Self { Self { require_signature: false, sign_key_path: String::new(), public_key_path: String::new(), sidebar_open: true, style: "miuix".into() } }
+    fn default() -> Self { Self { require_signature: false, sign_key_path: String::new(), public_key_path: String::new(), sidebar_open: true, style: "miuix".into(), record_name: true } }
 }
 impl Preferences {
     fn valid(&self) -> bool {
@@ -58,7 +60,7 @@ mod tests {
         let directory = crate::contacts::tests::Directory::new();
         let path = directory.0.to_str().unwrap();
         assert_eq!(load(path), Preferences::default());
-        let chosen = Preferences { require_signature: true, sign_key_path: "C:\\Keys\\me.private.key.enc".into(), public_key_path: "C:\\Keys\\me.public.key".into(), sidebar_open: false, style: "material".into() };
+        let chosen = Preferences { require_signature: true, sign_key_path: "C:\\Keys\\me.private.key.enc".into(), public_key_path: "C:\\Keys\\me.public.key".into(), sidebar_open: false, style: "material".into(), record_name: false };
         assert!(store(path, &chosen));
         assert_eq!(load(path), chosen);
         #[cfg(unix)]
@@ -70,5 +72,8 @@ mod tests {
         assert!(!store(path, &Preferences { style: "glass".into(), ..Preferences::default() }));
         std::fs::write(directory.file(PREFERENCES_FILE), br#"{"unsigned":true}"#).unwrap();
         assert_eq!(load(path), Preferences::default());
+        // A 5.1 file has no recordName: names are recorded.
+        std::fs::write(directory.file(PREFERENCES_FILE), br#"{"requireSignature":true}"#).unwrap();
+        assert_eq!(load(path), Preferences { require_signature: true, ..Preferences::default() });
     }
 }

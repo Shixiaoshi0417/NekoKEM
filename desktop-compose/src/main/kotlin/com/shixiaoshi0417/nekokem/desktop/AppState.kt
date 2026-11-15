@@ -68,6 +68,8 @@ class AppState(private val scope: CoroutineScope, private val files: FileChooser
     // Unsigned output is never saved: every launch signs again.
     var unsigned by mutableStateOf(false); private set
     var requireSignature by mutableStateOf(false); private set
+    /** Signed files record the input's name; off keeps them readable by NekoKEM 5.1. */
+    var recordName by mutableStateOf(true); private set
     // The user's own key pair. The private key is the only default: it signs and
     // decrypts. The public key is offered first when choosing recipients, never ticked.
     var signKeyPath by mutableStateOf(""); private set
@@ -152,6 +154,7 @@ class AppState(private val scope: CoroutineScope, private val files: FileChooser
             language = settings.language; selectedLanguage = settings.selection; version = settings.version
             runCatching { native { Backend.desktopPreferences() } }.getOrNull()?.let {
                 requireSignature = it.requireSignature; signKeyPath = it.signKeyPath; ownPublicKey = it.publicKeyPath; sidebarOpen = it.sidebarOpen
+                recordName = it.recordName
                 style = Style.entries.firstOrNull { entry -> entry.wire == it.style } ?: Style.Miuix
             }
             loaded = true
@@ -163,7 +166,7 @@ class AppState(private val scope: CoroutineScope, private val files: FileChooser
     }
 
     private fun storePreferences() {
-        val value = DesktopPreferences(requireSignature, signKeyPath, ownPublicKey, sidebarOpen, style.wire)
+        val value = DesktopPreferences(requireSignature, signKeyPath, ownPublicKey, sidebarOpen, style.wire, recordName)
         scope.launch { runCatching { native { Backend.saveDesktopPreferences(value) } } }
     }
     private fun storeUpdate() {
@@ -174,6 +177,7 @@ class AppState(private val scope: CoroutineScope, private val files: FileChooser
     fun toggleSidebar() { sidebarOpen = !sidebarOpen; storePreferences() }
     fun changeStyle(value: Style) { style = value; storePreferences() }
     fun changeRequireSignature(value: Boolean) { requireSignature = value; storePreferences() }
+    fun changeRecordName(value: Boolean) { recordName = value; storePreferences() }
     fun changeAutoUpdate(value: Boolean) { autoUpdate = value; update = update.copy(auto = value); storeUpdate() }
 
     fun toggleUnsigned(value: Boolean) {
@@ -464,7 +468,7 @@ class AppState(private val scope: CoroutineScope, private val files: FileChooser
             password = if (sign || !encrypting) password.text else "",
             contacts = chosen.map { it.id }, keyPaths = others,
             signKeyPath = if (sign) signKeyPath else "", unsigned = encrypting && unsigned,
-            requireSignature = !encrypting && requireSignature, stage = true,
+            requireSignature = !encrypting && requireSignature, omitName = sign && !recordName, stage = true,
         )
         scope.launch {
             var unavailable = false

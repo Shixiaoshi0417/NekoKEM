@@ -991,7 +991,14 @@ private fun NekoKEMRoute(
                 val chosen = recipients
                 recipients = emptyList()
                 val outcome = pageWork {
-                    fileWorkflow.prepareEncryptionForSelection(source.uri, tracker, pick.own, chosen, signingPassword?.copyOf())
+                    fileWorkflow.prepareEncryptionForSelection(
+                        source.uri,
+                        tracker,
+                        pick.own,
+                        chosen,
+                        signingPassword?.copyOf(),
+                        recordName = signatureSettings.recordOriginalName,
+                    )
                 }
                 val finalProgress = tracker.snapshot()
                 if (outcome.code == NativeBridge.RESULT_SUCCESS &&
@@ -2072,6 +2079,9 @@ private fun NekoKEMRoute(
                 } else {
                     updateSignatureSettings(signatureSettings.copy(unsignedEncryption = false))
                 }
+            },
+            onRecordOriginalNameChange = { record ->
+                updateSignatureSettings(signatureSettings.copy(recordOriginalName = record))
             },
             onRequireSignatureChange = { required ->
                 updateSignatureSettings(signatureSettings.copy(requireSignature = required))

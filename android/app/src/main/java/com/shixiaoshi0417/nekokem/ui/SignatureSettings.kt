@@ -23,11 +23,13 @@ import top.yukonga.miuix.kmp.theme.MiuixTheme
 /**
  * Signing policy of this device. Files are signed (NKEM v5) unless the user
  * turned on unsigned encryption; [requireSignature] makes Core refuse
- * unsigned files on decryption.
+ * unsigned files on decryption. [recordOriginalName] keeps the input's file
+ * name in signed files; NekoKEM 5.1 cannot open a file that records one.
  */
 data class SignatureSettings(
     val unsignedEncryption: Boolean = false,
     val requireSignature: Boolean = false,
+    val recordOriginalName: Boolean = true,
 )
 
 /** Stores [SignatureSettings] in this device's private preferences. */
@@ -35,12 +37,14 @@ object SignatureSettingsStore {
     private const val PREFERENCES = "signature_settings"
     private const val UNSIGNED = "unsigned_encryption"
     private const val REQUIRE = "require_signature"
+    private const val RECORD_NAME = "record_original_name"
 
     fun read(context: Context): SignatureSettings = try {
         val preferences = context.getSharedPreferences(PREFERENCES, Context.MODE_PRIVATE)
         SignatureSettings(
             unsignedEncryption = preferences.getBoolean(UNSIGNED, false),
             requireSignature = preferences.getBoolean(REQUIRE, false),
+            recordOriginalName = preferences.getBoolean(RECORD_NAME, true),
         )
     } catch (_: ClassCastException) {
         // A damaged value never turns signing off.
@@ -52,6 +56,7 @@ object SignatureSettingsStore {
         context.getSharedPreferences(PREFERENCES, Context.MODE_PRIVATE).edit()
             .putBoolean(UNSIGNED, settings.unsignedEncryption)
             .putBoolean(REQUIRE, settings.requireSignature)
+            .putBoolean(RECORD_NAME, settings.recordOriginalName)
             .commit()
 }
 

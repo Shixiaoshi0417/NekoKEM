@@ -17,7 +17,18 @@ class SignatureSettingsTest {
     private val preferences get() = context.getSharedPreferences("signature_settings", Context.MODE_PRIVATE)
 
     @Test fun newInstallSignsAndAcceptsUnsignedFiles() {
-        assertEquals(SignatureSettings(unsignedEncryption = false, requireSignature = false), SignatureSettingsStore.read(context))
+        assertEquals(
+            SignatureSettings(unsignedEncryption = false, requireSignature = false, recordOriginalName = true),
+            SignatureSettingsStore.read(context),
+        )
+    }
+
+    @Test fun recordingTheNameCanBeTurnedOffAndBackOn() {
+        assertTrue(SignatureSettingsStore.write(context, SignatureSettings(recordOriginalName = false)))
+        assertFalse(SignatureSettingsStore.read(context).recordOriginalName)
+        assertFalse(preferences.getBoolean("record_original_name", true))
+        assertTrue(SignatureSettingsStore.write(context, SignatureSettings()))
+        assertTrue(SignatureSettingsStore.read(context).recordOriginalName)
     }
 
     @Test fun choicesSurviveAndSwitchBack() {

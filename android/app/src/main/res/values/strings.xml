@@ -230,6 +230,8 @@
     <string name="unsigned_confirm_title">Turn off signing?</string>
     <string name="unsigned_confirm_message">Files will be NKEM v3/v4 without a signature. Recipients cannot confirm the file came from you, and anyone with their public key could send a file that looks the same.</string>
     <string name="action_turn_off_signing">Turn off signing</string>
+    <string name="settings_record_name_title">Record original file name</string>
+    <string name="settings_record_name_summary">On: signed files keep the original file name, and decryption restores it. Turn off for recipients using NekoKEM 5.1, which cannot open files that record a name.</string>
     <string name="settings_require_signature_title">Accept only signed files</string>
     <string name="settings_require_signature_summary">Decryption refuses NKEM v3/v4 files without a signature. No output is written for them.</string>
     <string name="sign_password_title">Sign the file</string>
