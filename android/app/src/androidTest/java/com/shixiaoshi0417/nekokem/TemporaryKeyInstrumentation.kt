@@ -81,6 +81,8 @@ class TemporaryKeyInstrumentation : Instrumentation() {
         check(root.mkdir())
         Os.chmod(root.absolutePath, PRIVATE_DIRECTORY_MODE)
 
+        testNkprV2KeyUpgrade(baseContext)
+
         var publicKeyTrace = ""
         try {
             val context = IsolatedStorageContext(baseContext, root)
@@ -372,6 +374,74 @@ class TemporaryKeyInstrumentation : Instrumentation() {
      * device as the trusted signer, and requiring a signature refuses an
      * unsigned file without writing its plaintext.
      */
+    /**
+     * An identity key pair written by NekoKEM 5.2.0 (NKPR v2, from the test
+     * assets) is imported, announced as an older format, still works, and is
+     * rewritten as NKPR v3 with the same keys and password.
+     */
+    private fun testNkprV2KeyUpgrade(baseContext: Context) {
+        val root = File(baseContext.cacheDir, "nekokem-nkpr-v2")
+        deleteTree(root)
+        check(root.mkdir())
+        Os.chmod(root.absolutePath, PRIVATE_DIRECTORY_MODE)
+        try {
+            val storage = IsolatedStorageContext(baseContext, root)
+            val manager = LocalKeyManager(storage)
+            val workflow = SafFileWorkflow(storage, manager)
+            val fixture = { name: String ->
+                File(storage.cacheDir, "v2-$name").also { file ->
+                    context.assets.open("nkpr-v2/$name").use { input -> file.writeBytes(input.readBytes()) }
+                    Os.chmod(file.absolutePath, PRIVATE_FILE_MODE)
+                }
+            }
+            val privateKey = fixture("private.key.enc")
+            val publicKey = fixture("public.key")
+            val secret = "nkpr-v2-fixture-password"
+            check(NativeBridge.nativePrivateKeyFormatVersion(privateKey.absolutePath) == 2)
+            check(NativeBridge.nativePrivateKeyFormatVersion(publicKey.absolutePath) == 0)
+            // A file from elsewhere in the old format is announced before its password is asked.
+            check(workflow.privateKeyLacksCommitment(Uri.fromFile(privateKey)))
+            val pending = workflow.stageTemporaryPrivateKey(Uri.fromFile(privateKey), "v2-private.key.enc")
+            check(pending.code == NativeBridge.RESULT_SUCCESS && checkNotNull(pending.key).lacksCommitment)
+            workflow.discardPendingTemporaryPrivateKey(pending.key)
+
+            check(manager.importEncryptedPrivateKey(privateKey, password(secret)) == NativeBridge.RESULT_SUCCESS)
+            check(manager.importPublicKey(publicKey, password(secret)) == NativeBridge.RESULT_SUCCESS)
+            val imported = manager.readState()
+            check(imported.privateKeyExists && imported.canSign && imported.privateKeyOutdated) {
+                "An NKPR v2 identity key was not reported as outdated"
+            }
+
+            // The NKPR v2 key signs and decrypts as before.
+            val plaintext = File(storage.cacheDir, "v2-plaintext")
+            plaintext.writeBytes(TEST_PLAINTEXT)
+            Os.chmod(plaintext.absolutePath, PRIVATE_FILE_MODE)
+            val signed = File(storage.cacheDir, "v2-signed.nkem")
+            check(manager.encryptFile(plaintext, signed, null, CONTINUE_PROGRESS, password(secret)) ==
+                NativeBridge.RESULT_SUCCESS)
+            val decrypt = { name: String ->
+                val output = File(storage.cacheDir, name)
+                check(manager.decryptFile(signed, output, password(secret), CONTINUE_PROGRESS) ==
+                    NativeBridge.RESULT_SUCCESS)
+                check(plaintext.readBytes().contentEquals(output.readBytes()))
+            }
+            decrypt("v2-decrypted")
+
+            // A wrong password changes nothing.
+            check(manager.upgradePrivateKeyFormat(password("wrong-password")) != NativeBridge.RESULT_SUCCESS)
+            check(manager.readState().privateKeyOutdated)
+            check(manager.upgradePrivateKeyFormat(ByteArray(0)) == NativeBridge.RESULT_INVALID_ARGUMENT)
+            check(manager.upgradePrivateKeyFormat(password(secret)) == NativeBridge.RESULT_SUCCESS)
+            val upgraded = manager.readState()
+            check(upgraded.privateKeyExists && upgraded.canSign && !upgraded.privateKeyOutdated)
+            check(upgraded.fingerprint == imported.fingerprint) { "The format upgrade changed the key" }
+            check(manager.upgradePrivateKeyFormat(password(secret)) == LocalKeyManager.RESULT_KEY_FORMAT_CURRENT)
+            decrypt("v3-decrypted")
+        } finally {
+            deleteTree(root)
+        }
+    }
+
     private fun testSignedRoundTrip(manager: LocalKeyManager, plaintext: File, cache: File) {
         val state = manager.readState()
         check(state.canSign) { "Generated key cannot sign" }
@@ -581,6 +651,9 @@ class TemporaryKeyInstrumentation : Instrumentation() {
             TEMPORARY_PRIVATE_NAME,
         )
         check(pendingResult.code == NativeBridge.RESULT_SUCCESS)
+        // A key generated now is NKPR v3: no old-format notice.
+        check(!checkNotNull(pendingResult.key).lacksCommitment)
+        check(!workflow.privateKeyLacksCommitment(Uri.fromFile(privateKey)))
         val privateResult = workflow.validateTemporaryPrivateKey(
             checkNotNull(pendingResult.key),
             password(TEMPORARY_PASSWORD),

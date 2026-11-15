@@ -49,6 +49,25 @@ static void managed_utf_path_release(JNIEnv *env, ManagedUtfPath *path)
     path->value = NULL;
 }
 
+/* The NKPR version in a key file's header (1 to 3), or 0. No password. */
+JNIEXPORT jint JNICALL
+Java_com_shixiaoshi0417_nekokem_nativecore_NativeBridge_nativePrivateKeyFormatVersion(
+    JNIEnv *env,
+    jobject bridge,
+    jstring private_key_path)
+{
+    ManagedUtfPath private_path = {0};
+    jint result = 0;
+
+    (void)bridge;
+    if (managed_utf_path_acquire(env, private_key_path, &private_path) ==
+        MANAGED_JNI_SUCCESS) {
+        result = (jint)nekokem_private_key_format_version(private_path.value);
+    }
+    managed_utf_path_release(env, &private_path);
+    return result;
+}
+
 JNIEXPORT jboolean JNICALL
 Java_com_shixiaoshi0417_nekokem_nativecore_NativeBridge_nativeHasPrivateKey(
     JNIEnv *env,

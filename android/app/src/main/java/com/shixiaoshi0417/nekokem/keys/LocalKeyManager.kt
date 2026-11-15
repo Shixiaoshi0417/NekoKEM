@@ -21,7 +21,21 @@ data class LocalKeyState(
     val canSign: Boolean = false,
     /** The X448 + ML-KEM-1024 fingerprint NekoKEM 4.x shows for this key. */
     val legacyFingerprint: String? = null,
+    /**
+     * An identity key whose private key file is still NKPR v2, the format
+     * without key commitment: it can be rewritten as NKPR v3.
+     */
+    val privateKeyOutdated: Boolean = false,
 )
+
+/** NKPR private-key container versions; see docs/key-commitment.md. */
+object NkprFormat {
+    const val IDENTITY = 2
+    const val COMMITTED = 3
+
+    /** NKPR v1 and v2 do not commit to the password-derived key. */
+    fun lacksCommitment(version: Int): Boolean = version == 1 || version == IDENTITY
+}
 
 /**
  * Core's report for one decryption. [trustedContact] is the index into the
@@ -67,7 +81,41 @@ class LocalKeyManager internal constructor(
             } else {
                 null
             },
+            privateKeyOutdated = canVerify &&
+                NativeBridge.nativePrivateKeyFormatVersion(privateKey.absolutePath) == NkprFormat.IDENTITY,
         )
+    }
+
+    /**
+     * Rewrites this device's NKPR v2 private key as NKPR v3, which commits to
+     * the password-derived key. Keys and password stay the same; NekoKEM 5.2
+     * and earlier cannot read the result. Takes ownership of [password].
+     */
+    fun upgradePrivateKeyFormat(password: ByteArray): Int = keyMutationLock.withLock {
+        try {
+            when {
+                password.isEmpty() -> NativeBridge.RESULT_INVALID_ARGUMENT
+                NativeBridge.nativePrivateKeyFormatVersion(privateKey.absolutePath) != NkprFormat.IDENTITY ->
+                    RESULT_KEY_FORMAT_CURRENT
+                else -> {
+                    val result = NativeBridge.nativeUpgradePrivateKeyFormat(
+                        privateKey.absolutePath,
+                        password,
+                    )
+                    if (result != NativeBridge.RESULT_SUCCESS) {
+                        result
+                    } else if (!setAndVerifyRegularFileMode(privateKey, PRIVATE_FILE_MODE)) {
+                        RESULT_STORAGE_ERROR
+                    } else {
+                        NativeBridge.RESULT_SUCCESS
+                    }
+                }
+            }
+        } catch (_: Exception) {
+            RESULT_STORAGE_ERROR
+        } finally {
+            password.fill(0)
+        }
     }
 
     /**
@@ -1265,6 +1313,8 @@ class LocalKeyManager internal constructor(
         /** Signing needs an identity key; this device still has a 4.x key. */
         const val RESULT_SIGNING_KEY_LEGACY = -19
         const val RESULT_ALREADY_IDENTITY = -20
+        /** The private key is not NKPR v2: there is no format to upgrade. */
+        const val RESULT_KEY_FORMAT_CURRENT = -21
         /** Core's signature failures, moved clear of the codes above. */
         const val RESULT_SIGNATURE_INVALID = -30
         const val RESULT_SIGNATURE_REQUIRED = -31

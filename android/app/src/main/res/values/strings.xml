@@ -260,6 +260,14 @@
     <string name="operation_export_legacy_public_key">Export legacy public key</string>
     <string name="upgrade_password_title">Upgrade to an identity key</string>
     <string name="upgrade_password_message">Adds signing keys to this NekoKEM 4.x key pair. Its encryption keys, password and old files stay unchanged. Enter the private key password. Export a backup of both keys first.</string>
+    <string name="key_old_format_status">Private key file in the older format. Upgrading adds key commitment; the password stays the same.</string>
+    <string name="action_upgrade_key_format">Upgrade private key format</string>
+    <string name="operation_upgrade_key_format">Upgrade private key format</string>
+    <string name="upgrade_format_password_title">Upgrade the private key format</string>
+    <string name="upgrade_format_password_message">Rewrites this private key file in the current format (NKPR v3) with key commitment. Keys, fingerprint and password stay unchanged. NekoKEM 5.2 and earlier cannot read the upgraded file. Enter the private key password.</string>
+    <string name="error_reason_upgrade_format">The private key format could not be upgraded: the password is incorrect or the file is damaged. It was left unchanged.</string>
+    <string name="error_reason_key_format_current">This private key already uses the current format; there is nothing to upgrade.</string>
+    <string name="old_key_format_note">This private key file uses an older format without key commitment. Enter your password only if the file is your own.</string>
     <string name="legacy_export_hint">For recipients on NekoKEM 4.x and earlier. It cannot verify signatures.</string>
     <string name="contact_verifies">Identity key · verifies signatures</string>
     <string name="contact_legacy">Legacy key · cannot verify signatures</string>

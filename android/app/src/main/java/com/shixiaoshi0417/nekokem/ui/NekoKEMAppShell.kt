@@ -125,6 +125,8 @@ data class NekoKEMUiState(
     val uiStyle: UiStyle = UiStyles.default,
     /** This device's key is an identity key: files are signed with it. */
     val canSign: Boolean = false,
+    /** The private key file is NKPR v2 and can be rewritten with key commitment. */
+    val privateKeyOutdated: Boolean = false,
     val signatureSettings: SignatureSettings = SignatureSettings(),
     val autoUpdateCheck: Boolean = true,
     val updateChecking: Boolean = false,
@@ -166,6 +168,7 @@ data class NekoKEMActions(
     val onSetContactArchived: (PublicKeyContact, Boolean) -> Unit = { _, _ -> },
     val onUiStyleChange: (UiStyle) -> Unit = {},
     val onUpgradeKey: () -> Unit = {},
+    val onUpgradeKeyFormat: () -> Unit = {},
     val onExportLegacyPublicKey: () -> Unit = {},
     /** Turning unsigned encryption on goes through the red warning first. */
     val onUnsignedEncryptionChange: (Boolean) -> Unit = {},
@@ -561,6 +564,13 @@ private fun KeyManagementPage(
                     style = MaterialTheme.typography.labelLarge,
                 )
             }
+            if (state.privateKeyExists && state.privateKeyOutdated) {
+                Text(
+                    modifier = Modifier.padding(top = 12.dp),
+                    text = stringResource(R.string.key_old_format_status),
+                    style = MaterialTheme.typography.labelLarge,
+                )
+            }
         }
         Spacer(modifier = Modifier.height(16.dp))
         if (state.fingerprint != null) {
@@ -588,6 +598,13 @@ private fun KeyManagementPage(
                 labelResource = R.string.action_upgrade_key,
                 enabled = canRun,
                 onClick = actions.onUpgradeKey,
+            )
+        }
+        if (state.privateKeyExists && state.privateKeyOutdated) {
+            ActionButton(
+                labelResource = R.string.action_upgrade_key_format,
+                enabled = canRun,
+                onClick = actions.onUpgradeKeyFormat,
             )
         }
         if (state.canSign) {

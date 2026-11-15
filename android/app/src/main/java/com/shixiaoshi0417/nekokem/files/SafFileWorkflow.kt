@@ -8,6 +8,7 @@ import android.system.Os
 import android.system.OsConstants
 import com.shixiaoshi0417.nekokem.R
 import com.shixiaoshi0417.nekokem.keys.LocalKeyManager
+import com.shixiaoshi0417.nekokem.keys.NkprFormat
 import com.shixiaoshi0417.nekokem.keys.PendingTemporaryPrivateKey
 import com.shixiaoshi0417.nekokem.keys.PendingTemporaryPrivateKeyResult
 import com.shixiaoshi0417.nekokem.keys.PublicKeyExportTrace
@@ -564,6 +565,7 @@ class SafFileWorkflow(
                     pending = PendingTemporaryPrivateKey(
                         candidate,
                         displayName,
+                        lacksCommitment = privateKeyFileLacksCommitment(candidate),
                     )
                     candidate = null
                     result = NativeBridge.RESULT_SUCCESS
@@ -853,6 +855,32 @@ class SafFileWorkflow(
             commitResult = commitResult,
             commitErrno = commitErrno,
         )
+    }
+
+    private fun privateKeyFileLacksCommitment(file: File): Boolean =
+        NkprFormat.lacksCommitment(NativeBridge.nativePrivateKeyFormatVersion(file.absolutePath))
+
+    /**
+     * Whether a private key chosen for import is NKPR v1 or v2, the formats
+     * without key commitment. Core reads only the header of a private copy;
+     * no password is involved.
+     */
+    fun privateKeyLacksCommitment(source: Uri): Boolean {
+        var stagedInput: File? = null
+        var workspace: File? = null
+
+        return try {
+            val directory = createWorkspace() ?: return false
+            workspace = directory
+            stagedInput = createPrivateTemporaryFile(PRIVATE_IMPORT_PREFIX, directory)
+            copyUriToFile(source, stagedInput, MAX_KEY_IMPORT_BYTES, null) &&
+                privateKeyFileLacksCommitment(stagedInput)
+        } catch (_: Exception) {
+            false
+        } finally {
+            clearAndDelete(stagedInput)
+            removeWorkspace(workspace)
+        }
     }
 
     /** Takes ownership of [password] and clears it before returning. */

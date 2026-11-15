@@ -140,6 +140,19 @@ object NativeBridge {
         password: ByteArray,
     ): Int
 
+    /**
+     * The NKPR version in a private key file's header: 1 or 2 for the formats
+     * without key commitment, 3 for the current one, 0 for anything else.
+     * Reads only the header; no password is involved.
+     */
+    external fun nativePrivateKeyFormatVersion(privateKeyPath: String): Int
+
+    /** Rewrites an NKPR v2 private key as NKPR v3 with the same keys and password. */
+    external fun nativeUpgradePrivateKeyFormat(
+        privateKeyPath: String,
+        password: ByteArray,
+    ): Int
+
     /** True for a valid four-component identity key, which verifies signatures. */
     external fun nativePublicKeyCanVerify(publicKeyPath: String): Boolean
 

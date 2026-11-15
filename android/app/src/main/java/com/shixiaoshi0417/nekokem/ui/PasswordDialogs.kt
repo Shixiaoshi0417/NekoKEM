@@ -165,6 +165,8 @@ fun SinglePasswordDialog(
     @StringRes titleResource: Int,
     @StringRes messageResource: Int,
     @StringRes labelResource: Int = R.string.password_label,
+    /** A second paragraph under the message, such as the old key format notice. */
+    @StringRes noteResource: Int? = null,
     passwordManager: PasswordManagerOptions? = null,
     onDismiss: () -> Unit,
     /** The password, and whether to save it to the password manager after it is accepted. */
@@ -193,6 +195,7 @@ fun SinglePasswordDialog(
         text = {
             Column(Modifier.verticalScroll(rememberScrollState())) {
                 Text(stringResource(messageResource))
+                noteResource?.let { Text(stringResource(it), modifier = Modifier.padding(top = 8.dp)) }
                 TemporaryPasswordField(
                     value = password,
                     onValueChanged = { updated ->

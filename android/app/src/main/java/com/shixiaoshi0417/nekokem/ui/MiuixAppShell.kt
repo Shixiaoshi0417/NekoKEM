@@ -412,6 +412,7 @@ private fun LazyListScope.keysPage(state: NekoKEMUiState, actions: NekoKEMAction
                 add(stringResource(R.string.fingerprint_label))
                 add(state.fingerprint ?: stringResource(R.string.not_available))
                 if (state.fingerprint != null && !state.canSign) add(stringResource(R.string.key_legacy_status))
+                if (state.privateKeyExists && state.privateKeyOutdated) add(stringResource(R.string.key_old_format_status))
             }.joinToString("\n"),
         )
         ButtonPair(
@@ -424,6 +425,9 @@ private fun LazyListScope.keysPage(state: NekoKEMUiState, actions: NekoKEMAction
         )
         if (state.fingerprint != null && state.privateKeyExists && !state.canSign) {
             Action(R.string.action_upgrade_key, canRun, actions.onUpgradeKey)
+        }
+        if (state.privateKeyExists && state.privateKeyOutdated) {
+            Action(R.string.action_upgrade_key_format, canRun, actions.onUpgradeKeyFormat)
         }
         if (state.fingerprint != null) {
             Action(R.string.action_show_fingerprint_qr, !state.running, actions.onShowFingerprintQr)
