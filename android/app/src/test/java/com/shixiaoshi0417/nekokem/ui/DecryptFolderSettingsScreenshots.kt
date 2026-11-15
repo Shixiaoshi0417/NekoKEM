@@ -85,7 +85,14 @@ class DecryptFolderSettingsScreenshots {
         compose.onAllNodesWithText(string(R.string.tab_settings)).onFirst().performClick()
         compose.waitForIdle()
         compose.onAllNodes(hasScrollAction()).onFirst()
-            .performScrollToNode(hasText(string(R.string.settings_decrypt_folder_title)))
+            .performScrollToNode(
+                hasText(
+                    string(
+                        if (folder == null) R.string.settings_decrypt_folder_title
+                        else R.string.settings_decrypt_folder_location,
+                    ),
+                ),
+            )
         compose.waitForIdle()
         val name = "${style.tag}-${if (dark) "dark" else "light"}-" + when {
             folder == null -> "off"
