@@ -840,7 +840,10 @@ jobs:
         with:
           toolchain: 1.99.0
           targets: ${{ matrix.arch }}-unknown-linux-gnu
-          components: clippy
+          components: clippy, rustfmt
+      - name: Check bridge formatting
+        working-directory: desktop/bridge
+        run: cargo fmt --check
       - name: Install native build, packaging and desktop test tools
         run: |
           sudo apt-get update

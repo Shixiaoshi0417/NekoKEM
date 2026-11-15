@@ -32,7 +32,12 @@ extern "C" {
     fn desktop_write_private(path: *const c_char, bytes: *const u8, length: usize) -> c_int;
     fn desktop_remove_private(directory: *const c_char, name: *const c_char) -> c_int;
     fn nekokem_export_public_key(public_key: *const c_char, output: *const c_char) -> c_int;
-    fn file_read_sensitive(path: *const c_char, maximum: usize, buffer: *mut *mut u8, length: *mut usize) -> c_int;
+    fn file_read_sensitive(
+        path: *const c_char,
+        maximum: usize,
+        buffer: *mut *mut u8,
+        length: *mut usize,
+    ) -> c_int;
     fn secure_free(memory: *mut c_void, length: usize);
 }
 
@@ -45,14 +50,21 @@ pub struct Contact {
     pub note: String,
     // An identity key: files this contact signs are reported as trusted.
     pub can_verify: bool,
-    #[serde(skip_serializing_if = "Option::is_none")] pub legacy_fingerprint: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub legacy_fingerprint: Option<String>,
     // Pinned contacts are listed first, as on Android.
     pub pinned: bool,
     // The user compared this fingerprint with the key's owner.
     pub verified: bool,
 }
 impl Contact {
-    fn label(&self) -> &str { if self.note.is_empty() { &self.name } else { &self.note } }
+    fn label(&self) -> &str {
+        if self.note.is_empty() {
+            &self.name
+        } else {
+            &self.note
+        }
+    }
 }
 
 #[derive(Debug, Serialize)]
@@ -71,47 +83,74 @@ struct Record {
     note: String,
     public_key: String,
     // Present exactly for identity keys; records from 4.x have neither.
-    #[serde(default, skip_serializing_if = "Option::is_none")] legacy_fingerprint: Option<String>,
-    #[serde(default, skip_serializing_if = "std::ops::Not::not")] pinned: bool,
-    #[serde(default, skip_serializing_if = "std::ops::Not::not")] verified: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    legacy_fingerprint: Option<String>,
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pinned: bool,
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    verified: bool,
 }
 impl Record {
     fn is_valid(&self, id: &str) -> bool {
         let components = self.public_key.matches(BEGIN).count();
-        self.version == RECORD_VERSION && identity(&self.fingerprint).as_deref() == Some(id) &&
-            (self.name == clean_name(&self.name) || self.name == legacy_clean_name(&self.name)) &&
-            clean_note(&self.note).is_ok_and(|note| note == self.note) &&
-            valid_public_key(&self.public_key) &&
-            match (&self.legacy_fingerprint, components) {
+        self.version == RECORD_VERSION
+            && identity(&self.fingerprint).as_deref() == Some(id)
+            && (self.name == clean_name(&self.name) || self.name == legacy_clean_name(&self.name))
+            && clean_note(&self.note).is_ok_and(|note| note == self.note)
+            && valid_public_key(&self.public_key)
+            && match (&self.legacy_fingerprint, components) {
                 (None, 2) => true,
                 (Some(legacy), 4) => identity(legacy).is_some_and(|legacy| legacy != id),
                 _ => false,
             }
     }
-    fn can_verify(&self) -> bool { self.legacy_fingerprint.is_some() }
+    fn can_verify(&self) -> bool {
+        self.legacy_fingerprint.is_some()
+    }
     fn contact(&self, id: &str) -> Contact {
-        Contact { id: id.into(), fingerprint: self.fingerprint.clone(), name: clean_name(&self.name), note: self.note.clone(),
-                  can_verify: self.can_verify(), legacy_fingerprint: self.legacy_fingerprint.clone(), pinned: self.pinned, verified: self.verified }
+        Contact {
+            id: id.into(),
+            fingerprint: self.fingerprint.clone(),
+            name: clean_name(&self.name),
+            note: self.note.clone(),
+            can_verify: self.can_verify(),
+            legacy_fingerprint: self.legacy_fingerprint.clone(),
+            pinned: self.pinned,
+            verified: self.verified,
+        }
     }
 }
 const BEGIN: &str = "-----BEGIN PUBLIC KEY-----";
 
-pub enum Source<'a> { Path(&'a str), Text(&'a str) }
+pub enum Source<'a> {
+    Path(&'a str),
+    Text(&'a str),
+}
 
 /// Callers hold `CORE_LOCK`; Core's file layer enforces every privacy check.
-pub struct Store { directory: String }
+pub struct Store {
+    directory: String,
+}
 impl Store {
     pub fn open() -> Result<Self, Failure> {
         #[cfg(test)]
-        if let Some(directory) = tests::DIRECTORY.lock().unwrap_or_else(|error| error.into_inner()).clone() {
+        if let Some(directory) = tests::DIRECTORY
+            .lock()
+            .unwrap_or_else(|error| error.into_inner())
+            .clone()
+        {
             return Ok(Self { directory });
         }
         let mut buffer = vec![0 as c_char; 32768];
         if unsafe { desktop_contacts_directory(buffer.as_mut_ptr(), buffer.len()) } != 1 {
             return Err(Failure::new(STORAGE));
         }
-        let directory = unsafe { CStr::from_ptr(buffer.as_ptr()) }.to_str().map_err(|_| Failure::new(STORAGE))?;
-        Ok(Self { directory: directory.into() })
+        let directory = unsafe { CStr::from_ptr(buffer.as_ptr()) }
+            .to_str()
+            .map_err(|_| Failure::new(STORAGE))?;
+        Ok(Self {
+            directory: directory.into(),
+        })
     }
 
     pub fn list(&self) -> Result<Contacts, Failure> {
@@ -127,8 +166,17 @@ impl Store {
                 Err(_) => unreadable += 1,
             }
         }
-        contacts.sort_by_cached_key(|contact| (!contact.pinned, contact.label().to_lowercase(), contact.id.clone()));
-        Ok(Contacts { contacts, unreadable })
+        contacts.sort_by_cached_key(|contact| {
+            (
+                !contact.pinned,
+                contact.label().to_lowercase(),
+                contact.id.clone(),
+            )
+        });
+        Ok(Contacts {
+            contacts,
+            unreadable,
+        })
     }
 
     #[cfg(test)]
@@ -138,18 +186,28 @@ impl Store {
 
     /// Saves a contact; an identity key replaces a legacy contact only when
     /// [confirmed] is its full fingerprint, which the user checked.
-    pub fn save_confirmed(&self, source: Source<'_>, note: &str, confirmed: &str) -> Result<Contact, Failure> {
+    pub fn save_confirmed(
+        &self,
+        source: Source<'_>,
+        note: &str,
+        confirmed: &str,
+    ) -> Result<Contact, Failure> {
         let note = clean_note(note)?;
         let (name, mut pasted, input) = match source {
             Source::Path(path) => (clean_name(file_name(path)), None, core::path(path)?),
             Source::Text(text) => {
                 let stage = Staged::new(text)?;
-                let input = stage.path().ok_or_else(||Failure::new("internal"))?.to_owned();
+                let input = stage
+                    .path()
+                    .ok_or_else(|| Failure::new("internal"))?
+                    .to_owned();
                 (String::new(), Some(stage), input)
             }
         };
         let result = self.import(&input, name, note, confirmed);
-        if pasted.as_mut().is_some_and(|stage| !stage.close()) { return Err(Failure::new("cleanup-error")); }
+        if pasted.as_mut().is_some_and(|stage| !stage.close()) {
+            return Err(Failure::new("cleanup-error"));
+        }
         result
     }
 
@@ -172,10 +230,17 @@ impl Store {
 
     /// Marks the fingerprint as compared with its owner. `fingerprint` must still
     /// be the saved one, so a record replaced meanwhile is never marked.
-    pub fn set_verified(&self, id: &str, fingerprint: &str, verified: bool) -> Result<Contact, Failure> {
+    pub fn set_verified(
+        &self,
+        id: &str,
+        fingerprint: &str,
+        verified: bool,
+    ) -> Result<Contact, Failure> {
         let _lock = self.lock()?;
         let mut record = self.read(checked(id)?)?;
-        if record.fingerprint != fingerprint { return Err(Failure::new(MISMATCH)); }
+        if record.fingerprint != fingerprint {
+            return Err(Failure::new(MISMATCH));
+        }
         record.verified = verified;
         self.write(id, &record)?;
         Ok(record.contact(id))
@@ -183,13 +248,18 @@ impl Store {
 
     pub fn delete(&self, id: &str) -> Result<(), Failure> {
         let _lock = self.lock()?;
-        if !self.exists(checked(id)?)? { return Err(Failure::new(MISSING)); }
+        if !self.exists(checked(id)?)? {
+            return Err(Failure::new(MISSING));
+        }
         self.remove(id)
     }
 
     /// The identity contact whose legacy fingerprint is this one, if any.
     fn identity_with_legacy(&self, legacy: &str) -> Result<Option<String>, Failure> {
-        Ok(self.ids()?.0.into_iter().find(|id| self.read(id).is_ok_and(|record| record.legacy_fingerprint.as_deref() == Some(legacy))))
+        Ok(self.ids()?.0.into_iter().find(|id| {
+            self.read(id)
+                .is_ok_and(|record| record.legacy_fingerprint.as_deref() == Some(legacy))
+        }))
     }
 
     fn remove(&self, id: &str) -> Result<(), Failure> {
@@ -206,54 +276,94 @@ impl Store {
     pub fn stage(&self, id: &str) -> Result<(Staged, String), Failure> {
         let record = self.read(checked(id)?)?;
         let mut stage = Staged::new(&record.public_key)?;
-        if stage.path().and_then(core::fingerprint).as_deref() == Some(record.fingerprint.as_str()) {
+        if stage.path().and_then(core::fingerprint).as_deref() == Some(record.fingerprint.as_str())
+        {
             return Ok((stage, record.fingerprint));
         }
-        if !stage.close() { return Err(Failure::new("cleanup-error")); }
+        if !stage.close() {
+            return Err(Failure::new("cleanup-error"));
+        }
         Err(Failure::new(MISMATCH))
     }
 
     /// Staged identity keys of every contact Core still verifies, for
     /// decryption to match signers against. Others are left out.
     pub fn signers(&self) -> Vec<(String, Staged)> {
-        let Ok((ids, _)) = self.ids() else { return Vec::new() };
-        ids.into_iter().filter(|id| self.read(id).is_ok_and(|record| record.can_verify()))
+        let Ok((ids, _)) = self.ids() else {
+            return Vec::new();
+        };
+        ids.into_iter()
+            .filter(|id| self.read(id).is_ok_and(|record| record.can_verify()))
             .filter_map(|id| self.stage(&id).ok().map(|(stage, _)| (id, stage)))
             .filter(|(_, stage)| stage.path().is_some_and(core::can_verify))
             .collect()
     }
 
-    fn import(&self, input: &CStr, name: String, note: String, confirmed: &str) -> Result<Contact, Failure> {
-        let fingerprint = core::fingerprint(input).ok_or_else(|| Failure::new("public-key-invalid"))?;
+    fn import(
+        &self,
+        input: &CStr,
+        name: String,
+        note: String,
+        confirmed: &str,
+    ) -> Result<Contact, Failure> {
+        let fingerprint =
+            core::fingerprint(input).ok_or_else(|| Failure::new("public-key-invalid"))?;
         let id = identity(&fingerprint).ok_or_else(|| Failure::new("public-key-invalid"))?;
         let can_verify = core::can_verify(input);
         let legacy = if can_verify {
-            Some(core::legacy_fingerprint(input).filter(|legacy| identity(legacy).is_some()).ok_or_else(|| Failure::new("public-key-invalid"))?)
-        } else { None };
+            Some(
+                core::legacy_fingerprint(input)
+                    .filter(|legacy| identity(legacy).is_some())
+                    .ok_or_else(|| Failure::new("public-key-invalid"))?,
+            )
+        } else {
+            None
+        };
         let _lock = self.lock()?;
         // The same person's upgraded key replaces their legacy contact, keeping
         // its note and name; their legacy key is not added beside the identity one.
         let mut replaces = None;
         if let Some(legacy) = legacy.as_deref().and_then(identity) {
-            if let Ok(record) = self.read(&legacy) { replaces = Some((legacy, record)); }
+            if let Ok(record) = self.read(&legacy) {
+                replaces = Some((legacy, record));
+            }
         } else if let Some(owner) = self.identity_with_legacy(&fingerprint)? {
             return Err(Failure::existing(owner));
         }
         if let Some((old, _)) = &replaces {
-            if confirmed != fingerprint { return Err(Failure::upgrade(old.clone(), fingerprint)); }
+            if confirmed != fingerprint {
+                return Err(Failure::upgrade(old.clone(), fingerprint));
+            }
         }
         let (name, note) = match &replaces {
-            Some((_, old)) => (if name.is_empty() { old.name.clone() } else { name }, if note.is_empty() { old.note.clone() } else { note }),
+            Some((_, old)) => (
+                if name.is_empty() {
+                    old.name.clone()
+                } else {
+                    name
+                },
+                if note.is_empty() {
+                    old.note.clone()
+                } else {
+                    note
+                },
+            ),
             None => (name, note),
         };
         // Only an entry that Core still verifies counts as already saved.
         match self.stage(&id) {
             Ok((mut stage, _)) => {
-                return Err(if stage.close() { Failure::existing(id) } else { Failure::new("cleanup-error") });
+                return Err(if stage.close() {
+                    Failure::existing(id)
+                } else {
+                    Failure::new("cleanup-error")
+                });
             }
             Err(error) if error.code == MISSING => {
                 let (ids, overflow) = self.ids()?;
-                if replaces.is_none() && ids.len() + overflow >= MAX_CONTACTS { return Err(Failure::new("contact-limit")); }
+                if replaces.is_none() && ids.len() + overflow >= MAX_CONTACTS {
+                    return Err(Failure::new("contact-limit"));
+                }
             }
             // Explicitly re-importing the same key replaces a damaged or substituted record.
             Err(error) if error.code == INVALID || error.code == MISMATCH => {}
@@ -263,26 +373,53 @@ impl Store {
         // (two, or four for an identity key), never extra text from the source.
         let mut output = Staged::output()?;
         let result = (|| {
-            if unsafe { nekokem_export_public_key(input.as_ptr(), output.path().ok_or_else(||Failure::new("internal"))?.as_ptr()) } != 1 {
+            if unsafe {
+                nekokem_export_public_key(
+                    input.as_ptr(),
+                    output
+                        .path()
+                        .ok_or_else(|| Failure::new("internal"))?
+                        .as_ptr(),
+                )
+            } != 1
+            {
                 return Err(Failure::new("public-key-invalid"));
             }
             if output.path().and_then(core::fingerprint).as_deref() != Some(fingerprint.as_str()) {
                 return Err(Failure::new(MISMATCH));
             }
-            let public_key = read_private(output.path().ok_or_else(||Failure::new("internal"))?, MAX_PUBLIC_KEY_BYTES)
-                .and_then(|bytes| String::from_utf8(bytes).ok())
-                .filter(|key| valid_public_key(key))
-                .ok_or_else(|| Failure::new("public-key-invalid"))?;
+            let public_key = read_private(
+                output.path().ok_or_else(|| Failure::new("internal"))?,
+                MAX_PUBLIC_KEY_BYTES,
+            )
+            .and_then(|bytes| String::from_utf8(bytes).ok())
+            .filter(|key| valid_public_key(key))
+            .ok_or_else(|| Failure::new("public-key-invalid"))?;
             // An upgraded key stays pinned like the legacy contact it replaces.
             // Its fingerprint is new, so it starts unverified.
             let pinned = replaces.as_ref().is_some_and(|(_, old)| old.pinned);
-            let record = Record { version: RECORD_VERSION, fingerprint, name, note, public_key, legacy_fingerprint: legacy, pinned, verified: false };
-            if !record.is_valid(&id) { return Err(Failure::new("public-key-invalid")); }
+            let record = Record {
+                version: RECORD_VERSION,
+                fingerprint,
+                name,
+                note,
+                public_key,
+                legacy_fingerprint: legacy,
+                pinned,
+                verified: false,
+            };
+            if !record.is_valid(&id) {
+                return Err(Failure::new("public-key-invalid"));
+            }
             self.write(&id, &record)?;
-            if let Some((old, _)) = &replaces { self.remove(old)?; }
+            if let Some((old, _)) = &replaces {
+                self.remove(old)?;
+            }
             Ok(record.contact(&id))
         })();
-        if !output.close() { return Err(Failure::new("cleanup-error")); }
+        if !output.close() {
+            return Err(Failure::new("cleanup-error"));
+        }
         result
     }
 
@@ -293,8 +430,16 @@ impl Store {
         for entry in std::fs::read_dir(&self.directory).map_err(|_| Failure::new(STORAGE))? {
             let name = entry.map_err(|_| Failure::new(STORAGE))?.file_name();
             // Core's atomic temporary/backup names and foreign files are ignored.
-            if let Some(id) = name.to_str().and_then(|name| name.strip_suffix(".json")).filter(|id| valid_id(id)) {
-                if ids.len() == MAX_CONTACTS { overflow += 1; } else { ids.push(id.to_owned()); }
+            if let Some(id) = name
+                .to_str()
+                .and_then(|name| name.strip_suffix(".json"))
+                .filter(|id| valid_id(id))
+            {
+                if ids.len() == MAX_CONTACTS {
+                    overflow += 1;
+                } else {
+                    ids.push(id.to_owned());
+                }
             }
         }
         Ok((ids, overflow))
@@ -316,18 +461,24 @@ impl Store {
             const FILE_FLAG_OPEN_REPARSE_POINT: u32 = 0x0020_0000;
             options.custom_flags(FILE_FLAG_OPEN_REPARSE_POINT);
         }
-        let file = options.open(format!("{}/{LOCK_NAME}", self.directory)).map_err(|_| Failure::new(STORAGE))?;
+        let file = options
+            .open(format!("{}/{LOCK_NAME}", self.directory))
+            .map_err(|_| Failure::new(STORAGE))?;
         for attempt in 0..20 {
             match file.try_lock() {
                 Ok(()) => return Ok(file),
-                Err(TryLockError::WouldBlock) if attempt + 1 < 20 => std::thread::sleep(Duration::from_millis(50)),
+                Err(TryLockError::WouldBlock) if attempt + 1 < 20 => {
+                    std::thread::sleep(Duration::from_millis(50))
+                }
                 Err(_) => break,
             }
         }
         Err(Failure::new(STORAGE))
     }
 
-    fn file(&self, id: &str) -> String { format!("{}/{id}.json", self.directory) }
+    fn file(&self, id: &str) -> String {
+        format!("{}/{id}.json", self.directory)
+    }
 
     fn exists(&self, id: &str) -> Result<bool, Failure> {
         match std::fs::symlink_metadata(self.file(id)) {
@@ -338,20 +489,28 @@ impl Store {
     }
 
     fn read(&self, id: &str) -> Result<Record, Failure> {
-        if !self.exists(id)? { return Err(Failure::new(MISSING)); }
+        if !self.exists(id)? {
+            return Err(Failure::new(MISSING));
+        }
         // Core rejects links, other owners, extra hard links and non-private modes/ACLs.
-        let bytes = read_private(&CString::new(self.file(id)).map_err(|_| Failure::new(STORAGE))?, MAX_RECORD_BYTES)
-            .ok_or_else(|| Failure::new(INVALID))?;
+        let bytes = read_private(
+            &CString::new(self.file(id)).map_err(|_| Failure::new(STORAGE))?,
+            MAX_RECORD_BYTES,
+        )
+        .ok_or_else(|| Failure::new(INVALID))?;
         let record: Record = serde_json::from_slice(&bytes).map_err(|_| Failure::new(INVALID))?;
-        if !record.is_valid(id) { return Err(Failure::new(INVALID)); }
+        if !record.is_valid(id) {
+            return Err(Failure::new(INVALID));
+        }
         Ok(record)
     }
 
     fn write(&self, id: &str, record: &Record) -> Result<(), Failure> {
         let bytes = serde_json::to_vec(record).map_err(|_| Failure::new(STORAGE))?;
         let path = CString::new(self.file(id)).map_err(|_| Failure::new(STORAGE))?;
-        if bytes.len() > MAX_RECORD_BYTES ||
-            unsafe { desktop_write_private(path.as_ptr(), bytes.as_ptr(), bytes.len()) } != 1 {
+        if bytes.len() > MAX_RECORD_BYTES
+            || unsafe { desktop_write_private(path.as_ptr(), bytes.as_ptr(), bytes.len()) } != 1
+        {
             return Err(Failure::new(STORAGE));
         }
         Ok(())
@@ -360,48 +519,74 @@ impl Store {
 
 /// A public key Core wrote to a private staged file.
 pub fn read_public_key(path: &CStr) -> Option<String> {
-    read_private(path, MAX_PUBLIC_KEY_BYTES).and_then(|bytes| String::from_utf8(bytes).ok()).filter(|key| valid_public_key(key))
+    read_private(path, MAX_PUBLIC_KEY_BYTES)
+        .and_then(|bytes| String::from_utf8(bytes).ok())
+        .filter(|key| valid_public_key(key))
 }
 
 fn read_private(path: &CStr, maximum: usize) -> Option<Vec<u8>> {
     let mut buffer = std::ptr::null_mut();
     let mut length = 0;
-    if unsafe { file_read_sensitive(path.as_ptr(), maximum, &mut buffer, &mut length) } != 1 { return None; }
+    if unsafe { file_read_sensitive(path.as_ptr(), maximum, &mut buffer, &mut length) } != 1 {
+        return None;
+    }
     let bytes = unsafe { std::slice::from_raw_parts(buffer, length) }.to_vec();
     unsafe { secure_free(buffer.cast(), length) };
     Some(bytes)
 }
 
 fn checked(id: &str) -> Result<&str, Failure> {
-    if valid_id(id) { Ok(id) } else { Err(Failure::new("invalid-request")) }
+    if valid_id(id) {
+        Ok(id)
+    } else {
+        Err(Failure::new("invalid-request"))
+    }
 }
 
 fn valid_id(id: &str) -> bool {
-    id.len() == 64 && id.bytes().all(|byte| matches!(byte, b'0'..=b'9' | b'a'..=b'f'))
+    id.len() == 64
+        && id
+            .bytes()
+            .all(|byte| matches!(byte, b'0'..=b'9' | b'a'..=b'f'))
 }
 
 // Core fingerprints are 32 SHA-256 bytes as uppercase, colon-separated hex.
 fn identity(fingerprint: &str) -> Option<String> {
-    let valid = fingerprint.len() == 95 && fingerprint.bytes().enumerate().all(|(index, byte)| {
-        if index % 3 == 2 { byte == b':' } else { matches!(byte, b'0'..=b'9' | b'A'..=b'F') }
-    });
+    let valid = fingerprint.len() == 95
+        && fingerprint.bytes().enumerate().all(|(index, byte)| {
+            if index % 3 == 2 {
+                byte == b':'
+            } else {
+                matches!(byte, b'0'..=b'9' | b'A'..=b'F')
+            }
+        });
     valid.then(|| fingerprint.replace(':', "").to_ascii_lowercase())
 }
 
 fn valid_public_key(key: &str) -> bool {
-    !key.is_empty() && key.len() <= MAX_PUBLIC_KEY_BYTES && key.is_ascii() && !key.contains('\0') &&
-        key.starts_with(BEGIN) && key.split('\n').all(|line| line.len() <= MAX_LINE_BYTES)
+    !key.is_empty()
+        && key.len() <= MAX_PUBLIC_KEY_BYTES
+        && key.is_ascii()
+        && !key.contains('\0')
+        && key.starts_with(BEGIN)
+        && key.split('\n').all(|line| line.len() <= MAX_LINE_BYTES)
 }
 
 pub fn clean_note(note: &str) -> Result<String, Failure> {
     let note = note.trim();
-    if note.chars().count() > MAX_NOTE_CHARS || note.chars().any(|c| c.is_control() && c != '\n' && c != '\t') {
+    if note.chars().count() > MAX_NOTE_CHARS
+        || note
+            .chars()
+            .any(|c| c.is_control() && c != '\n' && c != '\t')
+    {
         return Err(Failure::new("note-limit"));
     }
     Ok(note.into())
 }
 
-fn file_name(path: &str) -> &str { path.rsplit(['/', '\\']).next().unwrap_or_default() }
+fn file_name(path: &str) -> &str {
+    path.rsplit(['/', '\\']).next().unwrap_or_default()
+}
 
 // Source names come from files received from others: drop controls, line
 // separators and every format character (Unicode Cf, as Android filters by
@@ -409,23 +594,39 @@ fn file_name(path: &str) -> &str { path.rsplit(['/', '\\']).next().unwrap_or_def
 // non-joiner stays only between two visible non-ASCII characters, where
 // scripts and emoji sequences need it.
 fn clean_name(name: &str) -> String {
-    let kept: Vec<char> = name.chars()
-        .filter(|&c| joiner(c) || !(c.is_control() || matches!(c, '\u{2028}' | '\u{2029}') || format_character(c)))
+    let kept: Vec<char> = name
+        .chars()
+        .filter(|&c| {
+            joiner(c)
+                || !(c.is_control() || matches!(c, '\u{2028}' | '\u{2029}') || format_character(c))
+        })
         .collect();
-    let visible: String = kept.iter().enumerate()
-        .filter(|&(index, &c)| !joiner(c) ||
-            (index > 0 && joinable(kept[index - 1]) && kept.get(index + 1).is_some_and(|&next| joinable(next))))
+    let visible: String = kept
+        .iter()
+        .enumerate()
+        .filter(|&(index, &c)| {
+            !joiner(c)
+                || (index > 0
+                    && joinable(kept[index - 1])
+                    && kept.get(index + 1).is_some_and(|&next| joinable(next)))
+        })
         .map(|(_, &c)| c)
         .collect();
     let mut capped: String = visible.trim().chars().take(MAX_NAME_CHARS).collect();
     // The cap may have cut the character a joiner was joining.
-    if capped.ends_with(joiner) { capped.pop(); }
+    if capped.ends_with(joiner) {
+        capped.pop();
+    }
     capped.trim_end().into()
 }
 
-fn joiner(c: char) -> bool { matches!(c, '\u{200c}' | '\u{200d}') }
+fn joiner(c: char) -> bool {
+    matches!(c, '\u{200c}' | '\u{200d}')
+}
 
-fn joinable(c: char) -> bool { !c.is_ascii() && !joiner(c) && !c.is_whitespace() }
+fn joinable(c: char) -> bool {
+    !c.is_ascii() && !joiner(c) && !c.is_whitespace()
+}
 
 fn format_character(c: char) -> bool {
     matches!(c, '\u{ad}' | '\u{600}'..='\u{605}' | '\u{61c}' | '\u{6dd}' | '\u{70f}' | '\u{890}'..='\u{891}' |
@@ -441,41 +642,71 @@ fn legacy_clean_name(name: &str) -> String {
     let visible: String = name.chars()
         .filter(|&c| !c.is_control() && !matches!(c, '\u{061c}' | '\u{200e}' | '\u{200f}' | '\u{202a}'..='\u{202e}' | '\u{2066}'..='\u{2069}'))
         .collect();
-    visible.trim().chars().take(MAX_NAME_CHARS).collect::<String>().trim_end().into()
+    visible
+        .trim()
+        .chars()
+        .take(MAX_NAME_CHARS)
+        .collect::<String>()
+        .trim_end()
+        .into()
 }
 
 #[cfg(test)]
 pub mod tests {
     use super::*;
     use crate::core::CORE_LOCK;
-    use std::{fs, path::PathBuf, sync::Mutex, time::{SystemTime, UNIX_EPOCH}};
+    use std::{
+        fs,
+        path::PathBuf,
+        sync::Mutex,
+        time::{SystemTime, UNIX_EPOCH},
+    };
 
     // Test-only store location so integration tests never touch the user's configuration.
     pub static DIRECTORY: Mutex<Option<String>> = Mutex::new(None);
 
     extern "C" {
-        fn nekokem_generate_keypair(public: *const c_char, private: *const c_char, password: *const u8, length: usize) -> c_int;
+        fn nekokem_generate_keypair(
+            public: *const c_char,
+            private: *const c_char,
+            password: *const u8,
+            length: usize,
+        ) -> c_int;
         fn desktop_private_directory(path: *const c_char) -> c_int;
         fn nekokem_export_legacy_public_key(public: *const c_char, output: *const c_char) -> c_int;
     }
 
     /// The two-component key NekoKEM 4.x reads, exported from an identity key.
     pub fn legacy_export(public: &str, output: String) -> String {
-        let (cpublic, coutput) = (CString::new(public).unwrap(), CString::new(output.as_str()).unwrap());
-        assert_eq!(unsafe { nekokem_export_legacy_public_key(cpublic.as_ptr(), coutput.as_ptr()) }, 1);
+        let (cpublic, coutput) = (
+            CString::new(public).unwrap(),
+            CString::new(output.as_str()).unwrap(),
+        );
+        assert_eq!(
+            unsafe { nekokem_export_legacy_public_key(cpublic.as_ptr(), coutput.as_ptr()) },
+            1
+        );
         output
     }
 
     pub struct Directory(pub PathBuf);
     impl Directory {
         pub fn new() -> Self {
-            let path = std::env::temp_dir().join(format!("nekokem-contacts-{}-{}", std::process::id(),
-                SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_nanos()));
+            let path = std::env::temp_dir().join(format!(
+                "nekokem-contacts-{}-{}",
+                std::process::id(),
+                SystemTime::now()
+                    .duration_since(UNIX_EPOCH)
+                    .unwrap()
+                    .as_nanos()
+            ));
             let name = CString::new(path.to_str().unwrap()).unwrap();
             assert_eq!(unsafe { desktop_private_directory(name.as_ptr()) }, 1);
             Self(path)
         }
-        pub fn file(&self, name: &str) -> String { self.0.join(name).to_str().unwrap().into() }
+        pub fn file(&self, name: &str) -> String {
+            self.0.join(name).to_str().unwrap().into()
+        }
         pub fn private(&self, name: &str) -> Self {
             let path = self.0.join(name);
             let cpath = CString::new(path.to_str().unwrap()).unwrap();
@@ -483,55 +714,100 @@ pub mod tests {
             Self(path)
         }
     }
-    impl Drop for Directory { fn drop(&mut self) { let _ = fs::remove_dir_all(&self.0); } }
+    impl Drop for Directory {
+        fn drop(&mut self) {
+            let _ = fs::remove_dir_all(&self.0);
+        }
+    }
 
     /// Generates a real Core key pair and returns (public path, private path, fingerprint).
     pub fn keypair(directory: &Directory, name: &str, password: &str) -> (String, String, String) {
         let public = directory.file(&format!("{name}.public.key"));
         let private = directory.file(&format!("{name}.private.key.enc"));
-        let (cpublic, cprivate) = (CString::new(public.as_str()).unwrap(), CString::new(private.as_str()).unwrap());
-        assert_eq!(unsafe { nekokem_generate_keypair(cpublic.as_ptr(), cprivate.as_ptr(), password.as_ptr(), password.len()) }, 1);
+        let (cpublic, cprivate) = (
+            CString::new(public.as_str()).unwrap(),
+            CString::new(private.as_str()).unwrap(),
+        );
+        assert_eq!(
+            unsafe {
+                nekokem_generate_keypair(
+                    cpublic.as_ptr(),
+                    cprivate.as_ptr(),
+                    password.as_ptr(),
+                    password.len(),
+                )
+            },
+            1
+        );
         let fingerprint = core::fingerprint(&cpublic).unwrap();
         (public, private, fingerprint)
     }
 
-    pub fn core_lock() -> std::sync::MutexGuard<'static, ()> { CORE_LOCK.lock().unwrap_or_else(|error| error.into_inner()) }
+    pub fn core_lock() -> std::sync::MutexGuard<'static, ()> {
+        CORE_LOCK.lock().unwrap_or_else(|error| error.into_inner())
+    }
 
-    fn store(directory: &Directory) -> Store { Store { directory: directory.0.to_str().unwrap().into() } }
-    fn code<T>(result: Result<T, Failure>) -> &'static str { result.err().expect("operation must fail").code }
+    fn store(directory: &Directory) -> Store {
+        Store {
+            directory: directory.0.to_str().unwrap().into(),
+        }
+    }
+    fn code<T>(result: Result<T, Failure>) -> &'static str {
+        result.err().expect("operation must fail").code
+    }
     fn record_names(directory: &Directory) -> Vec<String> {
-        let mut names: Vec<String> = fs::read_dir(&directory.0).unwrap()
+        let mut names: Vec<String> = fs::read_dir(&directory.0)
+            .unwrap()
             .map(|entry| entry.unwrap().file_name().into_string().unwrap())
-            .filter(|name| name != LOCK_NAME).collect();
+            .filter(|name| name != LOCK_NAME)
+            .collect();
         names.sort();
         names
     }
     fn rewrite(store: &Store, id: &str, json: &str) {
         let path = CString::new(store.file(id)).unwrap();
-        assert_eq!(unsafe { desktop_write_private(path.as_ptr(), json.as_ptr(), json.len()) }, 1);
+        assert_eq!(
+            unsafe { desktop_write_private(path.as_ptr(), json.as_ptr(), json.len()) },
+            1
+        );
     }
 
     #[test]
     fn source_names_drop_controls_separators_bidi_and_zero_width_characters() {
         assert_eq!(clean_name(" a\u{0085}\u{2028}\u{2029}\u{061c}\u{200b}\u{200c}\u{200d}\u{200e}\u{200f}\u{202a}\u{202e}\u{2060}\u{2066}\u{2069}\u{feff}b.pub "),"ab.pub");
-        assert_eq!(clean_name(&"猫".repeat(129)).chars().count(),128);
+        assert_eq!(clean_name(&"猫".repeat(129)).chars().count(), 128);
         // Every format character, not only a hand-made list.
-        assert_eq!(clean_name("a\u{00ad}\u{2061}\u{2064}\u{180e}\u{206a}\u{fff9}\u{e0041}b"),"ab");
+        assert_eq!(
+            clean_name("a\u{00ad}\u{2061}\u{2064}\u{180e}\u{206a}\u{fff9}\u{e0041}b"),
+            "ab"
+        );
     }
 
     #[test]
     fn joiners_stay_only_between_visible_non_ascii_characters() {
         let family = "\u{1f468}\u{200d}\u{1f469}\u{200d}\u{1f467}.pub";
         assert_eq!(clean_name(family), family);
-        assert_eq!(clean_name("\u{645}\u{6cc}\u{200c}\u{62e}"), "\u{645}\u{6cc}\u{200c}\u{62e}");
-        assert_eq!(clean_name("\u{200d}a\u{200d}b\u{200c}.pub\u{200d}"), "ab.pub");
+        assert_eq!(
+            clean_name("\u{645}\u{6cc}\u{200c}\u{62e}"),
+            "\u{645}\u{6cc}\u{200c}\u{62e}"
+        );
+        assert_eq!(
+            clean_name("\u{200d}a\u{200d}b\u{200c}.pub\u{200d}"),
+            "ab.pub"
+        );
         // Judged after filtering: a hidden character or a second joiner is no neighbour.
         assert_eq!(clean_name("\u{e9}\u{200d}\u{200b}a"), "\u{e9}a");
         assert_eq!(clean_name("\u{e9}\u{200d}\u{200d}\u{e9}"), "\u{e9}\u{e9}");
         assert_eq!(clean_name("\u{3000}\u{200d}\u{e9}"), "\u{e9}");
-        let capped = clean_name(&format!("{}\u{200d}\u{e9}", "\u{e9}".repeat(MAX_NAME_CHARS)));
+        let capped = clean_name(&format!(
+            "{}\u{200d}\u{e9}",
+            "\u{e9}".repeat(MAX_NAME_CHARS)
+        ));
         assert!(!capped.ends_with('\u{200d}'));
-        let capped = clean_name(&format!("{}\u{200d}\u{e9}", "\u{e9}".repeat(MAX_NAME_CHARS - 1)));
+        let capped = clean_name(&format!(
+            "{}\u{200d}\u{e9}",
+            "\u{e9}".repeat(MAX_NAME_CHARS - 1)
+        ));
         assert_eq!(capped.chars().count(), MAX_NAME_CHARS - 1);
     }
 
@@ -547,8 +823,17 @@ pub mod tests {
 
         // Leading text is accepted by Core's PEM reader but never stored.
         let annotated = keys.file("annotated \u{202e}yek\u{061c}.pem");
-        fs::write(&annotated, format!("Alice's key from a trusted channel\n{}", fs::read_to_string(&alice).unwrap())).unwrap();
-        let saved = store.save(Source::Path(&annotated), "  Alice 中文 😀\tlaptop  ").unwrap();
+        fs::write(
+            &annotated,
+            format!(
+                "Alice's key from a trusted channel\n{}",
+                fs::read_to_string(&alice).unwrap()
+            ),
+        )
+        .unwrap();
+        let saved = store
+            .save(Source::Path(&annotated), "  Alice 中文 😀\tlaptop  ")
+            .unwrap();
         assert_eq!(saved.fingerprint, alice_fingerprint);
         assert_eq!(saved.id, alice_fingerprint.replace(':', "").to_lowercase());
         assert_eq!(saved.note, "Alice 中文 😀\tlaptop");
@@ -556,17 +841,41 @@ pub mod tests {
         let record = store.read(&saved.id).unwrap();
         assert!(!record.public_key.contains("trusted channel"));
         // An identity key keeps all four components and its legacy fingerprint.
-        assert_eq!(record.public_key.matches("-----BEGIN PUBLIC KEY-----").count(), 4);
+        assert_eq!(
+            record
+                .public_key
+                .matches("-----BEGIN PUBLIC KEY-----")
+                .count(),
+            4
+        );
         assert!(saved.can_verify);
-        assert_eq!(saved.legacy_fingerprint, core::legacy_fingerprint(&CString::new(alice.as_str()).unwrap()));
+        assert_eq!(
+            saved.legacy_fingerprint,
+            core::legacy_fingerprint(&CString::new(alice.as_str()).unwrap())
+        );
         assert_eq!(record_names(&contacts), vec![format!("{}.json", saved.id)]);
 
-        let duplicate = store.save(Source::Path(&alice), "other note").err().unwrap();
-        assert_eq!((duplicate.code, duplicate.contact.as_deref()), ("contact-exists", Some(saved.id.as_str())));
+        let duplicate = store
+            .save(Source::Path(&alice), "other note")
+            .err()
+            .unwrap();
+        assert_eq!(
+            (duplicate.code, duplicate.contact.as_deref()),
+            ("contact-exists", Some(saved.id.as_str()))
+        );
         assert_eq!(store.read(&saved.id).unwrap().note, "Alice 中文 😀\tlaptop");
 
-        let pasted = store.save(Source::Text(&fs::read_to_string(&bob).unwrap()), "").unwrap();
-        assert_eq!((pasted.fingerprint.as_str(), pasted.name.as_str(), pasted.note.as_str()), (bob_fingerprint.as_str(), "", ""));
+        let pasted = store
+            .save(Source::Text(&fs::read_to_string(&bob).unwrap()), "")
+            .unwrap();
+        assert_eq!(
+            (
+                pasted.fingerprint.as_str(),
+                pasted.name.as_str(),
+                pasted.note.as_str()
+            ),
+            (bob_fingerprint.as_str(), "", "")
+        );
         // Labels sort by note, then source name; the pasted key has neither.
         let listed = store.list().unwrap();
         assert_eq!(listed.unreadable, 0);
@@ -577,13 +886,26 @@ pub mod tests {
         assert_eq!(store.update_note(&pasted.id, "").unwrap().note, "");
         store.update_note(&pasted.id, "Bob desktop").unwrap();
         // A new store instance (as after restarting the app) reads the same records.
-        let reopened = Store { directory: store.directory.clone() };
-        assert_eq!(reopened.list().unwrap().contacts.iter().map(|c| c.note.as_str()).collect::<Vec<_>>(),
-                   vec!["Alice 中文 😀\tlaptop", "Bob desktop"]);
+        let reopened = Store {
+            directory: store.directory.clone(),
+        };
+        assert_eq!(
+            reopened
+                .list()
+                .unwrap()
+                .contacts
+                .iter()
+                .map(|c| c.note.as_str())
+                .collect::<Vec<_>>(),
+            vec!["Alice 中文 😀\tlaptop", "Bob desktop"]
+        );
 
         reopened.delete(&pasted.id).unwrap();
         assert_eq!(code(reopened.delete(&pasted.id)), "contact-missing");
-        assert_eq!(code(reopened.update_note(&pasted.id, "note")), "contact-missing");
+        assert_eq!(
+            code(reopened.update_note(&pasted.id, "note")),
+            "contact-missing"
+        );
         assert_eq!(code(reopened.stage(&pasted.id)), "contact-missing");
         assert_eq!(reopened.list().unwrap().contacts, vec![saved]);
         assert_eq!(record_names(&contacts).len(), 1);
@@ -599,21 +921,48 @@ pub mod tests {
         let (bob, _, _) = keypair(&keys, "bob", "public-test-bob");
         store.save(Source::Path(&alice), "Alice").unwrap();
         let bob = store.save(Source::Path(&bob), "Bob").unwrap();
-        let order = || store.list().unwrap().contacts.into_iter().map(|contact| (contact.note, contact.pinned)).collect::<Vec<_>>();
-        assert_eq!(order(), vec![("Alice".into(), false), ("Bob".into(), false)]);
+        let order = || {
+            store
+                .list()
+                .unwrap()
+                .contacts
+                .into_iter()
+                .map(|contact| (contact.note, contact.pinned))
+                .collect::<Vec<_>>()
+        };
+        assert_eq!(
+            order(),
+            vec![("Alice".into(), false), ("Bob".into(), false)]
+        );
         assert!(store.set_pinned(&bob.id, true).unwrap().pinned);
         assert_eq!(order(), vec![("Bob".into(), true), ("Alice".into(), false)]);
         // Editing the note keeps the pin; unpinning restores the order.
         assert!(store.update_note(&bob.id, "Bob · laptop").unwrap().pinned);
         assert!(!store.set_pinned(&bob.id, false).unwrap().pinned);
-        assert_eq!(order(), vec![("Alice".into(), false), ("Bob · laptop".into(), false)]);
+        assert_eq!(
+            order(),
+            vec![("Alice".into(), false), ("Bob · laptop".into(), false)]
+        );
         assert_eq!(code(store.set_pinned("../alice", true)), "invalid-request");
         // Verification needs the saved fingerprint and survives pinning.
         let fingerprint = store.list().unwrap().contacts[1].fingerprint.clone();
-        assert_eq!(code(store.set_verified(&bob.id, &"0".repeat(95), true)), MISMATCH);
-        assert!(store.set_verified(&bob.id, &fingerprint, true).unwrap().verified);
+        assert_eq!(
+            code(store.set_verified(&bob.id, &"0".repeat(95), true)),
+            MISMATCH
+        );
+        assert!(
+            store
+                .set_verified(&bob.id, &fingerprint, true)
+                .unwrap()
+                .verified
+        );
         assert!(store.set_pinned(&bob.id, true).unwrap().verified);
-        assert!(!store.set_verified(&bob.id, &fingerprint, false).unwrap().verified);
+        assert!(
+            !store
+                .set_verified(&bob.id, &fingerprint, false)
+                .unwrap()
+                .verified
+        );
     }
 
     #[test]
@@ -624,36 +973,91 @@ pub mod tests {
         let store = store(&contacts);
         let (alice, _, alice_fingerprint) = keypair(&keys, "alice", "public-test-alice");
         let legacy = legacy_export(&alice, keys.file("alice-legacy.pub"));
-        let legacy_fingerprint = core::fingerprint(&CString::new(legacy.as_str()).unwrap()).unwrap();
+        let legacy_fingerprint =
+            core::fingerprint(&CString::new(legacy.as_str()).unwrap()).unwrap();
         assert_ne!(legacy_fingerprint, alice_fingerprint);
 
         // A 4.x contact: two components, no signature verification.
         let old = store.save(Source::Path(&legacy), "Alice").unwrap();
-        assert_eq!((old.fingerprint.as_str(), old.can_verify, old.legacy_fingerprint.as_deref()), (legacy_fingerprint.as_str(), false, None));
-        assert_eq!(store.read(&old.id).unwrap().public_key.matches(BEGIN).count(), 2);
+        assert_eq!(
+            (
+                old.fingerprint.as_str(),
+                old.can_verify,
+                old.legacy_fingerprint.as_deref()
+            ),
+            (legacy_fingerprint.as_str(), false, None)
+        );
+        assert_eq!(
+            store
+                .read(&old.id)
+                .unwrap()
+                .public_key
+                .matches(BEGIN)
+                .count(),
+            2
+        );
         assert!(store.signers().is_empty());
 
         // Anyone with the legacy key could attach signing keys to it, so the
         // upgrade waits for the user to check the new full fingerprint.
         let alice_text = fs::read_to_string(&alice).unwrap();
         let unconfirmed = store.save(Source::Text(&alice_text), "").err().unwrap();
-        assert_eq!((unconfirmed.code, unconfirmed.contact.as_deref(), unconfirmed.fingerprint.as_deref()),
-                   ("upgrade-unconfirmed", Some(old.id.as_str()), Some(alice_fingerprint.as_str())));
-        assert_eq!(code(store.save_confirmed(Source::Text(&alice_text), "", &legacy_fingerprint)), "upgrade-unconfirmed");
+        assert_eq!(
+            (
+                unconfirmed.code,
+                unconfirmed.contact.as_deref(),
+                unconfirmed.fingerprint.as_deref()
+            ),
+            (
+                "upgrade-unconfirmed",
+                Some(old.id.as_str()),
+                Some(alice_fingerprint.as_str())
+            )
+        );
+        assert_eq!(
+            code(store.save_confirmed(Source::Text(&alice_text), "", &legacy_fingerprint)),
+            "upgrade-unconfirmed"
+        );
         assert_eq!(record_names(&contacts), vec![format!("{}.json", old.id)]);
 
         // The upgraded key replaces it under the identity id and keeps the note.
-        let upgraded = store.save_confirmed(Source::Text(&alice_text), "", &alice_fingerprint).unwrap();
-        assert_eq!((upgraded.fingerprint.as_str(), upgraded.note.as_str(), upgraded.name.as_str()), (alice_fingerprint.as_str(), "Alice", "alice-legacy.pub"));
-        assert_eq!(upgraded.legacy_fingerprint.as_deref(), Some(legacy_fingerprint.as_str()));
-        assert_eq!(record_names(&contacts), vec![format!("{}.json", upgraded.id)]);
+        let upgraded = store
+            .save_confirmed(Source::Text(&alice_text), "", &alice_fingerprint)
+            .unwrap();
+        assert_eq!(
+            (
+                upgraded.fingerprint.as_str(),
+                upgraded.note.as_str(),
+                upgraded.name.as_str()
+            ),
+            (alice_fingerprint.as_str(), "Alice", "alice-legacy.pub")
+        );
+        assert_eq!(
+            upgraded.legacy_fingerprint.as_deref(),
+            Some(legacy_fingerprint.as_str())
+        );
+        assert_eq!(
+            record_names(&contacts),
+            vec![format!("{}.json", upgraded.id)]
+        );
         let mut signers = store.signers();
-        assert_eq!(signers.iter().map(|(id, _)| id.as_str()).collect::<Vec<_>>(), vec![upgraded.id.as_str()]);
-        for (_, stage) in signers.iter_mut() { assert!(stage.close()); }
+        assert_eq!(
+            signers
+                .iter()
+                .map(|(id, _)| id.as_str())
+                .collect::<Vec<_>>(),
+            vec![upgraded.id.as_str()]
+        );
+        for (_, stage) in signers.iter_mut() {
+            assert!(stage.close());
+        }
 
         // The legacy key now names the identity contact as already saved.
         let duplicate = store.save(Source::Path(&legacy), "again").err().unwrap();
-        assert_eq!((duplicate.code, duplicate.contact.as_deref()), ("contact-exists", Some(upgraded.id.as_str())));
+        assert_eq!(
+            (duplicate.code, duplicate.contact.as_deref()),
+            ("contact-exists", Some(upgraded.id.as_str()))
+        );
         assert_eq!(record_names(&contacts).len(), 1);
 
         // A legacy fingerprint that does not belong with an identity key, or
@@ -679,17 +1083,43 @@ pub mod tests {
         let contacts = keys.private("contacts");
         let store = store(&contacts);
         let (alice, private, _) = keypair(&keys, "alice", "public-test-alice");
-        assert_eq!(code(store.save(Source::Path(&alice), &"n".repeat(MAX_NOTE_CHARS + 1))), "note-limit");
-        assert_eq!(code(store.save(Source::Path(&alice), "bell\u{7}")), "note-limit");
-        assert!(store.save(Source::Path(&alice), &"中".repeat(MAX_NOTE_CHARS)).is_ok());
+        assert_eq!(
+            code(store.save(Source::Path(&alice), &"n".repeat(MAX_NOTE_CHARS + 1))),
+            "note-limit"
+        );
+        assert_eq!(
+            code(store.save(Source::Path(&alice), "bell\u{7}")),
+            "note-limit"
+        );
+        assert!(store
+            .save(Source::Path(&alice), &"中".repeat(MAX_NOTE_CHARS))
+            .is_ok());
         fs::write(keys.file("text.key"), "not a public key\n").unwrap();
-        assert_eq!(code(store.save(Source::Path(&keys.file("text.key")), "")), "public-key-invalid");
-        assert_eq!(code(store.save(Source::Path(&private), "")), "public-key-invalid");
-        assert_eq!(code(store.save(Source::Path(&keys.file("missing.key")), "")), "public-key-invalid");
-        assert_eq!(code(store.save(Source::Text("-----BEGIN PUBLIC KEY-----\nAAAA\n-----END PUBLIC KEY-----\n"), "")), "public-key-invalid");
+        assert_eq!(
+            code(store.save(Source::Path(&keys.file("text.key")), "")),
+            "public-key-invalid"
+        );
+        assert_eq!(
+            code(store.save(Source::Path(&private), "")),
+            "public-key-invalid"
+        );
+        assert_eq!(
+            code(store.save(Source::Path(&keys.file("missing.key")), "")),
+            "public-key-invalid"
+        );
+        assert_eq!(
+            code(store.save(
+                Source::Text("-----BEGIN PUBLIC KEY-----\nAAAA\n-----END PUBLIC KEY-----\n"),
+                ""
+            )),
+            "public-key-invalid"
+        );
         // A truncated last component fails Core's component validation.
         let text = fs::read_to_string(&alice).unwrap();
-        assert_eq!(code(store.save(Source::Text(&text[..text.len() - 40]), "")), "public-key-invalid");
+        assert_eq!(
+            code(store.save(Source::Text(&text[..text.len() - 40]), "")),
+            "public-key-invalid"
+        );
         assert_eq!(code(store.save(Source::Text(""), "")), "key-limit");
         for id in ["", "../escape", "ABCDEF", &"a".repeat(63), &"g".repeat(64)] {
             assert_eq!(code(store.update_note(id, "")), "invalid-request");
@@ -708,10 +1138,15 @@ pub mod tests {
         let (alice, _, alice_fingerprint) = keypair(&keys, "alice", "public-test-alice");
         let (bob, _, _) = keypair(&keys, "bob", "public-test-bob");
         let saved = store.save(Source::Path(&alice), "Alice").unwrap();
-        let bob_record = store.read(&store.save(Source::Path(&bob), "Bob").unwrap().id).unwrap();
+        let bob_record = store
+            .read(&store.save(Source::Path(&bob), "Bob").unwrap().id)
+            .unwrap();
         let (mut staged, fingerprint) = store.stage(&saved.id).unwrap();
         assert_eq!(fingerprint, alice_fingerprint);
-        assert_eq!(fs::read_to_string(staged.path().unwrap().to_str().unwrap()).unwrap(), store.read(&saved.id).unwrap().public_key);
+        assert_eq!(
+            fs::read_to_string(staged.path().unwrap().to_str().unwrap()).unwrap(),
+            store.read(&saved.id).unwrap().public_key
+        );
         assert!(staged.close());
 
         // Bob's valid key under Alice's identity is detected by Core's fingerprint.
@@ -724,10 +1159,16 @@ pub mod tests {
         // an explicit re-import of the real key must replace it, not report a duplicate.
         assert_eq!(store.list().unwrap().contacts.len(), 2);
         let repaired = store.save(Source::Path(&alice), "Alice repaired").unwrap();
-        assert_eq!((repaired.id.as_str(), repaired.note.as_str()), (saved.id.as_str(), "Alice repaired"));
+        assert_eq!(
+            (repaired.id.as_str(), repaired.note.as_str()),
+            (saved.id.as_str(), "Alice repaired")
+        );
         assert_eq!(store.stage(&saved.id).unwrap().1, alice_fingerprint);
         let duplicate = store.save(Source::Path(&alice), "ignored").err().unwrap();
-        assert_eq!((duplicate.code, duplicate.contact.as_deref()), ("contact-exists", Some(saved.id.as_str())));
+        assert_eq!(
+            (duplicate.code, duplicate.contact.as_deref()),
+            ("contact-exists", Some(saved.id.as_str()))
+        );
 
         let mut renamed: serde_json::Value = serde_json::from_str(&original).unwrap();
         renamed["fingerprint"] = bob_record.fingerprint.clone().into();
@@ -737,8 +1178,14 @@ pub mod tests {
         version["version"] = 2.into();
         let mut control: serde_json::Value = serde_json::from_str(&original).unwrap();
         control["name"] = "bad\u{1b}name".into();
-        for damaged in [renamed.to_string(), unknown.to_string(), version.to_string(), control.to_string(),
-                        "{".into(), original.replace("BEGIN PUBLIC KEY", "BEGIN PRIVATE KEY")] {
+        for damaged in [
+            renamed.to_string(),
+            unknown.to_string(),
+            version.to_string(),
+            control.to_string(),
+            "{".into(),
+            original.replace("BEGIN PUBLIC KEY", "BEGIN PRIVATE KEY"),
+        ] {
             rewrite(&store, &saved.id, &damaged);
             assert_eq!(code(store.stage(&saved.id)), "contact-invalid");
             assert_eq!(code(store.update_note(&saved.id, "x")), "contact-invalid");
@@ -748,21 +1195,35 @@ pub mod tests {
 
         // An explicit re-import of the same key repairs the damaged record.
         let repaired = store.save(Source::Path(&alice), "Alice again").unwrap();
-        assert_eq!((repaired.id.as_str(), repaired.note.as_str()), (saved.id.as_str(), "Alice again"));
+        assert_eq!(
+            (repaired.id.as_str(), repaired.note.as_str()),
+            (saved.id.as_str(), "Alice again")
+        );
         assert!(store.stage(&saved.id).is_ok());
         assert_eq!(store.list().unwrap().unreadable, 0);
 
         // Names saved by v4.0.0 to v4.1.0 stay usable and are shown cleaned.
-        for (stored, shown) in [("Al\u{ad}ice.pub", "Alice.pub"), ("a\u{200b}b.pub", "ab.pub"),
-                                ("Ali\u{200d}ce.pub", "Alice.pub"), ("key\u{feff}.pub", "key.pub"),
-                                ("a\u{2060}b.pub", "ab.pub"), ("x\u{2028}y.pub", "xy.pub")] {
+        for (stored, shown) in [
+            ("Al\u{ad}ice.pub", "Alice.pub"),
+            ("a\u{200b}b.pub", "ab.pub"),
+            ("Ali\u{200d}ce.pub", "Alice.pub"),
+            ("key\u{feff}.pub", "key.pub"),
+            ("a\u{2060}b.pub", "ab.pub"),
+            ("x\u{2028}y.pub", "xy.pub"),
+        ] {
             let mut legacy: serde_json::Value = serde_json::from_str(&original).unwrap();
             legacy["name"] = stored.into();
             rewrite(&store, &saved.id, &legacy.to_string());
             assert!(store.stage(&saved.id).is_ok(), "{stored:?}");
             let listed = store.list().unwrap();
             assert_eq!(listed.unreadable, 0, "{stored:?}");
-            assert!(listed.contacts.iter().any(|contact| contact.id == saved.id && contact.name == shown), "{stored:?}");
+            assert!(
+                listed
+                    .contacts
+                    .iter()
+                    .any(|contact| contact.id == saved.id && contact.name == shown),
+                "{stored:?}"
+            );
         }
 
         // Damaged records can still be deleted; foreign names are ignored.
@@ -822,25 +1283,64 @@ pub mod tests {
         use std::os::unix::fs::PermissionsExt;
         let _core = core_lock();
         let home = Directory::new();
-        struct Environment(Vec<(&'static str,Option<std::ffi::OsString>)>);
-        impl Drop for Environment {fn drop(&mut self){for (name,value) in &self.0 {match value {Some(value)=>std::env::set_var(name,value),None=>std::env::remove_var(name)}}}}
-        let environment=Environment(["XDG_CONFIG_HOME","HOME"].iter().map(|&name|(name,std::env::var_os(name))).collect());
+        struct Environment(Vec<(&'static str, Option<std::ffi::OsString>)>);
+        impl Drop for Environment {
+            fn drop(&mut self) {
+                for (name, value) in &self.0 {
+                    match value {
+                        Some(value) => std::env::set_var(name, value),
+                        None => std::env::remove_var(name),
+                    }
+                }
+            }
+        }
+        let environment = Environment(
+            ["XDG_CONFIG_HOME", "HOME"]
+                .iter()
+                .map(|&name| (name, std::env::var_os(name)))
+                .collect(),
+        );
         std::env::set_var("HOME", &home.0);
         std::env::set_var("XDG_CONFIG_HOME", "relative/ignored");
         let opened = Store::open().map(|store| store.directory);
         let xdg = home.0.join("xdg");
         std::env::set_var("XDG_CONFIG_HOME", &xdg);
         let configured = Store::open().map(|store| store.directory);
-        fs::set_permissions(xdg.join("nekokem/contacts"), fs::Permissions::from_mode(0o755)).unwrap();
+        fs::set_permissions(
+            xdg.join("nekokem/contacts"),
+            fs::Permissions::from_mode(0o755),
+        )
+        .unwrap();
         let unsafe_contacts = Store::open().map(|store| store.directory);
-        fs::set_permissions(xdg.join("nekokem/contacts"), fs::Permissions::from_mode(0o700)).unwrap();
+        fs::set_permissions(
+            xdg.join("nekokem/contacts"),
+            fs::Permissions::from_mode(0o700),
+        )
+        .unwrap();
         fs::set_permissions(xdg.join("nekokem"), fs::Permissions::from_mode(0o755)).unwrap();
         let unsafe_parent = Store::open().map(|store| store.directory);
         drop(environment);
         assert_eq!(opened.unwrap(), home.file(".config/nekokem/contacts"));
-        assert_eq!(fs::metadata(home.0.join(".config/nekokem")).unwrap().permissions().mode() & 0o777, 0o700);
-        assert_eq!(configured.unwrap(), format!("{}/nekokem/contacts", xdg.display()));
-        assert_eq!(fs::metadata(xdg.join("nekokem/contacts")).unwrap().permissions().mode() & 0o777, 0o700);
+        assert_eq!(
+            fs::metadata(home.0.join(".config/nekokem"))
+                .unwrap()
+                .permissions()
+                .mode()
+                & 0o777,
+            0o700
+        );
+        assert_eq!(
+            configured.unwrap(),
+            format!("{}/nekokem/contacts", xdg.display())
+        );
+        assert_eq!(
+            fs::metadata(xdg.join("nekokem/contacts"))
+                .unwrap()
+                .permissions()
+                .mode()
+                & 0o777,
+            0o700
+        );
         assert_eq!(code(unsafe_contacts), "contact-storage");
         assert_eq!(code(unsafe_parent), "contact-storage");
     }
@@ -855,9 +1355,19 @@ pub mod tests {
         let existed = (base.exists(), expected.exists());
         // Store::open() succeeds only after Core verifies both owner-only directories.
         let opened = Store::open().map(|store| store.directory);
-        let listed = opened.as_ref().ok().map(|directory| Store { directory: directory.clone() }.list().map(|list| list.unreadable));
-        if !existed.1 { let _ = fs::remove_dir(&expected); }
-        if !existed.0 { let _ = fs::remove_dir(&base); }
+        let listed = opened.as_ref().ok().map(|directory| {
+            Store {
+                directory: directory.clone(),
+            }
+            .list()
+            .map(|list| list.unreadable)
+        });
+        if !existed.1 {
+            let _ = fs::remove_dir(&expected);
+        }
+        if !existed.0 {
+            let _ = fs::remove_dir(&base);
+        }
         assert_eq!(std::path::Path::new(&opened.unwrap()), expected.as_path());
         assert_eq!(listed.unwrap().unwrap(), 0);
     }
@@ -871,7 +1381,9 @@ pub mod tests {
         let (alice, _, _) = keypair(&keys, "alice", "public-test-alice");
         let (bob, _, _) = keypair(&keys, "bob", "public-test-bob");
         let filler = |index: usize| format!("{index:064x}");
-        for index in 0..MAX_CONTACTS - 1 { rewrite(&store, &filler(index), "{}"); }
+        for index in 0..MAX_CONTACTS - 1 {
+            rewrite(&store, &filler(index), "{}");
+        }
         let saved = store.save(Source::Path(&alice), "").unwrap();
         assert_eq!(code(store.save(Source::Path(&bob), "")), "contact-limit");
         // More records than the limit, as another app process or a copied
@@ -882,7 +1394,14 @@ pub mod tests {
         store.delete(&filler(0)).unwrap();
         store.delete(&filler(1)).unwrap();
         let listed = store.list().unwrap();
-        assert_eq!(listed.contacts.iter().map(|c| c.id.as_str()).collect::<Vec<_>>(), vec![saved.id.as_str()]);
+        assert_eq!(
+            listed
+                .contacts
+                .iter()
+                .map(|c| c.id.as_str())
+                .collect::<Vec<_>>(),
+            vec![saved.id.as_str()]
+        );
         assert_eq!(listed.unreadable, MAX_CONTACTS - 2);
     }
 
