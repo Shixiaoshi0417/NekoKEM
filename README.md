@@ -314,7 +314,7 @@ encrypted/test.jpg.nkem -> plaintext/test.jpg
 ./nekokem decrypt hybrid --trust alice.key --require-trusted encrypted/from-alice.nkem output.txt keys/private.key.enc
 ```
 
-接收方仍在使用 NekoKEM 4.x 或更早版本时，用 `--unsigned` 写入不签名的 NKEM v3/v4（接收方无法确认文件来自你），并把 `export-legacy-public-key` 导出的旧版公钥交给对方。旧版密钥对可用 `upgrade-key` 就地升级为身份密钥，加密密钥和密码不变：
+接收方仍在使用 NekoKEM 4.x 或更早版本时，用 `--unsigned` 写入不签名的 NKEM v3/v4（接收方无法确认文件来自你），并把 `export-legacy-public-key` 导出的旧版公钥交给对方。旧版密钥对可用 `upgrade-key` 就地升级为身份密钥，加密密钥和密码不变；对 NekoKEM 5.0–5.2 生成的身份密钥，`upgrade-key` 把私钥文件重写为带密钥承诺的 NKPR v3，密钥和密码不变：
 
 ```sh
 ./nekokem encrypt hybrid --unsigned test.txt encrypted/test-v3.nkem keys/public.key
@@ -343,11 +343,11 @@ encrypted/test.jpg.nkem -> plaintext/test.jpg
 
 ## NKPR 加密私钥格式
 
-NKPR 是独立于 NKEM 文件容器的私钥存储格式；NKEM v3 不修改 NKPR version 1。当前 NKPR 固定使用：
+NKPR 是独立于 NKEM 文件容器的私钥存储格式，有三个版本：version 1 保存两段式旧版密钥，version 2 保存四段式身份密钥，version 3 在 version 2 的基础上加入密钥承诺。新生成和升级的密钥写为 version 3，三个版本都能读取。NKPR 固定使用：
 
 - Argon2id：64 MiB（`65536` KiB）、3 次迭代、并行度 4、Argon2 version 1.3；
 - 32 字节随机 salt；
-- 32 字节派生密钥；
+- 派生密钥：version 1/2 直接取 32 字节 Argon2id 输出作为 AES 密钥；version 3 取 64 字节输出，再用 HKDF-SHA512（salt 为同一个 32 字节 salt）分别派生 32 字节 AES 密钥和 32 字节密钥承诺；
 - AES-256-GCM、12 字节随机 nonce、16 字节认证标签。
 
 固定头部为 36 字节，所有多字节整数采用大端序：
@@ -355,7 +355,7 @@ NKPR 是独立于 NKEM 文件容器的私钥存储格式；NKEM v3 不修改 NKP
 | 偏移 | 长度 | 字段 |
 |---:|---:|---|
 | 0 | 4 | magic：ASCII `NKPR` |
-| 4 | 1 | container version：`1` |
+| 4 | 1 | container version：`1`、`2` 或 `3` |
 | 5 | 1 | KDF id：`1`，Argon2id |
 | 6 | 1 | cipher id：`1`，AES-256-GCM |
 | 7 | 1 | flags：`0` |
@@ -371,12 +371,13 @@ NKPR 是独立于 NKEM 文件容器的私钥存储格式；NKEM v3 不修改 NKP
 头部后依次为：
 
 ```text
-32-byte salt || 12-byte nonce || encrypted hybrid private PEM || 16-byte tag
+version 1/2: 32-byte salt || 12-byte nonce || encrypted hybrid private PEM || 16-byte tag
+version 3:   32-byte salt || 32-byte key commitment || 12-byte nonce || encrypted hybrid private PEM || 16-byte tag
 ```
 
-`header || salt || nonce` 全部作为 AES-GCM AAD。读取器严格验证版本、算法、参数、长度和 GCM 标签；错误密码与任何受认证字段或密文的修改都会失败，并对外统一报告无法解锁私钥，不区分错误口令与容器损坏。解密缓冲区即使在标签验证前产生数据也始终只驻留内存，并在失败路径清零。
+nonce 之前的全部字节（`header || salt || nonce`，version 3 为 `header || salt || commitment || nonce`）作为 AES-GCM AAD。version 3 的读取器先用口令重新计算密钥承诺并以常数时间比较，不一致时不运行 AES-GCM。读取器严格验证版本、算法、参数、长度和 GCM 标签；错误密码与任何受认证字段或密文的修改都会失败，并对外统一报告无法解锁私钥，不区分错误口令与容器损坏。解密缓冲区即使在标签验证前产生数据也始终只驻留内存，并在失败路径清零。
 
-NKPR 的 AES-GCM 不具备密钥承诺性，不保证一个容器只能由唯一口令或保护密钥认证，也不提供跨保护密钥的明文一致性保证。此处说明现有格式的边界，不改变 NKPR 格式或密码参数。NKEM v4/v5 通过头部 HMAC-SHA512 承诺文件密钥，不受此限制；各处 AES-GCM 的评估和 NKPR v3 设计草案见 [密钥承诺评估](docs/key-commitment.md)。
+AES-GCM 本身不具备密钥承诺性：NKPR version 1/2 不保证一个容器只能由唯一口令认证，他人制作的文件可以同时被多个口令打开。version 3 用密钥承诺补上这一点，一个文件只对应一个 Argon2id 输出。旧版本仍可读取，所以应用在你向不是自己的 version 1/2 私钥文件输入口令前给出提示；自己的身份密钥可用「升级密钥」（CLI 为 `upgrade-key`）同口令重写为 version 3。**NekoKEM 5.2 及更早版本无法读取 version 3**，会报告口令错误。NKEM v4/v5 通过头部 HMAC-SHA512 承诺文件密钥，不受此限制；各处 AES-GCM 的评估和 NKPR v3 的设计见 [密钥承诺评估](docs/key-commitment.md)。
 
 ## NKEM v3 hybrid 文件格式
 

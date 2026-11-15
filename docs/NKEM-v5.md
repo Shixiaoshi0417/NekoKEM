@@ -104,6 +104,10 @@ as a wrong password: "Private-key password is incorrect or NKPR data is
 corrupted" in the CLI. The password is not the problem; the key needs NekoKEM 5.0.0 or later.
 Core still reads NKPR v1 and plaintext two-component PEM keys.
 
+Versions after NekoKEM 5.2 write identity keys as NKPR v3, which holds the
+same plaintext under a committed key; see
+[Key commitment](key-commitment.md#nkpr-v3). NKPR v2 stays readable.
+
 Upgrading a key generates Ed448 and ML-DSA-87 keys, keeps the X448 and
 ML-KEM-1024 keys, and atomically replaces both files under the existing pair
 lock, with the same password.
