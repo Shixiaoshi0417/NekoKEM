@@ -17,7 +17,7 @@ enum class KeySource { Path, Paste }
 // The key page generates identity keys, upgrades a 4.x key pair or exports the
 // two-component public key that NekoKEM 4.x and earlier read.
 enum class KeyMode { Generate, Upgrade, Export }
-enum class PathField { Input, Output, KeyPath, PublicPath, PrivatePath, ContactKeyPath, SignKeyPath, OwnPublicKey, OtherPrivateKey }
+enum class PathField { Input, Output, KeyPath, PublicPath, PrivatePath, ContactKeyPath, SignKeyPath, OwnPublicKey, OtherPrivateKey, DecryptFolder }
 enum class Feedback { Form, List }
 
 /** A finished encryption or decryption whose staged output waits for the place to save it. */
@@ -95,6 +95,10 @@ class AppState(private val scope: CoroutineScope, private val files: FileChooser
     // Turning off signing needs an explicit, red-marked confirmation.
     var confirmingUnsigned by mutableStateOf(false); private set
 
+    // Decrypted files go straight to this folder when set; empty asks every time.
+    var decryptFolder by mutableStateOf(""); private set
+    // The folder could not be written last time, so the save dialog asked instead.
+    var decryptFolderFailed by mutableStateOf(false); private set
     private var update = UpdatePreferences()
     var autoUpdate by mutableStateOf(true); private set
     var checkingUpdate by mutableStateOf(false); private set
@@ -152,6 +156,7 @@ class AppState(private val scope: CoroutineScope, private val files: FileChooser
             language = settings.language; selectedLanguage = settings.selection; version = settings.version
             runCatching { native { Backend.desktopPreferences() } }.getOrNull()?.let {
                 requireSignature = it.requireSignature; signKeyPath = it.signKeyPath; ownPublicKey = it.publicKeyPath; sidebarOpen = it.sidebarOpen
+                decryptFolder = it.decryptFolder
                 style = Style.entries.firstOrNull { entry -> entry.wire == it.style } ?: Style.Miuix
             }
             loaded = true
@@ -163,7 +168,7 @@ class AppState(private val scope: CoroutineScope, private val files: FileChooser
     }
 
     private fun storePreferences() {
-        val value = DesktopPreferences(requireSignature, signKeyPath, ownPublicKey, sidebarOpen, style.wire)
+        val value = DesktopPreferences(requireSignature, signKeyPath, ownPublicKey, sidebarOpen, style.wire, decryptFolder)
         scope.launch { runCatching { native { Backend.saveDesktopPreferences(value) } } }
     }
     private fun storeUpdate() {
@@ -174,6 +179,10 @@ class AppState(private val scope: CoroutineScope, private val files: FileChooser
     fun toggleSidebar() { sidebarOpen = !sidebarOpen; storePreferences() }
     fun changeStyle(value: Style) { style = value; storePreferences() }
     fun changeRequireSignature(value: Boolean) { requireSignature = value; storePreferences() }
+    /** Turning it on chooses the folder first; closing that dialog leaves it off. */
+    fun changeDecryptFolder(enabled: Boolean) {
+        if (enabled) browse(PathField.DecryptFolder) else if (!locked) setPath(PathField.DecryptFolder, "")
+    }
     fun changeAutoUpdate(value: Boolean) { autoUpdate = value; update = update.copy(auto = value); storeUpdate() }
 
     fun toggleUnsigned(value: Boolean) {
@@ -213,6 +222,7 @@ class AppState(private val scope: CoroutineScope, private val files: FileChooser
         PathField.PublicPath -> publicPath; PathField.PrivatePath -> privatePath
         PathField.ContactKeyPath -> contactKeyPath; PathField.SignKeyPath -> signKeyPath; PathField.OwnPublicKey -> ownPublicKey
         PathField.OtherPrivateKey -> otherPrivateKey
+        PathField.DecryptFolder -> decryptFolder
     }
     fun setPath(field: PathField, value: String) {
         when (field) {
@@ -226,6 +236,7 @@ class AppState(private val scope: CoroutineScope, private val files: FileChooser
             PathField.ContactKeyPath -> contactKeyPath = value
             PathField.SignKeyPath -> { signKeyPath = value; if (view == View.Settings) storePreferences() }
             PathField.OwnPublicKey -> { ownPublicKey = value; storePreferences() }
+            PathField.DecryptFolder -> { decryptFolder = value; decryptFolderFailed = false; storePreferences() }
         }
         edited(field.name.replaceFirstChar(Char::lowercase))
     }
@@ -281,7 +292,9 @@ class AppState(private val scope: CoroutineScope, private val files: FileChooser
             try {
                 // Upgrading changes existing key files, so it opens them.
                 val saving = field in listOf(PathField.Output, PathField.PublicPath, PathField.PrivatePath) && !(view == View.Keygen && keyMode == KeyMode.Upgrade)
-                val value = if (saving) {
+                val value = if (field == PathField.DecryptFolder) {
+                    files.folder(decryptFolder.ifEmpty { null })
+                } else if (saving) {
                     files.save(when (field) {
                         PathField.PublicPath -> "public.key"
                         PathField.PrivatePath -> "private.key.enc"
@@ -507,14 +520,26 @@ class AppState(private val scope: CoroutineScope, private val files: FileChooser
             // A signed file restores the name it recorded, even after a rename.
             val suggested = if (item.kind == Kind.Encrypt) "$name.nkem"
                 else item.outcome.originalName ?: if (plain != name) plain else "decrypted-$name"
-            val destination = files.save(suggested, java.io.File(item.source).parent)
+            // The decrypt folder takes the file under a free name; when it cannot
+            // be written, the staged file stays and the save dialog asks.
+            val folder = decryptFolder
+            val placed = if (item.kind == Kind.Decrypt && folder.isNotEmpty()) {
+                try {
+                    native { Backend.saveOutputIn(folder, suggested) }.also { decryptFolderFailed = false }
+                } catch (error: BridgeFailure) {
+                    if (error.code != "save-failed") throw error
+                    decryptFolderFailed = true
+                    null
+                }
+            } else null
+            val destination = placed ?: files.save(suggested, java.io.File(item.source).parent)
             if (destination == null) {
                 staged = null; unsaved = false
                 native { Backend.discardOutput() }
                 failure = "cancelled"
                 return
             }
-            native { Backend.saveOutput(destination) }
+            if (placed == null) native { Backend.saveOutput(destination) }
             staged = null; unsaved = false
             result = item.outcome.copy(output = destination)
             recipients = item.contacts; ownRecipient = item.own; otherRecipients = item.others

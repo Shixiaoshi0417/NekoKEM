@@ -569,6 +569,16 @@ private fun SettingsPage(state: AppState) {
         }
         kit.SwitchRow(state.t("requireSignature"), "", state.requireSignature, onChange = state::changeRequireSignature)
     }
+    kit.SectionTitle(state.t("settingsDecrypt"))
+    kit.Section(padded = false) {
+        val on = state.decryptFolder.isNotEmpty()
+        kit.SwitchRow(state.t("decryptFolder"), state.t("decryptFolderHint"), on, enabled = state.editable, onChange = state::changeDecryptFolder)
+        if (on) {
+            kit.ActionRow(state.t("decryptFolderPath"), if (state.decryptFolderFailed) state.t("decryptFolderFailed") else state.decryptFolder, state.editable) {
+                state.browse(PathField.DecryptFolder)
+            }
+        }
+    }
     kit.SectionTitle(state.t("settingsUpdates"))
     kit.Section(padded = false) {
         kit.SwitchRow(state.t("autoUpdate"), "", state.autoUpdate, onChange = state::changeAutoUpdate)

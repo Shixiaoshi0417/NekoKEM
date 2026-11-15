@@ -21,13 +21,14 @@ extern "C" {
 #[serde(rename_all = "camelCase", default, deny_unknown_fields)]
 // The user's own key pair: the public key is offered first as a recipient, the
 // private key signs and decrypts by default.
-pub struct Preferences { pub require_signature: bool, pub sign_key_path: String, pub public_key_path: String, pub sidebar_open: bool, pub style: String }
+// decrypt_folder: decrypted files go there without a save dialog; empty asks every time.
+pub struct Preferences { pub require_signature: bool, pub sign_key_path: String, pub public_key_path: String, pub sidebar_open: bool, pub style: String, pub decrypt_folder: String }
 impl Default for Preferences {
-    fn default() -> Self { Self { require_signature: false, sign_key_path: String::new(), public_key_path: String::new(), sidebar_open: true, style: "miuix".into() } }
+    fn default() -> Self { Self { require_signature: false, sign_key_path: String::new(), public_key_path: String::new(), sidebar_open: true, style: "miuix".into(), decrypt_folder: String::new() } }
 }
 impl Preferences {
     fn valid(&self) -> bool {
-        STYLES.contains(&self.style.as_str()) && [&self.sign_key_path, &self.public_key_path].iter().all(|path| path.len() <= MAX_PATH_BYTES && !path.contains('\0'))
+        STYLES.contains(&self.style.as_str()) && [&self.sign_key_path, &self.public_key_path, &self.decrypt_folder].iter().all(|path| path.len() <= MAX_PATH_BYTES && !path.contains('\0'))
     }
 }
 
@@ -58,7 +59,7 @@ mod tests {
         let directory = crate::contacts::tests::Directory::new();
         let path = directory.0.to_str().unwrap();
         assert_eq!(load(path), Preferences::default());
-        let chosen = Preferences { require_signature: true, sign_key_path: "C:\\Keys\\me.private.key.enc".into(), public_key_path: "C:\\Keys\\me.public.key".into(), sidebar_open: false, style: "material".into() };
+        let chosen = Preferences { require_signature: true, sign_key_path: "C:\\Keys\\me.private.key.enc".into(), public_key_path: "C:\\Keys\\me.public.key".into(), sidebar_open: false, style: "material".into(), decrypt_folder: "D:\\Decrypted".into() };
         assert!(store(path, &chosen));
         assert_eq!(load(path), chosen);
         #[cfg(unix)]
@@ -68,6 +69,7 @@ mod tests {
         }
         assert!(!store(path, &Preferences { sign_key_path: "a\0b".into(), ..Preferences::default() }));
         assert!(!store(path, &Preferences { style: "glass".into(), ..Preferences::default() }));
+        assert!(!store(path, &Preferences { decrypt_folder: "a\0b".into(), ..Preferences::default() }));
         std::fs::write(directory.file(PREFERENCES_FILE), br#"{"unsigned":true}"#).unwrap();
         assert_eq!(load(path), Preferences::default());
     }

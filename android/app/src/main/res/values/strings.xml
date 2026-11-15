@@ -262,6 +262,13 @@
     <string name="contact_verifies">Identity key · verifies signatures</string>
     <string name="contact_legacy">Legacy key · cannot verify signatures</string>
     <string name="error_settings_save">The setting could not be saved. The previous setting is still in effect.</string>
+    <string name="settings_decrypt_title">Decryption</string>
+    <string name="settings_decrypt_folder_title">Save to a set folder</string>
+    <string name="settings_decrypt_folder_summary">Decrypted files go straight to the chosen folder; a taken name gets a number. When off, you choose where to save each time.</string>
+    <string name="settings_decrypt_folder_location">Folder</string>
+    <string name="settings_decrypt_folder_unavailable">Cannot access this folder. Choose it again.</string>
+    <string name="snackbar_decrypt_folder_unavailable">The set folder cannot be written. Choose where to save.</string>
+    <string name="completion_folder">Folder</string>
     <string name="settings_updates_title">Updates</string>
     <string name="settings_auto_update_title">Check for updates automatically</string>
     <string name="settings_auto_update_summary">At most once a day. Only asks GitHub for the latest version number; no keys or file details are sent.</string>

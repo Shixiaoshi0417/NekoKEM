@@ -734,6 +734,30 @@ private fun MiuixSettingsPage(
                 enabled = !state.running,
             )
         }
+        section(R.string.settings_decrypt_title, key = "decrypt") {
+            SwitchPreference(
+                checked = state.decryptFolderSet,
+                onCheckedChange = actions.onDecryptFolderChange,
+                title = stringResource(R.string.settings_decrypt_folder_title),
+                summary = stringResource(R.string.settings_decrypt_folder_summary),
+                enabled = !state.running,
+            )
+            if (state.decryptFolderSet) {
+                val reachable = state.decryptFolderName != null
+                ArrowPreference(
+                    title = stringResource(R.string.settings_decrypt_folder_location),
+                    summary = state.decryptFolderName
+                        ?: stringResource(R.string.settings_decrypt_folder_unavailable),
+                    summaryColor = if (reachable) {
+                        BasicComponentDefaults.summaryColor()
+                    } else {
+                        BasicComponentDefaults.summaryColor(color = MiuixTheme.colorScheme.error)
+                    },
+                    enabled = !state.running,
+                    onClick = actions.onChooseDecryptFolder,
+                )
+            }
+        }
         section(R.string.settings_updates_title, key = "updates") {
             SwitchPreference(
                 checked = state.autoUpdateCheck,

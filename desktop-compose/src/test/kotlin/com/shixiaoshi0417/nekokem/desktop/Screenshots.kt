@@ -38,9 +38,11 @@ fun main(args: Array<String>): Unit = runBlocking(Dispatchers.Main) {
     for (style in Style.entries) for (theme in listOf(SystemTheme.Light, SystemTheme.Dark)) {
         // The save dialog answers with a new file beside the input, as a user would.
         val saved = mutableListOf<String>()
+        val outFolder = File(work, "${style.wire}-${theme.name}-out").apply { mkdirs() }
         val chooser = object : FileChooser {
             override fun open() = null
             override fun save(suggested: String, directory: String?) = File(directory ?: work.path, "${style.wire}-${theme.name}-$suggested").absolutePath.also(saved::add)
+            override fun folder(directory: String?) = outFolder.absolutePath
         }
         val state = AppState(this, chooser) {}
         state.start()
@@ -76,13 +78,36 @@ fun main(args: Array<String>): Unit = runBlocking(Dispatchers.Main) {
         shot("encrypt-done")
 
         // The file comes back through the same page: pick it, decrypt, save.
-        state.setPath(PathField.Input, saved.last())
+        val encrypted = saved.last()
+        state.setPath(PathField.Input, encrypted)
         state.setPath(PathField.OtherPrivateKey, file("alice.private.key.enc"))
         state.decrypt()
         state.password.edit { append(password) }
         state.confirmPassword(); done()
         check(state.result?.signature != null && File(saved.last()).readBytes().contentEquals(File(work, "report.pdf").readBytes())) { "Decrypted file differs: ${state.failure}" }
         shot("decrypt-done")
+        state.restoreDefaultKey()
+
+        // With a decrypt folder set, files go there without the save dialog and
+        // a taken name gets a number.
+        val dialogs = saved.size
+        state.changeDecryptFolder(true)
+        while (state.choosing != null) delay(20)
+        check(state.decryptFolder == outFolder.absolutePath) { "Decrypt folder was not set" }
+        repeat(2) {
+            state.setPath(PathField.Input, encrypted)
+            state.setPath(PathField.OtherPrivateKey, file("alice.private.key.enc"))
+            state.decrypt()
+            state.password.edit { append(password) }
+            state.confirmPassword(); done()
+        }
+        val restored = File(work, "report.pdf").readBytes()
+        check(saved.size == dialogs) { "The save dialog was shown although a folder is set" }
+        check(File(outFolder, "report.pdf").readBytes().contentEquals(restored) && File(outFolder, "report (1).pdf").readBytes().contentEquals(restored)) {
+            "Decrypt folder output is wrong: ${outFolder.list()?.toList()} ${state.failure}"
+        }
+        check(state.result?.output == File(outFolder, "report (1).pdf").absolutePath) { "Result names ${state.result?.output}" }
+        shot("decrypt-folder-done")
         state.restoreDefaultKey()
 
         state.switchTab(View.Keygen); settle()
@@ -100,6 +125,9 @@ fun main(args: Array<String>): Unit = runBlocking(Dispatchers.Main) {
         state.closeQr()
 
         state.switchTab(View.Settings); settle()
+        shot("settings-decrypt-folder")
+        // Cleared again, so the next style starts with the save dialog.
+        state.changeDecryptFolder(false)
         shot("settings")
         scene.close()
     }

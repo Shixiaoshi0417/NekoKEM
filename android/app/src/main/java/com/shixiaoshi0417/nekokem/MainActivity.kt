@@ -40,6 +40,9 @@ import com.shixiaoshi0417.nekokem.files.SafFileWorkflow
 import com.shixiaoshi0417.nekokem.files.SaveDocumentContract
 import com.shixiaoshi0417.nekokem.files.SelectedDocument
 import com.shixiaoshi0417.nekokem.files.decryptedDocumentRequest
+import com.shixiaoshi0417.nekokem.files.DecryptFolderAccess
+import com.shixiaoshi0417.nekokem.files.DecryptFolderStore
+import com.shixiaoshi0417.nekokem.files.SaveDocumentRequest
 import com.shixiaoshi0417.nekokem.files.encryptedDocumentRequest
 import com.shixiaoshi0417.nekokem.files.encryptedPrivateKeyExportRequest
 import com.shixiaoshi0417.nekokem.files.publicKeyExportRequest
@@ -314,6 +317,10 @@ private fun NekoKEMRoute(
     // Update checks: automatic once a day unless turned off; the dialog only links to the release page.
     var updateSettings by remember { mutableStateOf(UpdateSettingsStore.read(context)) }
     var updateChecking by remember { mutableStateOf(false) }
+    // Decrypted files go straight to this folder when one is set; otherwise the save dialog asks.
+    val decryptFolderAccess = remember { DecryptFolderAccess(context) }
+    var decryptFolder by remember { mutableStateOf(DecryptFolderStore.read(context)) }
+    var decryptFolderName by remember { mutableStateOf<String?>(null) }
     var availableRelease by remember { mutableStateOf<ReleaseInfo?>(null) }
     val currentVersion = remember { installedVersion(context) }
     val selectedInputUri = selectedInputState.uriString?.let(Uri::parse)
@@ -771,6 +778,62 @@ private fun NekoKEMRoute(
         }
     }
 
+    /**
+     * Writes the prepared plaintext to [destination]. [folderName] is set when
+     * the file was created in the decrypt folder; it is removed again when the
+     * output fails or is cancelled.
+     */
+    fun commitDecryption(destination: Uri, folderName: String?) {
+        val prepared = preparedDecryption
+        preparedDecryption = null
+        val created = folderName != null
+        if (prepared == null) {
+            decryptionPreparationProgress = null
+            if (created) scope.launch { pageWork { decryptFolderAccess.delete(destination) } }
+            reportFailure(
+                R.string.operation_decrypt_file,
+                LocalKeyManager.RESULT_STORAGE_ERROR,
+            )
+            return
+        }
+        val initial = decryptionPreparationProgress
+        decryptionPreparationProgress = null
+        val tracker = beginProgress(R.string.operation_decrypt_file)
+        scope.launch {
+            var destinationName = selectedDocument?.displayName
+                ?: context.getString(R.string.default_selected_filename)
+            val result = try {
+                pageWork {
+                    destinationName = fileWorkflow.describe(destination).displayName
+                    fileWorkflow.commitPreparedDecryption(
+                        prepared,
+                        destination,
+                        tracker,
+                    )
+                }
+            } catch (_: Exception) {
+                LocalKeyManager.RESULT_STORAGE_ERROR
+            } finally {
+                endProgress(tracker)
+            }
+            if (created && result != NativeBridge.RESULT_SUCCESS) {
+                pageWork { decryptFolderAccess.delete(destination) }
+            }
+            val combined = combineProgress(initial, tracker.snapshot())
+            reportFileResult(
+                R.string.operation_decrypt_file,
+                result,
+                combined,
+                destinationName,
+                listOfNotNull(
+                    folderName?.let {
+                        OperationResultDetail(R.string.completion_folder, it)
+                    },
+                ) + signatureDetails(context, prepared.signature, prepared.signerLabel),
+            )
+        }
+    }
+
     val createOutputLauncher = rememberLauncherForActivityResult(
         SaveDocumentContract(),
     ) { destination ->
@@ -885,45 +948,7 @@ private fun NekoKEMRoute(
                 }
             }
 
-            PendingOutputAction.SAVE_DECRYPTED_FILE -> {
-                val prepared = preparedDecryption
-                preparedDecryption = null
-                if (prepared == null) {
-                    decryptionPreparationProgress = null
-                    reportFailure(
-                        R.string.operation_decrypt_file,
-                        LocalKeyManager.RESULT_STORAGE_ERROR,
-                    )
-                } else {
-                    val initial = decryptionPreparationProgress
-                    decryptionPreparationProgress = null
-                    val tracker = beginProgress(R.string.operation_decrypt_file)
-                    scope.launch {
-                        val result = try {
-                            pageWork {
-                                destinationName = fileWorkflow.describe(destination).displayName
-                                fileWorkflow.commitPreparedDecryption(
-                                    prepared,
-                                    destination,
-                                    tracker,
-                                )
-                            }
-                        } catch (_: Exception) {
-                            LocalKeyManager.RESULT_STORAGE_ERROR
-                        } finally {
-                            endProgress(tracker)
-                        }
-                        val combined = combineProgress(initial, tracker.snapshot())
-                        reportFileResult(
-                            R.string.operation_decrypt_file,
-                            result,
-                            combined,
-                            destinationName,
-                            signatureDetails(context, prepared.signature, prepared.signerLabel),
-                        )
-                    }
-                }
-            }
+            PendingOutputAction.SAVE_DECRYPTED_FILE -> commitDecryption(destination, null)
 
             PendingOutputAction.EXPORT_PUBLIC_KEY -> {
                 runKeyOperation(
@@ -1057,6 +1082,7 @@ private fun NekoKEMRoute(
         val tracker = beginProgress(R.string.operation_decrypt_file)
         val requireSignature = signatureSettings.requireSignature
         scope.launch {
+            var saveRequest: SaveDocumentRequest? = null
             try {
                 var signerIds = emptyList<String>()
                 val outcome = pageWork {
@@ -1089,14 +1115,11 @@ private fun NekoKEMRoute(
                         ?.let { id -> contactsState.contacts.firstOrNull { it.id == id }?.label }
                     preparedDecryption = outcome.prepared
                     decryptionPreparationProgress = finalProgress
-                    pendingOutputAction = PendingOutputAction.SAVE_DECRYPTED_FILE
-                    createOutputLauncher.launch(
-                        decryptedDocumentRequest(
-                            source.displayName,
-                            context.getString(R.string.default_selected_filename),
-                            context.getString(R.string.default_decrypted_filename),
-                            outcome.signature?.originalName,
-                        ),
+                    saveRequest = decryptedDocumentRequest(
+                        source.displayName,
+                        context.getString(R.string.default_selected_filename),
+                        context.getString(R.string.default_decrypted_filename),
+                        outcome.signature?.originalName,
                     )
                 } else {
                     pageWork {
@@ -1130,6 +1153,28 @@ private fun NekoKEMRoute(
                 password.fill(0)
                 endProgress(tracker)
             }
+            val request = saveRequest ?: return@launch
+            if (preparedDecryption == null) return@launch
+            // The set folder takes the file under a free name; without one,
+            // or when the folder cannot be written, the save dialog asks.
+            val folder = decryptFolder
+            if (folder != null) {
+                val created = try {
+                    pageWork { decryptFolderAccess.create(folder, request) }
+                } catch (_: Exception) {
+                    null
+                }
+                if (created != null) {
+                    commitDecryption(
+                        created,
+                        decryptFolderName ?: context.getString(R.string.settings_decrypt_folder_title),
+                    )
+                    return@launch
+                }
+                showSnackbar(R.string.snackbar_decrypt_folder_unavailable)
+            }
+            pendingOutputAction = PendingOutputAction.SAVE_DECRYPTED_FILE
+            createOutputLauncher.launch(request)
         }
     }
 
@@ -1787,6 +1832,44 @@ private fun NekoKEMRoute(
         }
     }
 
+    LaunchedEffect(decryptFolder) {
+        val folder = decryptFolder
+        decryptFolderName = if (folder == null) {
+            null
+        } else {
+            try {
+                pageWork {
+                    if (decryptFolderAccess.hasAccess(folder)) decryptFolderAccess.displayName(folder) else null
+                }
+            } catch (_: Exception) {
+                null
+            }
+        }
+    }
+
+    /** Sets or clears the decrypt folder, keeping exactly one persistable grant. */
+    fun storeDecryptFolder(folder: Uri?) {
+        val old = decryptFolder
+        if (folder != null && folder != old && !decryptFolderAccess.take(folder)) {
+            showSnackbar(R.string.snackbar_decrypt_folder_unavailable)
+            return
+        }
+        if (DecryptFolderStore.write(context, folder)) {
+            if (old != null && old != folder) decryptFolderAccess.release(old)
+            decryptFolder = folder
+        } else {
+            if (folder != null && folder != old) decryptFolderAccess.release(folder)
+            showSnackbar(R.string.error_settings_save)
+        }
+    }
+
+    val chooseDecryptFolderLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocumentTree(),
+    ) { folder ->
+        // Cancelling keeps whatever was set before.
+        if (folder != null) storeDecryptFolder(folder)
+    }
+
     fun storeUpdateSettings(updated: UpdateSettings): Boolean {
         if (!UpdateSettingsStore.write(context, updated)) return false
         updateSettings = updated
@@ -1886,6 +1969,8 @@ private fun NekoKEMRoute(
             signatureSettings = signatureSettings,
             autoUpdateCheck = updateSettings.autoCheck,
             updateChecking = updateChecking,
+            decryptFolderSet = decryptFolder != null,
+            decryptFolderName = decryptFolderName,
         ),
         actions = NekoKEMActions(
             onGenerate = {
@@ -2076,6 +2161,11 @@ private fun NekoKEMRoute(
             onRequireSignatureChange = { required ->
                 updateSignatureSettings(signatureSettings.copy(requireSignature = required))
             },
+            onDecryptFolderChange = { enabled ->
+                // Turning it on picks the folder first; cancelling the picker leaves it off.
+                if (enabled) chooseDecryptFolderLauncher.launch(null) else storeDecryptFolder(null)
+            },
+            onChooseDecryptFolder = { chooseDecryptFolderLauncher.launch(decryptFolder) },
             onCheckUpdate = { checkForUpdate(manual = true) },
             onAutoUpdateChange = { enabled ->
                 if (!storeUpdateSettings(UpdateSettingsStore.read(context).copy(autoCheck = enabled))) {

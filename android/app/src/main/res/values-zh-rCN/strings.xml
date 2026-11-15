@@ -261,6 +261,13 @@
     <string name="contact_verifies">身份密钥 · 可验证签名</string>
     <string name="contact_legacy">旧版密钥 · 无法验证签名</string>
     <string name="error_settings_save">无法保存设置，之前的设置仍然有效。</string>
+    <string name="settings_decrypt_title">解密</string>
+    <string name="settings_decrypt_folder_title">保存到指定文件夹</string>
+    <string name="settings_decrypt_folder_summary">开启后解密文件直接存到所选文件夹，重名时自动加编号；关闭时每次选择保存位置。</string>
+    <string name="settings_decrypt_folder_location">文件夹</string>
+    <string name="settings_decrypt_folder_unavailable">无法访问该文件夹，请重新选择。</string>
+    <string name="snackbar_decrypt_folder_unavailable">无法写入指定文件夹，请选择保存位置。</string>
+    <string name="completion_folder">文件夹</string>
     <string name="settings_updates_title">更新</string>
     <string name="settings_auto_update_title">自动检查更新</string>
     <string name="settings_auto_update_summary">每天最多一次，只向 GitHub 查询最新版本号，不发送任何密钥或文件信息。</string>
