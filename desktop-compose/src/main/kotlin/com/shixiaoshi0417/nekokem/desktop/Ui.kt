@@ -567,6 +567,8 @@ private fun SettingsPage(state: AppState) {
                 }
             }
         }
+        // Unsigned files never record a name, so the switch waits for signing.
+        kit.SwitchRow(state.t("recordName"), state.t("recordNameSummary"), state.recordName, enabled = !state.unsigned, onChange = state::changeRecordName)
         kit.SwitchRow(state.t("requireSignature"), "", state.requireSignature, onChange = state::changeRequireSignature)
     }
     kit.SectionTitle(state.t("settingsDecrypt"))

@@ -215,6 +215,8 @@
     <string name="unsigned_confirm_title">署名をオフにしますか？</string>
     <string name="unsigned_confirm_message">ファイルは署名なしの NKEM v3/v4 になります。受信者はあなたからのファイルか確認できず、相手の公開鍵を持つ誰でも同じように見えるファイルを送れます。</string>
     <string name="action_turn_off_signing">署名をオフにする</string>
+    <string name="settings_record_name_title">元のファイル名を記録</string>
+    <string name="settings_record_name_summary">オン: 署名付きファイルに元のファイル名を記録し、復号時に復元します。受信者が NekoKEM 5.1 を使う場合はオフにしてください。5.1 はファイル名を記録したファイルを開けません。</string>
     <string name="settings_require_signature_title">署名済みファイルのみ受け入れる</string>
     <string name="settings_require_signature_summary">署名のない NKEM v3/v4 ファイルの復号を拒否し、出力を書き込みません。</string>
     <string name="sign_password_title">ファイルに署名</string>

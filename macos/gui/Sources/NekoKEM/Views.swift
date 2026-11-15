@@ -562,6 +562,13 @@ private struct SettingsPage: View {
                     .accessibilityLabel(state.t("unsignedSetting"))
             }
             Divider()
+            // Unsigned files never record a name, so the switch waits for signing.
+            SettingRow(title: state.t("recordName"), detail: state.t("recordNameSummary")) {
+                Toggle("", isOn: Binding(get: { state.recordName }, set: { state.changeRecordName($0) })).toggleStyle(.switch).labelsHidden()
+                    .accessibilityLabel(state.t("recordName"))
+            }
+            .disabled(state.unsigned)
+            Divider()
             SettingRow(title: state.t("requireSignature")) {
                 Toggle("", isOn: Binding(get: { state.requireSignature }, set: { state.changeRequireSignature($0) })).toggleStyle(.switch).labelsHidden()
                     .accessibilityLabel(state.t("requireSignature"))

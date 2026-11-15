@@ -80,6 +80,8 @@ final class AppState: ObservableObject {
     // Unsigned output is never saved: every launch signs again.
     @Published private(set) var unsigned = false
     @Published private(set) var requireSignature = false
+    // Signed files record the input's name; off keeps them readable by NekoKEM 5.1.
+    @Published private(set) var recordName = true
     // Decrypted files go straight to this folder when set; empty asks every time.
     @Published private(set) var decryptFolder = ""
     // The folder could not be written last time, so the save panel asked instead.
@@ -226,6 +228,7 @@ final class AppState: ObservableObject {
                 if let saved = try? await native({ try Backend.desktopPreferences() }) {
                     stored = saved
                     requireSignature = saved.requireSignature; signKeyPath = saved.signKeyPath; ownPublicKey = saved.publicKeyPath
+                    recordName = saved.recordName
                     decryptFolder = saved.decryptFolder
                 }
                 loaded = true
@@ -242,6 +245,7 @@ final class AppState: ObservableObject {
     private func storePreferences() {
         guard !demo else { return }
         stored.requireSignature = requireSignature; stored.signKeyPath = signKeyPath; stored.publicKeyPath = ownPublicKey
+        stored.recordName = recordName
         stored.decryptFolder = decryptFolder
         let value = stored
         Task { _ = try? await native { try Backend.save(value) } }
@@ -253,6 +257,7 @@ final class AppState: ObservableObject {
     }
 
     func changeRequireSignature(_ value: Bool) { requireSignature = value; storePreferences() }
+    func changeRecordName(_ value: Bool) { recordName = value; storePreferences() }
     /// Turning it on chooses the folder first; closing that panel leaves it off.
     func changeDecryptFolder(_ enabled: Bool) {
         if enabled { chooseDecryptFolder(); return }
@@ -587,6 +592,7 @@ final class AppState: ObservableObject {
         request.signKeyPath = sign ? signKeyPath : ""
         request.unsigned = encrypting && unsigned
         request.requireSignature = !encrypting && requireSignature
+        request.omitName = sign && !recordName
         request.stage = true
         let remember = saveToKeychain && !request.password.isEmpty
         let passwordKey = sign ? signKeyPath : decryptKey

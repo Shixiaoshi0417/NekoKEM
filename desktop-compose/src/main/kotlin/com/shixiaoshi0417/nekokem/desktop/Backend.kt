@@ -22,6 +22,8 @@ class OperationRequest(
     val paste: Boolean = false, val contacts: List<String> = emptyList(), val keyPaths: List<String> = emptyList(),
     val replace: Boolean = false, val overwrite: Boolean = false,
     val signKeyPath: String = "", val unsigned: Boolean = false, val requireSignature: Boolean = false,
+    // Signed encryption only: record no file name, so NekoKEM 5.1 can open the file.
+    val omitName: Boolean = false,
     // Encryption and decryption write to a private staged file; saveOutput moves it to the chosen place.
     val stage: Boolean = false,
 )
@@ -43,7 +45,7 @@ sealed interface UpdateStatus {
 }
 data class UpdatePreferences(val auto: Boolean = true, val lastCheck: Long = 0, val ignored: String = "")
 /** The choices kept between launches. Unsigned output is never saved. */
-data class DesktopPreferences(val requireSignature: Boolean = false, val signKeyPath: String = "", val publicKeyPath: String = "", val sidebarOpen: Boolean = true, val style: String = "miuix", val decryptFolder: String = "")
+data class DesktopPreferences(val requireSignature: Boolean = false, val signKeyPath: String = "", val publicKeyPath: String = "", val sidebarOpen: Boolean = true, val style: String = "miuix", val recordName: Boolean = true, val decryptFolder: String = "")
 
 // Same limit as Core's NEKOKEM_MAX_RECIPIENTS for one NKEM v4/v5 file.
 const val MAX_RECIPIENTS = 64
@@ -73,7 +75,7 @@ object Backend {
                     arrayField("keyPaths") { request.keyPaths.forEach { value(it) } }
                     field("replace", request.replace); field("overwrite", request.overwrite)
                     field("signKeyPath", request.signKeyPath); field("unsigned", request.unsigned); field("requireSignature", request.requireSignature)
-                    field("stage", request.stage)
+                    field("omitName", request.omitName); field("stage", request.stage)
                 }
             }
         }
@@ -131,10 +133,10 @@ object Backend {
     }
 
     fun desktopPreferences(): DesktopPreferences = Bridge.request { command("desktop_preferences") }.obj().let {
-        DesktopPreferences(it.flag("requireSignature") ?: false, it.text("signKeyPath") ?: "", it.text("publicKeyPath") ?: "", it.flag("sidebarOpen") ?: true, it.text("style") ?: "miuix", it.text("decryptFolder") ?: "")
+        DesktopPreferences(it.flag("requireSignature") ?: false, it.text("signKeyPath") ?: "", it.text("publicKeyPath") ?: "", it.flag("sidebarOpen") ?: true, it.text("style") ?: "miuix", it.flag("recordName") ?: true, it.text("decryptFolder") ?: "")
     }
 
     fun saveDesktopPreferences(value: DesktopPreferences) {
-        Bridge.request { obj { field("save_desktop_preferences") { field("preferences") { field("requireSignature", value.requireSignature); field("signKeyPath", value.signKeyPath); field("publicKeyPath", value.publicKeyPath); field("sidebarOpen", value.sidebarOpen); field("style", value.style); field("decryptFolder", value.decryptFolder) } } } }
+        Bridge.request { obj { field("save_desktop_preferences") { field("preferences") { field("requireSignature", value.requireSignature); field("signKeyPath", value.signKeyPath); field("publicKeyPath", value.publicKeyPath); field("sidebarOpen", value.sidebarOpen); field("style", value.style); field("recordName", value.recordName); field("decryptFolder", value.decryptFolder) } } } }
     }
 }

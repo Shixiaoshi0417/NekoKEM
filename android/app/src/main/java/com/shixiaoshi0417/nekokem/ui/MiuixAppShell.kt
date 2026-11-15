@@ -726,6 +726,14 @@ private fun MiuixSettingsPage(
                 summaryColor = if (unsigned) BasicComponentDefaults.summaryColor(color = red) else BasicComponentDefaults.summaryColor(),
                 enabled = !state.running,
             )
+            // Unsigned files never record a name, so the switch waits for signing.
+            SwitchPreference(
+                checked = state.signatureSettings.recordOriginalName,
+                onCheckedChange = actions.onRecordOriginalNameChange,
+                title = stringResource(R.string.settings_record_name_title),
+                summary = stringResource(R.string.settings_record_name_summary),
+                enabled = !state.running && !unsigned,
+            )
             SwitchPreference(
                 checked = state.signatureSettings.requireSignature,
                 onCheckedChange = actions.onRequireSignatureChange,

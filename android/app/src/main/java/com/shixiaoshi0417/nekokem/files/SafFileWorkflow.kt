@@ -247,11 +247,13 @@ class SafFileWorkflow(
         progress: CancellableProgressCallback,
         temporaryKey: TemporaryPublicKey? = null,
         signingPassword: ByteArray? = null,
+        recordName: Boolean = true,
     ): PreparedEncryptionResult = try {
         prepareEncryptionWith(
             source,
             progress,
             listOfNotNull(temporaryKey),
+            recordName,
         ) { input, output, name -> keyManager.encryptFile(input, output, temporaryKey, progress, signingPassword?.copyOf(), name) }
     } finally {
         signingPassword?.fill(0)
@@ -266,11 +268,13 @@ class SafFileWorkflow(
         progress: CancellableProgressCallback,
         recipients: List<TemporaryPublicKey>,
         signingPassword: ByteArray? = null,
+        recordName: Boolean = true,
     ): PreparedEncryptionResult = try {
         prepareEncryptionWith(
             source,
             progress,
             recipients,
+            recordName,
         ) { input, output, name ->
             keyManager.encryptFileForRecipients(input, output, recipients, progress, signingPassword?.copyOf(), name)
         }
@@ -289,8 +293,9 @@ class SafFileWorkflow(
         includeOwn: Boolean,
         recipients: List<TemporaryPublicKey>,
         signingPassword: ByteArray? = null,
+        recordName: Boolean = true,
     ): PreparedEncryptionResult = try {
-        prepareEncryptionWith(source, progress, recipients) { input, output, name ->
+        prepareEncryptionWith(source, progress, recipients, recordName) { input, output, name ->
             keyManager.encryptFileForSelection(input, output, includeOwn, recipients, progress, signingPassword?.copyOf(), name)
         }
     } finally {
@@ -301,6 +306,7 @@ class SafFileWorkflow(
         source: Uri,
         progress: CancellableProgressCallback,
         temporaryKeys: List<TemporaryPublicKey>,
+        recordName: Boolean,
         encrypt: (File, File, String?) -> Int,
     ): PreparedEncryptionResult {
         var workspace: File? = null
@@ -328,8 +334,10 @@ class SafFileWorkflow(
                 ) {
                     result = cancelledOrStorageError(progress)
                 } else {
-                    // Signed files record the name so decryption restores it.
-                    result = encrypt(input, output, recordableName(queryDisplayName(source)))
+                    // Signed files record the name so decryption restores it,
+                    // unless the user turned that off for NekoKEM 5.1 recipients.
+                    val name = if (recordName) recordableName(queryDisplayName(source)) else null
+                    result = encrypt(input, output, name)
                     if (result == NativeBridge.RESULT_SUCCESS &&
                         progress.isCancelled()
                     ) {

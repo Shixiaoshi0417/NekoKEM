@@ -56,6 +56,9 @@ pub struct Request {
     #[serde(default)] pub unsigned:bool,
     // Decryption: Core refuses NKEM v3/v4 files without a signature.
     #[serde(default)] pub require_signature:bool,
+    // Signed encryption: leave the input's file name out, so NekoKEM 5.1 can
+    // open the file. Unsigned files never record a name.
+    #[serde(default)] pub omit_name:bool,
     // Encryption/decryption: write to a private staged file, which the user
     // saves afterwards (save_output) or gives up (discard_output). No `output`.
     #[serde(default)] pub stage:bool,
@@ -424,7 +427,8 @@ pub fn execute<F:Fn(u64,u64)>(backend:&Backend,request:Request,job:Arc<Job>,emit
     if request.overwrite && !matches!(request.kind,Kind::Encrypt|Kind::Decrypt|Kind::ExportLegacy) {return Err(Failure::new("invalid-request"));}
     if (request.kind!=Kind::Encrypt && (request.unsigned || !request.sign_key_path.is_empty())) ||
         (request.kind==Kind::Encrypt && request.unsigned && !request.sign_key_path.is_empty()) ||
-        (request.require_signature && request.kind!=Kind::Decrypt) {return Err(Failure::new("invalid-request"));}
+        (request.require_signature && request.kind!=Kind::Decrypt) ||
+        (request.omit_name && request.kind!=Kind::Encrypt) {return Err(Failure::new("invalid-request"));}
     if request.contacts.len()+request.key_paths.len()+usize::from(!request.key_path.is_empty())>MAX_RECIPIENTS {return Err(Failure::new("recipient-limit"));}
     let mut seen=std::collections::HashSet::new();
     if !request.contacts.iter().all(|id|seen.insert(id.as_str())) {return Err(Failure::new("invalid-request"));}
@@ -518,7 +522,7 @@ pub fn execute<F:Fn(u64,u64)>(backend:&Backend,request:Request,job:Arc<Job>,emit
         let sign_key=if signing {Some(path(&request.sign_key_path)?)} else {None};
         let mut written=EncryptResult{struct_size:std::mem::size_of::<EncryptResult>(),format_version:0,signed_by_sender:0};
         let mut verified=VerifyResult{struct_size:std::mem::size_of::<VerifyResult>(),format_version:0,signature_status:0,trusted_signer_index:0,signer_fingerprint:[0;96],original_name:[0;ORIGINAL_NAME_SIZE]};
-        let original_name=if request.kind==Kind::Encrypt && signing {recordable_name(&request.input)} else {None};
+        let original_name=if request.kind==Kind::Encrypt && signing && !request.omit_name {recordable_name(&request.input)} else {None};
         let signer_paths:Vec<*const c_char>=signers.iter().map(|(_,stage):&(String,Staged)|stage.path().map_or(std::ptr::null(),CStr::as_ptr)).collect();
         if signer_paths.iter().any(|pointer|pointer.is_null()) {return Err(Failure::new("internal"));}
         let status=unsafe{match request.kind {
@@ -630,7 +634,7 @@ mod tests {
         assert!(unsafe { CStr::from_ptr(version) }.to_bytes().starts_with(b"OpenSSL 4.1.0 "),
                 "GUI linked runtime does not match pinned OpenSSL 4.1.0");
     }
-    fn request(kind:Kind)->Request {Request{stage:false,id:"test-job".into(),input:String::new(),output:String::new(),key_path:String::new(),public_path:String::new(),private_path:String::new(),password:Zeroizing::new(String::new()),confirmation:Zeroizing::new(String::new()),key_text:Zeroizing::new(String::new()),paste:false,replace:false,overwrite:false,contacts:Vec::new(),key_paths:Vec::new(),
+    fn request(kind:Kind)->Request {Request{stage:false,omit_name:false,id:"test-job".into(),input:String::new(),output:String::new(),key_path:String::new(),public_path:String::new(),private_path:String::new(),password:Zeroizing::new(String::new()),confirmation:Zeroizing::new(String::new()),key_text:Zeroizing::new(String::new()),paste:false,replace:false,overwrite:false,contacts:Vec::new(),key_paths:Vec::new(),
         // Signing has its own tests; the others check one behaviour of all formats.
         sign_key_path:String::new(),unsigned:kind==Kind::Encrypt,require_signature:false,kind}}
     fn run(backend:&Arc<Backend>,r:Request)->Result<Outcome,Failure>{let job=backend.reserve(&r)?;let _hold=Reservation{backend:backend.clone(),job:job.clone()};execute(backend,r,job,|_,_|{})}
@@ -968,6 +972,12 @@ mod tests {
         fs::rename(keys.file("signed.nkem"),keys.file("renamed.bin")).unwrap();
         assert_eq!(run(&backend,decrypt("renamed.bin","renamed.out")).unwrap().original_name.as_deref(),Some("plain"));
         fs::rename(keys.file("renamed.bin"),keys.file("signed.nkem")).unwrap();
+        // Turned off, the signed file records no name, like a 5.1 file.
+        let mut r=encrypt("nameless.nkem");r.omit_name=true;assert_eq!(run(&backend,r).unwrap().format,Some(5));
+        let outcome=run(&backend,decrypt("nameless.nkem","nameless.out")).unwrap();
+        assert_eq!((outcome.original_name,outcome.signature.unwrap().status),(None,"trusted"));
+        assert_eq!(fs::read(keys.file("nameless.out")).unwrap(),data);
+        let mut r=decrypt("nameless.nkem","bad.out");r.omit_name=true;assert_eq!(run(&backend,r).err().unwrap().code,"invalid-request");
 
         // Not a contact: valid but untrusted, with her key offered for saving.
         {let _core=contact::core_lock();Store::open().unwrap().delete(&alice_id).unwrap();}
