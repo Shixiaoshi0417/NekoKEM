@@ -38,6 +38,56 @@ class AuditTests(unittest.TestCase):
         result = self.cli('keygen', data=PASSWORD * 2)
         self.assertEqual(result.returncode, 0, result.stderr)
 
+    def test_nkpr_v2_key_from_5_2_reads_warns_and_upgrades_to_v3(self):
+        fixture = Path(__file__).resolve().parents[2] / 'core/tests/fixtures/nkpr-v2'
+        password = b'nkpr-v2-fixture-password\n'
+        hint = b'older NKPR format without key commitment'
+        (self.root / 'keys').mkdir(mode=0o700)
+        for name, mode in [('public.key', 0o644), ('private.key.enc', 0o600)]:
+            (self.root / 'keys' / name).write_bytes((fixture / name).read_bytes())
+            (self.root / 'keys' / name).chmod(mode)
+        private = self.root / 'keys/private.key.enc'
+        received = self.root / 'received.key.enc'
+        received.write_bytes(private.read_bytes())
+        received.chmod(0o600)
+        self.assertEqual(private.read_bytes()[4], 2)
+        (self.root / 'input').write_bytes(b'key commitment')
+
+        # The managed NKPR v2 key signs and decrypts without a hint.
+        result = self.cli('encrypt', 'hybrid', 'input', 'x.nkem', 'keys/public.key', data=password)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        result = self.cli('decrypt', 'hybrid', 'x.nkem', 'out', 'keys/private.key.enc', data=password)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertNotIn(hint, result.stderr)
+        # The same file anywhere else may be someone else's: say so first.
+        result = self.cli('decrypt', 'hybrid', 'x.nkem', 'out2', 'received.key.enc', data=password)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn(hint, result.stderr)
+
+        before = private.read_bytes()
+        result = self.cli('upgrade-key', data=b'wrong password\n')
+        self.assertEqual(result.returncode, 1)
+        self.assertEqual(private.read_bytes(), before)
+        fingerprint = self.cli('fingerprint', 'keys/public.key').stdout
+        result = self.cli('upgrade-key', data=password)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn(b'NKPR v3', result.stdout)
+        self.assertEqual(private.read_bytes()[4], 3)
+        self.assertEqual(private.stat().st_mode & 0o777, 0o600)
+        self.assertEqual(len(private.read_bytes()), len(before) + 32)
+        self.assertEqual(self.cli('fingerprint', 'keys/public.key').stdout, fingerprint)
+        result = self.cli('decrypt', 'hybrid', 'x.nkem', 'out3', 'keys/private.key.enc', data=password)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual((self.root / 'out3').read_bytes(), b'key commitment')
+        # An NKPR v3 key anywhere needs no hint, and there is nothing left to upgrade.
+        received.write_bytes(private.read_bytes())
+        result = self.cli('decrypt', 'hybrid', 'x.nkem', 'out4', 'received.key.enc', data=password)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertNotIn(hint, result.stderr)
+        result = self.cli('upgrade-key', data=password)
+        self.assertEqual(result.returncode, 1)
+        self.assertIn(b'already a signing identity key', result.stderr)
+
     def test_encrypted_pkcs8_paste_finishes_immediately_and_cleans_up(self):
         for marker in [b'-----BEGIN ENCRYPTED PRIVATE KEY-----',
                        b'-----END ENCRYPTED PRIVATE KEY-----']:

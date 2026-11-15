@@ -5,6 +5,7 @@
 
 #include <limits.h>
 #include <openssl/core_names.h>
+#include <openssl/crypto.h>
 #include <openssl/err.h>
 #include <openssl/evp.h>
 #include <openssl/kdf.h>
@@ -19,6 +20,11 @@
 #define NKPR_CIPHER_ID_AES256_GCM 1U
 #define NKPR_ARGON2_VERSION 0x13U
 #define NKPR_FLAGS 0U
+#define NKPR_KEY_SIZE 32U
+#define NKPR_MASTER_SIZE 64U
+
+static const char NKPR_V3_CIPHER_INFO[] = "NekoKEM NKPR v3 AES-256-GCM";
+static const char NKPR_V3_COMMITMENT_INFO[] = "NekoKEM NKPR v3 key commitment";
 
 typedef struct {
     uint32_t memory_kib;
@@ -28,6 +34,18 @@ typedef struct {
     uint64_t ciphertext_len;
     unsigned int version;
 } NkprHeader;
+
+static int nkpr_version_is_known(unsigned int version)
+{
+    return version == NKPR_VERSION || version == NKPR_VERSION_IDENTITY ||
+           version == NKPR_VERSION_COMMITTED;
+}
+
+/* Bytes between the salt and the nonce: the key commitment of v3. */
+static size_t nkpr_commitment_size(unsigned int version)
+{
+    return version == NKPR_VERSION_COMMITTED ? NKPR_COMMITMENT_SIZE : 0U;
+}
 
 static int checked_size_add(size_t left, size_t right, size_t *result)
 {
@@ -118,7 +136,7 @@ static int nkpr_header_decode_internal(
         }
         return 0;
     }
-    if ((input[4] != NKPR_VERSION && input[4] != NKPR_VERSION_IDENTITY) ||
+    if (!nkpr_version_is_known(input[4]) ||
         input[5] != NKPR_KDF_ID_ARGON2ID ||
         input[6] != NKPR_CIPHER_ID_AES256_GCM ||
         input[7] != NKPR_FLAGS) {
@@ -181,6 +199,9 @@ static int nkpr_container_decode_internal(
     ciphertext_len = (size_t)header->ciphertext_len;
     expected_len = NKPR_HEADER_SIZE;
     if (!checked_size_add(expected_len, NKPR_SALT_SIZE, &expected_len) ||
+        !checked_size_add(expected_len,
+                          nkpr_commitment_size(header->version),
+                          &expected_len) ||
         !checked_size_add(expected_len, NKPR_NONCE_SIZE, &expected_len) ||
         !checked_size_add(expected_len, ciphertext_len, &expected_len) ||
         !checked_size_add(expected_len, NKPR_TAG_SIZE, &expected_len)) {
@@ -207,11 +228,24 @@ int protected_private_key_container_parse(
     return nkpr_container_decode_internal(input, input_len, &header, 0);
 }
 
-static int derive_protection_key(
+unsigned int protected_private_key_container_version(
+    const unsigned char *input,
+    size_t input_len)
+{
+    NkprHeader header;
+
+    return nkpr_container_decode_internal(input, input_len, &header, 0)
+               ? header.version
+               : 0U;
+}
+
+/* Argon2id over the password: 32 bytes for v1/v2, 64 bytes for v3. */
+static int derive_argon2id(
     const unsigned char *password,
     size_t password_len,
     const unsigned char salt[NKPR_SALT_SIZE],
-    unsigned char key[32])
+    unsigned char *key,
+    size_t key_len)
 {
     EVP_KDF *algorithm = NULL;
     EVP_KDF_CTX *context = NULL;
@@ -229,7 +263,7 @@ static int derive_protection_key(
         fprintf(stderr, file_message("Invalid private-key protection output\n"));
         return 0;
     }
-    secure_mem_clear(key, 32U);
+    secure_mem_clear(key, key_len);
     if (password == NULL || password_len == 0U ||
         password_len > NKPR_MAX_PASSWORD_SIZE || salt == NULL) {
         fprintf(stderr, file_message("Invalid private-key protection parameters\n"));
@@ -276,7 +310,7 @@ static int derive_protection_key(
         OSSL_KDF_PARAM_ARGON2_VERSION, &version);
     *parameter = OSSL_PARAM_construct_end();
 
-    if (EVP_KDF_derive(context, key, 32U, parameters) <= 0) {
+    if (EVP_KDF_derive(context, key, key_len, parameters) <= 0) {
         print_openssl_error("Argon2id private-key derivation failed");
         goto cleanup;
     }
@@ -284,10 +318,92 @@ static int derive_protection_key(
 
 cleanup:
     if (success == 0) {
-        secure_mem_clear(key, 32U);
+        secure_mem_clear(key, key_len);
     }
     EVP_KDF_CTX_free(context);
     EVP_KDF_free(algorithm);
+    return success;
+}
+
+static int nkpr_hkdf_sha512(
+    const unsigned char master[NKPR_MASTER_SIZE],
+    const unsigned char salt[NKPR_SALT_SIZE],
+    const char *info,
+    size_t info_len,
+    unsigned char output[NKPR_KEY_SIZE])
+{
+    static char digest_name[] = "SHA512";
+    EVP_KDF *algorithm = NULL;
+    EVP_KDF_CTX *context = NULL;
+    OSSL_PARAM parameters[5];
+    int success = 0;
+
+    algorithm = EVP_KDF_fetch(NULL, "HKDF", NULL);
+    if (algorithm != NULL) {
+        context = EVP_KDF_CTX_new(algorithm);
+    }
+    if (context == NULL) {
+        print_openssl_error("NKPR v3 key derivation failed");
+        goto cleanup;
+    }
+    parameters[0] = OSSL_PARAM_construct_utf8_string(
+        OSSL_KDF_PARAM_DIGEST, digest_name, 0U);
+    parameters[1] = OSSL_PARAM_construct_octet_string(
+        OSSL_KDF_PARAM_KEY, (void *)master, NKPR_MASTER_SIZE);
+    parameters[2] = OSSL_PARAM_construct_octet_string(
+        OSSL_KDF_PARAM_SALT, (void *)salt, NKPR_SALT_SIZE);
+    parameters[3] = OSSL_PARAM_construct_octet_string(
+        OSSL_KDF_PARAM_INFO, (void *)info, info_len);
+    parameters[4] = OSSL_PARAM_construct_end();
+    if (EVP_KDF_derive(context, output, NKPR_KEY_SIZE, parameters) <= 0) {
+        print_openssl_error("NKPR v3 key derivation failed");
+        goto cleanup;
+    }
+    success = 1;
+
+cleanup:
+    if (success == 0) {
+        secure_mem_clear(output, NKPR_KEY_SIZE);
+    }
+    EVP_KDF_CTX_free(context);
+    EVP_KDF_free(algorithm);
+    return success;
+}
+
+/*
+ * The AES-256-GCM key of a container, and for v3 the commitment to the
+ * Argon2id output it came from. v1/v2 use the Argon2id output directly and
+ * leave the commitment zero.
+ */
+static int derive_protection_keys(
+    unsigned int version,
+    const unsigned char *password,
+    size_t password_len,
+    const unsigned char salt[NKPR_SALT_SIZE],
+    unsigned char key[NKPR_KEY_SIZE],
+    unsigned char commitment[NKPR_COMMITMENT_SIZE])
+{
+    unsigned char master[NKPR_MASTER_SIZE] = {0};
+    int success;
+
+    secure_mem_clear(commitment, NKPR_COMMITMENT_SIZE);
+    if (version != NKPR_VERSION_COMMITTED) {
+        return derive_argon2id(password, password_len, salt, key,
+                               NKPR_KEY_SIZE);
+    }
+    secure_mem_clear(key, NKPR_KEY_SIZE);
+    success = derive_argon2id(password, password_len, salt, master,
+                              sizeof(master)) &&
+              nkpr_hkdf_sha512(master, salt, NKPR_V3_CIPHER_INFO,
+                               sizeof(NKPR_V3_CIPHER_INFO) - 1U, key) &&
+              nkpr_hkdf_sha512(master, salt, NKPR_V3_COMMITMENT_INFO,
+                               sizeof(NKPR_V3_COMMITMENT_INFO) - 1U,
+                               commitment);
+    if (success == 0) {
+        secure_mem_clear(key, NKPR_KEY_SIZE);
+        secure_mem_clear(commitment, NKPR_COMMITMENT_SIZE);
+    }
+    secure_mem_clear(master, sizeof(master));
     return success;
 }
 
@@ -297,6 +413,8 @@ static int encrypt_pem(
     const unsigned char key[32],
     const unsigned char header[NKPR_HEADER_SIZE],
     const unsigned char salt[NKPR_SALT_SIZE],
+    const unsigned char *commitment,
+    size_t commitment_len,
     const unsigned char nonce[NKPR_NONCE_SIZE],
     unsigned char *ciphertext,
     unsigned char tag[NKPR_TAG_SIZE])
@@ -327,6 +445,9 @@ static int encrypt_pem(
                           header, (int)NKPR_HEADER_SIZE) <= 0 ||
         EVP_EncryptUpdate(context, NULL, &output_len,
                           salt, (int)NKPR_SALT_SIZE) <= 0 ||
+        (commitment_len != 0U &&
+         EVP_EncryptUpdate(context, NULL, &output_len,
+                           commitment, (int)commitment_len) <= 0) ||
         EVP_EncryptUpdate(context, NULL, &output_len,
                           nonce, (int)NKPR_NONCE_SIZE) <= 0 ||
         EVP_EncryptUpdate(context, ciphertext, &output_len,
@@ -361,6 +482,8 @@ static int decrypt_pem(
     const unsigned char key[32],
     const unsigned char header[NKPR_HEADER_SIZE],
     const unsigned char salt[NKPR_SALT_SIZE],
+    const unsigned char *commitment,
+    size_t commitment_len,
     const unsigned char nonce[NKPR_NONCE_SIZE],
     unsigned char *pem,
     size_t *pem_len)
@@ -393,6 +516,9 @@ static int decrypt_pem(
                           header, (int)NKPR_HEADER_SIZE) <= 0 ||
         EVP_DecryptUpdate(context, NULL, &output_len,
                           salt, (int)NKPR_SALT_SIZE) <= 0 ||
+        (commitment_len != 0U &&
+         EVP_DecryptUpdate(context, NULL, &output_len,
+                           commitment, (int)commitment_len) <= 0) ||
         EVP_DecryptUpdate(context, NULL, &output_len,
                           nonce, (int)NKPR_NONCE_SIZE) <= 0 ||
         EVP_DecryptUpdate(context, pem, &output_len,
@@ -448,15 +574,17 @@ int protected_private_key_stage_version(
     unsigned char salt[NKPR_SALT_SIZE] = {0};
     unsigned char nonce[NKPR_NONCE_SIZE] = {0};
     unsigned char tag[NKPR_TAG_SIZE] = {0};
-    unsigned char key[32] = {0};
+    unsigned char key[NKPR_KEY_SIZE] = {0};
+    unsigned char commitment[NKPR_COMMITMENT_SIZE] = {0};
     unsigned char *ciphertext = NULL;
+    size_t commitment_len = nkpr_commitment_size(version);
     int success = 0;
 
     if (output == NULL || path == NULL || pem == NULL || pem_len == 0U ||
         pem_len > NKPR_MAX_PEM_SIZE || pem_len > (size_t)INT_MAX ||
         password == NULL || password_len == 0U ||
         password_len > NKPR_MAX_PASSWORD_SIZE ||
-        (version != NKPR_VERSION && version != NKPR_VERSION_IDENTITY)) {
+        !nkpr_version_is_known(version)) {
         fprintf(stderr, file_message("Invalid hybrid private-key PEM data\n"));
         goto cleanup;
     }
@@ -465,7 +593,8 @@ int protected_private_key_stage_version(
         print_openssl_error("Cannot generate NKPR salt or nonce");
         goto cleanup;
     }
-    if (!derive_protection_key(password, password_len, salt, key)) {
+    if (!derive_protection_keys(version, password, password_len, salt, key,
+                                commitment)) {
         goto cleanup;
     }
     nkpr_header_encode(header, (uint64_t)pem_len, version);
@@ -474,13 +603,15 @@ int protected_private_key_stage_version(
         print_openssl_error("Cannot allocate private-key ciphertext");
         goto cleanup;
     }
-    if (!encrypt_pem(pem, pem_len, key, header, salt, nonce,
-                     ciphertext, tag)) {
+    if (!encrypt_pem(pem, pem_len, key, header, salt, commitment,
+                     commitment_len, nonce, ciphertext, tag)) {
         goto cleanup;
     }
     if (!atomic_file_open(output, path, 0600) ||
         !file_write_all(output->stream, header, sizeof(header)) ||
         !file_write_all(output->stream, salt, sizeof(salt)) ||
+        (commitment_len != 0U &&
+         !file_write_all(output->stream, commitment, commitment_len)) ||
         !file_write_all(output->stream, nonce, sizeof(nonce)) ||
         !file_write_all(output->stream, ciphertext, pem_len) ||
         !file_write_all(output->stream, tag, sizeof(tag))) {
@@ -494,6 +625,7 @@ cleanup:
     }
     secure_free(ciphertext, pem_len);
     secure_mem_clear(key, sizeof(key));
+    secure_mem_clear(commitment, sizeof(commitment));
     secure_mem_clear(header, sizeof(header));
     secure_mem_clear(salt, sizeof(salt));
     secure_mem_clear(nonce, sizeof(nonce));
@@ -603,13 +735,16 @@ int protected_private_key_decode_version(
     unsigned int *version)
 {
     unsigned char *plaintext = NULL;
-    unsigned char key[32] = {0};
+    unsigned char key[NKPR_KEY_SIZE] = {0};
+    unsigned char commitment[NKPR_COMMITMENT_SIZE] = {0};
     NkprHeader header;
     const unsigned char *salt;
+    const unsigned char *stored_commitment;
     const unsigned char *nonce;
     const unsigned char *ciphertext;
     const unsigned char *tag;
     size_t ciphertext_len;
+    size_t commitment_len;
     size_t plaintext_capacity = 0U;
     size_t plaintext_len = 0U;
     int success = 0;
@@ -630,11 +765,23 @@ int protected_private_key_decode_version(
     }
     ciphertext_len = (size_t)header.ciphertext_len;
 
+    commitment_len = nkpr_commitment_size(header.version);
+
     salt = container + NKPR_HEADER_SIZE;
-    nonce = salt + NKPR_SALT_SIZE;
+    stored_commitment = salt + NKPR_SALT_SIZE;
+    nonce = stored_commitment + commitment_len;
     ciphertext = nonce + NKPR_NONCE_SIZE;
     tag = ciphertext + ciphertext_len;
-    if (!derive_protection_key(password, password_len, salt, key)) {
+    if (!derive_protection_keys(header.version, password, password_len,
+                                salt, key, commitment)) {
+        goto cleanup;
+    }
+    /* v3: the file must commit to this password's Argon2id output before
+     * AES-GCM runs. A mismatch reads exactly like a wrong password. */
+    if (commitment_len != 0U &&
+        CRYPTO_memcmp(commitment, stored_commitment, commitment_len) != 0) {
+        fputs(file_message("Private-key password is incorrect or NKPR data is corrupted"), stderr);
+        fputc('\n', stderr);
         goto cleanup;
     }
     plaintext = OPENSSL_malloc(ciphertext_len);
@@ -644,8 +791,8 @@ int protected_private_key_decode_version(
     }
     plaintext_capacity = ciphertext_len;
     if (!decrypt_pem(ciphertext, ciphertext_len, tag, key,
-                     container, salt, nonce, plaintext,
-                     &plaintext_len)) {
+                     container, salt, stored_commitment, commitment_len,
+                     nonce, plaintext, &plaintext_len)) {
         goto cleanup;
     }
 
@@ -658,7 +805,18 @@ int protected_private_key_decode_version(
 cleanup:
     secure_free(plaintext, plaintext_capacity);
     secure_mem_clear(key, sizeof(key));
+    secure_mem_clear(commitment, sizeof(commitment));
     return success;
+}
+
+unsigned int protected_private_key_header_version(
+    const unsigned char header[NKPR_HEADER_SIZE])
+{
+    NkprHeader decoded;
+
+    return header != NULL && nkpr_header_decode_internal(header, &decoded, 0)
+               ? decoded.version
+               : 0U;
 }
 
 int private_key_data_is_protected(const unsigned char *data, size_t length)

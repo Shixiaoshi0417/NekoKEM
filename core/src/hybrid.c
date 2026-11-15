@@ -174,7 +174,7 @@ int hybrid_write_public_keys(FILE *output, const HybridKeys *keys,
     return 1;
 }
 
-/* Writes an identity key pair as public PEM and NKPR v2, committed together. */
+/* Writes an identity key pair as public PEM and NKPR v3, committed together. */
 static int write_identity_key_files(const HybridKeys *keys,
                                     const char *public_path,
                                     const char *private_path,
@@ -212,7 +212,7 @@ static int write_identity_key_files(const HybridKeys *keys,
             &private_file, private_path,
             (const unsigned char *)private_buffer->data,
             private_buffer->length, password, password_len,
-            NKPR_VERSION_IDENTITY) ||
+            NKPR_VERSION_COMMITTED) ||
         !(replace != 0
               ? atomic_file_commit_pair(&public_file, &private_file)
               : atomic_file_commit_pair_new(&public_file, &private_file))) {
@@ -486,7 +486,51 @@ cleanup:
 
 static unsigned int nkpr_components(unsigned int version)
 {
-    return version == NKPR_VERSION_IDENTITY ? 4U : 2U;
+    return version == NKPR_VERSION ? 2U : 4U;
+}
+
+int hybrid_upgrade_private_key_format(const char *private_path,
+                                      const unsigned char *password,
+                                      size_t password_len)
+{
+    HybridKeys keys = {0};
+    AtomicFile output = {0};
+    unsigned char *pem = NULL;
+    size_t pem_len = 0U;
+    unsigned int version = 0U;
+    int success = 0;
+
+    if (!protected_private_key_read_version(private_path, password,
+                                            password_len, &pem, &pem_len,
+                                            &version)) {
+        goto cleanup;
+    }
+    if (version == NKPR_VERSION_COMMITTED) {
+        fprintf(stderr, file_message("This private key already uses the current NKPR format\n"));
+        goto cleanup;
+    }
+    if (version != NKPR_VERSION_IDENTITY) {
+        fprintf(stderr, file_message("Upgrade this key to a signing identity key first\n"));
+        goto cleanup;
+    }
+    /* Only a key that parses and validates is rewritten. */
+    if (!parse_hybrid_private_keys(pem, pem_len, 1, 4U, &keys) ||
+        !x448_private_key_is_usable(keys.x448)) {
+        goto cleanup;
+    }
+    if (!protected_private_key_stage_version(
+            &output, private_path, pem, pem_len, password, password_len,
+            NKPR_VERSION_COMMITTED) ||
+        !atomic_file_commit_pair(&output, NULL)) {
+        goto cleanup;
+    }
+    success = 1;
+
+cleanup:
+    atomic_file_abort(&output);
+    hybrid_keys_cleanup(&keys);
+    secure_free(pem, pem_len);
+    return success;
 }
 
 int hybrid_load_protected_private_keys(

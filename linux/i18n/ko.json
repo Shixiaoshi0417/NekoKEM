@@ -343,5 +343,10 @@
   "The signer key path is a file this decryption reads or writes; choose another path\n": "서명자 공개 키 저장 경로가 이 복호화에서 읽거나 쓰는 파일입니다. 다른 경로를 선택하세요\n",
   "Original file name: %s\n": "원래 파일 이름: %s\n",
   "The original file name cannot be recorded\n": "원래 파일 이름을 기록할 수 없습니다\n",
-  "The recorded original file name is invalid\n": "기록된 원래 파일 이름이 올바르지 않습니다\n"
+  "The recorded original file name is invalid\n": "기록된 원래 파일 이름이 올바르지 않습니다\n",
+  "This private key already uses the current NKPR format\n": "이 개인 키는 이미 현재 NKPR 형식입니다\n",
+  "Upgrade this key to a signing identity key first\n": "먼저 이 키를 서명 신원 키로 업그레이드하세요\n",
+  "NKPR v3 key derivation failed": "NKPR v3 키 파생에 실패했습니다",
+  "This private key uses an older NKPR format without key commitment. Enter your password only if this key file is your own.\n": "이 개인 키는 키 커밋먼트가 없는 이전 NKPR 형식입니다. 본인의 키 파일인 경우에만 암호를 입력하세요.\n",
+  "Rewrote %s as NKPR v3 with key commitment. NekoKEM 5.2 and earlier cannot read it.\n": "%s을(를) 키 커밋먼트가 있는 NKPR v3로 다시 썼습니다. NekoKEM 5.2 및 이전 버전에서는 읽을 수 없습니다.\n"
 }

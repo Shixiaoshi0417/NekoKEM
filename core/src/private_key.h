@@ -9,6 +9,13 @@
 #define NKPR_VERSION 1U
 /* NKPR v2: same protection, four identity private keys; see docs/NKEM-v5.md. */
 #define NKPR_VERSION_IDENTITY 2U
+/*
+ * NKPR v3: the identity keys of v2 under a committed key. Argon2id yields a
+ * 64-byte master secret; HKDF-SHA512 derives the AES key and a commitment
+ * stored after the salt. See docs/key-commitment.md.
+ */
+#define NKPR_VERSION_COMMITTED 3U
+#define NKPR_COMMITMENT_SIZE 32U
 #define NKPR_HEADER_SIZE 36U
 #define NKPR_SALT_SIZE 32U
 #define NKPR_NONCE_SIZE 12U
@@ -19,8 +26,8 @@
 #define NKPR_MAX_PEM_SIZE (1024U * 1024U)
 #define NKPR_MAX_PASSWORD_SIZE 1024U
 #define NKPR_MAX_CONTAINER_SIZE \
-    (NKPR_HEADER_SIZE + NKPR_SALT_SIZE + NKPR_NONCE_SIZE + \
-     NKPR_MAX_PEM_SIZE + NKPR_TAG_SIZE)
+    (NKPR_HEADER_SIZE + NKPR_SALT_SIZE + NKPR_COMMITMENT_SIZE + \
+     NKPR_NONCE_SIZE + NKPR_MAX_PEM_SIZE + NKPR_TAG_SIZE)
 
 int protected_private_key_stage(
     AtomicFile *output,
@@ -30,7 +37,7 @@ int protected_private_key_stage(
     const unsigned char *password,
     size_t password_len);
 
-/* As protected_private_key_stage, writing the given NKPR version (1 or 2). */
+/* As protected_private_key_stage, writing the given NKPR version (1, 2 or 3). */
 int protected_private_key_stage_version(
     AtomicFile *output,
     const char *path,
@@ -103,5 +110,14 @@ int private_key_data_is_protected(const unsigned char *data, size_t length);
 int protected_private_key_container_parse(
     const unsigned char *input,
     size_t input_len);
+
+/* As protected_private_key_container_parse; returns the NKPR version or 0. */
+unsigned int protected_private_key_container_version(
+    const unsigned char *input,
+    size_t input_len);
+
+/* The NKPR version of a valid NKPR_HEADER_SIZE-byte header, or 0. Quiet. */
+unsigned int protected_private_key_header_version(
+    const unsigned char header[NKPR_HEADER_SIZE]);
 
 #endif

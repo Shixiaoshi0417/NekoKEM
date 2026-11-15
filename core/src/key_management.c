@@ -16,9 +16,7 @@
 #include "windows_io.h"
 #endif
 
-#define MANAGED_NKPR_MAX_SIZE \
-    (NKPR_HEADER_SIZE + NKPR_SALT_SIZE + NKPR_NONCE_SIZE + \
-     NKPR_MAX_PEM_SIZE + NKPR_TAG_SIZE)
+#define MANAGED_NKPR_MAX_SIZE NKPR_MAX_CONTAINER_SIZE
 
 static int managed_path_is_valid(const char *path)
 {
@@ -81,6 +79,40 @@ int nekokem_check_private_key_password(
 cleanup:
     hybrid_keys_cleanup(&keys);
     return success;
+}
+
+int nekokem_private_key_format_version(const char *private_key_path)
+{
+    unsigned char header[NKPR_HEADER_SIZE];
+    unsigned int version = 0U;
+
+    if (managed_path_is_valid(private_key_path) &&
+        file_peek_regular(private_key_path, header, sizeof(header))) {
+        version = protected_private_key_header_version(header);
+    }
+    secure_mem_clear(header, sizeof(header));
+    return (int)version;
+}
+
+int nekokem_upgrade_private_key_format(
+    const char *private_key_path,
+    const unsigned char *password,
+    size_t password_len)
+{
+    if (!managed_path_is_valid(private_key_path)) {
+        fprintf(stderr, file_message("NekoKEM Core received an empty key path\n"));
+        return 0;
+    }
+    if (password == NULL || password_len == 0U) {
+        fprintf(stderr, file_message("A non-empty private-key password is required\n"));
+        return 0;
+    }
+    if (!nekokem_private_key_exists(private_key_path)) {
+        fprintf(stderr, file_message("Only a protected NKPR private key can be upgraded\n"));
+        return 0;
+    }
+    return hybrid_upgrade_private_key_format(private_key_path, password,
+                                             password_len);
 }
 
 static int export_public_key(const char *public_key_path,

@@ -343,5 +343,10 @@
   "The signer key path is a file this decryption reads or writes; choose another path\n": "The signer key path is a file this decryption reads or writes; choose another path\n",
   "Original file name: %s\n": "Original file name: %s\n",
   "The original file name cannot be recorded\n": "The original file name cannot be recorded\n",
-  "The recorded original file name is invalid\n": "The recorded original file name is invalid\n"
+  "The recorded original file name is invalid\n": "The recorded original file name is invalid\n",
+  "This private key already uses the current NKPR format\n": "This private key already uses the current NKPR format\n",
+  "Upgrade this key to a signing identity key first\n": "Upgrade this key to a signing identity key first\n",
+  "NKPR v3 key derivation failed": "NKPR v3 key derivation failed",
+  "This private key uses an older NKPR format without key commitment. Enter your password only if this key file is your own.\n": "This private key uses an older NKPR format without key commitment. Enter your password only if this key file is your own.\n",
+  "Rewrote %s as NKPR v3 with key commitment. NekoKEM 5.2 and earlier cannot read it.\n": "Rewrote %s as NKPR v3 with key commitment. NekoKEM 5.2 and earlier cannot read it.\n"
 }
