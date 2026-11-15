@@ -321,6 +321,8 @@ private fun NekoKEMRoute(
     val decryptFolderAccess = remember { DecryptFolderAccess(context) }
     var decryptFolder by remember { mutableStateOf(DecryptFolderStore.read(context)) }
     var decryptFolderName by remember { mutableStateOf<String?>(null) }
+    // Bumped on every pick, so a regained grant on the same folder shows its name again.
+    var decryptFolderChecks by remember { mutableStateOf(0) }
     var availableRelease by remember { mutableStateOf<ReleaseInfo?>(null) }
     val currentVersion = remember { installedVersion(context) }
     val selectedInputUri = selectedInputState.uriString?.let(Uri::parse)
@@ -781,9 +783,10 @@ private fun NekoKEMRoute(
     /**
      * Writes the prepared plaintext to [destination]. [folderName] is set when
      * the file was created in the decrypt folder; it is removed again when the
-     * output fails or is cancelled.
+     * output fails or is cancelled. A failed folder write keeps the plaintext
+     * and runs [askInstead], so the save dialog can still take it.
      */
-    fun commitDecryption(destination: Uri, folderName: String?) {
+    fun commitDecryption(destination: Uri, folderName: String?, askInstead: (() -> Unit)? = null) {
         val prepared = preparedDecryption
         preparedDecryption = null
         val created = folderName != null
@@ -809,6 +812,7 @@ private fun NekoKEMRoute(
                         prepared,
                         destination,
                         tracker,
+                        keepOnFailure = created,
                     )
                 }
             } catch (_: Exception) {
@@ -818,6 +822,17 @@ private fun NekoKEMRoute(
             }
             if (created && result != NativeBridge.RESULT_SUCCESS) {
                 pageWork { decryptFolderAccess.delete(destination) }
+                if (result != NativeBridge.RESULT_CANCELLED &&
+                    result != NativeBridge.RESULT_INVALID_ARGUMENT &&
+                    askInstead != null
+                ) {
+                    // The plaintext is still staged: offer the save dialog.
+                    preparedDecryption = prepared
+                    decryptionPreparationProgress = initial
+                    showSnackbar(R.string.snackbar_decrypt_folder_unavailable)
+                    askInstead()
+                    return@launch
+                }
             }
             val combined = combineProgress(initial, tracker.snapshot())
             reportFileResult(
@@ -1168,7 +1183,10 @@ private fun NekoKEMRoute(
                     commitDecryption(
                         created,
                         decryptFolderName ?: context.getString(R.string.settings_decrypt_folder_title),
-                    )
+                    ) {
+                        pendingOutputAction = PendingOutputAction.SAVE_DECRYPTED_FILE
+                        createOutputLauncher.launch(request)
+                    }
                     return@launch
                 }
                 showSnackbar(R.string.snackbar_decrypt_folder_unavailable)
@@ -1832,7 +1850,7 @@ private fun NekoKEMRoute(
         }
     }
 
-    LaunchedEffect(decryptFolder) {
+    LaunchedEffect(decryptFolder, decryptFolderChecks) {
         val folder = decryptFolder
         decryptFolderName = if (folder == null) {
             null
@@ -1850,13 +1868,15 @@ private fun NekoKEMRoute(
     /** Sets or clears the decrypt folder, keeping exactly one persistable grant. */
     fun storeDecryptFolder(folder: Uri?) {
         val old = decryptFolder
-        if (folder != null && folder != old && !decryptFolderAccess.take(folder)) {
+        // Every pick takes the grant again: the same folder may have lost it.
+        if (folder != null && !decryptFolderAccess.take(folder)) {
             showSnackbar(R.string.snackbar_decrypt_folder_unavailable)
             return
         }
         if (DecryptFolderStore.write(context, folder)) {
             if (old != null && old != folder) decryptFolderAccess.release(old)
             decryptFolder = folder
+            decryptFolderChecks++
         } else {
             if (folder != null && folder != old) decryptFolderAccess.release(folder)
             showSnackbar(R.string.error_settings_save)

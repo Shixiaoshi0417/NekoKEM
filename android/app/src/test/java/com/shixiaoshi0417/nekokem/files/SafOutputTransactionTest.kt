@@ -131,6 +131,39 @@ class SafOutputTransactionTest {
         assertArrayEquals(original, document)
     }
 
+    @Test fun failedFolderWriteKeepsPlaintextForAnotherPlace() {
+        failWrite = true
+        val stage = File(context.cacheDir, "stage")
+        stage.writeBytes(byteArrayOf(1, 2, 3))
+        val prepared = PreparedDecryption(stage)
+        assertNotEquals(
+            NativeBridge.RESULT_SUCCESS,
+            workflow.commitPreparedDecryption(prepared, uri, progress { true }, keepOnFailure = true),
+        )
+        assertArrayEquals(original, document)
+        assertTrue("plaintext stays for the save dialog", stage.exists())
+        failWrite = false
+        assertEquals(NativeBridge.RESULT_SUCCESS, workflow.commitPreparedDecryption(prepared, uri, progress { true }))
+        assertArrayEquals(byteArrayOf(1, 2, 3), document)
+        assertTrue(!stage.exists())
+    }
+
+    private val cancelled = object : CancellableProgressCallback {
+        override fun isCancelled() = true
+        override fun onProgress(processedBytes: Long, totalBytes: Long) = false
+    }
+
+    @Test fun cancelledFolderWriteStillDiscardsPlaintext() {
+        val stage = File(context.cacheDir, "stage")
+        stage.writeBytes(byteArrayOf(1, 2, 3))
+        val prepared = PreparedDecryption(stage)
+        assertEquals(
+            NativeBridge.RESULT_CANCELLED,
+            workflow.commitPreparedDecryption(prepared, uri, cancelled, keepOnFailure = true),
+        )
+        assertTrue(!stage.exists())
+    }
+
     @Test fun partialWriteFailureRestoresOriginal() {
         failWrite = true
         assertNotEquals(NativeBridge.RESULT_SUCCESS, commit())

@@ -135,6 +135,12 @@ class PreparedDecryption internal constructor(
         active = false
         return plaintextFile
     }
+
+    /** Makes a consumed plaintext available again after its output failed. */
+    @Synchronized
+    internal fun restore() {
+        active = true
+    }
 }
 
 /**
@@ -644,17 +650,24 @@ class SafFileWorkflow(
     internal fun hasTemporaryKeyCache(): Boolean =
         temporaryKeyDirectory.exists()
 
+    /**
+     * With [keepOnFailure], an output that failed for any reason other than
+     * cancelling keeps the plaintext in [prepared], so another destination
+     * can still be chosen; it is then committed or discarded later.
+     */
     fun commitPreparedDecryption(
         prepared: PreparedDecryption,
         destination: Uri,
         progress: CancellableProgressCallback,
+        keepOnFailure: Boolean = false,
     ): Int {
         val plaintext = prepared.consume()
             ?: return NativeBridge.RESULT_INVALID_ARGUMENT
         var outputCommitted = false
         var transfer: UriOutputTransaction? = null
+        var result = LocalKeyManager.RESULT_STORAGE_ERROR
 
-        return try {
+        try {
             val currentTransfer = copyFileToUri(
                 plaintext,
                 destination,
@@ -662,7 +675,7 @@ class SafFileWorkflow(
                 true,
             )
             transfer = currentTransfer
-            if (!currentTransfer.success) {
+            result = if (!currentTransfer.success) {
                 cancelledOrStorageError(progress)
             } else {
                 currentTransfer.commit()
@@ -670,12 +683,17 @@ class SafFileWorkflow(
                 NativeBridge.RESULT_SUCCESS
             }
         } catch (_: Exception) {
-            LocalKeyManager.RESULT_STORAGE_ERROR
+            result = LocalKeyManager.RESULT_STORAGE_ERROR
         } finally {
             if (!outputCommitted) transfer?.rollback()
-            clearAndDelete(plaintext)
-            removeWorkspace(prepared.workspace)
+            if (keepOnFailure && !outputCommitted && result != NativeBridge.RESULT_CANCELLED) {
+                prepared.restore()
+            } else {
+                clearAndDelete(plaintext)
+                removeWorkspace(prepared.workspace)
+            }
         }
+        return result
     }
 
     fun discardPreparedDecryption(prepared: PreparedDecryption?) {
