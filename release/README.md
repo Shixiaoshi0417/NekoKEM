@@ -42,7 +42,7 @@ uploads artifacts to Actions. Publishing is a separate maintainer step:
    with the `<!-- RELEASE_ZH_METADATA -->` and `<!-- RELEASE_EN_METADATA -->`
    placeholders) into `main`, then wait for that commit's CI run.
 2. Run Release on `main` for the same commit.
-3. Run Publish: `gh workflow run publish.yml --ref main -f tag=v5.1.0 -f ci_run=<CI run ID> -f release_run=<Release run ID>`.
+3. Run Publish: `gh workflow run publish.yml --ref main -f tag=v5.2.0 -f ci_run=<CI run ID> -f release_run=<Release run ID>`.
 
 Publish checks that both runs succeeded on the same `main` commit, that the CI
 run came from a push to `main` or a manual run and the Release run from a manual
@@ -148,13 +148,13 @@ Publish only packages from the successful Release run for the exact CI-validated
 source; the Publish workflow enforces this. One more asset, top-level
 `SHA256SUMS.txt`, lists all the packages. The notes record the source commit,
 CI/Release run links, Android signer and public asset hashes, as in the
-[Chinese-then-English v5.1.0 notes](v5.1.0.md). Releases after v4.1.0 also carry
+[Chinese-then-English v5.2.0 notes](v5.2.0.md). Releases after v4.1.0 also carry
 build provenance attestations; v4.1.0 and earlier do not.
 A rotation's encrypted signing recovery envelope is never selected for
 publication; **do not attach it to the public GitHub Release**. Windows application EXEs and
 the installer are unsigned.
 
-Android v5.1.0 uses versionCode `16`, keeps the v3.2.0/v3.3.0 signing identity and
+Android v5.2.0 uses versionCode `17`, keeps the v3.2.0/v3.3.0 signing identity and
 supports an in-place update. Only old-signer v3.1.x installations need backup
 verification and uninstall/reinstall. Keep the existing square artwork for Android,
 use transparent outer white areas for Windows EXE icons, reuse those PNGs for

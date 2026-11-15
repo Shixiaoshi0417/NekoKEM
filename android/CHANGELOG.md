@@ -1,5 +1,15 @@
 # Changelog
 
+## 5.2.0
+
+- 全平台 5.2.0，Core 5.1，Android versionCode 17；沿用既有签名，可覆盖升级。密码参数不变。
+- 签名文件记录原文件名，解密时保存对话框默认使用原文件名；设置「签名」中的「记录原文件名」可关闭。5.1.0 及更早版本打不开记录了原文件名的文件。
+- 设置新增「解密 · 保存到指定文件夹」：开启后解密直接按原文件名保存到选定文件夹，同名时自动编号，从不覆盖。
+- 私钥密码可保存到系统凭据管理器（Android 14+），之后可从密码管理器填入，不依赖 Google Play 服务。
+- 「核对指纹」卡片按 Signal 安全码样式重做；只显示一种指纹，不再显示旧版公钥指纹。检查更新在 GitHub API 限流时改从发布页读取。完整双语说明见 [v5.2.0](../release/v5.2.0.md)。
+
+Android 5.2.0 / versionCode 17 retains the existing signer; cryptographic parameters are unchanged. Signed files record the original file name and decryption suggests it when saving; "Record original file name" in the Signing settings turns this off. NekoKEM 5.1.0 and earlier cannot open a file that records its name. A new setting saves decrypted files straight to a chosen folder, numbering taken names instead of overwriting. The private key password can be saved to the system credential manager (Android 14+) and filled in from it, without Google Play services. The Verify fingerprint card is redesigned after Signal's safety number, only one fingerprint is shown, and the update check falls back to the release page when the GitHub API is rate limited. See the [bilingual notes](../release/v5.2.0.md).
+
 ## 5.1.0
 
 - 全平台 5.1.0，Core 5.0，Android versionCode 16；沿用既有签名，可覆盖升级。文件格式与密码参数不变。
