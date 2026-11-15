@@ -166,6 +166,7 @@ data class NekoKEMActions(
     /** Turning unsigned encryption on goes through the red warning first. */
     val onUnsignedEncryptionChange: (Boolean) -> Unit = {},
     val onRequireSignatureChange: (Boolean) -> Unit = {},
+    val onRecordOriginalNameChange: (Boolean) -> Unit = {},
     val onCheckUpdate: () -> Unit = {},
     val onAutoUpdateChange: (Boolean) -> Unit = {},
     val onShowFingerprintQr: () -> Unit = {},
@@ -792,6 +793,14 @@ private fun SettingsPage(state: NekoKEMUiState, actions: NekoKEMActions, onOpenA
                 warning = unsigned,
             )
             if (unsigned) UnsignedWarningText(modifier = Modifier.padding(horizontal = 8.dp))
+            // Unsigned files never record a name, so the switch waits for signing.
+            SwitchSetting(
+                title = stringResource(R.string.settings_record_name_title),
+                summary = stringResource(R.string.settings_record_name_summary),
+                checked = state.signatureSettings.recordOriginalName,
+                running = running || unsigned,
+                onCheckedChange = actions.onRecordOriginalNameChange,
+            )
             SwitchSetting(
                 title = stringResource(R.string.settings_require_signature_title),
                 summary = stringResource(R.string.settings_require_signature_summary),

@@ -229,6 +229,8 @@
     <string name="unsigned_confirm_title">确定关闭签名吗？</string>
     <string name="unsigned_confirm_message">文件将以无签名的 NKEM v3/v4 格式保存。接收方无法确认文件来自你，任何拿到其公钥的人都能发送看起来一样的文件。</string>
     <string name="action_turn_off_signing">关闭签名</string>
+    <string name="settings_record_name_title">记录原文件名</string>
+    <string name="settings_record_name_summary">开启时：签名文件记录原文件名，解密时自动还原。接收方使用 NekoKEM 5.1 时请关闭，5.1 打不开记录了文件名的文件。</string>
     <string name="settings_require_signature_title">只接受已签名文件</string>
     <string name="settings_require_signature_summary">解密时拒绝没有签名的 NKEM v3/v4 文件，不会写入输出。</string>
     <string name="sign_password_title">签名文件</string>
