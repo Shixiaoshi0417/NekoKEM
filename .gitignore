@@ -136,3 +136,9 @@ macos/gui/.build/
 
 # Compose desktop: the bridge library copied in before packaging
 desktop-compose/native/
+
+# Test-only NKPR v2 key from NekoKEM 5.2.0 (public password, see its README).
+!core/tests/fixtures/nkpr-v2/public.key
+!core/tests/fixtures/nkpr-v2/private.key.enc
+!android/app/src/androidTest/assets/nkpr-v2/public.key
+!android/app/src/androidTest/assets/nkpr-v2/private.key.enc
