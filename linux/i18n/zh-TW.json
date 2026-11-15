@@ -340,5 +340,8 @@
   "输出文件：%s\n": "輸出檔案：%s\n",
   "输出路径长度溢出\n": "輸出路徑長度溢位\n",
   "Cannot compare the signer key path with the other files": "無法將簽署者公鑰路徑與其他檔案比較",
-  "The signer key path is a file this decryption reads or writes; choose another path\n": "簽署者公鑰的儲存路徑是本次解密讀取或寫入的檔案，請選擇其他路徑\n"
+  "The signer key path is a file this decryption reads or writes; choose another path\n": "簽署者公鑰的儲存路徑是本次解密讀取或寫入的檔案，請選擇其他路徑\n",
+  "Original file name: %s\n": "原始檔名：%s\n",
+  "The original file name cannot be recorded\n": "無法記錄原始檔名\n",
+  "The recorded original file name is invalid\n": "檔案中記錄的原始檔名無效\n"
 }

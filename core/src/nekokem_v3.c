@@ -9,6 +9,7 @@
 #include "secure_mem.h"
 
 #include <limits.h>
+#include <stddef.h>
 #include <openssl/rand.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -381,7 +382,10 @@ int nekokem_decrypt_file_verified_with_progress(
     int result = NEKOKEM_OPERATION_ERROR;
 
     if (verify_result != NULL) {
-        if (verify_result->struct_size < sizeof(*verify_result)) {
+        /* Callers built before original_name existed pass the older size. */
+        if (verify_result->struct_size !=
+                offsetof(NekoKEMVerifyResult, original_name) &&
+            verify_result->struct_size < sizeof(*verify_result)) {
             fprintf(stderr, file_message("Invalid signature verification result\n"));
             return NEKOKEM_OPERATION_ERROR;
         }
@@ -389,6 +393,9 @@ int nekokem_decrypt_file_verified_with_progress(
         verify_result->signature_status = NEKOKEM_SIGNATURE_UNSIGNED;
         verify_result->trusted_signer_index = 0U;
         verify_result->signer_fingerprint[0] = '\0';
+        if (verify_result->struct_size >= sizeof(*verify_result)) {
+            verify_result->original_name[0] = '\0';
+        }
     }
     if (!nekokem_v5_policy_is_valid(policy) ||
         !validate_file_paths(input_path, output_path, private_key_path) ||

@@ -80,4 +80,26 @@ class DisplayNameTest {
         }
         assertEquals("decrypted_photo.jpg", decryptedOutputName("photo.jpg", "fallback", "decrypted-file"))
     }
+
+    @Test
+    fun recordedOriginalNameRestoresFormatAfterTheContainerWasRenamed() {
+        val decrypted = decryptedDocumentRequest("file_1234.bin", "fallback", "decrypted-file", "合同 v2.txt")
+        assertEquals("合同 v2.txt", decrypted.displayName)
+        assertEquals("text/plain", decrypted.mimeType)
+        assertEquals("photo.jpg", decryptedDocumentRequest("x.nkem", "fallback", "plain", "\u202Ephoto.jpg").displayName)
+        assertEquals("x", decryptedDocumentRequest("x.nkem", "fallback", "plain", null).displayName)
+        assertEquals("x", decryptedDocumentRequest("x.nkem", "fallback", "plain", "..").displayName)
+    }
+
+    @Test
+    fun onlyNamesCoreCanRecordAreRecorded() {
+        assertEquals("report.pdf", recordableName("dir/\u202Ereport.pdf"))
+        assertEquals(null, recordableName(null))
+        assertEquals(null, recordableName("\u200B"))
+        assertEquals(null, recordableName(".."))
+        assertEquals(null, recordableName("a\\b"))
+        // 255 four-byte characters exceed Core's 1016-byte limit.
+        assertEquals(null, recordableName("\uD83D\uDE00".repeat(255)))
+        assertEquals("名".repeat(255), recordableName("名".repeat(255)))
+    }
 }

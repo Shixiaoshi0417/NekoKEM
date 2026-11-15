@@ -33,12 +33,18 @@ fun encryptedDocumentRequest(
     mimeType = BINARY_MIME_TYPE,
 )
 
+/**
+ * Suggests the name a signed file recorded when it has one, so the original
+ * format comes back even after the container was renamed; otherwise the
+ * container's name without ".nkem".
+ */
 fun decryptedDocumentRequest(
     inputName: String,
     defaultName: String,
     defaultDecryptedName: String,
+    originalName: String? = null,
 ): SaveDocumentRequest {
-    val displayName = decryptedOutputName(
+    val displayName = restoredOutputName(originalName) ?: decryptedOutputName(
         inputName,
         defaultName,
         defaultDecryptedName,
@@ -81,6 +87,20 @@ internal fun decryptedOutputName(
     }
 }
 
+/** The provider's name as Core may record it, or null to record none. */
+internal fun recordableName(displayName: String?): String? {
+    val safe = displaySafeName(displayName?.substringAfterLast('/'), "")
+    return safe.takeIf {
+        it.isNotEmpty() && it != "." && it != ".." && '\\' !in it &&
+            it.toByteArray(Charsets.UTF_8).size <= MAX_RECORDED_NAME_BYTES
+    }
+}
+
+/** A recorded name made safe for the save dialog, or null to fall back. */
+internal fun restoredOutputName(originalName: String?): String? =
+    originalName?.let { displaySafeName(it.substringAfterLast('/'), "") }
+        ?.takeIf { it.isNotEmpty() && it != "." && it != ".." }
+
 internal fun mimeTypeForFilename(filename: String): String {
     val extension = filename.substringAfterLast('.', missingDelimiterValue = "")
         .lowercase(Locale.ROOT)
@@ -108,6 +128,8 @@ private const val PUBLIC_KEY_EXPORT_NAME = "public.key"
 private const val LEGACY_PUBLIC_KEY_EXPORT_NAME = "public-legacy.key"
 private const val PRIVATE_KEY_EXPORT_NAME = "private.nkpr"
 private const val NKEM_EXTENSION = ".nkem"
+/** NEKOKEM_ORIGINAL_NAME_MAX in Core. */
+private const val MAX_RECORDED_NAME_BYTES = 1016
 private const val DECRYPTED_PREFIX = "decrypted_"
 private const val JPEG_EXTENSION = "jpeg"
 private const val JPG_EXTENSION = "jpg"

@@ -34,6 +34,8 @@ struct Outcome {
     var format: Int? = nil
     var signature: Signature? = nil
     var canVerify: Bool? = nil
+    /// The file name a signed file recorded, already safe for this system.
+    var originalName: String? = nil
 
     init(fingerprint: String? = nil) { self.fingerprint = fingerprint }
     init(_ value: Any) {
@@ -43,6 +45,7 @@ struct Outcome {
         recipients = fields["recipients"] as? [String] ?? []
         format = fields["format"] as? Int
         canVerify = fields["canVerify"] as? Bool
+        originalName = fields["originalName"] as? String
         if let signed = fields["signature"] as? [String: Any] {
             signature = Signature(status: signed["status"] as? String ?? "unsigned", fingerprint: signed["fingerprint"] as? String,
                                   contact: signed["contact"] as? String, signerKey: signed["signerKey"] as? String)

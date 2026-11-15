@@ -33,6 +33,11 @@
 #define NKEM_V5_SIGNATURE_PLAINTEXT_SIZE 9032U
 #define NKEM_V5_SIGNATURE_BLOCK_SIZE \
     (NKEM_V5_SIGNATURE_PLAINTEXT_SIZE + NKEM_TAG_SIZE)
+/* Header flag: the signature block ends with a 1024-byte file-info record. */
+#define NKEM_V5_FLAG_FILE_INFO 0x1U
+#define NKEM_V5_FILE_INFO_SIZE 1024U
+#define NKEM_V5_FILE_INFO_SIGNATURE_BLOCK_SIZE \
+    (NKEM_V5_SIGNATURE_BLOCK_SIZE + NKEM_V5_FILE_INFO_SIZE)
 
 /* SP 800-38D section 5.2.1.1: 2^39 - 256 bits = 2^36 - 32 bytes. */
 #define NKEM_GCM_MAX_DATA_SIZE ((UINT64_C(1) << 36) - UINT64_C(32))
@@ -60,6 +65,7 @@ typedef struct {
     uint16_t recipient_count;
     uint16_t entry_len;
     uint16_t signature_block_len;
+    uint32_t flags;                 /* NKEM_V5_FLAG_* */
     uint64_t ciphertext_len;
     uint8_t salt_len;
     uint8_t nonce_len;
@@ -221,9 +227,12 @@ int nkem_v4_container_size_is_valid(const NkemV4Header *header,
                                     uint64_t actual_size);
 int nkem_v4_container_parse(const unsigned char *input, size_t input_len);
 
+/* Encrypted signature block length for the given header flags. */
+size_t nkem_v5_signature_block_size(uint32_t flags);
 void nkem_v5_header_encode(unsigned char output[NKEM_V4_HEADER_SIZE],
                            uint16_t recipient_count,
-                           uint64_t ciphertext_len);
+                           uint64_t ciphertext_len,
+                           uint32_t flags);
 int nkem_v5_header_decode(
     const unsigned char input[NKEM_V4_HEADER_SIZE],
     NkemV5Header *header);

@@ -246,7 +246,7 @@ class SafFileWorkflow(
             source,
             progress,
             listOfNotNull(temporaryKey),
-        ) { input, output -> keyManager.encryptFile(input, output, temporaryKey, progress, signingPassword?.copyOf()) }
+        ) { input, output, name -> keyManager.encryptFile(input, output, temporaryKey, progress, signingPassword?.copyOf(), name) }
     } finally {
         signingPassword?.fill(0)
     }
@@ -265,8 +265,8 @@ class SafFileWorkflow(
             source,
             progress,
             recipients,
-        ) { input, output ->
-            keyManager.encryptFileForRecipients(input, output, recipients, progress, signingPassword?.copyOf())
+        ) { input, output, name ->
+            keyManager.encryptFileForRecipients(input, output, recipients, progress, signingPassword?.copyOf(), name)
         }
     } finally {
         signingPassword?.fill(0)
@@ -284,8 +284,8 @@ class SafFileWorkflow(
         recipients: List<TemporaryPublicKey>,
         signingPassword: ByteArray? = null,
     ): PreparedEncryptionResult = try {
-        prepareEncryptionWith(source, progress, recipients) { input, output ->
-            keyManager.encryptFileForSelection(input, output, includeOwn, recipients, progress, signingPassword?.copyOf())
+        prepareEncryptionWith(source, progress, recipients) { input, output, name ->
+            keyManager.encryptFileForSelection(input, output, includeOwn, recipients, progress, signingPassword?.copyOf(), name)
         }
     } finally {
         signingPassword?.fill(0)
@@ -295,7 +295,7 @@ class SafFileWorkflow(
         source: Uri,
         progress: CancellableProgressCallback,
         temporaryKeys: List<TemporaryPublicKey>,
-        encrypt: (File, File) -> Int,
+        encrypt: (File, File, String?) -> Int,
     ): PreparedEncryptionResult {
         var workspace: File? = null
         var stagedInput: File? = null
@@ -322,7 +322,8 @@ class SafFileWorkflow(
                 ) {
                     result = cancelledOrStorageError(progress)
                 } else {
-                    result = encrypt(input, output)
+                    // Signed files record the name so decryption restores it.
+                    result = encrypt(input, output, recordableName(queryDisplayName(source)))
                     if (result == NativeBridge.RESULT_SUCCESS &&
                         progress.isCancelled()
                     ) {

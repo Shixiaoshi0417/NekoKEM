@@ -12,6 +12,7 @@
 #include <openssl/err.h>
 #include <openssl/evp.h>
 #include <openssl/rand.h>
+#include <stddef.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
@@ -38,6 +39,138 @@ static const unsigned char block_nonce[NKEM_NONCE_SIZE] = {0};
 
 _Static_assert(NKEM_TAG_SIZE == PAYLOAD_HASH_TAG_SIZE, "Payload tag size");
 
+/* Signature block plaintext with the optional file-info record at its end. */
+#define V5_BLOCK_PLAINTEXT_MAX \
+    (NKEM_V5_SIGNATURE_PLAINTEXT_SIZE + NKEM_V5_FILE_INFO_SIZE)
+#define V5_FILE_INFO_NAME_OFFSET 8U
+_Static_assert(V5_FILE_INFO_NAME_OFFSET + NEKOKEM_ORIGINAL_NAME_MAX ==
+                   NKEM_V5_FILE_INFO_SIZE,
+               "File-info record layout");
+_Static_assert(NKEM_V5_FILE_INFO_SIGNATURE_BLOCK_SIZE <= UINT16_MAX,
+               "Signature block length field");
+
+/* Oldest caller struct layouts, before original_name was added. */
+#define ENCRYPT_OPTIONS_V1_SIZE offsetof(NekoKEMEncryptOptions, original_name)
+#define ENCRYPT_OPTIONS_HAS_NAME(options) \
+    ((options)->struct_size >= sizeof(*(options)))
+
+static int is_bidi_control(uint32_t code_point)
+{
+    return code_point == 0x061CU || code_point == 0x200EU ||
+           code_point == 0x200FU ||
+           (code_point >= 0x202AU && code_point <= 0x202EU) ||
+           (code_point >= 0x2066U && code_point <= 0x2069U);
+}
+
+/* Well-formed UTF-8 (RFC 3629) without the characters the format forbids. */
+static int original_name_bytes_are_valid(const unsigned char *name,
+                                         size_t length)
+{
+    size_t index = 0U;
+
+    if (length == 0U || length > NEKOKEM_ORIGINAL_NAME_MAX ||
+        (length == 1U && name[0] == '.') ||
+        (length == 2U && name[0] == '.' && name[1] == '.')) {
+        return 0;
+    }
+    while (index < length) {
+        unsigned char lead = name[index];
+        uint32_t code_point;
+        uint32_t minimum;
+        size_t extra;
+        size_t next;
+
+        if (lead < 0x80U) {
+            code_point = lead;
+            minimum = 0U;
+            extra = 0U;
+        } else if (lead >= 0xC2U && lead <= 0xDFU) {
+            code_point = lead & 0x1FU;
+            minimum = 0x80U;
+            extra = 1U;
+        } else if (lead >= 0xE0U && lead <= 0xEFU) {
+            code_point = lead & 0x0FU;
+            minimum = 0x800U;
+            extra = 2U;
+        } else if (lead >= 0xF0U && lead <= 0xF4U) {
+            code_point = lead & 0x07U;
+            minimum = 0x10000U;
+            extra = 3U;
+        } else {
+            return 0;
+        }
+        if (extra > length - index - 1U) {
+            return 0;
+        }
+        for (next = 1U; next <= extra; ++next) {
+            unsigned char byte = name[index + next];
+
+            if ((byte & 0xC0U) != 0x80U) {
+                return 0;
+            }
+            code_point = (code_point << 6) | (byte & 0x3FU);
+        }
+        if (code_point < minimum || code_point > 0x10FFFFU ||
+            (code_point >= 0xD800U && code_point <= 0xDFFFU) ||
+            code_point < 0x20U ||
+            (code_point >= 0x7FU && code_point <= 0x9FU) ||
+            code_point == '/' || code_point == '\\' ||
+            is_bidi_control(code_point)) {
+            return 0;
+        }
+        index += extra + 1U;
+    }
+    return 1;
+}
+
+int nekokem_original_name_is_valid(const char *name)
+{
+    return name != NULL &&
+           original_name_bytes_are_valid((const unsigned char *)name,
+                                         strlen(name));
+}
+
+/* "NKFI" || 0x01 || 0x00 || u16be length || name || zero padding. */
+static void file_info_encode(const char *name,
+                             unsigned char record[NKEM_V5_FILE_INFO_SIZE])
+{
+    size_t length = strlen(name);
+
+    memset(record, 0, NKEM_V5_FILE_INFO_SIZE);
+    memcpy(record, "NKFI", 4U);
+    record[4] = 1U;
+    record[6] = (unsigned char)(length >> 8);
+    record[7] = (unsigned char)length;
+    memcpy(record + V5_FILE_INFO_NAME_OFFSET, name, length);
+}
+
+/* Copies the name into output (NEKOKEM_ORIGINAL_NAME_SIZE bytes) when valid. */
+static int file_info_decode(const unsigned char record[NKEM_V5_FILE_INFO_SIZE],
+                            char output[NEKOKEM_ORIGINAL_NAME_SIZE])
+{
+    size_t length;
+    size_t index;
+
+    if (memcmp(record, "NKFI", 4U) != 0 || record[4] != 1U ||
+        record[5] != 0U) {
+        return 0;
+    }
+    length = ((size_t)record[6] << 8) | record[7];
+    if (!original_name_bytes_are_valid(record + V5_FILE_INFO_NAME_OFFSET,
+                                       length)) {
+        return 0;
+    }
+    for (index = V5_FILE_INFO_NAME_OFFSET + length;
+         index < NKEM_V5_FILE_INFO_SIZE; ++index) {
+        if (record[index] != 0U) {
+            return 0;
+        }
+    }
+    memcpy(output, record + V5_FILE_INFO_NAME_OFFSET, length);
+    output[length] = '\0';
+    return 1;
+}
+
 static int hash_ciphertext(const unsigned char *ciphertext, size_t length,
                            void *user_data)
 {
@@ -61,19 +194,22 @@ static int derive_signature_key(
 }
 
 /*
- * M = label || metadata || payload digest || identity encoding, where the
- * payload digest is the leaf/root SHA-512 tree of payload_hash.h and
- * metadata is header || salt || entries || header MAC || nonce.
+ * M = label || metadata || payload digest || identity encoding [|| file
+ * info], where the payload digest is the leaf/root SHA-512 tree of
+ * payload_hash.h and metadata is header || salt || entries || header MAC ||
+ * nonce. file_info is NULL unless the header carries NKEM_V5_FLAG_FILE_INFO.
  */
 static unsigned char *build_message(const unsigned char *metadata,
                                     size_t metadata_len,
                                     const unsigned char digest[V5_DIGEST_SIZE],
                                     const unsigned char identity[IDENTITY_ENCODING_SIZE],
+                                    const unsigned char *file_info,
                                     size_t *message_len)
 {
     size_t label_len = sizeof(message_label) - 1U;
+    size_t info_len = file_info == NULL ? 0U : NKEM_V5_FILE_INFO_SIZE;
     size_t length = label_len + metadata_len + V5_DIGEST_SIZE +
-                    IDENTITY_ENCODING_SIZE;
+                    IDENTITY_ENCODING_SIZE + info_len;
     unsigned char *message = OPENSSL_malloc(length);
 
     if (message == NULL) {
@@ -85,6 +221,11 @@ static unsigned char *build_message(const unsigned char *metadata,
     memcpy(message + label_len + metadata_len, digest, V5_DIGEST_SIZE);
     memcpy(message + label_len + metadata_len + V5_DIGEST_SIZE, identity,
            IDENTITY_ENCODING_SIZE);
+    if (file_info != NULL) {
+        memcpy(message + label_len + metadata_len + V5_DIGEST_SIZE +
+                   IDENTITY_ENCODING_SIZE,
+               file_info, info_len);
+    }
     *message_len = length;
     return message;
 }
@@ -95,8 +236,9 @@ static int seal_signature_block(
     const unsigned char *metadata,
     size_t metadata_len,
     const unsigned char payload_tag[NKEM_TAG_SIZE],
-    const unsigned char plaintext[NKEM_V5_SIGNATURE_PLAINTEXT_SIZE],
-    unsigned char block[NKEM_V5_SIGNATURE_BLOCK_SIZE])
+    const unsigned char *plaintext,
+    size_t plaintext_len,
+    unsigned char *block)
 {
     EVP_CIPHER_CTX *context = EVP_CIPHER_CTX_new();
     unsigned char final_block[EVP_MAX_BLOCK_LENGTH];
@@ -113,12 +255,12 @@ static int seal_signature_block(
         EVP_EncryptUpdate(context, NULL, &length, payload_tag,
                           (int)NKEM_TAG_SIZE) <= 0 ||
         EVP_EncryptUpdate(context, block, &length, plaintext,
-                          (int)NKEM_V5_SIGNATURE_PLAINTEXT_SIZE) <= 0 ||
-        length != (int)NKEM_V5_SIGNATURE_PLAINTEXT_SIZE ||
+                          (int)plaintext_len) <= 0 ||
+        length != (int)plaintext_len ||
         EVP_EncryptFinal_ex(context, final_block, &length) <= 0 ||
         length != 0 ||
         EVP_CIPHER_CTX_ctrl(context, EVP_CTRL_GCM_GET_TAG, (int)NKEM_TAG_SIZE,
-                            block + NKEM_V5_SIGNATURE_PLAINTEXT_SIZE) <= 0) {
+                            block + plaintext_len) <= 0) {
         print_openssl_error("Cannot encrypt the NKEM v5 signature block");
         goto cleanup;
     }
@@ -135,8 +277,9 @@ static int open_signature_block(
     const unsigned char *metadata,
     size_t metadata_len,
     const unsigned char payload_tag[NKEM_TAG_SIZE],
-    const unsigned char block[NKEM_V5_SIGNATURE_BLOCK_SIZE],
-    unsigned char plaintext[NKEM_V5_SIGNATURE_PLAINTEXT_SIZE])
+    const unsigned char *block,
+    size_t plaintext_len,
+    unsigned char *plaintext)
 {
     EVP_CIPHER_CTX *context = EVP_CIPHER_CTX_new();
     unsigned char tag[NKEM_TAG_SIZE];
@@ -144,7 +287,7 @@ static int open_signature_block(
     int length = 0;
     int result = -1;
 
-    memcpy(tag, block + NKEM_V5_SIGNATURE_PLAINTEXT_SIZE, sizeof(tag));
+    memcpy(tag, block + plaintext_len, sizeof(tag));
     if (context == NULL ||
         EVP_DecryptInit_ex(context, EVP_aes_256_gcm(), NULL, NULL, NULL) <= 0 ||
         EVP_CIPHER_CTX_ctrl(context, EVP_CTRL_GCM_SET_IVLEN,
@@ -155,8 +298,8 @@ static int open_signature_block(
         EVP_DecryptUpdate(context, NULL, &length, payload_tag,
                           (int)NKEM_TAG_SIZE) <= 0 ||
         EVP_DecryptUpdate(context, plaintext, &length, block,
-                          (int)NKEM_V5_SIGNATURE_PLAINTEXT_SIZE) <= 0 ||
-        length != (int)NKEM_V5_SIGNATURE_PLAINTEXT_SIZE ||
+                          (int)plaintext_len) <= 0 ||
+        length != (int)plaintext_len ||
         EVP_CIPHER_CTX_ctrl(context, EVP_CTRL_GCM_SET_TAG, (int)sizeof(tag),
                             tag) <= 0) {
         print_openssl_error("Cannot decrypt the NKEM v5 signature block");
@@ -171,7 +314,7 @@ static int open_signature_block(
 
 cleanup:
     if (result != 1) {
-        secure_mem_clear(plaintext, NKEM_V5_SIGNATURE_PLAINTEXT_SIZE);
+        secure_mem_clear(plaintext, plaintext_len);
     }
     EVP_CIPHER_CTX_free(context);
     return result;
@@ -205,8 +348,10 @@ int nekokem_encrypt_file_v5_with_progress(
     unsigned char *message = NULL;
     PayloadHash *payload_hash = NULL;
     unsigned char identity[IDENTITY_ENCODING_SIZE];
-    unsigned char block_plaintext[NKEM_V5_SIGNATURE_PLAINTEXT_SIZE];
-    unsigned char block[NKEM_V5_SIGNATURE_BLOCK_SIZE];
+    unsigned char block_plaintext[V5_BLOCK_PLAINTEXT_MAX];
+    unsigned char block[V5_BLOCK_PLAINTEXT_MAX + NKEM_TAG_SIZE];
+    unsigned char *file_info = NULL;
+    const char *original_name = NULL;
     unsigned char digest[V5_DIGEST_SIZE];
     unsigned char file_key[NKEM_V4_FILE_KEY_SIZE] = {0};
     unsigned char payload_key[AES256_KEY_SIZE] = {0};
@@ -216,14 +361,18 @@ int nekokem_encrypt_file_v5_with_progress(
     unsigned char *nonce;
     size_t message_len = 0U;
     size_t metadata_len = 0U;
+    size_t block_plaintext_len = NKEM_V5_SIGNATURE_PLAINTEXT_SIZE;
     size_t mac_offset;
     size_t index;
+    uint32_t header_flags = 0U;
     uint64_t plaintext_len = 0U;
     int aes_result;
     int result = NEKOKEM_OPERATION_ERROR;
 
     encrypt_result_set(encrypt_result, 0);
-    if (options == NULL || options->struct_size < sizeof(*options) ||
+    if (options == NULL ||
+        (options->struct_size != ENCRYPT_OPTIONS_V1_SIZE &&
+         options->struct_size < sizeof(*options)) ||
         (options->flags & ~(uint32_t)NEKOKEM_ENCRYPT_UNSIGNED) != 0U ||
         (encrypt_result != NULL &&
          encrypt_result->struct_size < sizeof(*encrypt_result))) {
@@ -244,6 +393,16 @@ int nekokem_encrypt_file_v5_with_progress(
         !valid_path(options->sender_private_key_path)) {
         fprintf(stderr, file_message("NekoKEM Core received an empty file path\n"));
         goto cleanup;
+    }
+    if (ENCRYPT_OPTIONS_HAS_NAME(options) && options->original_name != NULL) {
+        original_name = options->original_name;
+        if (!nekokem_original_name_is_valid(original_name)) {
+            fprintf(stderr, file_message("The original file name cannot be recorded\n"));
+            goto cleanup;
+        }
+        header_flags = NKEM_V5_FLAG_FILE_INFO;
+        block_plaintext_len += NKEM_V5_FILE_INFO_SIZE;
+        file_info = block_plaintext + NKEM_V5_SIGNATURE_PLAINTEXT_SIZE;
     }
     if (public_key_paths == NULL || public_key_count == 0U ||
         public_key_count > NKEM_V4_MAX_RECIPIENTS) {
@@ -303,7 +462,7 @@ int nekokem_encrypt_file_v5_with_progress(
     }
     nonce = metadata + mac_offset + NKEM_V4_MAC_SIZE;
     nkem_v5_header_encode(metadata, (uint16_t)public_key_count,
-                          plaintext_len);
+                          plaintext_len, header_flags);
     if (RAND_bytes(file_key, (int)sizeof(file_key)) != 1 ||
         RAND_bytes(metadata + NKEM_V4_HEADER_SIZE,
                    (int)NKEM_V4_SALT_SIZE) != 1 ||
@@ -353,8 +512,11 @@ int nekokem_encrypt_file_v5_with_progress(
         !payload_hash_final(payload_hash, tag, digest)) {
         goto cleanup;
     }
+    if (file_info != NULL) {
+        file_info_encode(original_name, file_info);
+    }
     message = build_message(metadata, metadata_len, digest, identity,
-                            &message_len);
+                            file_info, &message_len);
     if (message == NULL) {
         goto cleanup;
     }
@@ -365,8 +527,9 @@ int nekokem_encrypt_file_v5_with_progress(
     }
     hybrid_keys_cleanup(&sender);
     if (!seal_signature_block(signature_key, metadata, metadata_len, tag,
-                              block_plaintext, block) ||
-        !file_write_all(output.stream, block, sizeof(block)) ||
+                              block_plaintext, block_plaintext_len, block) ||
+        !file_write_all(output.stream, block,
+                        block_plaintext_len + NKEM_TAG_SIZE) ||
         !atomic_file_commit(&output)) {
         goto cleanup;
     }
@@ -384,6 +547,7 @@ cleanup:
     OPENSSL_free(metadata);
     OPENSSL_free(message);
     payload_hash_free(payload_hash);
+    secure_mem_clear(block_plaintext, sizeof(block_plaintext));
     secure_mem_clear(file_key, sizeof(file_key));
     secure_mem_clear(payload_key, sizeof(payload_key));
     secure_mem_clear(mac_key, sizeof(mac_key));
@@ -504,8 +668,11 @@ int nekokem_v5_decrypt_opened(
     unsigned char *message = NULL;
     unsigned char *trusted = NULL;
     unsigned char *trusted_present = NULL;
-    unsigned char block[NKEM_V5_SIGNATURE_BLOCK_SIZE];
-    unsigned char block_plaintext[NKEM_V5_SIGNATURE_PLAINTEXT_SIZE];
+    unsigned char block[V5_BLOCK_PLAINTEXT_MAX + NKEM_TAG_SIZE];
+    unsigned char block_plaintext[V5_BLOCK_PLAINTEXT_MAX];
+    const unsigned char *file_info = NULL;
+    char original_name[NEKOKEM_ORIGINAL_NAME_SIZE] = {0};
+    size_t block_plaintext_len;
     unsigned char digest[V5_DIGEST_SIZE];
     unsigned char file_key[NKEM_V4_FILE_KEY_SIZE] = {0};
     unsigned char payload_key[AES256_KEY_SIZE] = {0};
@@ -528,6 +695,10 @@ int nekokem_v5_decrypt_opened(
         !nkem_v5_header_decode(raw_header, &header) ||
         !nkem_v5_container_size_is_valid(&header, container_size)) {
         goto cleanup;
+    }
+    block_plaintext_len = (size_t)header.signature_block_len - NKEM_TAG_SIZE;
+    if ((header.flags & NKEM_V5_FLAG_FILE_INFO) != 0U) {
+        file_info = block_plaintext + NKEM_V5_SIGNATURE_PLAINTEXT_SIZE;
     }
     trusted = load_trusted_identities(policy, &trusted_present);
     if (trusted == NULL) {
@@ -574,7 +745,7 @@ int nekokem_v5_decrypt_opened(
         goto cleanup;
     }
     if (aes_result != AES_GCM_FILE_SUCCESS ||
-        !file_read_exact(input, block, sizeof(block))) {
+        !file_read_exact(input, block, (size_t)header.signature_block_len)) {
         goto cleanup;
     }
     if (fgetc(input) != EOF || ferror(input) != 0) {
@@ -588,7 +759,8 @@ int nekokem_v5_decrypt_opened(
     }
 
     opened = open_signature_block(signature_key, metadata, metadata_len, tag,
-                                  block, block_plaintext);
+                                  block, block_plaintext_len,
+                                  block_plaintext);
     if (opened < 0) {
         goto cleanup;
     }
@@ -597,7 +769,7 @@ int nekokem_v5_decrypt_opened(
         goto invalid;
     }
     message = build_message(metadata, metadata_len, digest, block_plaintext,
-                            &message_len);
+                            file_info, &message_len);
     if (message == NULL) {
         goto cleanup;
     }
@@ -608,6 +780,11 @@ int nekokem_v5_decrypt_opened(
     }
     if (!identity_fingerprint(block_plaintext, fingerprint,
                               sizeof(fingerprint))) {
+        goto cleanup;
+    }
+    /* Signed by the sender, so a malformed record is a broken sender. */
+    if (file_info != NULL && !file_info_decode(file_info, original_name)) {
+        fprintf(stderr, file_message("The recorded original file name is invalid\n"));
         goto cleanup;
     }
 
@@ -643,6 +820,10 @@ int nekokem_v5_decrypt_opened(
         verify_result->trusted_signer_index = trusted_index;
         memcpy(verify_result->signer_fingerprint, fingerprint,
                sizeof(fingerprint));
+        if (verify_result->struct_size >= sizeof(*verify_result)) {
+            memcpy(verify_result->original_name, original_name,
+                   sizeof(original_name));
+        }
     }
     result = NEKOKEM_OPERATION_SUCCESS;
     goto cleanup;
@@ -660,6 +841,7 @@ cleanup:
     OPENSSL_free(trusted);
     OPENSSL_free(trusted_present);
     secure_mem_clear(block_plaintext, sizeof(block_plaintext));
+    secure_mem_clear(original_name, sizeof(original_name));
     secure_mem_clear(file_key, sizeof(file_key));
     secure_mem_clear(payload_key, sizeof(payload_key));
     secure_mem_clear(signature_key, sizeof(signature_key));

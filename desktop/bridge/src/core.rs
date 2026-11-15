@@ -71,6 +71,8 @@ pub struct Outcome {
     #[serde(skip_serializing_if="Option::is_none")] pub signature:Option<Signature>,
     // Fingerprint and upgrade: the X448 + ML-KEM-1024 fingerprint NekoKEM 4.x shows.
     #[serde(skip_serializing_if="Option::is_none")] pub can_verify:Option<bool>,
+    // Decryption: the file name a signed file recorded, made safe for this system.
+    #[serde(skip_serializing_if="Option::is_none")] pub original_name:Option<String>,
 }
 // Core decides the status and matches the signer; the GUI only reports it.
 #[derive(Serialize,Debug)]
@@ -204,14 +206,16 @@ impl Drop for Reservation { fn drop(&mut self){ self.backend.finish(&self.job); 
 type Progress=unsafe extern "C" fn(u64,u64,*mut c_void)->c_int;
 const ENCRYPT_UNSIGNED:u32=0x1;
 const VERIFY_REQUIRE_SIGNATURE:u32=0x1;
-#[repr(C)] struct EncryptOptions {struct_size:usize,flags:u32,sender_private_key_path:*const c_char,password:*const u8,password_len:usize}
+#[repr(C)] struct EncryptOptions {struct_size:usize,flags:u32,sender_private_key_path:*const c_char,password:*const u8,password_len:usize,original_name:*const c_char}
 #[repr(C)] struct EncryptResult {struct_size:usize,format_version:c_int,signed_by_sender:c_int}
 #[repr(C)] struct VerifyPolicy {struct_size:usize,flags:u32,trusted_signer_paths:*const *const c_char,trusted_signer_count:usize,signer_public_key_output_path:*const c_char}
-#[repr(C)] struct VerifyResult {struct_size:usize,format_version:c_int,signature_status:c_int,trusted_signer_index:usize,signer_fingerprint:[c_char;96]}
+const ORIGINAL_NAME_SIZE:usize=1017;
+#[repr(C)] struct VerifyResult {struct_size:usize,format_version:c_int,signature_status:c_int,trusted_signer_index:usize,signer_fingerprint:[c_char;96],original_name:[c_char;ORIGINAL_NAME_SIZE]}
 extern "C" {
     fn nekokem_generate_keypair(public:*const c_char, private:*const c_char,password:*const u8,length:usize)->c_int;
     fn nekokem_replace_keypair(public:*const c_char, private:*const c_char,password:*const u8,length:usize)->c_int;
     fn nekokem_encrypt_file_v5_with_progress(input:*const c_char,output:*const c_char,keys:*const *const c_char,count:usize,options:*const EncryptOptions,result:*mut EncryptResult,callback:Option<Progress>,data:*mut c_void)->c_int;
+    fn nekokem_original_name_is_valid(name:*const c_char)->c_int;
     fn nekokem_decrypt_file_verified_with_progress(input:*const c_char,output:*const c_char,key:*const c_char,password:*const u8,length:usize,policy:*const VerifyPolicy,result:*mut VerifyResult,callback:Option<Progress>,data:*mut c_void)->c_int;
     fn nekokem_upgrade_to_identity_keys(public:*const c_char,private:*const c_char,password:*const u8,length:usize)->c_int;
     fn nekokem_export_legacy_public_key(key:*const c_char,output:*const c_char)->c_int;
@@ -244,6 +248,27 @@ fn exists(path:&CStr)->Option<bool> {
 fn same_file(first:&CStr,second:&CStr)->Option<bool> {
     let mut same=0;
     (unsafe{file_paths_are_same_file(first.as_ptr(),second.as_ptr(),&mut same)}==1).then_some(same!=0)
+}
+// The input's file name when Core can record it; otherwise none is recorded.
+fn recordable_name(input:&str)->Option<CString> {
+    let name=CString::new(std::path::Path::new(input).file_name()?.to_str()?).ok()?;
+    (unsafe{nekokem_original_name_is_valid(name.as_ptr())}==1).then_some(name)
+}
+// Core already refused separators, controls and bidi characters. Windows
+// also forbids <>:"|?*, trailing dots and spaces, and device names.
+pub(crate) fn restored_name(name:&str,windows:bool)->Option<String> {
+    if !windows {return (!name.is_empty()).then(||name.to_owned());}
+    let mut safe:String=name.chars().map(|c| if "<>:\"|?*".contains(c) {'_'} else {c}).collect();
+    while safe.ends_with('.')||safe.ends_with(' ') {safe.pop();}
+    let stem=safe.split('.').next().unwrap_or("").trim_end().to_ascii_uppercase();
+    let device=matches!(stem.as_str(),"CON"|"PRN"|"AUX"|"NUL"|"CONIN$"|"CONOUT$")||
+        ((stem.starts_with("COM")||stem.starts_with("LPT"))&&stem.len()==4&&matches!(stem.as_bytes()[3],b'1'..=b'9'));
+    if device {safe.insert(0,'_');}
+    (!safe.is_empty()).then_some(safe)
+}
+fn original_name_text(output:&[c_char;ORIGINAL_NAME_SIZE])->Option<String> {
+    let name=unsafe{CStr::from_ptr(output.as_ptr())}.to_str().ok()?;
+    restored_name(name,cfg!(windows))
 }
 fn fingerprint_text(output:&[c_char;96])->String { unsafe{CStr::from_ptr(output.as_ptr()).to_string_lossy().into_owned()} }
 // Core parses and validates every public component before hashing: the
@@ -422,7 +447,8 @@ pub fn execute<F:Fn(u64,u64)>(backend:&Backend,request:Request,job:Arc<Job>,emit
         let output_mode=OutputMode::new(!request.overwrite);
         let sign_key=if signing {Some(path(&request.sign_key_path)?)} else {None};
         let mut written=EncryptResult{struct_size:std::mem::size_of::<EncryptResult>(),format_version:0,signed_by_sender:0};
-        let mut verified=VerifyResult{struct_size:std::mem::size_of::<VerifyResult>(),format_version:0,signature_status:0,trusted_signer_index:0,signer_fingerprint:[0;96]};
+        let mut verified=VerifyResult{struct_size:std::mem::size_of::<VerifyResult>(),format_version:0,signature_status:0,trusted_signer_index:0,signer_fingerprint:[0;96],original_name:[0;ORIGINAL_NAME_SIZE]};
+        let original_name=if request.kind==Kind::Encrypt && signing {recordable_name(&request.input)} else {None};
         let signer_paths:Vec<*const c_char>=signers.iter().map(|(_,stage):&(String,Staged)|stage.path().map_or(std::ptr::null(),CStr::as_ptr)).collect();
         if signer_paths.iter().any(|pointer|pointer.is_null()) {return Err(Failure::new("internal"));}
         let status=unsafe{match request.kind {
@@ -430,7 +456,8 @@ pub fn execute<F:Fn(u64,u64)>(backend:&Backend,request:Request,job:Arc<Job>,emit
                 let pointers:Vec<*const c_char>=keys.iter().map(|key|key.as_ptr()).collect();
                 let options=EncryptOptions{struct_size:std::mem::size_of::<EncryptOptions>(),flags:if signing {0} else {ENCRYPT_UNSIGNED},
                     sender_private_key_path:sign_key.as_ref().map_or(std::ptr::null(),|key|key.as_ptr()),
-                    password:if signing {request.password.as_ptr()} else {std::ptr::null()},password_len:if signing {request.password.len()} else {0}};
+                    password:if signing {request.password.as_ptr()} else {std::ptr::null()},password_len:if signing {request.password.len()} else {0},
+                    original_name:original_name.as_ref().map_or(std::ptr::null(),|name|name.as_ptr())};
                 nekokem_encrypt_file_v5_with_progress(input.as_ptr(),output.as_ptr(),pointers.as_ptr(),pointers.len(),&options,&mut written,Some(progress::<F>),data)
             }
             Kind::Decrypt=>{
@@ -455,6 +482,7 @@ pub fn execute<F:Fn(u64,u64)>(backend:&Backend,request:Request,job:Arc<Job>,emit
             Kind::Encrypt=>outcome.format=Some(written.format_version),
             Kind::Decrypt=>{
                 outcome.format=Some(verified.format_version);
+                outcome.original_name=original_name_text(&verified.original_name);
                 outcome.signature=Some(match verified.signature_status {
                     1=>Signature{status:"trusted",fingerprint:Some(fingerprint_text(&verified.signer_fingerprint)),
                         contact:signers.get(verified.trusted_signer_index).map(|(id,_)|id.clone()),signer_key:None},
@@ -865,6 +893,11 @@ mod tests {
         assert_eq!((signature.status,signature.fingerprint.as_deref(),signature.contact.as_deref(),signature.signer_key.is_none()),
                    ("trusted",Some(alice_fingerprint.as_str()),Some(alice_id.as_str()),true));
         assert_eq!(outcome.format,Some(5));
+        // The signed file restores the plaintext's name even after a rename.
+        assert_eq!(outcome.original_name.as_deref(),Some("plain"));
+        fs::rename(keys.file("signed.nkem"),keys.file("renamed.bin")).unwrap();
+        assert_eq!(run(&backend,decrypt("renamed.bin","renamed.out")).unwrap().original_name.as_deref(),Some("plain"));
+        fs::rename(keys.file("renamed.bin"),keys.file("signed.nkem")).unwrap();
 
         // Not a contact: valid but untrusted, with her key offered for saving.
         {let _core=contact::core_lock();Store::open().unwrap().delete(&alice_id).unwrap();}
@@ -879,6 +912,7 @@ mod tests {
         let mut r=encrypt("unsigned.nkem");r.unsigned=true;r.sign_key_path=String::new();r.password=Zeroizing::new(String::new());
         assert_eq!(run(&backend,r).unwrap().format,Some(3));
         let outcome=run(&backend,decrypt("unsigned.nkem","unsigned.out")).unwrap();
+        assert_eq!(outcome.original_name,None);
         assert_eq!((outcome.format,outcome.signature.unwrap().status),(Some(3),"unsigned"));
         let mut r=decrypt("unsigned.nkem","required.out");r.require_signature=true;
         assert_eq!(run(&backend,r).err().unwrap().code,"signature-required");
@@ -901,6 +935,19 @@ mod tests {
         let mut r=request(Kind::Fingerprint);r.key_path=keys.file("alice-legacy.pub");let outcome=run(&backend,r).unwrap();
         assert_eq!((outcome.fingerprint,outcome.can_verify),(Some(legacy),Some(false)));
         assert_eq!(staging_entries(),staged);
+    }
+    #[test]
+    fn restored_names_are_safe_for_the_save_dialog() {
+        assert_eq!(restored_name("合同 v2.pdf",false).as_deref(),Some("合同 v2.pdf"));
+        assert_eq!(restored_name("a:b?.txt",false).as_deref(),Some("a:b?.txt"));
+        assert_eq!(restored_name("a:b?.txt",true).as_deref(),Some("a_b_.txt"));
+        assert_eq!(restored_name("notes. . ",true).as_deref(),Some("notes"));
+        assert_eq!(restored_name("con.txt",true).as_deref(),Some("_con.txt"));
+        assert_eq!(restored_name("COM1",true).as_deref(),Some("_COM1"));
+        assert_eq!(restored_name("COM10.txt",true).as_deref(),Some("COM10.txt"));
+        assert_eq!(restored_name("...",true),None);
+        assert!(recordable_name("/tmp/report.pdf").is_some());
+        assert!(recordable_name("/").is_none());
     }
     #[test]
     fn upgrading_a_legacy_key_keeps_its_encryption_keys_and_password() {

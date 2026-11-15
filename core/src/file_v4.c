@@ -197,9 +197,17 @@ int nkem_v4_container_parse(const unsigned char *input, size_t input_len)
 }
 
 /* NKEM v5: the v4 layout with a signature block after the payload tag. */
+size_t nkem_v5_signature_block_size(uint32_t flags)
+{
+    return (flags & NKEM_V5_FLAG_FILE_INFO) != 0U
+               ? NKEM_V5_FILE_INFO_SIGNATURE_BLOCK_SIZE
+               : NKEM_V5_SIGNATURE_BLOCK_SIZE;
+}
+
 void nkem_v5_header_encode(unsigned char output[NKEM_V4_HEADER_SIZE],
                            uint16_t recipient_count,
-                           uint64_t ciphertext_len)
+                           uint64_t ciphertext_len,
+                           uint32_t flags)
 {
     memcpy(output, "NKEM", 4U);
     output[4] = NKEM_V5_VERSION;
@@ -207,14 +215,14 @@ void nkem_v5_header_encode(unsigned char output[NKEM_V4_HEADER_SIZE],
     put_u16_be(output + 6U, (uint16_t)NKEM_V4_HEADER_SIZE);
     put_u16_be(output + 8U, recipient_count);
     put_u16_be(output + 10U, (uint16_t)NKEM_V4_ENTRY_SIZE);
-    put_u16_be(output + 12U, (uint16_t)NKEM_V5_SIGNATURE_BLOCK_SIZE);
+    put_u16_be(output + 12U, (uint16_t)nkem_v5_signature_block_size(flags));
     put_u16_be(output + 14U, 0U);
     put_u64_be(output + 16U, ciphertext_len);
     output[24] = NKEM_V4_SALT_SIZE;
     output[25] = NKEM_NONCE_SIZE;
     output[26] = NKEM_TAG_SIZE;
     output[27] = NKEM_V4_MAC_SIZE;
-    put_u32_be(output + 28U, 0U);
+    put_u32_be(output + 28U, flags);
 }
 
 static int nkem_v5_header_decode_internal(
@@ -225,7 +233,8 @@ static int nkem_v5_header_decode_internal(
     if (memcmp(input, "NKEM", 4U) != 0 || input[4] != NKEM_V5_VERSION ||
         input[5] != NKEM_V5_ALGORITHM_ID ||
         get_u16_be(input + 6U) != NKEM_V4_HEADER_SIZE ||
-        get_u16_be(input + 14U) != 0U || get_u32_be(input + 28U) != 0U) {
+        get_u16_be(input + 14U) != 0U ||
+        (get_u32_be(input + 28U) & ~(uint32_t)NKEM_V5_FLAG_FILE_INFO) != 0U) {
         if (report_errors != 0) {
             fprintf(stderr, file_message("Invalid NKEM v5 header\n"));
         }
@@ -235,6 +244,7 @@ static int nkem_v5_header_decode_internal(
     header->recipient_count = get_u16_be(input + 8U);
     header->entry_len = get_u16_be(input + 10U);
     header->signature_block_len = get_u16_be(input + 12U);
+    header->flags = get_u32_be(input + 28U);
     header->ciphertext_len = get_u64_be(input + 16U);
     header->salt_len = input[24];
     header->nonce_len = input[25];
@@ -244,7 +254,8 @@ static int nkem_v5_header_decode_internal(
     if (header->recipient_count == 0U ||
         header->recipient_count > NKEM_V4_MAX_RECIPIENTS ||
         header->entry_len != NKEM_V4_ENTRY_SIZE ||
-        header->signature_block_len != NKEM_V5_SIGNATURE_BLOCK_SIZE ||
+        header->signature_block_len !=
+            nkem_v5_signature_block_size(header->flags) ||
         header->salt_len != NKEM_V4_SALT_SIZE ||
         header->nonce_len != NKEM_NONCE_SIZE ||
         header->tag_len != NKEM_TAG_SIZE ||
@@ -286,7 +297,9 @@ static int nkem_v5_container_size_is_valid_internal(
 {
     if (header->recipient_count == 0U ||
         header->recipient_count > NKEM_V4_MAX_RECIPIENTS ||
-        header->signature_block_len != NKEM_V5_SIGNATURE_BLOCK_SIZE ||
+        (header->flags & ~(uint32_t)NKEM_V5_FLAG_FILE_INFO) != 0U ||
+        header->signature_block_len !=
+            nkem_v5_signature_block_size(header->flags) ||
         !nkem_gcm_data_size_is_valid(header->ciphertext_len)) {
         if (report_errors != 0) {
             fprintf(stderr, file_message("Invalid NKEM v5 header\n"));
@@ -296,7 +309,7 @@ static int nkem_v5_container_size_is_valid_internal(
     /* Every term is bounded far below 2^64, so the sum cannot wrap. */
     if (nkem_v5_metadata_size(header->recipient_count) +
             header->ciphertext_len + NKEM_TAG_SIZE +
-            NKEM_V5_SIGNATURE_BLOCK_SIZE != actual_size) {
+            header->signature_block_len != actual_size) {
         if (report_errors != 0) {
             fprintf(stderr,
                     file_message("NKEM v5 container is truncated or has trailing data\n"));

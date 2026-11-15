@@ -611,6 +611,24 @@ static int read_existing_password(const char *private_key_path,
            read_password_line(file_message("请输入私钥密码："), password);
 }
 
+/* The input's last path component, recorded so decryption can show it. */
+static const char *original_name_of(const char *input_path)
+{
+    const char *name = input_path;
+    const char *cursor;
+
+    for (cursor = input_path; *cursor != '\0'; ++cursor) {
+#ifdef _WIN32
+        if (*cursor == '/' || *cursor == '\\' || *cursor == ':') {
+#else
+        if (*cursor == '/') {
+#endif
+            name = cursor + 1;
+        }
+    }
+    return nekokem_original_name_is_valid(name) ? name : NULL;
+}
+
 int cli_run_hybrid_encrypt(const char *input_path,
                            const char *output_path,
                            const char *const *public_key_paths,
@@ -627,6 +645,7 @@ int cli_run_hybrid_encrypt(const char *input_path,
     memset(&result, 0, sizeof(result));
     options.struct_size = sizeof(options);
     result.struct_size = sizeof(result);
+    options.original_name = original_name_of(input_path);
     if (unsigned_output != 0) {
         options.flags = NEKOKEM_ENCRYPT_UNSIGNED;
     } else {
@@ -740,6 +759,9 @@ int cli_run_hybrid_decrypt(const char *input_path,
     printf(file_message("Decrypted NKEM %s -> %s\n"),
            file_display_safe_path(input_path), file_display_safe_path(output_path));
     print_signature_status(&result, verify->trusted_paths);
+    if (result.original_name[0] != '\0') {
+        printf(file_message("Original file name: %s\n"), result.original_name);
+    }
     if (verify->save_signer_path != NULL) {
         printf(file_message("Saved the signer's public key: %s\n"),
                file_display_safe_path(verify->save_signer_path));
