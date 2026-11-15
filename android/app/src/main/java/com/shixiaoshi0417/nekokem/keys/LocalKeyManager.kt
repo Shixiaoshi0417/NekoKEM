@@ -35,6 +35,34 @@ object NkprFormat {
 
     /** NKPR v1 and v2 do not commit to the password-derived key. */
     fun lacksCommitment(version: Int): Boolean = version == 1 || version == IDENTITY
+
+    /**
+     * The NKPR version byte of [file], or 0 when it is not an NKPR container.
+     * Only the first five bytes are read; this drives a hint, not a decision
+     * Core relies on.
+     */
+    fun versionOf(file: java.io.File): Int = try {
+        val header = ByteArray(5)
+        val read = file.inputStream().use { input ->
+            var filled = 0
+            while (filled < header.size) {
+                val count = input.read(header, filled, header.size - filled)
+                if (count < 0) break
+                filled += count
+            }
+            filled
+        }
+        if (read == header.size &&
+            header[0] == 'N'.code.toByte() && header[1] == 'K'.code.toByte() &&
+            header[2] == 'P'.code.toByte() && header[3] == 'R'.code.toByte()
+        ) {
+            header[4].toInt() and 0xff
+        } else {
+            0
+        }
+    } catch (_: java.io.IOException) {
+        0
+    }
 }
 
 /**
@@ -99,6 +127,7 @@ class LocalKeyManager internal constructor(
                     RESULT_KEY_FORMAT_CURRENT
                 else -> {
                     val result = NativeBridge.nativeUpgradePrivateKeyFormat(
+                        publicKey.absolutePath,
                         privateKey.absolutePath,
                         password,
                     )

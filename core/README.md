@@ -59,7 +59,8 @@ Core 使用 OpenSSL EVP、NKEM v3（单接收方）、NKEM v4（多接收方）�
   （1 至 3，其他文件为 0），不需要口令。前端据此在用户向不是自己的 NKPR v1/v2 文件
   输入口令前给出提示。
 - `nekokem_upgrade_private_key_format()`：把 NKPR v2 私钥用同一口令重写为 NKPR v3，
-  密钥不变，原子替换文件；口令错误、NKPR v1 或已是 v3 时失败且不改动文件。
+  密钥不变，原子替换文件；口令错误、NKPR v1、已是 v3，或传入的公钥与该私钥不成对时
+  失败且不改动文件。
 - `nekokem_encrypt_file_v5_with_progress()`：默认为 1 至 64 位接收方写出签名的 v5；
   设置 `NEKOKEM_ENCRYPT_UNSIGNED` 时与 `nekokem_encrypt_file_multi_with_progress()`
   相同地写出 v3 或 v4。发送方密钥缺失或只有两段时报错，不会静默改为不签名。

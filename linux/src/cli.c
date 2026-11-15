@@ -829,7 +829,8 @@ int cli_run_upgrade_key(const char *public_key_path,
             goto cleanup;
         }
         if (!read_password_line(file_message("请输入私钥密码："), &password) ||
-            !nekokem_upgrade_private_key_format(private_key_path,
+            !nekokem_upgrade_private_key_format(public_key_path,
+                                                private_key_path,
                                                 password.data,
                                                 password.length)) {
             goto cleanup;

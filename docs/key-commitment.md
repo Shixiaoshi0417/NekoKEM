@@ -152,7 +152,9 @@ ends act on the version before any password is entered:
   as NKPR v3 with the same password: "Upgrade private key format" on
   Android, the "Upgrade key" page on the desktop apps, `upgrade-key` in the
   CLI (`nekokem_upgrade_private_key_format()` in Core). The rewrite is
-  explicit because older versions cannot read the result.
+  explicit because older versions cannot read the result. Core takes the
+  public key too and refuses a pair that does not match, since the desktop
+  apps keep the two selected files as the user's key pair afterwards.
 
 ### Compatibility
 

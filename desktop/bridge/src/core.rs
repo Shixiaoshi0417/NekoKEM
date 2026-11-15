@@ -566,6 +566,7 @@ extern "C" {
     ) -> c_int;
     fn nekokem_private_key_format_version(key: *const c_char) -> c_int;
     fn nekokem_upgrade_private_key_format(
+        public: *const c_char,
         private: *const c_char,
         password: *const u8,
         length: usize,
@@ -938,6 +939,7 @@ pub fn execute<F: Fn(u64, u64)>(
             }
             if unsafe {
                 nekokem_upgrade_private_key_format(
+                    public.as_ptr(),
                     private.as_ptr(),
                     request.password.as_ptr(),
                     request.password.len(),
@@ -2187,6 +2189,17 @@ mod tests {
             run(&backend, upgrade("wrong")).err().unwrap().code,
             "core-error"
         );
+        assert_eq!(fs::read(&private).unwrap(), before);
+        // Someone else's identity public key is not this key's pair.
+        let mut r = request(Kind::Keygen);
+        r.public_path = dir.file("other.public.key");
+        r.private_path = dir.file("other.private.key.enc");
+        r.password = Zeroizing::new("public test password".into());
+        r.confirmation = r.password.clone();
+        run(&backend, r).unwrap();
+        let mut r = upgrade(NKPR_V2_PASSWORD);
+        r.public_path = dir.file("other.public.key");
+        assert_eq!(run(&backend, r).err().unwrap().code, "core-error");
         assert_eq!(fs::read(&private).unwrap(), before);
         let outcome = run(&backend, upgrade(NKPR_V2_PASSWORD)).unwrap();
         assert_eq!(

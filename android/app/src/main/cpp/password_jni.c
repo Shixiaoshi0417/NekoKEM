@@ -243,22 +243,28 @@ JNIEXPORT jint JNICALL
 Java_com_shixiaoshi0417_nekokem_nativecore_NativeBridge_nativeUpgradePrivateKeyFormat(
     JNIEnv *env,
     jobject bridge,
+    jstring public_key_path,
     jstring private_key_path,
     jbyteArray password_array)
 {
+    PasswordJniPath public_path = {0};
     PasswordJniPath private_path = {0};
     unsigned char *password = NULL;
     size_t password_len = 0U;
     int result;
 
     (void)bridge;
-    result = password_path_acquire(env, private_key_path, &private_path);
+    result = password_path_acquire(env, public_key_path, &public_path);
+    if (result == PASSWORD_JNI_SUCCESS) {
+        result = password_path_acquire(env, private_key_path, &private_path);
+    }
     if (result == PASSWORD_JNI_SUCCESS) {
         result = password_bytes_copy(env, password_array,
                                      &password, &password_len);
     }
     if (result == PASSWORD_JNI_SUCCESS) {
-        result = nekokem_upgrade_private_key_format(private_path.value,
+        result = nekokem_upgrade_private_key_format(public_path.value,
+                                                    private_path.value,
                                                     password,
                                                     password_len) == 1
                      ? PASSWORD_JNI_SUCCESS
@@ -266,6 +272,7 @@ Java_com_shixiaoshi0417_nekokem_nativecore_NativeBridge_nativeUpgradePrivateKeyF
     }
     OPENSSL_clear_free(password, password_len);
     password_path_release(env, &private_path);
+    password_path_release(env, &public_path);
     return (jint)result;
 }
 

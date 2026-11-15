@@ -48,9 +48,11 @@ int hybrid_upgrade_to_identity(const char *public_path,
                                size_t password_len);
 /*
  * Rewrites an NKPR v2 private key as NKPR v3 with the same keys and
- * password. NKPR v1 and v3 keys fail and are left untouched.
+ * password. NKPR v1 and v3 keys, and a public key that is not this private
+ * key's, fail and leave the file untouched.
  */
-int hybrid_upgrade_private_key_format(const char *private_path,
+int hybrid_upgrade_private_key_format(const char *public_path,
+                                      const char *private_path,
                                       const unsigned char *password,
                                       size_t password_len);
 /* Two or four PEM public keys; a fifth or anything else fails. */

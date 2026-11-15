@@ -573,7 +573,7 @@ static int test_versions_and_upgrade(void)
     CHECK(memcmp(commitment, key, sizeof(key)) != 0);
 
     /* A v3 key is already current. */
-    CHECK(!nekokem_upgrade_private_key_format("a.key", password,
+    CHECK(!nekokem_upgrade_private_key_format("a.pub", "a.key", password,
                                               sizeof(password) - 1U));
     CHECK(same_file("a.key", file, file_len));
     OPENSSL_free(file);
@@ -595,18 +595,28 @@ static int test_versions_and_upgrade(void)
     CHECK(read_file("b.key", &file, &file_len));
 
     /* Refusals leave the file as it was. */
-    CHECK(!nekokem_upgrade_private_key_format("b.key", other_password,
+    CHECK(!nekokem_upgrade_private_key_format("a.pub", "b.key", other_password,
                                               sizeof(other_password) - 1U));
-    CHECK(!nekokem_upgrade_private_key_format("b.key", NULL, 0U));
-    CHECK(!nekokem_upgrade_private_key_format("", password,
+    CHECK(!nekokem_upgrade_private_key_format("a.pub", "b.key", NULL, 0U));
+    CHECK(!nekokem_upgrade_private_key_format("a.pub", "", password,
                                               sizeof(password) - 1U));
-    CHECK(!nekokem_upgrade_private_key_format("missing.key", password,
+    CHECK(!nekokem_upgrade_private_key_format("a.pub", "missing.key", password,
+                                              sizeof(password) - 1U));
+    /* Someone else's identity public key is not this key's pair. */
+    CHECK(nekokem_generate_keypair("x.pub", "x.key", password,
+                                   sizeof(password) - 1U));
+    CHECK(!nekokem_upgrade_private_key_format("x.pub", "b.key", password,
+                                              sizeof(password) - 1U));
+    CHECK(!nekokem_upgrade_private_key_format("missing.pub", "b.key",
+                                              password,
+                                              sizeof(password) - 1U));
+    CHECK(!nekokem_upgrade_private_key_format("", "b.key", password,
                                               sizeof(password) - 1U));
     CHECK(same_file("b.key", file, file_len));
     OPENSSL_free(file);
     file = NULL;
 
-    CHECK(nekokem_upgrade_private_key_format("b.key", password,
+    CHECK(nekokem_upgrade_private_key_format("a.pub", "b.key", password,
                                              sizeof(password) - 1U));
     CHECK(nekokem_private_key_format_version("b.key") ==
           NEKOKEM_NKPR_VERSION_COMMITTED);
@@ -622,7 +632,7 @@ static int test_versions_and_upgrade(void)
     CHECK(version == NKPR_VERSION_COMMITTED && copy_len == pem_len &&
           memcmp(copy, pem, pem_len) == 0);
     OPENSSL_clear_free(copy, copy_len);
-    CHECK(!nekokem_upgrade_private_key_format("b.key", password,
+    CHECK(!nekokem_upgrade_private_key_format("a.pub", "b.key", password,
                                               sizeof(password) - 1U));
     /* The upgraded key still belongs to the same public key. */
     CHECK(nekokem_encrypt_file("a.pub", "a.nkem", "a.pub"));
@@ -643,7 +653,7 @@ static int test_versions_and_upgrade(void)
     CHECK(nekokem_decrypt_file("a.nkem", "c.out", "c.key", password,
                                sizeof(password) - 1U));
     CHECK(read_file("c.key", &file, &file_len));
-    CHECK(!nekokem_upgrade_private_key_format("c.key", password,
+    CHECK(!nekokem_upgrade_private_key_format("a.pub", "c.key", password,
                                               sizeof(password) - 1U));
     CHECK(same_file("c.key", file, file_len));
     OPENSSL_free(file);

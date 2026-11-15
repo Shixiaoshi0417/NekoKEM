@@ -489,11 +489,13 @@ static unsigned int nkpr_components(unsigned int version)
     return version == NKPR_VERSION ? 2U : 4U;
 }
 
-int hybrid_upgrade_private_key_format(const char *private_path,
+int hybrid_upgrade_private_key_format(const char *public_path,
+                                      const char *private_path,
                                       const unsigned char *password,
                                       size_t password_len)
 {
     HybridKeys keys = {0};
+    HybridKeys public_keys = {0};
     AtomicFile output = {0};
     unsigned char *pem = NULL;
     size_t pem_len = 0U;
@@ -518,6 +520,16 @@ int hybrid_upgrade_private_key_format(const char *private_path,
         !x448_private_key_is_usable(keys.x448)) {
         goto cleanup;
     }
+    /* Callers adopt the two paths as one key pair, so they must be one. */
+    if (!hybrid_load_public_keys(public_path, &public_keys) ||
+        !hybrid_keys_have_identity(&public_keys) ||
+        EVP_PKEY_eq(public_keys.x448, keys.x448) != 1 ||
+        EVP_PKEY_eq(public_keys.mlkem, keys.mlkem) != 1 ||
+        EVP_PKEY_eq(public_keys.ed448, keys.ed448) != 1 ||
+        EVP_PKEY_eq(public_keys.mldsa, keys.mldsa) != 1) {
+        fprintf(stderr, file_message("The public key does not belong to this private key\n"));
+        goto cleanup;
+    }
     if (!protected_private_key_stage_version(
             &output, private_path, pem, pem_len, password, password_len,
             NKPR_VERSION_COMMITTED) ||
@@ -528,6 +540,7 @@ int hybrid_upgrade_private_key_format(const char *private_path,
 
 cleanup:
     atomic_file_abort(&output);
+    hybrid_keys_cleanup(&public_keys);
     hybrid_keys_cleanup(&keys);
     secure_free(pem, pem_len);
     return success;

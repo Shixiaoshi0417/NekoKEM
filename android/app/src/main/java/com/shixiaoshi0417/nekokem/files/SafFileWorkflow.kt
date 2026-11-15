@@ -858,7 +858,7 @@ class SafFileWorkflow(
     }
 
     private fun privateKeyFileLacksCommitment(file: File): Boolean =
-        NkprFormat.lacksCommitment(NativeBridge.nativePrivateKeyFormatVersion(file.absolutePath))
+        NkprFormat.lacksCommitment(NkprFormat.versionOf(file))
 
     /**
      * Whether a private key chosen for import is NKPR v1 or v2, the formats

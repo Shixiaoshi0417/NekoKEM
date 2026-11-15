@@ -310,10 +310,12 @@ NEKOKEM_API int nekokem_private_key_format_version(
  * Rewrites an NKPR v2 private key as NKPR v3 with the same keys and the
  * same password, replacing the file atomically. NekoKEM 5.2 and earlier
  * cannot read the result. Fails without changing the file for a wrong
- * password, an NKPR v1 key (use nekokem_upgrade_to_identity_keys) and a key
- * that is already NKPR v3.
+ * password, an NKPR v1 key (use nekokem_upgrade_to_identity_keys), a key
+ * that is already NKPR v3, and a public key that is not this private key's:
+ * callers keep the two paths as one key pair, so Core checks that they are.
  */
 NEKOKEM_API int nekokem_upgrade_private_key_format(
+    const char *public_key_path,
     const char *private_key_path,
     const unsigned char *password,
     size_t password_len);

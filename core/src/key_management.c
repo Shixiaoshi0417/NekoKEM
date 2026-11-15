@@ -95,11 +95,13 @@ int nekokem_private_key_format_version(const char *private_key_path)
 }
 
 int nekokem_upgrade_private_key_format(
+    const char *public_key_path,
     const char *private_key_path,
     const unsigned char *password,
     size_t password_len)
 {
-    if (!managed_path_is_valid(private_key_path)) {
+    if (!managed_path_is_valid(public_key_path) ||
+        !managed_path_is_valid(private_key_path)) {
         fprintf(stderr, file_message("NekoKEM Core received an empty key path\n"));
         return 0;
     }
@@ -111,7 +113,8 @@ int nekokem_upgrade_private_key_format(
         fprintf(stderr, file_message("Only a protected NKPR private key can be upgraded\n"));
         return 0;
     }
-    return hybrid_upgrade_private_key_format(private_key_path, password,
+    return hybrid_upgrade_private_key_format(public_key_path,
+                                             private_key_path, password,
                                              password_len);
 }
 

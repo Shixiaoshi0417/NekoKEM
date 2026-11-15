@@ -147,8 +147,12 @@ object NativeBridge {
      */
     external fun nativePrivateKeyFormatVersion(privateKeyPath: String): Int
 
-    /** Rewrites an NKPR v2 private key as NKPR v3 with the same keys and password. */
+    /**
+     * Rewrites an NKPR v2 private key as NKPR v3 with the same keys and
+     * password. The public key must be this private key's.
+     */
     external fun nativeUpgradePrivateKeyFormat(
+        publicKeyPath: String,
         privateKeyPath: String,
         password: ByteArray,
     ): Int
