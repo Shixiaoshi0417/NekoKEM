@@ -52,7 +52,7 @@ class DecryptFolderSettingsScreenshots {
     private fun settings(style: UiStyle, dark: Boolean, folder: String?, reachable: Boolean = true) {
         val state = NekoKEMUiState(
             nativeConnected = true,
-            nativeVersion = "5.1.0",
+            nativeVersion = "5.2.0",
             privateKeyExists = true,
             fingerprint = "0123 4567 89AB CDEF",
             selectedFileName = null,
