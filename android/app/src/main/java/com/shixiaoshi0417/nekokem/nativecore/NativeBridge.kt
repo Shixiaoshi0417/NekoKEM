@@ -154,7 +154,9 @@ object NativeBridge {
 
     /**
      * Writes one NKEM v5 file for every key, signed with the identity private
-     * key at [signKeyPath]. Never falls back to an unsigned file.
+     * key at [signKeyPath]. Never falls back to an unsigned file. A valid
+     * UTF-8 [originalName] is recorded in the signature block; one Core
+     * cannot record is left out.
      */
     external fun nativeEncryptFileSignedWithProgress(
         inputPath: String,
@@ -162,13 +164,15 @@ object NativeBridge {
         publicKeyPaths: Array<String>,
         signKeyPath: String,
         password: ByteArray,
+        originalName: ByteArray?,
         callback: NativeProgressCallback,
     ): Int
 
     /**
      * Decrypts NKEM v3, v4 or v5 while Core enforces the signature policy.
      * [report] receives {format, status, trusted index}; [signer] the v5
-     * signer's fingerprint. Returns a RESULT_* or RESULT_SIGNATURE_* code.
+     * signer's fingerprint; [originalName] the recorded file name as UTF-8.
+     * Returns a RESULT_* or RESULT_SIGNATURE_* code.
      */
     external fun nativeDecryptFileVerifiedWithProgress(
         inputPath: String,
@@ -180,6 +184,7 @@ object NativeBridge {
         signerOutputPath: String?,
         report: IntArray,
         signer: Array<String?>,
+        originalName: Array<ByteArray?>,
         callback: NativeProgressCallback,
     ): Int
 }

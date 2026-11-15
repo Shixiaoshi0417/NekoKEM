@@ -504,7 +504,9 @@ class AppState(private val scope: CoroutineScope, private val files: FileChooser
         try {
             val name = fileName(item.source).ifEmpty { "file" }
             val plain = name.removeSuffix(".nkem").ifEmpty { "file" }
-            val suggested = if (item.kind == Kind.Encrypt) "$name.nkem" else if (plain != name) plain else "decrypted-$name"
+            // A signed file restores the name it recorded, even after a rename.
+            val suggested = if (item.kind == Kind.Encrypt) "$name.nkem"
+                else item.outcome.originalName ?: if (plain != name) plain else "decrypted-$name"
             val destination = files.save(suggested, java.io.File(item.source).parent)
             if (destination == null) {
                 staged = null; unsaved = false

@@ -121,14 +121,14 @@ reused for the signature block length.
 | 6 | 2 | Header length: `32` |
 | 8 | 2 | Recipient count: `1` to `64` |
 | 10 | 2 | Recipient entry length: `1672` |
-| 12 | 2 | Encrypted signature block length: `9048` |
+| 12 | 2 | Encrypted signature block length: `9048`, or `10072` with file information |
 | 14 | 2 | Reserved: `0` |
 | 16 | 8 | Payload ciphertext length |
 | 24 | 1 | HKDF salt length: `32` |
 | 25 | 1 | AES-GCM nonce length: `12` |
 | 26 | 1 | Authentication tag length: `16` |
 | 27 | 1 | Header MAC length: `64` |
-| 28 | 4 | Flags/reserved: `0` |
+| 28 | 4 | Flags: `0`, or `1` when the container records [file information](#file-information) |
 
 Algorithm ID 5 means:
 
@@ -146,7 +146,8 @@ recipient entry 1 || ... || recipient entry N ||
 64-byte header MAC ||
 12-byte payload nonce ||
 payload ciphertext || 16-byte payload tag ||
-9032-byte encrypted signature block || 16-byte signature block tag
+9032-byte encrypted signature block [|| 1024-byte encrypted file information] ||
+16-byte signature block tag
 ```
 
 Recipient entries have the v4 layout of exactly 1672 bytes:
@@ -167,7 +168,45 @@ The signature block plaintext is 9032 bytes:
 ```
 
 A container of `L` payload bytes for `N` recipients is exactly
-`9204 + 1672 * N + L` bytes; v4 is `156 + 1672 * N + L`.
+`9204 + 1672 * N + L` bytes; v4 is `156 + 1672 * N + L`. With file
+information the signature block plaintext is 10056 bytes (the 9032 bytes
+above followed by the 1024-byte record), so the container is
+`10228 + 1672 * N + L` bytes.
+
+## File information
+
+Flag bit 0 (`0x00000001`) of the header says that the signature block ends
+with a fixed 1024-byte file-information record, so decryption can restore
+the original file name and with it the file's format. Every other flag bit
+is reserved and must be zero. The record is inside the encrypted signature
+block, so only recipients see it, and its fixed size hides the length of
+the name.
+
+```text
+file information (1024 bytes) =
+    "NKFI"          4 bytes, ASCII magic
+    0x01            record version
+    0x00            reserved
+    name length     2 bytes, big-endian, 1 to 1016
+    name            UTF-8 bytes
+    zero padding    to 1024 bytes
+```
+
+The name is the last path component of the input, at most 1016 bytes of
+well-formed UTF-8 (RFC 3629: no overlong forms, surrogates or code points
+above U+10FFFF). It is not `.` or `..` and contains no `/`, `\`, C0 or C1
+control character, DEL, or bidirectional formatting character (U+061C,
+U+200E, U+200F, U+202A to U+202E, U+2066 to U+2069). Encryption refuses a
+name that breaks these rules; front ends then record no name. Decryption
+checks the magic, version, reserved byte, length, name and padding only
+after both signatures verify; a malformed record is an error and no output
+is committed. Front ends still adapt the name to their file system, for
+example the characters Windows forbids, before suggesting it.
+
+Encryption without a name writes flags `0` and is byte-for-byte the v5
+container of NekoKEM 5.1. NekoKEM 5.1 and earlier reject a container with
+flag bit 0 as an invalid header. Unsigned v3 and v4 containers never carry
+file information.
 
 ## Key derivation
 
@@ -247,12 +286,16 @@ ecbcc712915fd1602efe47c2ea4a8c4ff80c61638a71e62790dd1208c35d744d
 M = "NekoKEM v5 sender signature" ||
     header || salt || all recipient entries || header MAC || payload nonce ||
     payload digest ||
-    sender identity encoding
+    sender identity encoding [|| file information]
 
 Ed448 signature     = Ed448(sender Ed448 key, M, context = "NekoKEM v5 Ed448")
 ML-DSA-87 signature = ML-DSA-87.Sign(sender ML-DSA key, M,
                                      context = "NekoKEM v5 ML-DSA-87")
 ```
+
+The file information is part of `M` exactly when the header flag is set,
+and the header itself is in `M`, so the name, the flag and the block length
+are all signed.
 
 Ed448 is the RFC 8032 Ed448 variant with a context string, not Ed448ph.
 ML-DSA-87 uses the pure (non-prehash) FIPS 204 interface with OpenSSL's
@@ -260,7 +303,8 @@ default hedged randomness. Both come from OpenSSL 4.1.0 through EVP.
 
 ```text
 encrypted signature block || signature block tag =
-    AES-256-GCM(signature key, nonce = 12 zero bytes, signature block plaintext,
+    AES-256-GCM(signature key, nonce = 12 zero bytes,
+                signature block plaintext [|| file information],
                 AAD = header || salt || all recipient entries || header MAC ||
                       payload nonce || payload tag)
 ```
@@ -382,6 +426,10 @@ completely and reject an invalid signature; they apply no policy flags.
   four-component public keys without committing output.
 - Encrypting without a signature writes v3 for one recipient and v4 for two
   or more, byte-for-byte as before.
+- NekoKEM 5.2 records the input's file name in signed files (header flag
+  bit 0). NekoKEM 5.1 and earlier reject those files as an invalid header
+  and commit no output; a signed file written without a name stays readable
+  by them.
 - Contacts are deduplicated by their encryption components. A
   four-component key may upgrade a two-component contact after the user
   confirms the new identity fingerprint; a two-component key never replaces

@@ -162,13 +162,30 @@ NEKOKEM_API int nekokem_export_legacy_public_key(
 /* Encryption signs unless this flag is set; then it writes v3 or v4. */
 #define NEKOKEM_ENCRYPT_UNSIGNED 0x1U
 
+/* Longest original file name a v5 container records, in UTF-8 bytes. */
+#define NEKOKEM_ORIGINAL_NAME_MAX 1016U
+#define NEKOKEM_ORIGINAL_NAME_SIZE (NEKOKEM_ORIGINAL_NAME_MAX + 1U)
+
 typedef struct {
     size_t struct_size;               /* sizeof(NekoKEMEncryptOptions) */
     uint32_t flags;                   /* NEKOKEM_ENCRYPT_* */
     const char *sender_private_key_path;
     const unsigned char *password;    /* borrowed for the call */
     size_t password_len;
+    /* Optional UTF-8 file name (no directory) that signed v5 encryption
+     * records inside the signature block, so decryption can restore it.
+     * NULL writes no file information. It must pass
+     * nekokem_original_name_is_valid(); unsigned v3/v4 never record it. */
+    const char *original_name;
 } NekoKEMEncryptOptions;
+
+/*
+ * 1 when name can be recorded as an original file name: 1 to
+ * NEKOKEM_ORIGINAL_NAME_MAX bytes of well-formed UTF-8, not "." or "..",
+ * without '/', '\\', control characters or bidirectional formatting
+ * characters. Front ends still adapt it to their own file system.
+ */
+NEKOKEM_API int nekokem_original_name_is_valid(const char *name);
 
 typedef struct {
     size_t struct_size;               /* sizeof(NekoKEMEncryptResult) */
@@ -223,6 +240,8 @@ typedef struct {
     int signature_status;             /* NEKOKEM_SIGNATURE_* */
     size_t trusted_signer_index;      /* valid for _TRUSTED */
     char signer_fingerprint[NEKOKEM_FINGERPRINT_STRING_SIZE];
+    /* The signed original file name, or "" when the file records none. */
+    char original_name[NEKOKEM_ORIGINAL_NAME_SIZE];
 } NekoKEMVerifyResult;
 
 /* Policy failures; no output is committed for any of them. */

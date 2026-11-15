@@ -340,5 +340,8 @@
   "输出文件：%s\n": "Output file: %s\n",
   "输出路径长度溢出\n": "Output path length overflows\n",
   "Cannot compare the signer key path with the other files": "Cannot compare the signer key path with the other files",
-  "The signer key path is a file this decryption reads or writes; choose another path\n": "The signer key path is a file this decryption reads or writes; choose another path\n"
+  "The signer key path is a file this decryption reads or writes; choose another path\n": "The signer key path is a file this decryption reads or writes; choose another path\n",
+  "Original file name: %s\n": "Original file name: %s\n",
+  "The original file name cannot be recorded\n": "The original file name cannot be recorded\n",
+  "The recorded original file name is invalid\n": "The recorded original file name is invalid\n"
 }

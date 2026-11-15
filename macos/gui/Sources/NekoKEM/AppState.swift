@@ -616,7 +616,9 @@ final class AppState: ObservableObject {
         defer { choosing = false }
         let name = item.source.isEmpty ? "file" : fileName(item.source)
         let plain = name.hasSuffix(".nkem") && name.count > 5 ? String(name.dropLast(5)) : name
-        let suggested = item.kind == .encrypt ? name + ".nkem" : (plain != name ? plain : "decrypted-" + name)
+        // A signed file restores the name it recorded, even after a rename.
+        let suggested = item.kind == .encrypt ? name + ".nkem"
+            : item.outcome.originalName ?? (plain != name ? plain : "decrypted-" + name)
         guard let destination = chooseSave(suggested, directory: (item.source as NSString).deletingLastPathComponent) else {
             staged = nil; unsaved = false
             _ = try? await native { try Backend.discardOutput() }

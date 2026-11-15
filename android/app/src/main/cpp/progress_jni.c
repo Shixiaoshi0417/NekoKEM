@@ -98,6 +98,51 @@ static int progress_password_copy(JNIEnv *env,
     return PROGRESS_JNI_SUCCESS;
 }
 
+/*
+ * Copies an optional UTF-8 file name to a NUL-terminated string. NULL, an
+ * oversized name or one Core cannot record leaves *name NULL, so the file
+ * simply records no name.
+ */
+static int original_name_copy(JNIEnv *env, jbyteArray source, char **name)
+{
+    char *copy;
+    jsize java_len;
+
+    *name = NULL;
+    if (source == NULL) {
+        return PROGRESS_JNI_SUCCESS;
+    }
+    java_len = (*env)->GetArrayLength(env, source);
+    if ((*env)->ExceptionCheck(env) == JNI_TRUE) {
+        return PROGRESS_JNI_JAVA_EXCEPTION;
+    }
+    if (java_len <= 0 || (size_t)java_len > NEKOKEM_ORIGINAL_NAME_MAX) {
+        return PROGRESS_JNI_SUCCESS;
+    }
+    copy = OPENSSL_zalloc((size_t)java_len + 1U);
+    if (copy == NULL) {
+        return PROGRESS_JNI_ALLOCATION_ERROR;
+    }
+    (*env)->GetByteArrayRegion(env, source, 0, java_len, (jbyte *)copy);
+    if ((*env)->ExceptionCheck(env) == JNI_TRUE) {
+        OPENSSL_clear_free(copy, (size_t)java_len + 1U);
+        return PROGRESS_JNI_JAVA_EXCEPTION;
+    }
+    if (!nekokem_original_name_is_valid(copy)) {
+        OPENSSL_clear_free(copy, (size_t)java_len + 1U);
+        return PROGRESS_JNI_SUCCESS;
+    }
+    *name = copy;
+    return PROGRESS_JNI_SUCCESS;
+}
+
+static void original_name_free(char *name)
+{
+    if (name != NULL) {
+        OPENSSL_clear_free(name, strlen(name) + 1U);
+    }
+}
+
 static int progress_callback_prepare(JNIEnv *env,
                                      jobject callback,
                                      ProgressJniCallback *context)
@@ -532,11 +577,13 @@ Java_com_shixiaoshi0417_nekokem_nativecore_NativeBridge_nativeEncryptFileSignedW
     jobjectArray public_key_paths,
     jstring sign_key_path,
     jbyteArray password_array,
+    jbyteArray original_name_array,
     jobject callback)
 {
     ProgressJniPath input = {0};
     ProgressJniPath output = {0};
     ProgressJniPath sign_path = {0};
+    char *original_name = NULL;
     ProgressJniPath keys[NEKOKEM_MAX_RECIPIENTS] = {{0}};
     const char *key_values[NEKOKEM_MAX_RECIPIENTS] = {0};
     ProgressJniCallback progress = {0};
@@ -573,12 +620,17 @@ Java_com_shixiaoshi0417_nekokem_nativecore_NativeBridge_nativeEncryptFileSignedW
     if (result != PROGRESS_JNI_SUCCESS) {
         goto cleanup;
     }
+    result = original_name_copy(env, original_name_array, &original_name);
+    if (result != PROGRESS_JNI_SUCCESS) {
+        goto cleanup;
+    }
     result = progress_callback_prepare(env, callback, &progress);
     if (result != PROGRESS_JNI_SUCCESS) {
         goto cleanup;
     }
     options.struct_size = sizeof(options);
     options.flags = 0U;
+    options.original_name = original_name;
     options.sender_private_key_path = sign_path.value;
     options.password = password;
     options.password_len = password_len;
@@ -593,6 +645,7 @@ Java_com_shixiaoshi0417_nekokem_nativecore_NativeBridge_nativeEncryptFileSignedW
 
 cleanup:
     OPENSSL_clear_free(password, password_len);
+    original_name_free(original_name);
     progress_path_release(env, &sign_path);
     progress_path_release(env, &output);
     progress_path_release(env, &input);
@@ -603,8 +656,9 @@ cleanup:
 /*
  * Decrypts NKEM v3, v4 or v5 and lets Core enforce the signature policy.
  * report receives {format, status, trusted signer index}; signer receives
- * the signer's fingerprint for v5. Output is committed only after every
- * check passes.
+ * the signer's fingerprint for v5, and original_name the recorded file name
+ * as UTF-8 bytes when the file has one. Output is committed only after
+ * every check passes.
  */
 JNIEXPORT jint JNICALL
 Java_com_shixiaoshi0417_nekokem_nativecore_NativeBridge_nativeDecryptFileVerifiedWithProgress(
@@ -619,6 +673,7 @@ Java_com_shixiaoshi0417_nekokem_nativecore_NativeBridge_nativeDecryptFileVerifie
     jstring signer_output_path,
     jintArray report,
     jobjectArray signer,
+    jobjectArray original_name,
     jobject callback)
 {
     ProgressJniPath input = {0};
@@ -639,9 +694,10 @@ Java_com_shixiaoshi0417_nekokem_nativecore_NativeBridge_nativeDecryptFileVerifie
     int core_result;
 
     (void)bridge;
-    if (report == NULL || signer == NULL ||
+    if (report == NULL || signer == NULL || original_name == NULL ||
         (*env)->GetArrayLength(env, report) != 3 ||
-        (*env)->GetArrayLength(env, signer) != 1) {
+        (*env)->GetArrayLength(env, signer) != 1 ||
+        (*env)->GetArrayLength(env, original_name) != 1) {
         result = PROGRESS_JNI_INVALID_ARGUMENT;
         goto cleanup;
     }
@@ -718,12 +774,35 @@ Java_com_shixiaoshi0417_nekokem_nativecore_NativeBridge_nativeDecryptFileVerifie
             (*env)->DeleteLocalRef(env, fingerprint);
             if ((*env)->ExceptionCheck(env) == JNI_TRUE) {
                 result = PROGRESS_JNI_JAVA_EXCEPTION;
+                goto cleanup;
+            }
+        }
+        if (verified.original_name[0] != '\0') {
+            /* Bytes, not NewStringUTF: JNI expects modified UTF-8. */
+            jsize name_len = (jsize)strlen(verified.original_name);
+            jbyteArray name = (*env)->NewByteArray(env, name_len);
+
+            if (name == NULL) {
+                result = (*env)->ExceptionCheck(env) == JNI_TRUE
+                             ? PROGRESS_JNI_JAVA_EXCEPTION
+                             : PROGRESS_JNI_ALLOCATION_ERROR;
+                goto cleanup;
+            }
+            (*env)->SetByteArrayRegion(env, name, 0, name_len,
+                                       (const jbyte *)verified.original_name);
+            if ((*env)->ExceptionCheck(env) == JNI_FALSE) {
+                (*env)->SetObjectArrayElement(env, original_name, 0, name);
+            }
+            (*env)->DeleteLocalRef(env, name);
+            if ((*env)->ExceptionCheck(env) == JNI_TRUE) {
+                result = PROGRESS_JNI_JAVA_EXCEPTION;
             }
         }
     }
 
 cleanup:
     OPENSSL_clear_free(password, password_len);
+    OPENSSL_cleanse(&verified, sizeof(verified));
     progress_path_release(env, &signer_output);
     progress_path_release(env, &private_path);
     progress_path_release(env, &output);

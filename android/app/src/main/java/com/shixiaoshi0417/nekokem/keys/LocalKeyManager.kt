@@ -33,6 +33,8 @@ data class SignatureReport(
     val signerFingerprint: String?,
     val signedBySelf: Boolean = false,
     val trustedContact: Int = -1,
+    /** The file name the sender recorded in a signed v5 file, if any. */
+    val originalName: String? = null,
 )
 
 data class VerifiedDecryptionResult(val code: Int, val signature: SignatureReport?)
@@ -205,7 +207,8 @@ class LocalKeyManager internal constructor(
     /**
      * With [signingPassword] the file is NKEM v5 signed with this device's
      * identity key; without it, unsigned NKEM v3. Takes ownership of
-     * [signingPassword] and clears it before returning.
+     * [signingPassword] and clears it before returning. A signed file also
+     * records [originalName] so decryption can restore it.
      */
     fun encryptFile(
         input: File,
@@ -213,13 +216,14 @@ class LocalKeyManager internal constructor(
         temporaryKey: TemporaryPublicKey?,
         progress: NativeProgressCallback,
         signingPassword: ByteArray? = null,
+        originalName: String? = null,
     ): Int = try {
         val currentFingerprint = temporaryKey?.let { publicKeyFingerprint(it.file) }
         val recipient = (temporaryKey?.file ?: publicKey).absolutePath
         if (temporaryKey != null && currentFingerprint != temporaryKey.fingerprint) {
             RESULT_FINGERPRINT_MISMATCH
         } else if (signingPassword != null) {
-            encryptSigned(input, output, arrayOf(recipient), signingPassword, progress)
+            encryptSigned(input, output, arrayOf(recipient), signingPassword, progress, originalName)
         } else NativeBridge.nativeEncryptFileWithProgress(
             input.absolutePath,
             output.absolutePath,
@@ -238,6 +242,7 @@ class LocalKeyManager internal constructor(
         recipients: Array<String>,
         password: ByteArray,
         progress: NativeProgressCallback,
+        originalName: String?,
     ): Int = if (password.isEmpty()) {
         NativeBridge.RESULT_INVALID_ARGUMENT
     } else if (!NativeBridge.nativePublicKeyCanVerify(publicKey.absolutePath)) {
@@ -250,6 +255,7 @@ class LocalKeyManager internal constructor(
             recipients,
             privateKey.absolutePath,
             password,
+            originalName?.toByteArray(Charsets.UTF_8),
             progress,
         )
     }
@@ -265,11 +271,12 @@ class LocalKeyManager internal constructor(
         keys: List<TemporaryPublicKey>,
         progress: NativeProgressCallback,
         signingPassword: ByteArray? = null,
+        originalName: String? = null,
     ): Int = try {
         when {
             keys.isEmpty() || keys.size > NativeBridge.MAX_RECIPIENTS ||
                 keys.map { it.fingerprint }.toSet().size != keys.size -> NativeBridge.RESULT_INVALID_ARGUMENT
-            keys.size == 1 -> encryptFile(input, output, keys.single(), progress, signingPassword?.copyOf())
+            keys.size == 1 -> encryptFile(input, output, keys.single(), progress, signingPassword?.copyOf(), originalName)
             keys.any { publicKeyFingerprint(it.file) != it.fingerprint } -> RESULT_FINGERPRINT_MISMATCH
             signingPassword != null -> encryptSigned(
                 input,
@@ -277,6 +284,7 @@ class LocalKeyManager internal constructor(
                 keys.map { it.file.absolutePath }.toTypedArray(),
                 signingPassword,
                 progress,
+                originalName,
             )
             else -> NativeBridge.nativeEncryptFileMultiWithProgress(
                 input.absolutePath,
@@ -304,9 +312,10 @@ class LocalKeyManager internal constructor(
         keys: List<TemporaryPublicKey>,
         progress: NativeProgressCallback,
         signingPassword: ByteArray? = null,
+        originalName: String? = null,
     ): Int = try {
         if (!includeOwn) {
-            encryptFileForRecipients(input, output, keys, progress, signingPassword?.copyOf())
+            encryptFileForRecipients(input, output, keys, progress, signingPassword?.copyOf(), originalName)
         } else {
             val own = publicKeyFingerprint(publicKey)
             val recipients = listOf(publicKey.absolutePath) + keys.map { it.file.absolutePath }
@@ -314,9 +323,9 @@ class LocalKeyManager internal constructor(
                 own == null -> RESULT_STORAGE_ERROR
                 recipients.size > NativeBridge.MAX_RECIPIENTS ||
                     (listOf(own) + keys.map { it.fingerprint }).toSet().size != recipients.size -> NativeBridge.RESULT_INVALID_ARGUMENT
-                keys.isEmpty() -> encryptFile(input, output, null, progress, signingPassword?.copyOf())
+                keys.isEmpty() -> encryptFile(input, output, null, progress, signingPassword?.copyOf(), originalName)
                 keys.any { publicKeyFingerprint(it.file) != it.fingerprint } -> RESULT_FINGERPRINT_MISMATCH
-                signingPassword != null -> encryptSigned(input, output, recipients.toTypedArray(), signingPassword, progress)
+                signingPassword != null -> encryptSigned(input, output, recipients.toTypedArray(), signingPassword, progress, originalName)
                 else -> NativeBridge.nativeEncryptFileMultiWithProgress(
                     input.absolutePath,
                     output.absolutePath,
@@ -436,6 +445,7 @@ class LocalKeyManager internal constructor(
                     val trusted = (if (own) listOf(publicKey) else emptyList()) + trustedKeys
                     val report = IntArray(3)
                     val signer = arrayOfNulls<String>(1)
+                    val originalName = arrayOfNulls<ByteArray>(1)
                     val code = NativeBridge.nativeDecryptFileVerifiedWithProgress(
                         input.absolutePath,
                         output.absolutePath,
@@ -446,6 +456,7 @@ class LocalKeyManager internal constructor(
                         null,
                         report,
                         signer,
+                        originalName,
                         progress,
                     )
                     if (code != NativeBridge.RESULT_SUCCESS) {
@@ -460,6 +471,7 @@ class LocalKeyManager internal constructor(
                                 signerFingerprint = signer[0],
                                 signedBySelf = own && index == 0,
                                 trustedContact = if (index < 0 || (own && index == 0)) -1 else index - if (own) 1 else 0,
+                                originalName = originalName[0]?.toString(Charsets.UTF_8),
                             ),
                         )
                     }

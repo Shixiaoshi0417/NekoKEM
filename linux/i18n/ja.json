@@ -340,5 +340,8 @@
   "输出文件：%s\n": "出力ファイル：%s\n",
   "输出路径长度溢出\n": "出力パスの長さがオーバーフローします\n",
   "Cannot compare the signer key path with the other files": "署名者の公開鍵のパスを他のファイルと比較できません",
-  "The signer key path is a file this decryption reads or writes; choose another path\n": "署名者の公開鍵の保存先は、この復号で読み書きするファイルです。別のパスを選んでください\n"
+  "The signer key path is a file this decryption reads or writes; choose another path\n": "署名者の公開鍵の保存先は、この復号で読み書きするファイルです。別のパスを選んでください\n",
+  "Original file name: %s\n": "元のファイル名：%s\n",
+  "The original file name cannot be recorded\n": "元のファイル名を記録できません\n",
+  "The recorded original file name is invalid\n": "記録された元のファイル名が無効です\n"
 }

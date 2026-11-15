@@ -1095,6 +1095,7 @@ private fun NekoKEMRoute(
                             source.displayName,
                             context.getString(R.string.default_selected_filename),
                             context.getString(R.string.default_decrypted_filename),
+                            outcome.signature?.originalName,
                         ),
                     )
                 } else {
