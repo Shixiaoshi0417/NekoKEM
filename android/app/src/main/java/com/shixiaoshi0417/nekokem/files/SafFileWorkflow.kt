@@ -135,6 +135,12 @@ class PreparedDecryption internal constructor(
         active = false
         return plaintextFile
     }
+
+    /** Makes a consumed plaintext available again after its output failed. */
+    @Synchronized
+    internal fun restore() {
+        active = true
+    }
 }
 
 /**
@@ -241,11 +247,13 @@ class SafFileWorkflow(
         progress: CancellableProgressCallback,
         temporaryKey: TemporaryPublicKey? = null,
         signingPassword: ByteArray? = null,
+        recordName: Boolean = true,
     ): PreparedEncryptionResult = try {
         prepareEncryptionWith(
             source,
             progress,
             listOfNotNull(temporaryKey),
+            recordName,
         ) { input, output, name -> keyManager.encryptFile(input, output, temporaryKey, progress, signingPassword?.copyOf(), name) }
     } finally {
         signingPassword?.fill(0)
@@ -260,11 +268,13 @@ class SafFileWorkflow(
         progress: CancellableProgressCallback,
         recipients: List<TemporaryPublicKey>,
         signingPassword: ByteArray? = null,
+        recordName: Boolean = true,
     ): PreparedEncryptionResult = try {
         prepareEncryptionWith(
             source,
             progress,
             recipients,
+            recordName,
         ) { input, output, name ->
             keyManager.encryptFileForRecipients(input, output, recipients, progress, signingPassword?.copyOf(), name)
         }
@@ -283,8 +293,9 @@ class SafFileWorkflow(
         includeOwn: Boolean,
         recipients: List<TemporaryPublicKey>,
         signingPassword: ByteArray? = null,
+        recordName: Boolean = true,
     ): PreparedEncryptionResult = try {
-        prepareEncryptionWith(source, progress, recipients) { input, output, name ->
+        prepareEncryptionWith(source, progress, recipients, recordName) { input, output, name ->
             keyManager.encryptFileForSelection(input, output, includeOwn, recipients, progress, signingPassword?.copyOf(), name)
         }
     } finally {
@@ -295,6 +306,7 @@ class SafFileWorkflow(
         source: Uri,
         progress: CancellableProgressCallback,
         temporaryKeys: List<TemporaryPublicKey>,
+        recordName: Boolean,
         encrypt: (File, File, String?) -> Int,
     ): PreparedEncryptionResult {
         var workspace: File? = null
@@ -322,8 +334,10 @@ class SafFileWorkflow(
                 ) {
                     result = cancelledOrStorageError(progress)
                 } else {
-                    // Signed files record the name so decryption restores it.
-                    result = encrypt(input, output, recordableName(queryDisplayName(source)))
+                    // Signed files record the name so decryption restores it,
+                    // unless the user turned that off for NekoKEM 5.1 recipients.
+                    val name = if (recordName) recordableName(queryDisplayName(source)) else null
+                    result = encrypt(input, output, name)
                     if (result == NativeBridge.RESULT_SUCCESS &&
                         progress.isCancelled()
                     ) {
@@ -644,17 +658,24 @@ class SafFileWorkflow(
     internal fun hasTemporaryKeyCache(): Boolean =
         temporaryKeyDirectory.exists()
 
+    /**
+     * With [keepOnFailure], an output that failed for any reason other than
+     * cancelling keeps the plaintext in [prepared], so another destination
+     * can still be chosen; it is then committed or discarded later.
+     */
     fun commitPreparedDecryption(
         prepared: PreparedDecryption,
         destination: Uri,
         progress: CancellableProgressCallback,
+        keepOnFailure: Boolean = false,
     ): Int {
         val plaintext = prepared.consume()
             ?: return NativeBridge.RESULT_INVALID_ARGUMENT
         var outputCommitted = false
         var transfer: UriOutputTransaction? = null
+        var result = LocalKeyManager.RESULT_STORAGE_ERROR
 
-        return try {
+        try {
             val currentTransfer = copyFileToUri(
                 plaintext,
                 destination,
@@ -662,7 +683,7 @@ class SafFileWorkflow(
                 true,
             )
             transfer = currentTransfer
-            if (!currentTransfer.success) {
+            result = if (!currentTransfer.success) {
                 cancelledOrStorageError(progress)
             } else {
                 currentTransfer.commit()
@@ -670,12 +691,17 @@ class SafFileWorkflow(
                 NativeBridge.RESULT_SUCCESS
             }
         } catch (_: Exception) {
-            LocalKeyManager.RESULT_STORAGE_ERROR
+            result = LocalKeyManager.RESULT_STORAGE_ERROR
         } finally {
             if (!outputCommitted) transfer?.rollback()
-            clearAndDelete(plaintext)
-            removeWorkspace(prepared.workspace)
+            if (keepOnFailure && !outputCommitted && result != NativeBridge.RESULT_CANCELLED) {
+                prepared.restore()
+            } else {
+                clearAndDelete(plaintext)
+                removeWorkspace(prepared.workspace)
+            }
         }
+        return result
     }
 
     fun discardPreparedDecryption(prepared: PreparedDecryption?) {

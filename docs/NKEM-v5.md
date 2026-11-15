@@ -182,6 +182,10 @@ is reserved and must be zero. The record is inside the encrypted signature
 block, so only recipients see it, and its fixed size hides the length of
 the name.
 
+The apps record the name by default and offer a "Record original file name"
+setting. With it off, a signed file has flag bit 0 clear and no record, so
+NekoKEM 5.1, which rejects any set flag bit, can still open it.
+
 ```text
 file information (1024 bytes) =
     "NKFI"          4 bytes, ASCII magic

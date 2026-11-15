@@ -135,7 +135,8 @@ internal fun runMiuixUiTests(
         // A lazy list drops rows scrolled past, so look back up once the end is reached.
         for (action in listOf(AccessibilityNodeInfo.ACTION_SCROLL_FORWARD, AccessibilityNodeInfo.ACTION_SCROLL_BACKWARD)) {
             var dragged = false
-            repeat(6) {
+            // Settings at 1.5x font on a 1080 x 1920 screen is longer than six pages.
+            repeat(12) {
                 if (!skip && exact(value) != null) return
                 skip = false
                 // The page is not always the first scrollable node, so each one is asked in turn.

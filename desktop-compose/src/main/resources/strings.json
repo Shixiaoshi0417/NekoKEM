@@ -345,6 +345,41 @@
    "署名",
    "서명"
   ],
+  "settingsDecrypt": [
+   "Decryption",
+   "解密",
+   "解密",
+   "復号",
+   "복호화"
+  ],
+  "decryptFolder": [
+   "Save to a set folder",
+   "保存到指定文件夹",
+   "儲存到指定資料夾",
+   "指定したフォルダに保存",
+   "지정한 폴더에 저장"
+  ],
+  "decryptFolderHint": [
+   "Decrypted files go straight to the chosen folder; a taken name gets a number. When off, you choose where to save each time.",
+   "开启后解密文件直接存到所选文件夹，重名时自动加编号；关闭时每次选择保存位置。",
+   "開啟後解密檔案直接存到所選資料夾，重名時自動加編號；關閉時每次選擇儲存位置。",
+   "オンにすると復号したファイルを選んだフォルダに直接保存し、同じ名前があれば番号を付けます。オフのときは毎回保存先を選びます。",
+   "켜면 복호화한 파일을 선택한 폴더에 바로 저장하고, 같은 이름이 있으면 번호를 붙입니다. 끄면 매번 저장 위치를 선택합니다."
+  ],
+  "decryptFolderPath": [
+   "Folder",
+   "文件夹",
+   "資料夾",
+   "フォルダ",
+   "폴더"
+  ],
+  "decryptFolderFailed": [
+   "The folder could not be written last time. Choose it again.",
+   "上次无法写入该文件夹，请重新选择。",
+   "上次無法寫入該資料夾，請重新選擇。",
+   "前回このフォルダに書き込めませんでした。もう一度選んでください。",
+   "지난번에 이 폴더에 쓸 수 없었습니다. 다시 선택하세요."
+  ],
   "settingsUpdates": [
    "Updates",
    "更新",
@@ -855,6 +890,20 @@
    "升級聯絡人",
    "連絡先をアップグレード",
    "연락처 업그레이드"
+  ],
+  "recordName": [
+   "Record original file name",
+   "记录原文件名",
+   "記錄原始檔名",
+   "元のファイル名を記録",
+   "원래 파일 이름 기록"
+  ],
+  "recordNameSummary": [
+   "Turn off for recipients using NekoKEM 5.1",
+   "接收方使用 NekoKEM 5.1 时请关闭",
+   "接收者使用 NekoKEM 5.1 時請關閉",
+   "受信者が NekoKEM 5.1 を使う場合はオフ",
+   "수신자가 NekoKEM 5.1을 쓰면 끄세요"
   ],
   "requireSignature": [
    "Accept only signed files",

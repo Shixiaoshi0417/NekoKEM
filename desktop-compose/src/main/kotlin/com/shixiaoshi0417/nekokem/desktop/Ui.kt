@@ -567,7 +567,19 @@ private fun SettingsPage(state: AppState) {
                 }
             }
         }
+        // Unsigned files never record a name, so the switch waits for signing.
+        kit.SwitchRow(state.t("recordName"), state.t("recordNameSummary"), state.recordName, enabled = !state.unsigned, onChange = state::changeRecordName)
         kit.SwitchRow(state.t("requireSignature"), "", state.requireSignature, onChange = state::changeRequireSignature)
+    }
+    kit.SectionTitle(state.t("settingsDecrypt"))
+    kit.Section(padded = false) {
+        val on = state.decryptFolder.isNotEmpty()
+        kit.SwitchRow(state.t("decryptFolder"), state.t("decryptFolderHint"), on, enabled = state.editable, onChange = state::changeDecryptFolder)
+        if (on) {
+            kit.ActionRow(state.t("decryptFolderPath"), if (state.decryptFolderFailed) state.t("decryptFolderFailed") else state.decryptFolder, state.editable) {
+                state.browse(PathField.DecryptFolder)
+            }
+        }
     }
     kit.SectionTitle(state.t("settingsUpdates"))
     kit.Section(padded = false) {

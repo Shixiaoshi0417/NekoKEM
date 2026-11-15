@@ -215,6 +215,8 @@
     <string name="unsigned_confirm_title">確定關閉簽章嗎？</string>
     <string name="unsigned_confirm_message">檔案將以無簽章的 NKEM v3/v4 格式儲存。接收者無法確認檔案來自你，任何取得其公開金鑰的人都能傳送看起來一樣的檔案。</string>
     <string name="action_turn_off_signing">關閉簽章</string>
+    <string name="settings_record_name_title">記錄原始檔名</string>
+    <string name="settings_record_name_summary">開啟時：簽章檔案會記錄原始檔名，解密時自動還原。接收者使用 NekoKEM 5.1 時請關閉，5.1 無法開啟記錄了檔名的檔案。</string>
     <string name="settings_require_signature_title">只接受已簽章檔案</string>
     <string name="settings_require_signature_summary">解密時拒絕沒有簽章的 NKEM v3/v4 檔案，不會寫入輸出。</string>
     <string name="sign_password_title">簽章檔案</string>
@@ -247,6 +249,13 @@
     <string name="contact_verifies">身分金鑰 · 可驗證簽章</string>
     <string name="contact_legacy">舊版金鑰 · 無法驗證簽章</string>
     <string name="error_settings_save">無法儲存設定，先前的設定仍然有效。</string>
+    <string name="settings_decrypt_title">解密</string>
+    <string name="settings_decrypt_folder_title">儲存到指定資料夾</string>
+    <string name="settings_decrypt_folder_summary">開啟後解密檔案直接存到所選資料夾，重名時自動加編號；關閉時每次選擇儲存位置。</string>
+    <string name="settings_decrypt_folder_location">資料夾</string>
+    <string name="settings_decrypt_folder_unavailable">無法存取該資料夾，請重新選擇。</string>
+    <string name="snackbar_decrypt_folder_unavailable">無法寫入指定資料夾，請選擇儲存位置。</string>
+    <string name="completion_folder">資料夾</string>
     <string name="settings_updates_title">更新</string>
     <string name="settings_auto_update_title">自動檢查更新</string>
     <string name="settings_auto_update_summary">每天最多一次，只向 GitHub 查詢最新版本號，不傳送任何金鑰或檔案資訊。</string>

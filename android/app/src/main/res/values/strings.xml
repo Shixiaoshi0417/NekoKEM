@@ -230,6 +230,8 @@
     <string name="unsigned_confirm_title">Turn off signing?</string>
     <string name="unsigned_confirm_message">Files will be NKEM v3/v4 without a signature. Recipients cannot confirm the file came from you, and anyone with their public key could send a file that looks the same.</string>
     <string name="action_turn_off_signing">Turn off signing</string>
+    <string name="settings_record_name_title">Record original file name</string>
+    <string name="settings_record_name_summary">On: signed files keep the original file name, and decryption restores it. Turn off for recipients using NekoKEM 5.1, which cannot open files that record a name.</string>
     <string name="settings_require_signature_title">Accept only signed files</string>
     <string name="settings_require_signature_summary">Decryption refuses NKEM v3/v4 files without a signature. No output is written for them.</string>
     <string name="sign_password_title">Sign the file</string>
@@ -262,6 +264,13 @@
     <string name="contact_verifies">Identity key · verifies signatures</string>
     <string name="contact_legacy">Legacy key · cannot verify signatures</string>
     <string name="error_settings_save">The setting could not be saved. The previous setting is still in effect.</string>
+    <string name="settings_decrypt_title">Decryption</string>
+    <string name="settings_decrypt_folder_title">Save to a set folder</string>
+    <string name="settings_decrypt_folder_summary">Decrypted files go straight to the chosen folder; a taken name gets a number. When off, you choose where to save each time.</string>
+    <string name="settings_decrypt_folder_location">Folder</string>
+    <string name="settings_decrypt_folder_unavailable">Cannot access this folder. Choose it again.</string>
+    <string name="snackbar_decrypt_folder_unavailable">The set folder cannot be written. Choose where to save.</string>
+    <string name="completion_folder">Folder</string>
     <string name="settings_updates_title">Updates</string>
     <string name="settings_auto_update_title">Check for updates automatically</string>
     <string name="settings_auto_update_summary">At most once a day. Only asks GitHub for the latest version number; no keys or file details are sent.</string>

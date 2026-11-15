@@ -215,6 +215,8 @@
     <string name="unsigned_confirm_title">서명을 끌까요?</string>
     <string name="unsigned_confirm_message">파일은 서명 없는 NKEM v3/v4가 됩니다. 수신자는 파일이 나에게서 왔는지 확인할 수 없고, 수신자의 공개 키를 가진 누구나 똑같아 보이는 파일을 보낼 수 있습니다.</string>
     <string name="action_turn_off_signing">서명 끄기</string>
+    <string name="settings_record_name_title">원래 파일 이름 기록</string>
+    <string name="settings_record_name_summary">켜면 서명된 파일에 원래 파일 이름을 기록하고 복호화할 때 복원합니다. 수신자가 NekoKEM 5.1을 쓸 때는 끄세요. 5.1은 파일 이름이 기록된 파일을 열 수 없습니다.</string>
     <string name="settings_require_signature_title">서명된 파일만 받기</string>
     <string name="settings_require_signature_summary">서명 없는 NKEM v3/v4 파일은 복호화를 거부하며 출력을 쓰지 않습니다.</string>
     <string name="sign_password_title">파일 서명</string>
@@ -247,6 +249,13 @@
     <string name="contact_verifies">신원 키 · 서명 확인 가능</string>
     <string name="contact_legacy">이전 형식 키 · 서명 확인 불가</string>
     <string name="error_settings_save">설정을 저장할 수 없습니다. 이전 설정이 계속 적용됩니다.</string>
+    <string name="settings_decrypt_title">복호화</string>
+    <string name="settings_decrypt_folder_title">지정한 폴더에 저장</string>
+    <string name="settings_decrypt_folder_summary">켜면 복호화한 파일을 선택한 폴더에 바로 저장하고, 같은 이름이 있으면 번호를 붙입니다. 끄면 매번 저장 위치를 선택합니다.</string>
+    <string name="settings_decrypt_folder_location">폴더</string>
+    <string name="settings_decrypt_folder_unavailable">이 폴더에 접근할 수 없습니다. 다시 선택하세요.</string>
+    <string name="snackbar_decrypt_folder_unavailable">지정한 폴더에 쓸 수 없습니다. 저장 위치를 선택하세요.</string>
+    <string name="completion_folder">폴더</string>
     <string name="settings_updates_title">업데이트</string>
     <string name="settings_auto_update_title">업데이트 자동 확인</string>
     <string name="settings_auto_update_summary">하루에 최대 한 번 GitHub에 최신 버전 번호만 확인하며, 키나 파일 정보는 보내지 않습니다.</string>

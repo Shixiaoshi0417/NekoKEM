@@ -128,6 +128,10 @@ data class NekoKEMUiState(
     val signatureSettings: SignatureSettings = SignatureSettings(),
     val autoUpdateCheck: Boolean = true,
     val updateChecking: Boolean = false,
+    /** Decrypted files go to a set folder instead of the save dialog. */
+    val decryptFolderSet: Boolean = false,
+    /** The set folder's name, or null when it cannot be reached any more. */
+    val decryptFolderName: String? = null,
 )
 
 data class NekoKEMActions(
@@ -166,6 +170,10 @@ data class NekoKEMActions(
     /** Turning unsigned encryption on goes through the red warning first. */
     val onUnsignedEncryptionChange: (Boolean) -> Unit = {},
     val onRequireSignatureChange: (Boolean) -> Unit = {},
+    val onRecordOriginalNameChange: (Boolean) -> Unit = {},
+    /** Turning it on picks the folder first. */
+    val onDecryptFolderChange: (Boolean) -> Unit = {},
+    val onChooseDecryptFolder: () -> Unit = {},
     val onCheckUpdate: () -> Unit = {},
     val onAutoUpdateChange: (Boolean) -> Unit = {},
     val onShowFingerprintQr: () -> Unit = {},
@@ -792,6 +800,14 @@ private fun SettingsPage(state: NekoKEMUiState, actions: NekoKEMActions, onOpenA
                 warning = unsigned,
             )
             if (unsigned) UnsignedWarningText(modifier = Modifier.padding(horizontal = 8.dp))
+            // Unsigned files never record a name, so the switch waits for signing.
+            SwitchSetting(
+                title = stringResource(R.string.settings_record_name_title),
+                summary = stringResource(R.string.settings_record_name_summary),
+                checked = state.signatureSettings.recordOriginalName,
+                running = running || unsigned,
+                onCheckedChange = actions.onRecordOriginalNameChange,
+            )
             SwitchSetting(
                 title = stringResource(R.string.settings_require_signature_title),
                 summary = stringResource(R.string.settings_require_signature_summary),
@@ -799,6 +815,29 @@ private fun SettingsPage(state: NekoKEMUiState, actions: NekoKEMActions, onOpenA
                 running = running,
                 onCheckedChange = actions.onRequireSignatureChange,
             )
+        }
+        Text(
+            modifier = Modifier.padding(top = 24.dp),
+            text = stringResource(R.string.settings_decrypt_title),
+            style = MaterialTheme.typography.titleLargeEmphasized,
+        )
+        SectionCard(modifier = Modifier.padding(top = 16.dp)) {
+            SwitchSetting(
+                title = stringResource(R.string.settings_decrypt_folder_title),
+                summary = stringResource(R.string.settings_decrypt_folder_summary),
+                checked = state.decryptFolderSet,
+                running = running,
+                onCheckedChange = actions.onDecryptFolderChange,
+            )
+            if (state.decryptFolderSet) {
+                ChoiceSetting(
+                    title = stringResource(R.string.settings_decrypt_folder_location),
+                    running = running,
+                    value = state.decryptFolderName
+                        ?: stringResource(R.string.settings_decrypt_folder_unavailable),
+                    onClick = actions.onChooseDecryptFolder,
+                )
+            }
         }
         Text(
             modifier = Modifier.padding(top = 24.dp),
