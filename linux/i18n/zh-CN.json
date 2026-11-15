@@ -343,5 +343,10 @@
   "The signer key path is a file this decryption reads or writes; choose another path\n": "签名者公钥的保存路径是本次解密读取或写入的文件，请选择其他路径\n",
   "Original file name: %s\n": "原文件名：%s\n",
   "The original file name cannot be recorded\n": "无法记录原文件名\n",
-  "The recorded original file name is invalid\n": "文件中记录的原文件名无效\n"
+  "The recorded original file name is invalid\n": "文件中记录的原文件名无效\n",
+  "This private key already uses the current NKPR format\n": "此私钥已是当前的 NKPR 格式\n",
+  "Upgrade this key to a signing identity key first\n": "请先将此密钥升级为签名身份密钥\n",
+  "NKPR v3 key derivation failed": "NKPR v3 密钥派生失败",
+  "This private key uses an older NKPR format without key commitment. Enter your password only if this key file is your own.\n": "此私钥使用没有密钥承诺的旧版 NKPR 格式。仅当这是你自己的密钥文件时才输入密码。\n",
+  "Rewrote %s as NKPR v3 with key commitment. NekoKEM 5.2 and earlier cannot read it.\n": "已将 %s 重写为带密钥承诺的 NKPR v3。NekoKEM 5.2 及更早版本无法读取它。\n"
 }

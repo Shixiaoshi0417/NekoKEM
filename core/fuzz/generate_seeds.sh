@@ -59,6 +59,10 @@ dd if=/dev/zero bs=1 count=61 status=none \
 # NKPR v2 (identity key) differs only in its version byte.
 { printf 'NKPR'; printf '\002'; dd if="$nkpr_dir/valid-nkpr" bs=1 skip=5 \
     status=none; } > "$nkpr_dir/valid-nkpr-v2"
+# NKPR v3 adds a 32-byte key commitment between the salt and the nonce.
+{ printf 'NKPR'; printf '\003'; dd if="$nkpr_dir/valid-nkpr" bs=1 skip=5 \
+    status=none; dd if=/dev/zero bs=1 count=32 status=none; } \
+    > "$nkpr_dir/valid-nkpr-v3"
 
 dd if="$nkem_dir/valid-v3" of="$nkem_dir/truncated-magic" \
     bs=1 count=3 status=none
@@ -81,3 +85,8 @@ dd if="$nkpr_dir/valid-nkpr" of="$nkpr_dir/truncated-header" \
     bs=1 count=20 status=none
 dd if="$nkpr_dir/valid-nkpr" of="$nkpr_dir/truncated-body" \
     bs=1 count=96 status=none
+# NKPR v3 cut inside the key commitment, and one byte short of complete.
+dd if="$nkpr_dir/valid-nkpr-v3" of="$nkpr_dir/truncated-v3-commitment" \
+    bs=1 count=84 status=none
+dd if="$nkpr_dir/valid-nkpr-v3" of="$nkpr_dir/truncated-v3-body" \
+    bs=1 count=128 status=none

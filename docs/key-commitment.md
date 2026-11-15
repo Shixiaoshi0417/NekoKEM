@@ -1,8 +1,8 @@
 # Key commitment: assessment and design
 
-Status: proposal. This document changes no format; it records where
-NekoKEM's use of AES-GCM depends on key commitment, which uses are already
-covered, and what a future format would change for the one that is not.
+Status: NKPR v3 is implemented. This document records where NekoKEM's use
+of AES-GCM depends on key commitment, which uses were already covered, and
+the private-key format that covers the one that was not.
 
 ## Background
 
@@ -31,6 +31,7 @@ open under.
 | NKEM v4/v5 payload | HKDF of the random file key | The sender |
 | NKEM v5 signature block | HKDF of the file key | The sender |
 | NKPR v1/v2 private key | Argon2id of the password, used directly | Whoever writes the NKPR file |
+| NKPR v3 private key | HKDF of the Argon2id output, with a stored commitment | Whoever writes the NKPR file |
 
 ## Assessment
 
@@ -77,7 +78,7 @@ non-committing container.
 
 ### NKPR v1 and v2: partitioning oracle on the password
 
-NKPR derives the AES-256-GCM key directly from the password with Argon2id
+NKPR v1 and v2 derive the AES-256-GCM key directly from the password with Argon2id
 (64 MiB, 3 iterations, 4 lanes). An attacker who writes an NKPR file can
 make it open under `k` passwords of their choice: they pay `k` Argon2id
 evaluations offline and about `k` blocks of ciphertext. If the victim
@@ -93,21 +94,28 @@ This needs both:
 
 Core already reports a wrong password and a damaged container with one
 message, which does not hide success itself. The exposure is low, but it is
-the one place in NekoKEM where key commitment matters and is missing.
+the one place in NekoKEM where key commitment mattered and was missing.
 
-## Proposed NKPR v3
+## NKPR v3
 
-NKPR v3 would keep NKPR v2's header, parameters, plaintext and AAD rules,
-with these changes:
+NKPR v3 keeps NKPR v2's header (with version byte `3`), Argon2id
+parameters and plaintext, and changes how the key is derived and what the
+file stores:
 
 ```text
 master      = Argon2id(password, salt, 64 MiB, t = 3, p = 4, 64 bytes)
-cipher key  = HKDF-SHA512(master, info = "NekoKEM NKPR v3 AES-256-GCM", 32 bytes)
-commitment  = HKDF-SHA512(master, info = "NekoKEM NKPR v3 key commitment", 32 bytes)
+cipher key  = HKDF-SHA512(key = master, salt = salt,
+                          info = "NekoKEM NKPR v3 AES-256-GCM", 32 bytes)
+commitment  = HKDF-SHA512(key = master, salt = salt,
+                          info = "NekoKEM NKPR v3 key commitment", 32 bytes)
 
 file = header (version 3) || salt || commitment || nonce || ciphertext || tag
 AAD  = header || salt || commitment || nonce
 ```
+
+`salt` is the container's 32-byte random salt, used for both Argon2id and
+HKDF. The info strings are ASCII without a terminator. A v3 file is exactly
+32 bytes longer than a v2 file of the same key.
 
 - The reader recomputes the commitment and compares it in constant time
   before running AES-GCM. A mismatch is reported exactly like a wrong
@@ -119,34 +127,69 @@ AAD  = header || salt || commitment || nonce
 - Argon2id cost is unchanged: one evaluation per unlock.
 - The 64-byte Argon2id output separates the cipher key from the
   commitment, so the commitment reveals nothing about the cipher key.
+- The version byte is authenticated and the lengths differ, so a v2 file
+  cannot be relabelled as v3 or the reverse.
+- NKPR v3 holds a four-component identity key. A two-component key from
+  NekoKEM 4.x stays NKPR v1 until it is upgraded to an identity key, which
+  writes NKPR v3.
+
+### What readers of old formats still owe the user
+
+Readers keep accepting NKPR v1 and v2, so a forged file can still be an
+NKPR v2 file: writing v3 protects nothing by itself. The commitment helps
+where a password meets a file the user did not write, and there the front
+ends act on the version before any password is entered:
+
+- Core reports the NKPR version from the header alone
+  (`nekokem_private_key_format_version()`), without a password.
+- When a private key is imported, or another private key is chosen for one
+  decryption, and the file is NKPR v1 or v2, the password prompt says that
+  the file uses an older format without key commitment and that the
+  password should be entered only if the file is the user's own. The CLI
+  prints the same notice for any NKPR v1/v2 key other than
+  `keys/private.key.enc`.
+- The user's own NKPR v2 key is used without a notice. It can be rewritten
+  as NKPR v3 with the same password: "Upgrade private key format" on
+  Android, the "Upgrade key" page on the desktop apps, `upgrade-key` in the
+  CLI (`nekokem_upgrade_private_key_format()` in Core). The rewrite is
+  explicit because older versions cannot read the result. Core takes the
+  public key too and refuses a pair that does not match, since the desktop
+  apps keep the two selected files as the user's key pair afterwards.
 
 ### Compatibility
 
-- NekoKEM 5.0.x and earlier cannot read NKPR v3 and would report it as a
-  wrong password, as 4.x does for v2. Readers keep accepting NKPR v1 and v2.
-- Core would write v3 for new keys, password changes and upgrades only, and
-  could rewrite an existing v1/v2 key on request with the same password.
-- Exported private keys meant for an older NekoKEM would need an explicit
-  "export as NKPR v2" option, as legacy public keys have today.
+- NekoKEM 5.2 and earlier cannot read NKPR v3 and report it as a wrong
+  password, as 4.x does for v2. The password is not the problem; the key
+  needs a version that reads NKPR v3.
+- Newer versions read NKPR v1, v2 and v3. They write v3 for new keys, for
+  the identity upgrade of an NKPR v1 key, and for the explicit format
+  upgrade of an NKPR v2 key; an existing v1 or v2 file is never rewritten
+  on its own.
+- There is no "export as NKPR v2". A private key that must stay readable by
+  NekoKEM 5.2 should be backed up before its format is upgraded.
 
-### Work and tests
+### Tests
 
-About 2–3 days across Core, CLI, Android JNI, desktop backend and docs:
-
-- Core: v3 reader and writer, constant-time commitment check, unified
-  error, format version in `nekokem_private_key_*` reporting.
-- Tests: known-answer vectors for `master`, cipher key and commitment; a
-  crafted two-password NKPR v2 file that opens under both passwords and is
-  rejected once relabelled or re-encoded as v3; v1/v2/v3 cross-reading;
-  NKPR fuzz seeds for v3.
-- Front ends: no new UI beyond the optional "export as NKPR v2".
+- Known answers for `master`, the cipher key and the commitment, computed
+  with an independent Argon2id and HKDF implementation, and a container
+  built only from them that Core opens
+  (`core/tests/key_commitment_tests.c`).
+- A two-password NKPR v2 file, built with the multi-key attack on AES-GCM,
+  that Core opens under both passwords; relabelled as v3 it is rejected, and
+  rebuilt as v3 with a tag forged for both derived keys it opens only under
+  the password it commits to.
+- NKPR v1, v2 and v3 reading, the format upgrade and its refusals, parser
+  mutations and fuzz seeds for v3.
+- A key pair written by NekoKEM 5.2.0 (`core/tests/fixtures/nkpr-v2`) is
+  read, announced and upgraded in the CLI, desktop bridge and Android
+  tests.
 
 ## Recommendation
 
 1. Do not introduce an NKEM v6 for key commitment; v4 and v5 already have
    it through the header MAC, and v3 is not exposed.
-2. Use the precise wording above in the next release notes.
-3. Implement NKPR v3 when the next private-key format change is planned,
-   or earlier if importing private keys from other people becomes a
-   supported workflow. Until then, the existing guidance stands: enter your
-   password only into your own key files.
+2. Use the precise wording above in release notes: NKEM v4/v5 commit to the
+   file key through the header MAC, NKPR v3 commits to the password-derived
+   key, and NKPR v1/v2 are the remaining non-committing containers.
+3. Enter a password only into your own key files. The apps say so whenever
+   a key file from elsewhere is in a format that cannot enforce it.

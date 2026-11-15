@@ -236,6 +236,47 @@ cleanup:
 }
 
 /*
+ * Rewrites an NKPR v2 private key as NKPR v3 (key commitment) with the same
+ * keys and password, replacing the file atomically.
+ */
+JNIEXPORT jint JNICALL
+Java_com_shixiaoshi0417_nekokem_nativecore_NativeBridge_nativeUpgradePrivateKeyFormat(
+    JNIEnv *env,
+    jobject bridge,
+    jstring public_key_path,
+    jstring private_key_path,
+    jbyteArray password_array)
+{
+    PasswordJniPath public_path = {0};
+    PasswordJniPath private_path = {0};
+    unsigned char *password = NULL;
+    size_t password_len = 0U;
+    int result;
+
+    (void)bridge;
+    result = password_path_acquire(env, public_key_path, &public_path);
+    if (result == PASSWORD_JNI_SUCCESS) {
+        result = password_path_acquire(env, private_key_path, &private_path);
+    }
+    if (result == PASSWORD_JNI_SUCCESS) {
+        result = password_bytes_copy(env, password_array,
+                                     &password, &password_len);
+    }
+    if (result == PASSWORD_JNI_SUCCESS) {
+        result = nekokem_upgrade_private_key_format(public_path.value,
+                                                    private_path.value,
+                                                    password,
+                                                    password_len) == 1
+                     ? PASSWORD_JNI_SUCCESS
+                     : PASSWORD_JNI_CORE_ERROR;
+    }
+    OPENSSL_clear_free(password, password_len);
+    password_path_release(env, &private_path);
+    password_path_release(env, &public_path);
+    return (jint)result;
+}
+
+/*
  * Adds Ed448 and ML-DSA-87 keys to an NKPR v1 key pair, keeping its
  * encryption keys and password, and replaces both files atomically.
  */

@@ -62,6 +62,9 @@ enum Call {
         name: String,
     },
     DiscardOutput,
+    KeyFormat {
+        path: String,
+    },
     ListContacts,
     SaveContact {
         contact: ContactImport,
@@ -173,6 +176,9 @@ fn run(call: Call, progress: Option<ProgressCallback>) -> Result<Value, Failure>
         Call::SaveOutputIn { folder, name } => {
             json(idle().and_then(|_| locked(|| backend().save_output_in(&folder, &name))))
         }
+        // Header only, no password: lets the UI warn before one is typed
+        // into an NKPR v1/v2 file that is not the user's own key.
+        Call::KeyFormat { path } => json(locked(|| Ok(core::key_format(&core::path(&path)?)))),
         Call::DiscardOutput => idle().and_then(|_| {
             locked(|| {
                 if backend().discard_output() {
@@ -322,6 +328,17 @@ mod tests {
 
     fn reply(request: &str) -> Value {
         serde_json::from_str(&dispatch(request.as_bytes(), None)).unwrap()
+    }
+
+    #[test]
+    fn key_format_reports_zero_for_anything_but_an_nkpr_key() {
+        let missing = std::env::temp_dir().join("nekokem-no-such-key.enc");
+        let request = serde_json::json!({ "key_format": { "path": missing } }).to_string();
+        assert_eq!(reply(&request)["ok"], 0);
+        assert_eq!(
+            reply(r#"{"key_format":{"path":""}}"#)["error"]["code"],
+            "invalid-path"
+        );
     }
 
     #[test]

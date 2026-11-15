@@ -30,7 +30,7 @@ int hybrid_keys_have_identity(const HybridKeys *keys);
 void hybrid_keys_cleanup(HybridKeys *keys);
 
 /*
- * Generates a four-component identity key pair (NKPR v2). replace == 0
+ * Generates a four-component identity key pair (NKPR v3). replace == 0
  * never overwrites: an existing key file fails the commit.
  */
 int hybrid_generate_keypair(const char *public_path,
@@ -40,12 +40,21 @@ int hybrid_generate_keypair(const char *public_path,
                             int replace);
 /*
  * Writes a four-component identity key pair: four public PEM blocks and an
- * NKPR v2 private key, committed together.
+ * NKPR v3 private key, committed together.
  */
 int hybrid_upgrade_to_identity(const char *public_path,
                                const char *private_path,
                                const unsigned char *password,
                                size_t password_len);
+/*
+ * Rewrites an NKPR v2 private key as NKPR v3 with the same keys and
+ * password. NKPR v1 and v3 keys, and a public key that is not this private
+ * key's, fail and leave the file untouched.
+ */
+int hybrid_upgrade_private_key_format(const char *public_path,
+                                      const char *private_path,
+                                      const unsigned char *password,
+                                      size_t password_len);
 /* Two or four PEM public keys; a fifth or anything else fails. */
 int hybrid_parse_public_keys(const unsigned char *pem,
                              size_t pem_len,

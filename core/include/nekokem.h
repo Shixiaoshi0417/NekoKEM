@@ -124,7 +124,7 @@ NEKOKEM_API int nekokem_public_key_fingerprint(
  * Signed NKEM v5 containers and identity keys; see docs/NKEM-v5.md.
  *
  * Key generation writes four-component identity keys (X448, ML-KEM-1024,
- * Ed448, ML-DSA-87) with an NKPR v2 private key. Two-component keys stay
+ * Ed448, ML-DSA-87) with an NKPR v3 private key. Two-component keys stay
  * valid recipients and decryption keys, but cannot sign or be trusted
  * signers. nekokem_public_key_fingerprint() returns the identity
  * fingerprint for a four-component key and the legacy fingerprint for a
@@ -133,7 +133,7 @@ NEKOKEM_API int nekokem_public_key_fingerprint(
 
 /*
  * Adds Ed448 and ML-DSA-87 keys to an NKPR v1 key pair, keeping its X448
- * and ML-KEM-1024 keys, and atomically replaces both files (NKPR v2, same
+ * and ML-KEM-1024 keys, and atomically replaces both files (NKPR v3, same
  * password). The public file must hold this private key's public keys.
  */
 NEKOKEM_API int nekokem_upgrade_to_identity_keys(
@@ -284,6 +284,41 @@ NEKOKEM_API int nekokem_check_private_key_password(
 NEKOKEM_API int nekokem_export_public_key(
     const char *public_key_path,
     const char *output_path);
+
+/*
+ * NKPR private-key container versions; see docs/key-commitment.md. Version 3
+ * commits to the password-derived key. Versions 1 and 2 stay readable but
+ * do not, so a file from someone else can be built to open under several
+ * passwords: front ends should say so before a password is entered into a
+ * version 1 or 2 file the user did not create.
+ */
+#define NEKOKEM_NKPR_VERSION_LEGACY 1
+#define NEKOKEM_NKPR_VERSION_IDENTITY 2
+#define NEKOKEM_NKPR_VERSION_COMMITTED 3
+
+/*
+ * The NKPR version in a protected private key's header, or 0 for anything
+ * else (a plaintext PEM key, another file, a missing file). Quiet, and reads
+ * only the 36-byte header: no password, Argon2id or AES-GCM, and no
+ * file-mode requirement, so it also serves keys outside the managed store.
+ * A non-zero result does not mean the rest of the file is intact.
+ */
+NEKOKEM_API int nekokem_private_key_format_version(
+    const char *private_key_path);
+
+/*
+ * Rewrites an NKPR v2 private key as NKPR v3 with the same keys and the
+ * same password, replacing the file atomically. NekoKEM 5.2 and earlier
+ * cannot read the result. Fails without changing the file for a wrong
+ * password, an NKPR v1 key (use nekokem_upgrade_to_identity_keys), a key
+ * that is already NKPR v3, and a public key that is not this private key's:
+ * callers keep the two paths as one key pair, so Core checks that they are.
+ */
+NEKOKEM_API int nekokem_upgrade_private_key_format(
+    const char *public_key_path,
+    const char *private_key_path,
+    const unsigned char *password,
+    size_t password_len);
 
 /*
  * Returns 1 when the key and every residue of its interrupted transactions

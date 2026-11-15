@@ -131,6 +131,9 @@ pub struct Outcome {
     // Decryption: the file name a signed file recorded, made safe for this system.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub original_name: Option<String>,
+    // Upgrade of an identity key: the NKPR version the private key now has.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub key_format: Option<i32>,
 }
 // Core decides the status and matches the signer; the GUI only reports it.
 #[derive(Serialize, Debug)]
@@ -561,6 +564,13 @@ extern "C" {
         password: *const u8,
         length: usize,
     ) -> c_int;
+    fn nekokem_private_key_format_version(key: *const c_char) -> c_int;
+    fn nekokem_upgrade_private_key_format(
+        public: *const c_char,
+        private: *const c_char,
+        password: *const u8,
+        length: usize,
+    ) -> c_int;
     fn nekokem_export_legacy_public_key(key: *const c_char, output: *const c_char) -> c_int;
     fn nekokem_public_key_fingerprint(
         key: *const c_char,
@@ -678,6 +688,14 @@ pub fn legacy_fingerprint(key: &CStr) -> Option<String> {
 }
 pub fn can_verify(key: &CStr) -> bool {
     (unsafe { nekokem_public_key_can_verify(key.as_ptr()) }) == 1
+}
+// NKPR versions 1 and 2 do not commit to the password-derived key.
+pub const NKPR_IDENTITY: i32 = 2;
+pub const NKPR_COMMITTED: i32 = 3;
+// The NKPR version in a private key's header; 0 for anything else. Core reads
+// only the header: no password is involved.
+pub fn key_format(key: &CStr) -> i32 {
+    unsafe { nekokem_private_key_format_version(key.as_ptr()) }
 }
 pub fn language() -> String {
     unsafe {
@@ -914,7 +932,29 @@ pub fn execute<F: Fn(u64, u64)>(
         let public = path(&request.public_path)?;
         let private = path(&request.private_path)?;
         if can_verify(&public) {
-            return Err(Failure::new("already-identity"));
+            // An identity key from NekoKEM 5.0 to 5.2 only needs NKPR v3:
+            // same keys, same password, a private key file that commits to it.
+            if key_format(&private) != NKPR_IDENTITY {
+                return Err(Failure::new("already-identity"));
+            }
+            if unsafe {
+                nekokem_upgrade_private_key_format(
+                    public.as_ptr(),
+                    private.as_ptr(),
+                    request.password.as_ptr(),
+                    request.password.len(),
+                )
+            } != 1
+            {
+                return Err(Failure::new("core-error"));
+            }
+            return Ok(Outcome {
+                output: Some(request.private_path.clone()),
+                fingerprint: fingerprint(&public),
+                can_verify: Some(true),
+                key_format: Some(NKPR_COMMITTED),
+                ..Outcome::default()
+            });
         }
         if unsafe {
             nekokem_upgrade_to_identity_keys(
@@ -2085,6 +2125,102 @@ mod tests {
         );
         assert_eq!(fs::read(keys.file("group.nkem")).unwrap(), before);
         assert_eq!(staging_entries(), staged);
+    }
+    // An identity key pair written by NekoKEM 5.2.0: an NKPR v2 private key.
+    const NKPR_V2_PASSWORD: &str = "nkpr-v2-fixture-password";
+    fn nkpr_v2_keypair(dir: &Directory) -> (String, String) {
+        let public = dir.file("v2.public.key");
+        let private = dir.file("v2.private.key.enc");
+        fs::write(
+            &public,
+            include_bytes!("../../../core/tests/fixtures/nkpr-v2/public.key"),
+        )
+        .unwrap();
+        // Owner-only, as NekoKEM 5.2 left it: Windows Core reads no other key.
+        write_owner_only(
+            &private,
+            include_bytes!("../../../core/tests/fixtures/nkpr-v2/private.key.enc"),
+        );
+        (public, private)
+    }
+    #[test]
+    fn a_5_2_identity_key_still_works_and_upgrades_to_nkpr_v3() {
+        let dir = Directory::new();
+        let backend = Arc::new(Backend::default());
+        let (public, private) = nkpr_v2_keypair(&dir);
+        let key = path(&private).unwrap();
+        assert_eq!(key_format(&key), NKPR_IDENTITY);
+        assert_eq!(key_format(&path(&public).unwrap()), 0);
+        let identity = fingerprint(&path(&public).unwrap()).unwrap();
+        // The NKPR v2 key signs and decrypts as before.
+        fs::write(dir.file("plain"), b"public test input").unwrap();
+        let mut r = request(Kind::Encrypt);
+        r.input = dir.file("plain");
+        r.output = dir.file("signed.nkem");
+        r.key_path = public.clone();
+        r.unsigned = false;
+        r.sign_key_path = private.clone();
+        r.password = Zeroizing::new(NKPR_V2_PASSWORD.into());
+        assert_eq!(run(&backend, r).unwrap().format, Some(5));
+        let decrypt = |output: &str| {
+            let mut r = request(Kind::Decrypt);
+            r.input = dir.file("signed.nkem");
+            r.output = dir.file(output);
+            r.key_path = private.clone();
+            r.password = Zeroizing::new(NKPR_V2_PASSWORD.into());
+            r
+        };
+        run(&backend, decrypt("v2.out")).unwrap();
+        let upgrade = |password: &str| {
+            let mut r = request(Kind::Upgrade);
+            r.public_path = public.clone();
+            r.private_path = private.clone();
+            r.password = Zeroizing::new(password.into());
+            r
+        };
+        // A wrong password changes nothing.
+        let before = fs::read(&private).unwrap();
+        assert_eq!(
+            run(&backend, upgrade("wrong")).err().unwrap().code,
+            "core-error"
+        );
+        assert_eq!(fs::read(&private).unwrap(), before);
+        // Someone else's identity public key is not this key's pair.
+        let mut r = request(Kind::Keygen);
+        r.public_path = dir.file("other.public.key");
+        r.private_path = dir.file("other.private.key.enc");
+        r.password = Zeroizing::new("public test password".into());
+        r.confirmation = r.password.clone();
+        run(&backend, r).unwrap();
+        let mut r = upgrade(NKPR_V2_PASSWORD);
+        r.public_path = dir.file("other.public.key");
+        assert_eq!(run(&backend, r).err().unwrap().code, "core-error");
+        assert_eq!(fs::read(&private).unwrap(), before);
+        let outcome = run(&backend, upgrade(NKPR_V2_PASSWORD)).unwrap();
+        assert_eq!(
+            (
+                outcome.key_format,
+                outcome.can_verify,
+                outcome.fingerprint,
+                outcome.output
+            ),
+            (
+                Some(NKPR_COMMITTED),
+                Some(true),
+                Some(identity.clone()),
+                Some(private.clone())
+            )
+        );
+        assert_eq!(key_format(&key), NKPR_COMMITTED);
+        // Same keys and password; the file gained the 32-byte commitment.
+        assert_eq!(fs::read(&private).unwrap().len(), before.len() + 32);
+        assert_eq!(fingerprint(&path(&public).unwrap()), Some(identity));
+        run(&backend, decrypt("v3.out")).unwrap();
+        assert_eq!(fs::read(dir.file("v3.out")).unwrap(), b"public test input");
+        assert_eq!(
+            run(&backend, upgrade(NKPR_V2_PASSWORD)).err().unwrap().code,
+            "already-identity"
+        );
     }
     // A NekoKEM 4.x key pair: the two encryption components under NKPR v1.
     fn legacy_keypair(

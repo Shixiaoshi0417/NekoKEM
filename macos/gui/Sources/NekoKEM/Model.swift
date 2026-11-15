@@ -38,6 +38,8 @@ struct Outcome {
     var canVerify: Bool? = nil
     /// The file name a signed file recorded, already safe for this system.
     var originalName: String? = nil
+    /// Upgrade of an identity key: the NKPR version the private key now has.
+    var keyFormat: Int? = nil
 
     init(fingerprint: String? = nil) { self.fingerprint = fingerprint }
     init(_ value: Any) {
@@ -48,6 +50,7 @@ struct Outcome {
         format = fields["format"] as? Int
         canVerify = fields["canVerify"] as? Bool
         originalName = fields["originalName"] as? String
+        keyFormat = fields["keyFormat"] as? Int
         if let signed = fields["signature"] as? [String: Any] {
             signature = Signature(status: signed["status"] as? String ?? "unsigned", fingerprint: signed["fingerprint"] as? String,
                                   contact: signed["contact"] as? String, signerKey: signed["signerKey"] as? String)
@@ -109,6 +112,8 @@ enum Backend {
         return saved
     }
     static func discardOutput() throws { _ = try Bridge.call("discard_output") }
+    /// The NKPR version in a private key's header (1 to 3), 0 for anything else. No password is involved.
+    static func keyFormat(_ path: String) throws -> Int { try Bridge.call(["key_format": ["path": path]]) as? Int ?? 0 }
     static func contacts() throws -> (contacts: [Contact], unreadable: Int) {
         let fields = try Bridge.call("list_contacts") as? [String: Any] ?? [:]
         return ((fields["contacts"] as? [Any] ?? []).map(Contact.init), fields["unreadable"] as? Int ?? 0)

@@ -8,7 +8,7 @@
 make core
 ```
 
-Core 使用 OpenSSL EVP、NKEM v3（单接收方）、NKEM v4（多接收方）、带发送方签名的 NKEM v5 和 NKPR v1/v2；固定依赖为 OpenSSL 4.1.0。NKEM v3 使用独立的
+Core 使用 OpenSSL EVP、NKEM v3（单接收方）、NKEM v4（多接收方）、带发送方签名的 NKEM v5 和 NKPR v1/v2/v3；固定依赖为 OpenSSL 4.1.0。NKEM v3 使用独立的
 32-byte HKDF salt；NKPR 作为独立私钥容器继续维护。
 
 ## 公共 API
@@ -16,7 +16,7 @@ Core 使用 OpenSSL EVP、NKEM v3（单接收方）、NKEM v4（多接收方）�
 原有函数成功返回 `1`、失败返回 `0`。路径和输出缓冲区由调用者拥有；
 口令只在调用期间借用，Core 不会保存或释放调用者的口令缓冲区。
 
-- `nekokem_generate_keypair()`：生成四段式身份公钥和受口令保护的 NKPR v2 私钥
+- `nekokem_generate_keypair()`：生成四段式身份公钥和受口令保护的 NKPR v3 私钥
   （其中的 X448 + ML-KEM-1024 用于加解密，见下文 v5 部分）。
 - `nekokem_encrypt_file()`：写出不签名的 NKEM v3 Hybrid 文件；签名的 v5 见下文。
 - `nekokem_decrypt_file()`：接受 NKEM v3 与 v4，其他版本一律拒绝；v4 尝试全部接收方记录
@@ -49,12 +49,18 @@ Core 使用 OpenSSL EVP、NKEM v3（单接收方）、NKEM v4（多接收方）�
   是否显示口令输入框。
 
 签名的 NKEM v5 与四段式身份密钥（X448、ML-KEM-1024、Ed448、ML-DSA-87，
-私钥为 NKPR v2）见 [`docs/NKEM-v5.md`](../docs/NKEM-v5.md)：
+私钥为 NKPR v3，NKPR v2 仍可读取）见 [`docs/NKEM-v5.md`](../docs/NKEM-v5.md)：
 
 - `nekokem_generate_keypair()` 与 `nekokem_replace_keypair()` 写出身份密钥；
   `nekokem_replace_keypair()` 会覆盖已有密钥，只应在用户明确确认后调用。
 - `nekokem_upgrade_to_identity_keys()`：为 NKPR v1 密钥对补上 Ed448 与 ML-DSA-87，
-  保留原 X448/ML-KEM-1024 密钥和口令，原子替换两个文件。
+  保留原 X448/ML-KEM-1024 密钥和口令，原子替换两个文件（私钥写为 NKPR v3）。
+- `nekokem_private_key_format_version()`：只读 36 字节头部，返回私钥文件的 NKPR 版本
+  （1 至 3，其他文件为 0），不需要口令。前端据此在用户向不是自己的 NKPR v1/v2 文件
+  输入口令前给出提示。
+- `nekokem_upgrade_private_key_format()`：把 NKPR v2 私钥用同一口令重写为 NKPR v3，
+  密钥不变，原子替换文件；口令错误、NKPR v1、已是 v3，或传入的公钥与该私钥不成对时
+  失败且不改动文件。
 - `nekokem_encrypt_file_v5_with_progress()`：默认为 1 至 64 位接收方写出签名的 v5；
   设置 `NEKOKEM_ENCRYPT_UNSIGNED` 时与 `nekokem_encrypt_file_multi_with_progress()`
   相同地写出 v3 或 v4。发送方密钥缺失或只有两段时报错，不会静默改为不签名。
@@ -85,9 +91,12 @@ v4 的收件人不可关联性针对不持有相应私钥的非收件人。收�
 
 NKPR 解码将错误口令、损坏的认证数据、损坏或不支持的容器结构统一报告为
 “私钥口令错误或 NKPR 数据损坏”，不附加 OpenSSL 的认证失败细节。
-Argon2id 参数和 NKPR 格式保持不变。AES-GCM 不具备密钥承诺性；成功解开
-一个容器不证明该容器只能由唯一口令或唯一保护密钥打开，也不保证不同
-保护密钥下的明文一致。该限制保留在 NKPR v1 中，以维持格式兼容性。
+Argon2id 成本参数保持不变。AES-GCM 不具备密钥承诺性：成功解开一个 NKPR v1/v2
+容器不证明该容器只能由唯一口令打开。NKPR v3 从 64 字节 Argon2id 输出用
+HKDF-SHA512 派生 AES 密钥和 32 字节密钥承诺，承诺写在 salt 之后并进入 AAD；
+读取时先以常数时间比较承诺，不一致即按口令错误处理，不运行 AES-GCM。
+v1/v2 为兼容仍可读取，其限制不变；设计见
+[`docs/key-commitment.md`](../docs/key-commitment.md)。
 
 ## 密钥文件与中断恢复
 

@@ -343,5 +343,10 @@
   "The signer key path is a file this decryption reads or writes; choose another path\n": "署名者の公開鍵の保存先は、この復号で読み書きするファイルです。別のパスを選んでください\n",
   "Original file name: %s\n": "元のファイル名：%s\n",
   "The original file name cannot be recorded\n": "元のファイル名を記録できません\n",
-  "The recorded original file name is invalid\n": "記録された元のファイル名が無効です\n"
+  "The recorded original file name is invalid\n": "記録された元のファイル名が無効です\n",
+  "This private key already uses the current NKPR format\n": "この秘密鍵はすでに現在の NKPR 形式です\n",
+  "Upgrade this key to a signing identity key first\n": "先にこの鍵を署名用 ID 鍵にアップグレードしてください\n",
+  "NKPR v3 key derivation failed": "NKPR v3 の鍵導出に失敗しました",
+  "This private key uses an older NKPR format without key commitment. Enter your password only if this key file is your own.\n": "この秘密鍵は鍵コミットメントのない旧 NKPR 形式です。自分の鍵ファイルである場合にのみパスワードを入力してください。\n",
+  "Rewrote %s as NKPR v3 with key commitment. NekoKEM 5.2 and earlier cannot read it.\n": "%s を鍵コミットメント付きの NKPR v3 に書き換えました。NekoKEM 5.2 以前では読み取れません。\n"
 }

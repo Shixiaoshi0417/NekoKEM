@@ -34,6 +34,8 @@ data class Outcome(
     val format: Int? = null, val signature: Signature? = null, val canVerify: Boolean? = null,
     /** The file name a signed file recorded, already safe for this system. */
     val originalName: String? = null,
+    /** Upgrade of an identity key: the NKPR version the private key now has. */
+    val keyFormat: Int? = null,
 )
 data class Contact(val id: String, val fingerprint: String, val name: String, val note: String, val canVerify: Boolean, val legacyFingerprint: String?, val pinned: Boolean = false, val verified: Boolean = false)
 data class ContactList(val contacts: List<Contact>, val unreadable: Int)
@@ -86,6 +88,8 @@ object Backend {
     fun saveOutputIn(folder: String, name: String): String =
         (Bridge.request { obj { field("save_output_in") { field("folder", folder); field("name", name) } } } as JsonPrimitive).content
     fun discardOutput() { Bridge.request { command("discard_output") } }
+    /** The NKPR version in a private key's header (1 to 3), 0 for anything else. No password is involved. */
+    fun keyFormat(path: String): Int = (Bridge.request { obj { field("key_format") { field("path", path) } } } as? JsonPrimitive)?.intOrNull ?: 0
 
     private fun outcome(value: JsonElement): Outcome {
         val it = value.obj()
@@ -96,6 +100,7 @@ object Backend {
             format = (it["format"] as? JsonPrimitive)?.intOrNull, signature = signature,
             canVerify = it.flag("canVerify"),
             originalName = it.text("originalName"),
+            keyFormat = (it["keyFormat"] as? JsonPrimitive)?.intOrNull,
         )
     }
 

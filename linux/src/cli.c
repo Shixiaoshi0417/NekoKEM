@@ -604,11 +604,28 @@ int cli_run_hybrid_keygen(int replace)
     return generate_hybrid_keypair(0, replace);
 }
 
+/* NKPR v1/v2 carry no key commitment; see docs/key-commitment.md. */
+static int private_key_lacks_commitment(const char *private_key_path)
+{
+    int version = nekokem_private_key_format_version(private_key_path);
+
+    return version == NEKOKEM_NKPR_VERSION_LEGACY ||
+           version == NEKOKEM_NKPR_VERSION_IDENTITY;
+}
+
 static int read_existing_password(const char *private_key_path,
                                   PasswordBuffer *password)
 {
-    return nekokem_private_key_requires_password(private_key_path) == 0 ||
-           read_password_line(file_message("请输入私钥密码："), password);
+    if (nekokem_private_key_requires_password(private_key_path) == 0) {
+        return 1;
+    }
+    /* The managed key is the user's own; any other file may not be. */
+    if (strcmp(private_key_path, PROTECTED_PRIVATE_KEY_PATH) != 0 &&
+        private_key_lacks_commitment(private_key_path)) {
+        fputs(file_message("This private key uses an older NKPR format without key commitment. Enter your password only if this key file is your own.\n"),
+              stderr);
+    }
+    return read_password_line(file_message("请输入私钥密码："), password);
 }
 
 /* The input's last path component, recorded so decryption can show it. */
@@ -805,7 +822,22 @@ int cli_run_upgrade_key(const char *public_key_path,
         private_key_path = PROTECTED_PRIVATE_KEY_PATH;
     }
     if (nekokem_public_key_can_verify(public_key_path) == 1) {
-        fputs(file_message("This key is already a signing identity key\n"), stderr);
+        /* An identity key from NekoKEM 5.0 to 5.2 only needs NKPR v3. */
+        if (nekokem_private_key_format_version(private_key_path) !=
+            NEKOKEM_NKPR_VERSION_IDENTITY) {
+            fputs(file_message("This key is already a signing identity key\n"), stderr);
+            goto cleanup;
+        }
+        if (!read_password_line(file_message("请输入私钥密码："), &password) ||
+            !nekokem_upgrade_private_key_format(public_key_path,
+                                                private_key_path,
+                                                password.data,
+                                                password.length)) {
+            goto cleanup;
+        }
+        printf(file_message("Rewrote %s as NKPR v3 with key commitment. NekoKEM 5.2 and earlier cannot read it.\n"),
+               file_display_safe_path(private_key_path));
+        success = 1;
         goto cleanup;
     }
     if (!read_password_line(file_message("请输入私钥密码："), &password) ||

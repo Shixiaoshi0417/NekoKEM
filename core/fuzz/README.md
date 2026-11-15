@@ -17,7 +17,7 @@ afl-fuzz -i fuzz/seeds/identity -o fuzz/out-identity -- \
 
 `fuzz_nkem` calls only the production NKEM v3, v4 and v5 header and
 total-size parsers. `fuzz_nkpr` calls only the production NKPR header, parameter, and
-total-size parser, which accepts NKPR v1 and v2. Neither performs key decapsulation, Argon2id, AES-GCM, or
+total-size parser, which accepts NKPR v1, v2 and v3. Neither performs key decapsulation, Argon2id, AES-GCM, or
 plaintext output.
 
 `fuzz_decrypt` runs the complete public decryption call on the input:
@@ -56,7 +56,8 @@ maximum 64 recipients, two recipients with one ciphertext byte, and two
 recipients cut inside the second entry and inside the header MAC. The v5
 parser seeds cover one recipient, two recipients with one ciphertext byte
 and 64 recipients, each followed by a zero signature block, and one cut
-inside the signature block; the NKPR seeds cover versions 1 and 2. Seeds
+inside the signature block; the NKPR seeds cover versions 1, 2 and 3, with v3 also cut inside its key
+commitment and one byte short. Seeds
 contain no password, private key, plaintext, or other sensitive material.
 Run `sh core/fuzz/generate_seeds.sh` to regenerate them deterministically.
 

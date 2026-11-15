@@ -245,6 +245,14 @@
     <string name="operation_export_legacy_public_key">匯出舊版公開金鑰</string>
     <string name="upgrade_password_title">升級為身分金鑰</string>
     <string name="upgrade_password_message">為此 NekoKEM 4.x 金鑰對加入簽章金鑰。加密金鑰、密碼和舊檔案都保持不變。請輸入私密金鑰密碼，並先匯出兩個金鑰的備份。</string>
+    <string name="key_old_format_status">私密金鑰檔案為舊格式。升級後帶金鑰承諾，密碼不變。</string>
+    <string name="action_upgrade_key_format">升級私密金鑰格式</string>
+    <string name="operation_upgrade_key_format">升級私密金鑰格式</string>
+    <string name="upgrade_format_password_title">升級私密金鑰格式</string>
+    <string name="upgrade_format_password_message">將此私密金鑰檔案重寫為帶金鑰承諾的目前格式（NKPR v3）。金鑰、指紋和密碼都保持不變。NekoKEM 5.2 及更早版本無法讀取升級後的檔案。請輸入私密金鑰密碼。</string>
+    <string name="error_reason_upgrade_format">無法升級私密金鑰格式：密碼錯誤或檔案已損毀，檔案保持不變。</string>
+    <string name="error_reason_key_format_current">此私密金鑰已是目前格式，無需升級。</string>
+    <string name="old_key_format_note">此私密金鑰檔案使用沒有金鑰承諾的舊格式。僅當它是你自己的檔案時才輸入密碼。</string>
     <string name="legacy_export_hint">供使用 NekoKEM 4.x 及更早版本的接收者使用，無法驗證簽章。</string>
     <string name="contact_verifies">身分金鑰 · 可驗證簽章</string>
     <string name="contact_legacy">舊版金鑰 · 無法驗證簽章</string>

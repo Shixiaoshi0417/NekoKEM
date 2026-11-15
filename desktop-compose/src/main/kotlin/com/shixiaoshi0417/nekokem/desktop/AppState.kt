@@ -80,6 +80,10 @@ class AppState(private val scope: CoroutineScope, private val files: FileChooser
     // Encrypt or Decrypt was pressed and its questions are being answered, or it runs.
     var fileAction by mutableStateOf<Kind?>(null); private set
     var askingPassword by mutableStateOf(false); private set
+    // The key chosen for this decryption is NKPR v1/v2, which does not commit to
+    // its password: the dialog says so before a password is typed into a file
+    // that may not be the user's own (docs/key-commitment.md).
+    var oldKeyFormat by mutableStateOf(false); private set
     // The output is written to a private staged file first. It stays there, and
     // can be saved again, when the chosen place could not be written.
     private var staged: Unsaved? = null
@@ -398,7 +402,11 @@ class AppState(private val scope: CoroutineScope, private val files: FileChooser
                 result = native { Backend.run(request, ::reportProgress) }
                 // A new or upgraded key pair becomes the user's own keys.
                 if (keys) { ownPublicKey = request.publicPath; signKeyPath = request.privatePath; storePreferences() }
-                successMessage = when (kind) { Kind.Upgrade -> "keyUpgraded"; Kind.ExportLegacy -> "legacyExported"; else -> "success" }
+                successMessage = when (kind) {
+                    Kind.Upgrade -> if (result?.keyFormat != null) "keyFormatUpgraded" else "keyUpgraded"
+                    Kind.ExportLegacy -> "legacyExported"
+                    else -> "success"
+                }
             } catch (error: Throwable) {
                 val message = code(error)
                 failure = message
@@ -432,6 +440,11 @@ class AppState(private val scope: CoroutineScope, private val files: FileChooser
             if (decryptKey.isEmpty()) { failure = invalid("invalid-path", "otherPrivateKey"); return }
             fileAction = action
             askingPassword = true
+            val key = otherPrivateKey
+            if (key.isNotEmpty()) scope.launch {
+                val format = runCatching { native { Backend.keyFormat(key) } }.getOrDefault(0)
+                if (askingPassword && fileAction == Kind.Decrypt && otherPrivateKey == key) oldKeyFormat = format == 1 || format == 2
+            }
         }
     }
 
@@ -750,7 +763,7 @@ class AppState(private val scope: CoroutineScope, private val files: FileChooser
     fun clearSelection() { if (!locked) selected.clear() }
     fun toggleOwn() { if (!locked && (ownSelected || !atRecipientLimit)) { ownSelected = !ownSelected; unverifiedWarned = false; edited("contacts") } }
     fun closeRecipients() { if (!locked) { closeRecipientsNow(); fileAction = null; invalidField = null; failure = null } }
-    private fun closeRecipientsNow() { choosingRecipients = false; askingPassword = false; ownSelected = false; otherKeys.clear(); unverifiedWarned = false }
+    private fun closeRecipientsNow() { choosingRecipients = false; askingPassword = false; oldKeyFormat = false; ownSelected = false; otherKeys.clear(); unverifiedWarned = false }
     fun removeOtherKey(path: String) { if (!locked) otherKeys.remove(path) }
     /** "Other public key file…": a one-off recipient for this file, never saved. */
     fun addOtherKey() {

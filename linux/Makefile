@@ -33,7 +33,8 @@ DEPS = $(OBJECTS:.o=.d)
 	fuzz-build test-key-management test-progress test-progress-large \
 	test-file-security test-version-rejection test-gcm-limit test-aes-stream \
 	test-hybrid-kdf test-asan test-input-boundaries test-pem-interaction test-openssl \
-	test-multi-recipient test-signature test-key-safety test-payload-hash
+	test-multi-recipient test-signature test-key-safety test-payload-hash \
+	test-key-commitment
 
 all: $(TARGET)
 
@@ -249,6 +250,18 @@ test-signature:
 	ASAN_OPTIONS=detect_leaks=1:halt_on_error=1 \
 		UBSAN_OPTIONS=halt_on_error=1:print_stacktrace=1 "$$signature_binary"
 
+test-key-commitment:
+	@set -eu; \
+	commitment_binary=$$(mktemp /tmp/nekokem-key-commitment-tests.XXXXXX); \
+	cleanup_commitment() { rm -f "$$commitment_binary"; }; \
+	trap cleanup_commitment EXIT INT TERM; \
+	$(CC) $(CPPFLAGS) $(CFLAGS) -O1 -g -fno-omit-frame-pointer \
+		-fsanitize=address,undefined -fno-sanitize-recover=undefined \
+		$(LDFLAGS) ../core/tests/key_commitment_tests.c $(CORE_SOURCES) \
+		$(LDLIBS) -fsanitize=address,undefined -o "$$commitment_binary"; \
+	ASAN_OPTIONS=detect_leaks=1:halt_on_error=1 \
+		UBSAN_OPTIONS=halt_on_error=1:print_stacktrace=1 "$$commitment_binary"
+
 test-payload-hash:
 	@set -eu; \
 	hash_binary=$$(mktemp /tmp/nekokem-payload-hash-tests.XXXXXX); \
@@ -300,7 +313,7 @@ test-progress test-progress-large: $(CORE_LIBRARY)
 test: $(TARGET) test-openssl analyze test-ubsan test-parser test-file-security test-gcm-limit test-aes-stream \
 	test-key-management test-version-rejection test-progress test-hybrid-kdf test-input-boundaries \
 	test-asan test-pem-interaction test-i18n test-multi-recipient test-signature test-key-safety test-payload-hash test-interrupts \
-	test-cli-audit test-crypto-audit
+	test-cli-audit test-crypto-audit test-key-commitment
 	@set -eu; \
 	test_dir=$$(mktemp -d); \
 	cleanup() { \

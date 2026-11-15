@@ -222,6 +222,54 @@ static int test_nkem_v4_mutations(const unsigned char *valid, size_t valid_len)
     return expect_nkem_v4_invalid(mutated, valid_len + 1U);
 }
 
+/*
+ * NKPR v1 and v2 share one layout; v3 is exactly NKPR_COMMITMENT_SIZE bytes
+ * longer. A version byte never fits the other layout's length.
+ */
+static int test_nkpr_versions(const unsigned char *valid, size_t valid_len)
+{
+    unsigned char container[512];
+    size_t committed_len = valid_len + NKPR_COMMITMENT_SIZE;
+    size_t length;
+
+    if (committed_len + 1U > sizeof(container)) return 0;
+    memset(container, 0, sizeof(container));
+    memcpy(container, valid, NKPR_HEADER_SIZE);
+    if (protected_private_key_container_version(container, valid_len) !=
+            NKPR_VERSION ||
+        protected_private_key_header_version(container) != NKPR_VERSION) {
+        return 0;
+    }
+    container[4] = NKPR_VERSION_IDENTITY;
+    if (protected_private_key_container_version(container, valid_len) !=
+            NKPR_VERSION_IDENTITY ||
+        !expect_nkpr_invalid(container, committed_len)) {
+        return 0;
+    }
+    container[4] = NKPR_VERSION_COMMITTED;
+    if (protected_private_key_container_version(container, committed_len) !=
+            NKPR_VERSION_COMMITTED ||
+        protected_private_key_header_version(container) !=
+            NKPR_VERSION_COMMITTED ||
+        !expect_nkpr_invalid(container, valid_len) ||
+        !expect_nkpr_invalid(container, committed_len + 1U)) {
+        return 0;
+    }
+    for (length = 0U; length < committed_len; ++length) {
+        if (!expect_nkpr_invalid(container, length)) return 0;
+    }
+    container[4] = 0U;
+    if (!expect_nkpr_invalid(container, valid_len) ||
+        !expect_nkpr_invalid(container, committed_len) ||
+        protected_private_key_header_version(container) != 0U) {
+        return 0;
+    }
+    container[4] = (unsigned char)(NKPR_VERSION_COMMITTED + 1U);
+    return expect_nkpr_invalid(container, valid_len) &&
+           expect_nkpr_invalid(container, committed_len) &&
+           protected_private_key_header_version(container) == 0U;
+}
+
 static int test_nkpr_mutations(const unsigned char *valid, size_t valid_len)
 {
     unsigned char mutated[512];
@@ -317,6 +365,7 @@ int main(void)
     for (i = 0U; i < nkem_v4_len; ++i) {
         if (nkem_v4_container_parse(nkem_v4, i)) return EXIT_FAILURE;
     }
+    if (!test_nkpr_versions(nkpr, nkpr_len)) return EXIT_FAILURE;
     for (i = 0U; i < nkpr_len; ++i) {
         if (protected_private_key_container_parse(nkpr, i)) return EXIT_FAILURE;
     }

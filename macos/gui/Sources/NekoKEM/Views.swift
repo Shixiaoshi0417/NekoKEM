@@ -314,6 +314,7 @@ private struct KeysPage: View {
                 let upgrade = state.keyMode == .upgrade
                 PathInput(state: state, field: .publicPath, label: state.t(upgrade ? "publicKey" : "publicPath"))
                 PathInput(state: state, field: .privatePath, label: state.t(upgrade ? "privateKey" : "privatePath"))
+                if upgrade { Text(state.t("upgradeKeyHint")).font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true) }
                 if state.replaceOffered {
                     Toggle(state.t("replaceKeys"), isOn: $state.replace).disabled(!state.editable)
                     Text(state.t("replaceKeysHint")).font(.callout).foregroundStyle(danger)
@@ -690,6 +691,7 @@ private struct PasswordSheet: View {
         VStack(alignment: .leading, spacing: 12) {
             Text(state.t("password")).font(.headline)
             if encrypting { Text(state.t("signPasswordHint")).font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true) }
+            else if state.oldKeyFormat { Text(state.t("oldKeyFormatHint")).font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true) }
             SecureField("", text: $state.password).textFieldStyle(.roundedBorder).accessibilityLabel(state.t("password"))
             if state.invalidField == "password", let failure = state.failure { Text(state.t(failure)).font(.callout).foregroundStyle(danger) }
             KeychainOptions(state: state)

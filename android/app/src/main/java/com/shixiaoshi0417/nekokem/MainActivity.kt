@@ -192,6 +192,7 @@ private enum class PasswordPrompt {
     DECRYPT_FILE,
     SIGN_ENCRYPTION,
     UPGRADE_KEY,
+    UPGRADE_KEY_FORMAT,
 }
 
 private enum class DeleteTarget(
@@ -271,6 +272,9 @@ private fun NekoKEMRoute(
     var pendingOutputAction by remember { mutableStateOf<PendingOutputAction?>(null) }
     var pendingKeyImport by remember { mutableStateOf<PendingKeyImport?>(null) }
     var pendingPrivateImportUri by remember { mutableStateOf<Uri?>(null) }
+    // The file chosen for import is NKPR v1/v2, which does not commit to its
+    // password: the prompt says so before a password is typed into it.
+    var pendingPrivateImportLacksCommitment by remember { mutableStateOf(false) }
     var pendingPublicImportUri by remember { mutableStateOf<Uri?>(null) }
     var pendingTemporaryPrivateKey by remember {
         mutableStateOf<PendingTemporaryPrivateKey?>(null)
@@ -667,6 +671,17 @@ private fun NekoKEMRoute(
             }
         } else {
             pendingPrivateImportUri = uri
+            pendingPrivateImportLacksCommitment = false
+            scope.launch {
+                val old = try {
+                    pageWork { fileWorkflow.privateKeyLacksCommitment(uri) }
+                } catch (_: Exception) {
+                    false
+                }
+                if (pendingPrivateImportUri == uri) {
+                    pendingPrivateImportLacksCommitment = old
+                }
+            }
             if (keyState.privateKeyExists) {
                 confirmPrivateKeyReplacement = true
             } else {
@@ -1258,6 +1273,7 @@ private fun NekoKEMRoute(
             PasswordPrompt.DECRYPT_FILE -> R.string.decrypt_password_title
             PasswordPrompt.SIGN_ENCRYPTION -> R.string.sign_password_title
             PasswordPrompt.UPGRADE_KEY -> R.string.upgrade_password_title
+            PasswordPrompt.UPGRADE_KEY_FORMAT -> R.string.upgrade_format_password_title
         }
         val message = when (prompt) {
             PasswordPrompt.CHECK_PRIVATE_KEY -> R.string.check_password_message
@@ -1268,6 +1284,13 @@ private fun NekoKEMRoute(
             PasswordPrompt.DECRYPT_FILE -> R.string.decrypt_password_message
             PasswordPrompt.SIGN_ENCRYPTION -> R.string.sign_password_message
             PasswordPrompt.UPGRADE_KEY -> R.string.upgrade_password_message
+            PasswordPrompt.UPGRADE_KEY_FORMAT -> R.string.upgrade_format_password_message
+        }
+        // A key file from elsewhere in a format without key commitment.
+        val oldFormat = when (prompt) {
+            PasswordPrompt.IMPORT_PRIVATE_KEY -> pendingPrivateImportLacksCommitment
+            PasswordPrompt.SELECT_TEMPORARY_PRIVATE_KEY -> pendingTemporaryPrivateKey?.lacksCommitment == true
+            else -> false
         }
         val label = if (prompt == PasswordPrompt.DECRYPT_FILE) {
             R.string.decrypt_password_label
@@ -1296,6 +1319,7 @@ private fun NekoKEMRoute(
             titleResource = title,
             messageResource = message,
             labelResource = label,
+            noteResource = if (oldFormat) R.string.old_key_format_note else null,
             passwordManager = passwordManager,
             onDismiss = {
                 if (prompt == PasswordPrompt.IMPORT_PRIVATE_KEY) {
@@ -1445,6 +1469,18 @@ private fun NekoKEMRoute(
                         },
                     ) {
                         keyManager.upgradeToIdentityKeys(password.copyOf())
+                    }
+
+                    PasswordPrompt.UPGRADE_KEY_FORMAT -> runKeyOperation(
+                        operationResource = R.string.operation_upgrade_key_format,
+                        sensitiveInput = password,
+                        completionDetails = {
+                            keyCompletionDetails(
+                                context.getString(R.string.default_private_key_filename),
+                            )
+                        },
+                    ) {
+                        keyManager.upgradePrivateKeyFormat(password.copyOf())
                     }
                 }
             },
@@ -1993,6 +2029,7 @@ private fun NekoKEMRoute(
             contactSelection = contactSelection,
             uiStyle = uiStyle,
             canSign = keyState.canSign,
+            privateKeyOutdated = keyState.privateKeyOutdated,
             signatureSettings = signatureSettings,
             autoUpdateCheck = updateSettings.autoCheck,
             updateChecking = updateChecking,
@@ -2173,6 +2210,7 @@ private fun NekoKEMRoute(
             },
             onUiStyleChange = onUiStyleChange,
             onUpgradeKey = { passwordPrompt = PasswordPrompt.UPGRADE_KEY },
+            onUpgradeKeyFormat = { passwordPrompt = PasswordPrompt.UPGRADE_KEY_FORMAT },
             onExportLegacyPublicKey = {
                 pendingOutputAction = PendingOutputAction.EXPORT_LEGACY_PUBLIC_KEY
                 createOutputLauncher.launch(legacyPublicKeyExportRequest())
@@ -2253,6 +2291,7 @@ private fun resultReason(
             R.string.error_reason_public_key_integrity
         LocalKeyManager.RESULT_SIGNING_KEY_LEGACY -> R.string.error_reason_signing_key
         LocalKeyManager.RESULT_ALREADY_IDENTITY -> R.string.error_reason_already_identity
+        LocalKeyManager.RESULT_KEY_FORMAT_CURRENT -> R.string.error_reason_key_format_current
         LocalKeyManager.RESULT_SIGNATURE_INVALID -> R.string.error_reason_signature_invalid
         LocalKeyManager.RESULT_SIGNATURE_REQUIRED -> R.string.error_reason_signature_required
         LocalKeyManager.RESULT_SIGNER_NOT_TRUSTED -> R.string.error_reason_signer_not_trusted
@@ -2276,6 +2315,7 @@ private fun resultReason(
             R.string.operation_select_temporary_private_key ->
                 R.string.error_reason_authentication
             R.string.operation_upgrade_key -> R.string.error_reason_upgrade
+            R.string.operation_upgrade_key_format -> R.string.error_reason_upgrade_format
             R.string.operation_export_public_key,
             R.string.operation_export_legacy_public_key,
             R.string.operation_export_private_key -> R.string.error_reason_export

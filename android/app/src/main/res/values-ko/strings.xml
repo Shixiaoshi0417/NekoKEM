@@ -245,6 +245,14 @@
     <string name="operation_export_legacy_public_key">이전 형식 공개 키 내보내기</string>
     <string name="upgrade_password_title">신원 키로 업그레이드</string>
     <string name="upgrade_password_message">이 NekoKEM 4.x 키 쌍에 서명 키를 추가합니다. 암호화 키, 암호, 기존 파일은 그대로입니다. 개인 키 암호를 입력하세요. 먼저 두 키의 백업을 내보내세요.</string>
+    <string name="key_old_format_status">개인 키 파일이 이전 형식입니다. 업그레이드하면 키 커밋먼트가 추가되며 암호는 그대로입니다.</string>
+    <string name="action_upgrade_key_format">개인 키 형식 업그레이드</string>
+    <string name="operation_upgrade_key_format">개인 키 형식 업그레이드</string>
+    <string name="upgrade_format_password_title">개인 키 형식 업그레이드</string>
+    <string name="upgrade_format_password_message">이 개인 키 파일을 키 커밋먼트가 있는 현재 형식(NKPR v3)으로 다시 씁니다. 키, 지문, 암호는 그대로입니다. NekoKEM 5.2 및 이전 버전은 업그레이드된 파일을 읽을 수 없습니다. 개인 키 암호를 입력하세요.</string>
+    <string name="error_reason_upgrade_format">개인 키 형식을 업그레이드할 수 없습니다. 암호가 틀렸거나 파일이 손상되었습니다. 파일은 그대로입니다.</string>
+    <string name="error_reason_key_format_current">이 개인 키는 이미 현재 형식이어서 업그레이드할 필요가 없습니다.</string>
+    <string name="old_key_format_note">이 개인 키 파일은 키 커밋먼트가 없는 이전 형식입니다. 본인의 파일인 경우에만 암호를 입력하세요.</string>
     <string name="legacy_export_hint">NekoKEM 4.x 이하를 쓰는 수신자용입니다. 서명 확인에는 쓸 수 없습니다.</string>
     <string name="contact_verifies">신원 키 · 서명 확인 가능</string>
     <string name="contact_legacy">이전 형식 키 · 서명 확인 불가</string>

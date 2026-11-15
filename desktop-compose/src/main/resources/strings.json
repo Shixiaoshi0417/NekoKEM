@@ -793,6 +793,13 @@
    "鍵をアップグレード",
    "키 업그레이드"
   ],
+  "upgradeKeyHint": [
+   "Adds signing keys to a NekoKEM 4.x key, or rewrites a private key from NekoKEM 5.0–5.2 in the current format (NKPR v3). The password stays the same. NekoKEM 5.2 and earlier cannot read the upgraded private key.",
+   "为 NekoKEM 4.x 的密钥补上签名密钥，或把 NekoKEM 5.0–5.2 的私钥重写为当前格式（NKPR v3）。密码不变。NekoKEM 5.2 及更早版本无法读取升级后的私钥。",
+   "為 NekoKEM 4.x 的金鑰補上簽章金鑰，或將 NekoKEM 5.0–5.2 的私密金鑰重寫為目前格式（NKPR v3）。密碼不變。NekoKEM 5.2 及更早版本無法讀取升級後的私密金鑰。",
+   "NekoKEM 4.x の鍵に署名鍵を追加するか、NekoKEM 5.0–5.2 の秘密鍵を現在の形式（NKPR v3）に書き換えます。パスワードは変わりません。NekoKEM 5.2 以前ではアップグレード後の秘密鍵を読み取れません。",
+   "NekoKEM 4.x 키에 서명 키를 추가하거나 NekoKEM 5.0–5.2의 개인 키를 현재 형식(NKPR v3)으로 다시 씁니다. 암호는 그대로입니다. NekoKEM 5.2 및 이전 버전은 업그레이드된 개인 키를 읽을 수 없습니다."
+  ],
   "exportLegacy": [
    "Export legacy public key",
    "导出旧版公钥",
@@ -820,6 +827,13 @@
    "密碼用於開啟你的私密金鑰為檔案簽章，不會被儲存。",
    "パスワードは秘密鍵を開いて署名するためだけに使い、保存しません。",
    "암호는 개인 키를 열어 서명하는 데만 쓰며 저장하지 않습니다."
+  ],
+  "oldKeyFormatHint": [
+   "This private key file uses an older format without key commitment. Enter your password only if the file is your own.",
+   "此私钥文件使用没有密钥承诺的旧格式。仅当它是你自己的文件时才输入密码。",
+   "此私密金鑰檔案使用沒有金鑰承諾的舊格式。僅當它是你自己的檔案時才輸入密碼。",
+   "この秘密鍵ファイルは鍵コミットメントのない旧形式です。自分のファイルである場合にのみパスワードを入力してください。",
+   "이 개인 키 파일은 키 커밋먼트가 없는 이전 형식입니다. 본인의 파일인 경우에만 암호를 입력하세요."
   ],
   "unsignedSetting": [
    "Encrypt without signing (legacy compatible)",
@@ -1024,6 +1038,13 @@
    "鍵をアップグレードしました。署名できます",
    "키를 업그레이드했습니다. 이제 서명할 수 있습니다"
   ],
+  "keyFormatUpgraded": [
+   "Private key rewritten in the current format (NKPR v3)",
+   "私钥已重写为当前格式（NKPR v3）",
+   "私密金鑰已重寫為目前格式（NKPR v3）",
+   "秘密鍵を現在の形式（NKPR v3）に書き換えました",
+   "개인 키를 현재 형식(NKPR v3)으로 다시 썼습니다"
+  ],
   "legacyExported": [
    "Legacy public key exported",
    "旧版公钥已导出",
@@ -1137,11 +1158,11 @@
    "서명자가 신뢰하는 키가 아닙니다. 아무것도 쓰지 않았습니다."
   ],
   "already-identity": [
-   "This key can already sign; there is nothing to upgrade.",
-   "此密钥已可签名，无需升级。",
-   "此金鑰已可簽章，無需升級。",
-   "この鍵は既に署名できます。アップグレードは不要です。",
-   "이 키는 이미 서명할 수 있어 업그레이드할 필요가 없습니다."
+   "This key can already sign and its private key uses the current format; there is nothing to upgrade.",
+   "此密钥已可签名，私钥也已是当前格式，无需升级。",
+   "此金鑰已可簽章，私密金鑰也已是目前格式，無需升級。",
+   "この鍵は既に署名でき、秘密鍵も現在の形式です。アップグレードは不要です。",
+   "이 키는 이미 서명할 수 있고 개인 키도 현재 형식이어서 업그레이드할 필요가 없습니다."
   ],
   "showQr": [
    "Show fingerprint QR code",

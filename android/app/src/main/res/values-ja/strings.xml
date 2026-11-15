@@ -245,6 +245,14 @@
     <string name="operation_export_legacy_public_key">旧形式の公開鍵の書き出し</string>
     <string name="upgrade_password_title">ID 鍵にアップグレード</string>
     <string name="upgrade_password_message">この NekoKEM 4.x の鍵ペアに署名鍵を追加します。暗号化鍵、パスワード、既存ファイルはそのままです。秘密鍵のパスワードを入力してください。先に両方の鍵のバックアップを書き出してください。</string>
+    <string name="key_old_format_status">秘密鍵ファイルは旧形式です。アップグレードすると鍵コミットメントが付きます。パスワードは変わりません。</string>
+    <string name="action_upgrade_key_format">秘密鍵の形式をアップグレード</string>
+    <string name="operation_upgrade_key_format">秘密鍵の形式のアップグレード</string>
+    <string name="upgrade_format_password_title">秘密鍵の形式をアップグレード</string>
+    <string name="upgrade_format_password_message">この秘密鍵ファイルを鍵コミットメント付きの現在の形式（NKPR v3）に書き換えます。鍵、フィンガープリント、パスワードはそのままです。NekoKEM 5.2 以前ではアップグレード後のファイルを読み取れません。秘密鍵のパスワードを入力してください。</string>
+    <string name="error_reason_upgrade_format">秘密鍵の形式をアップグレードできませんでした。パスワードが正しくないか、ファイルが破損しています。ファイルは変更していません。</string>
+    <string name="error_reason_key_format_current">この秘密鍵は既に現在の形式です。アップグレードは不要です。</string>
+    <string name="old_key_format_note">この秘密鍵ファイルは鍵コミットメントのない旧形式です。自分のファイルである場合にのみパスワードを入力してください。</string>
     <string name="legacy_export_hint">NekoKEM 4.x 以前を使う受信者向けです。署名の検証には使えません。</string>
     <string name="contact_verifies">ID 鍵 · 署名を検証できます</string>
     <string name="contact_legacy">旧形式の鍵 · 署名を検証できません</string>

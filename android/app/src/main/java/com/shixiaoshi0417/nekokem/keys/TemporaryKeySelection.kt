@@ -13,6 +13,8 @@ class TemporaryPublicKey internal constructor(
 class PendingTemporaryPrivateKey internal constructor(
     internal val file: File,
     val displayName: String,
+    /** The file is NKPR v1/v2: say so before a password is typed into it. */
+    val lacksCommitment: Boolean = false,
 ) {
     private var active = true
 

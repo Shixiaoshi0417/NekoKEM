@@ -96,6 +96,10 @@ final class AppState: ObservableObject {
     // Encrypt or Decrypt was pressed and its questions are being answered, or it runs.
     @Published private(set) var fileAction: Kind?
     @Published private(set) var askingPassword = false
+    /// The key chosen for this decryption is NKPR v1/v2, which does not commit to
+    /// its password: the sheet says so before a password is typed into a file
+    /// that may not be the user's own (docs/key-commitment.md).
+    @Published private(set) var oldKeyFormat = false
     // The output is written to a private staged file first. It stays there, and
     // can be saved again, when the chosen place could not be written.
     private var staged: Unsaved?
@@ -512,7 +516,7 @@ final class AppState: ObservableObject {
                 if keys { ownPublicKey = request.publicPath; signKeyPath = request.privatePath; storePreferences() }
                 if remember { rememberPassword(request.privatePath, request.password) }
                 switch kind {
-                case .upgrade: successMessage = "keyUpgraded"
+                case .upgrade: successMessage = outcome.keyFormat != nil ? "keyFormatUpgraded" : "keyUpgraded"
                 case .exportLegacy: successMessage = "legacyExported"
                 default: successMessage = "success"
                 }
@@ -546,6 +550,13 @@ final class AppState: ObservableObject {
             if decryptKey.isEmpty { failure = invalid("invalid-path", "otherPrivateKey"); return }
             fileAction = action
             askingPassword = true
+            let key = otherPrivateKey
+            if !key.isEmpty {
+                Task {
+                    let format = (try? await native { try Backend.keyFormat(key) }) ?? 0
+                    if askingPassword && fileAction == .decrypt && otherPrivateKey == key { oldKeyFormat = format == 1 || format == 2 }
+                }
+            }
         }
     }
 
@@ -845,7 +856,7 @@ final class AppState: ObservableObject {
         if !locked && (ownSelected || !atRecipientLimit) { ownSelected.toggle(); unverifiedWarned = false; edited("contacts") }
     }
     func closeRecipients() { if !locked { closeRecipientsNow(); fileAction = nil; invalidField = nil; failure = nil } }
-    private func closeRecipientsNow() { choosingRecipients = false; askingPassword = false; ownSelected = false; otherKeys = []; unverifiedWarned = false }
+    private func closeRecipientsNow() { choosingRecipients = false; askingPassword = false; oldKeyFormat = false; ownSelected = false; otherKeys = []; unverifiedWarned = false }
     func removeOtherKey(_ path: String) { if !locked { otherKeys.removeAll { $0 == path } } }
     /// "Other public key file…": a one-off recipient for this file, never saved.
     func addOtherKey() {
@@ -896,16 +907,19 @@ final class AppState: ObservableObject {
         demo = true; loaded = true
         signKeyPath = "/Users/shawn/Keys/private.key.enc"; ownPublicKey = "/Users/shawn/Keys/public.key"
         demoContacts()
-        choosingRecipients = false; askingPassword = false; fileAction = nil
+        choosingRecipients = false; askingPassword = false; oldKeyFormat = false; fileAction = nil
         ownSelected = false; selected = []; otherKeys = []; unverifiedWarned = false
         input = ""; output = ""; password = ""; otherPrivateKey = ""; saveToKeychain = false
         decryptFolder = name == "settings-decrypt-folder" ? "/Users/shawn/Downloads/Decrypted" : ""
         resetFeedback()
         switch name {
         case "files-empty": screen = .files
-        case "files", "encrypt-recipients", "encrypt-warning", "files-password", "files-done":
+        case "files", "encrypt-recipients", "encrypt-warning", "files-password", "files-old-key-password", "files-done":
             screen = .files
-            input = name == "files-password" ? "/Users/shawn/Downloads/report.pdf.nkem" : "/Users/shawn/Documents/report.pdf"
+            input = name.hasSuffix("-password") ? "/Users/shawn/Downloads/report.pdf.nkem" : "/Users/shawn/Documents/report.pdf"
+            if name == "files-old-key-password" {
+                otherPrivateKey = "/Users/shawn/Downloads/received.key.enc"; fileAction = .decrypt; askingPassword = true; oldKeyFormat = true
+            }
             if name == "encrypt-recipients" || name == "encrypt-warning" { fileAction = .encrypt; choosingRecipients = true; ownSelected = true; selected = ["alice"] }
             if name == "encrypt-warning" { selected = ["alice", "carol"]; unverifiedWarned = true }
             if name == "files-password" { fileAction = .decrypt; askingPassword = true; password = "demo-password"; saveToKeychain = true }
@@ -915,6 +929,9 @@ final class AppState: ObservableObject {
                 result = done; successMessage = "encryptedSigned"; ownRecipient = true; recipients = [contacts[1]]
             }
         case "keys": screen = .keygen; keyMode = .generate
+        case "keys-upgrade":
+            screen = .keygen; keyMode = .upgrade
+            publicPath = ownPublicKey; privatePath = signKeyPath
         case "fingerprint":
             screen = .fingerprint; keyPath = ownPublicKey
             result = Outcome(fingerprint: contacts[1].fingerprint); result?.canVerify = true
