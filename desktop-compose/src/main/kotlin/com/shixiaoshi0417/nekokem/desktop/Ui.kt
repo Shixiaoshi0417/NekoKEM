@@ -210,6 +210,7 @@ private fun KeyFields(state: AppState) {
         val upgrade = state.keyMode == KeyMode.Upgrade
         PathInput(state, PathField.PublicPath, state.t(if (upgrade) "publicKey" else "publicPath"), "publicPath")
         PathInput(state, PathField.PrivatePath, state.t(if (upgrade) "privateKey" else "privatePath"), "privatePath")
+        if (upgrade) Hint(state.t("upgradeKeyHint"))
         if (state.replaceOffered) {
             Spacer(Modifier.height(8.dp))
             CheckRow(state.replace, state.t("replaceKeys"), state.editable) { state.replace = !state.replace }
@@ -288,7 +289,12 @@ private fun FilesPage(state: AppState) {
 @Composable
 private fun PasswordDialog(state: AppState) {
     val kit = LocalKit.current
-    kit.Dialog(state.askingPassword, state.t("password"), if (state.fileAction == Kind.Encrypt) state.t("signPasswordHint") else "", state::cancelPassword) {
+    val hint = when {
+        state.fileAction == Kind.Encrypt -> state.t("signPasswordHint")
+        state.oldKeyFormat -> state.t("oldKeyFormatHint")
+        else -> ""
+    }
+    kit.Dialog(state.askingPassword, state.t("password"), hint, state::cancelPassword) {
         if (!state.askingPassword) return@Dialog
         kit.SecretInput(state.password, state.t("password"), state.editable, state.invalidField == "password", masked = true, lines = 1, placeholder = "")
         if (state.invalidField == "password") state.failure?.let { Hint(state.t(it), danger = true, modifier = Modifier.fillMaxWidth()) }

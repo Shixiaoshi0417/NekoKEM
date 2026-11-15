@@ -34,6 +34,9 @@ fun main(args: Array<String>): Unit = runBlocking(Dispatchers.Main) {
         runCatching { Backend.saveContact(file("bob.public.key"), "", false, "Bob · laptop") }.getOrNull()?.let { Backend.setPinned(it.id, true) }
     }
     File(work, "report.pdf").writeBytes(ByteArray(3_000_000) { it.toByte() })
+    // An identity key pair written by NekoKEM 5.2.0; Gradle runs this in desktop-compose.
+    val fixture = File(System.getProperty("nekokem.fixtures") ?: "../core/tests/fixtures/nkpr-v2").absoluteFile
+    check(fixture.resolve("private.key.enc").isFile) { "Missing NKPR v2 fixture: $fixture" }
 
     for (style in Style.entries) for (theme in listOf(SystemTheme.Light, SystemTheme.Dark)) {
         // The save dialog answers with a new file beside the input, as a user would.
@@ -110,8 +113,43 @@ fun main(args: Array<String>): Unit = runBlocking(Dispatchers.Main) {
         shot("decrypt-folder-done")
         state.restoreDefaultKey()
 
+        // A private key from NekoKEM 5.2 (NKPR v2) that is not the user's own:
+        // the password dialog says so, and the file still decrypts.
+        val oldKey = File(work, "${style.wire}-${theme.name}-received.key.enc")
+        val oldPublic = File(work, "received.public.key")
+        fixture.resolve("private.key.enc").copyTo(oldKey, overwrite = true)
+        fixture.resolve("public.key").copyTo(oldPublic, overwrite = true)
+        oldKey.setReadable(false, false); oldKey.setWritable(false, false); oldKey.setReadable(true, true); oldKey.setWritable(true, true)
+        check(Backend.keyFormat(oldKey.absolutePath) == 2) { "The fixture is not an NKPR v2 key" }
+        state.setPath(PathField.Input, encrypted)
+        state.setPath(PathField.OtherPrivateKey, oldKey.absolutePath)
+        state.decrypt()
+        for (attempt in 1..100) { if (state.oldKeyFormat) break; delay(20) }
+        check(state.oldKeyFormat) { "An NKPR v2 key that is not the user's own was not announced" }
+        shot("decrypt-old-key-password")
+        state.cancelPassword()
+        check(!state.oldKeyFormat) { "The old-format notice outlived its dialog" }
+        state.restoreDefaultKey()
+
         state.switchTab(View.Keygen); settle()
         shot("keygen")
+
+        // The upgrade page rewrites that key as NKPR v3 with the same password.
+        state.changeKeyMode(KeyMode.Upgrade)
+        state.setPath(PathField.PublicPath, oldPublic.absolutePath)
+        state.setPath(PathField.PrivatePath, oldKey.absolutePath)
+        shot("key-upgrade")
+        state.password.edit { append("nkpr-v2-fixture-password") }
+        state.submit(); settle()
+        check(state.result?.keyFormat == 3 && Backend.keyFormat(oldKey.absolutePath) == 3) { "The key was not rewritten as NKPR v3: ${state.failure}" }
+        shot("key-upgrade-done")
+        state.password.edit { append("nkpr-v2-fixture-password") }
+        state.submit(); settle()
+        check(state.failure == "already-identity") { "A current key was upgraded again: ${state.failure}" }
+        // The upgrade made these the user's own keys; the next shots use "me" again.
+        state.setPath(PathField.OwnPublicKey, file("me.public.key"))
+        state.setPath(PathField.SignKeyPath, file("me.private.key.enc"))
+        state.changeKeyMode(KeyMode.Generate)
 
         state.switchTab(View.Contacts); settle()
         shot("contacts")
