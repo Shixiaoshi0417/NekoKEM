@@ -2136,16 +2136,11 @@ mod tests {
             include_bytes!("../../../core/tests/fixtures/nkpr-v2/public.key"),
         )
         .unwrap();
-        fs::write(
+        // Owner-only, as NekoKEM 5.2 left it: Windows Core reads no other key.
+        write_owner_only(
             &private,
             include_bytes!("../../../core/tests/fixtures/nkpr-v2/private.key.enc"),
-        )
-        .unwrap();
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::PermissionsExt;
-            fs::set_permissions(&private, fs::Permissions::from_mode(0o600)).unwrap();
-        }
+        );
         (public, private)
     }
     #[test]

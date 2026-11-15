@@ -115,11 +115,17 @@ fun main(args: Array<String>): Unit = runBlocking(Dispatchers.Main) {
 
         // A private key from NekoKEM 5.2 (NKPR v2) that is not the user's own:
         // the password dialog says so, and the file still decrypts.
-        val oldKey = File(work, "${style.wire}-${theme.name}-received.key.enc")
-        val oldPublic = File(work, "received.public.key")
-        fixture.resolve("private.key.enc").copyTo(oldKey, overwrite = true)
-        fixture.resolve("public.key").copyTo(oldPublic, overwrite = true)
-        oldKey.setReadable(false, false); oldKey.setWritable(false, false); oldKey.setReadable(true, true); oldKey.setWritable(true, true)
+        // Core creates the two files, so they are owner-only on every system
+        // (Windows Core reads no other private key); the fixture replaces
+        // only their contents.
+        val received = "${style.wire}-${theme.name}-received"
+        val oldKey = File(file("$received.private.key.enc"))
+        val oldPublic = File(file("$received.public.key"))
+        withContext(Dispatchers.IO) {
+            Backend.run(OperationRequest(id = "keygen-$received", kind = Kind.Keygen, publicPath = oldPublic.absolutePath, privatePath = oldKey.absolutePath, password = password, confirmation = password)) { _, _ -> }
+            oldKey.writeBytes(fixture.resolve("private.key.enc").readBytes())
+            oldPublic.writeBytes(fixture.resolve("public.key").readBytes())
+        }
         check(Backend.keyFormat(oldKey.absolutePath) == 2) { "The fixture is not an NKPR v2 key" }
         state.setPath(PathField.Input, encrypted)
         state.setPath(PathField.OtherPrivateKey, oldKey.absolutePath)
