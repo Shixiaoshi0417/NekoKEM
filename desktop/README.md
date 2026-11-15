@@ -148,7 +148,9 @@ menu, or System Settings, Privacy & Security, Open Anyway.
 
 Every platform first builds the pinned static OpenSSL 4.1.0, then the bridge
 against it, then the app. CI (`.github/workflows/ci.yml`) and the Release
-workflow run exactly these steps.
+workflow run exactly these steps. CI also checks the bridge with
+`cargo fmt --check` and `cargo clippy --all-targets -- -D warnings`, so run
+`cargo fmt` in `desktop/bridge` before committing.
 
 Linux, on the native architecture, with Rust, JDK 25, `fakeroot` and `rpm`:
 
