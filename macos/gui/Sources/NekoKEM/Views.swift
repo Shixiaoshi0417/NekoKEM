@@ -578,6 +578,19 @@ private struct SettingsPage: View {
             Button(state.t("unsignedConfirm"), role: .destructive) { state.confirmUnsigned(true) }
             Button(state.t("cancel"), role: .cancel) { state.confirmUnsigned(false) }
         } message: { Text(state.t("unsignedConfirmText")) }
+        Text(state.t("settingsDecrypt")).font(.headline)
+        Card {
+            SettingRow(title: state.t("decryptFolder"), detail: state.t("decryptFolderHint")) {
+                Toggle("", isOn: Binding(get: { !state.decryptFolder.isEmpty }, set: { state.changeDecryptFolder($0) })).toggleStyle(.switch).labelsHidden()
+                    .accessibilityLabel(state.t("decryptFolder")).disabled(!state.editable)
+            }
+            if !state.decryptFolder.isEmpty {
+                Divider()
+                SettingRow(title: state.t("decryptFolderPath"), detail: state.decryptFolderFailed ? state.t("decryptFolderFailed") : state.decryptFolder, warn: state.decryptFolderFailed) {
+                    Button(state.t("browse")) { state.chooseDecryptFolder() }.disabled(!state.editable)
+                }
+            }
+        }
         Text(state.t("settingsUpdates")).font(.headline)
         Card {
             SettingRow(title: state.t("autoUpdate")) {

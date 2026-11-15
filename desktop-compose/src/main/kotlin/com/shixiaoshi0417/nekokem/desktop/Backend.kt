@@ -45,7 +45,7 @@ sealed interface UpdateStatus {
 }
 data class UpdatePreferences(val auto: Boolean = true, val lastCheck: Long = 0, val ignored: String = "")
 /** The choices kept between launches. Unsigned output is never saved. */
-data class DesktopPreferences(val requireSignature: Boolean = false, val signKeyPath: String = "", val publicKeyPath: String = "", val sidebarOpen: Boolean = true, val style: String = "miuix", val recordName: Boolean = true)
+data class DesktopPreferences(val requireSignature: Boolean = false, val signKeyPath: String = "", val publicKeyPath: String = "", val sidebarOpen: Boolean = true, val style: String = "miuix", val recordName: Boolean = true, val decryptFolder: String = "")
 
 // Same limit as Core's NEKOKEM_MAX_RECIPIENTS for one NKEM v4/v5 file.
 const val MAX_RECIPIENTS = 64
@@ -82,6 +82,9 @@ object Backend {
     })
 
     fun saveOutput(destination: String) { Bridge.request { obj { field("save_output") { field("destination", destination) } } } }
+    /** Saves into [folder] without replacing anything; returns the path used. */
+    fun saveOutputIn(folder: String, name: String): String =
+        (Bridge.request { obj { field("save_output_in") { field("folder", folder); field("name", name) } } } as JsonPrimitive).content
     fun discardOutput() { Bridge.request { command("discard_output") } }
 
     private fun outcome(value: JsonElement): Outcome {
@@ -130,10 +133,10 @@ object Backend {
     }
 
     fun desktopPreferences(): DesktopPreferences = Bridge.request { command("desktop_preferences") }.obj().let {
-        DesktopPreferences(it.flag("requireSignature") ?: false, it.text("signKeyPath") ?: "", it.text("publicKeyPath") ?: "", it.flag("sidebarOpen") ?: true, it.text("style") ?: "miuix", it.flag("recordName") ?: true)
+        DesktopPreferences(it.flag("requireSignature") ?: false, it.text("signKeyPath") ?: "", it.text("publicKeyPath") ?: "", it.flag("sidebarOpen") ?: true, it.text("style") ?: "miuix", it.flag("recordName") ?: true, it.text("decryptFolder") ?: "")
     }
 
     fun saveDesktopPreferences(value: DesktopPreferences) {
-        Bridge.request { obj { field("save_desktop_preferences") { field("preferences") { field("requireSignature", value.requireSignature); field("signKeyPath", value.signKeyPath); field("publicKeyPath", value.publicKeyPath); field("sidebarOpen", value.sidebarOpen); field("style", value.style); field("recordName", value.recordName) } } } }
+        Bridge.request { obj { field("save_desktop_preferences") { field("preferences") { field("requireSignature", value.requireSignature); field("signKeyPath", value.signKeyPath); field("publicKeyPath", value.publicKeyPath); field("sidebarOpen", value.sidebarOpen); field("style", value.style); field("recordName", value.recordName); field("decryptFolder", value.decryptFolder) } } } }
     }
 }

@@ -82,6 +82,10 @@ final class AppState: ObservableObject {
     @Published private(set) var requireSignature = false
     // Signed files record the input's name; off keeps them readable by NekoKEM 5.1.
     @Published private(set) var recordName = true
+    // Decrypted files go straight to this folder when set; empty asks every time.
+    @Published private(set) var decryptFolder = ""
+    // The folder could not be written last time, so the save panel asked instead.
+    @Published private(set) var decryptFolderFailed = false
     // The user's own key pair. The private key is the only default: it signs and
     // decrypts. The public key is offered first when choosing recipients, never ticked.
     @Published var signKeyPath = "" { didSet { edited("signKeyPath") } }
@@ -225,6 +229,7 @@ final class AppState: ObservableObject {
                     stored = saved
                     requireSignature = saved.requireSignature; signKeyPath = saved.signKeyPath; ownPublicKey = saved.publicKeyPath
                     recordName = saved.recordName
+                    decryptFolder = saved.decryptFolder
                 }
                 loaded = true
                 if ProcessInfo.processInfo.environment["NEKOKEM_NATIVE_STARTUP_EVIDENCE"] == "1" {
@@ -241,6 +246,7 @@ final class AppState: ObservableObject {
         guard !demo else { return }
         stored.requireSignature = requireSignature; stored.signKeyPath = signKeyPath; stored.publicKeyPath = ownPublicKey
         stored.recordName = recordName
+        stored.decryptFolder = decryptFolder
         let value = stored
         Task { _ = try? await native { try Backend.save(value) } }
     }
@@ -252,6 +258,22 @@ final class AppState: ObservableObject {
 
     func changeRequireSignature(_ value: Bool) { requireSignature = value; storePreferences() }
     func changeRecordName(_ value: Bool) { recordName = value; storePreferences() }
+    /// Turning it on chooses the folder first; closing that panel leaves it off.
+    func changeDecryptFolder(_ enabled: Bool) {
+        if enabled { chooseDecryptFolder(); return }
+        if locked { return }
+        decryptFolder = ""; decryptFolderFailed = false; storePreferences()
+    }
+    func chooseDecryptFolder() {
+        if locked || !loaded { return }
+        choosing = true
+        defer { choosing = false }
+        let panel = NSOpenPanel()
+        panel.canChooseFiles = false; panel.canChooseDirectories = true; panel.canCreateDirectories = true; panel.allowsMultipleSelection = false
+        if !decryptFolder.isEmpty { panel.directoryURL = URL(fileURLWithPath: decryptFolder, isDirectory: true) }
+        guard panel.runModal() == .OK, let path = panel.url?.path else { return }
+        decryptFolder = path; decryptFolderFailed = false; storePreferences()
+    }
     func changeAutoUpdate(_ value: Bool) { autoUpdate = value; update.auto = value; storeUpdate() }
     func toggleUnsigned(_ value: Bool) {
         if !value { unsigned = false; confirmingUnsigned = false; return }
@@ -625,14 +647,28 @@ final class AppState: ObservableObject {
         // A signed file restores the name it recorded, even after a rename.
         let suggested = item.kind == .encrypt ? name + ".nkem"
             : item.outcome.originalName ?? (plain != name ? plain : "decrypted-" + name)
-        guard let destination = chooseSave(suggested, directory: (item.source as NSString).deletingLastPathComponent) else {
+        // The decrypt folder takes the file under a free name; when it cannot be
+        // written, the staged file stays and the save panel asks.
+        var placed: String?
+        let folder = decryptFolder
+        if item.kind == .decrypt && !folder.isEmpty {
+            do {
+                placed = try await native { try Backend.saveOutputIn(folder, suggested) }
+                decryptFolderFailed = false
+            } catch {
+                let message = code(error)
+                if message != "save-failed" { failure = message; staged = nil; unsaved = false; return }
+                decryptFolderFailed = true
+            }
+        }
+        guard let destination = placed ?? chooseSave(suggested, directory: (item.source as NSString).deletingLastPathComponent) else {
             staged = nil; unsaved = false
             _ = try? await native { try Backend.discardOutput() }
             failure = "cancelled"
             return
         }
         do {
-            try await native { try Backend.saveOutput(destination) }
+            if placed == nil { try await native { try Backend.saveOutput(destination) } }
             staged = nil; unsaved = false
             var outcome = item.outcome
             outcome.output = destination
@@ -863,6 +899,7 @@ final class AppState: ObservableObject {
         choosingRecipients = false; askingPassword = false; fileAction = nil
         ownSelected = false; selected = []; otherKeys = []; unverifiedWarned = false
         input = ""; output = ""; password = ""; otherPrivateKey = ""; saveToKeychain = false
+        decryptFolder = name == "settings-decrypt-folder" ? "/Users/shawn/Downloads/Decrypted" : ""
         resetFeedback()
         switch name {
         case "files-empty": screen = .files

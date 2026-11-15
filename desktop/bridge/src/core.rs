@@ -159,6 +159,36 @@ impl Backend {
         move_file(std::path::Path::new(&source),std::path::Path::new(destination)).map_err(|_|Failure::new("save-failed"))?;
         if pending.take().is_some_and(|mut staged|staged.close()) {Ok(())} else {Err(Failure::new("cleanup-error"))}
     }
+    /// Moves the staged output into [folder], the decrypt folder from the
+    /// settings, under [name]; a taken name gets a number ("name (1).ext") so
+    /// nothing there is replaced. Returns the path it was saved at. A failure
+    /// keeps the staged output, so the save dialog can still ask.
+    pub fn save_output_in(&self,folder:&str,name:&str)->Result<String,Failure> {
+        let file=std::path::Path::new(name);
+        if name.is_empty()||file.file_name().and_then(|n|n.to_str())!=Some(name)||name.contains(['/','\\']) {return Err(Failure::new("invalid-request"));}
+        // Core refuses a folder it would not write to before anything opens it.
+        if exists(&path(folder)?)!=Some(true) {return Err(Failure::new("save-failed"));}
+        let mut pending=self.pending.lock().map_err(|_|Failure::new("internal"))?;
+        let source=pending.as_ref().and_then(Staged::path).and_then(|path|path.to_str().ok()).ok_or_else(||Failure::new("invalid-request"))?.to_owned();
+        let mut saved=None;
+        for number in 0..=MAX_NAME_NUMBER {
+            let Some(candidate)=numbered_name(name,number) else {continue};
+            let target=std::path::Path::new(folder).join(&candidate);
+            let Some(text)=target.to_str() else {return Err(Failure::new("save-failed"))};
+            match exists(&path(text)?) {
+                Some(true)=>continue,
+                Some(false)=>{}
+                None=>return Err(Failure::new("save-failed")),
+            }
+            match move_file_new(std::path::Path::new(&source),&target) {
+                Ok(())=>{saved=Some(text.to_owned());break;}
+                Err(error) if error.kind()==std::io::ErrorKind::AlreadyExists=>continue,
+                Err(_)=>return Err(Failure::new("save-failed")),
+            }
+        }
+        let saved=saved.ok_or_else(||Failure::new("save-failed"))?;
+        if pending.take().is_some_and(|mut staged|staged.close()) {Ok(saved)} else {Err(Failure::new("cleanup-error"))}
+    }
     /// Deletes a staged output that was not saved. True when nothing is left.
     pub fn discard_output(&self)->bool {
         let Ok(mut pending)=self.pending.lock() else { return false; };
@@ -202,6 +232,46 @@ fn move_file(source:&std::path::Path,destination:&std::path::Path)->std::io::Res
     })();
     if result.is_ok() {let _=std::fs::remove_file(source);} else {let _=std::fs::remove_file(&part);}
     result
+}
+// Like move_file, but never replaces: AlreadyExists when the name is taken.
+// A hard link claims the name atomically on one volume; otherwise the file is
+// copied into a new file of that name, which is removed again on failure.
+// Windows always copies, for the reason given at move_file.
+fn move_file_new(source:&std::path::Path,destination:&std::path::Path)->std::io::Result<()> {
+    #[cfg(not(windows))]
+    match std::fs::hard_link(source,destination) {
+        Ok(())=>{let _=std::fs::remove_file(source);return Ok(());}
+        Err(error) if error.kind()==std::io::ErrorKind::AlreadyExists=>return Err(error),
+        Err(_)=>{}
+    }
+    let mut from=std::fs::File::open(source)?;
+    let mut options=std::fs::OpenOptions::new();
+    options.write(true).create_new(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::{OpenOptionsExt,PermissionsExt};
+        options.mode(from.metadata()?.permissions().mode()&0o777);
+    }
+    let mut to=options.open(destination)?;
+    let result=std::io::copy(&mut from,&mut to).and_then(|_|to.sync_all());
+    drop(to);
+    if result.is_ok() {let _=std::fs::remove_file(source);} else {let _=std::fs::remove_file(destination);}
+    result
+}
+const MAX_NAME_NUMBER:u32=9999;
+const MAX_NAME_BYTES:usize=255;
+// [name] for 0, else "stem (n).ext" with the number before the last extension;
+// a name whose only dot leads (".profile") has none. The stem is shortened to
+// keep names within 255 bytes. None when nothing of the stem would remain.
+pub(crate) fn numbered_name(name:&str,number:u32)->Option<String> {
+    let dot=name.rfind('.').filter(|&index|index>0);
+    let (stem,extension)=dot.map_or((name,""),|index|name.split_at(index));
+    let suffix=if number==0 {extension.to_owned()} else {format!(" ({number}){extension}")};
+    let room=MAX_NAME_BYTES.checked_sub(suffix.len())?;
+    let mut end=stem.len().min(room);
+    while !stem.is_char_boundary(end) {end-=1;}
+    let stem=stem[..end].trim_end();
+    (!stem.is_empty()).then(||format!("{stem}{suffix}"))
 }
 pub struct Reservation { pub backend:Arc<Backend>, pub job:Arc<Job> }
 impl Drop for Reservation { fn drop(&mut self){ self.backend.finish(&self.job); } }
@@ -945,6 +1015,18 @@ mod tests {
         let mut r=request(Kind::Fingerprint);r.key_path=keys.file("alice-legacy.pub");let outcome=run(&backend,r).unwrap();
         assert_eq!((outcome.fingerprint,outcome.can_verify),(Some(legacy),Some(false)));
         assert_eq!(staging_entries(),staged);
+    }
+    #[test]
+    fn numbered_names_keep_the_extension_and_the_length_limit() {
+        assert_eq!(numbered_name("photo.jpg",0).as_deref(),Some("photo.jpg"));
+        assert_eq!(numbered_name("photo.jpg",2).as_deref(),Some("photo (2).jpg"));
+        assert_eq!(numbered_name("backup.tar.gz",1).as_deref(),Some("backup.tar (1).gz"));
+        assert_eq!(numbered_name(".profile",1).as_deref(),Some(".profile (1)"));
+        assert_eq!(numbered_name("README",1).as_deref(),Some("README (1)"));
+        let long=format!("{}.txt","\u{732B}".repeat(100));
+        let numbered=numbered_name(&long,1).unwrap();
+        assert!(numbered.len()<=255&&numbered.ends_with(" (1).txt"),"{numbered}");
+        assert!(numbered_name(&long,0).unwrap().len()<=255);
     }
     #[test]
     fn restored_names_are_safe_for_the_save_dialog() {

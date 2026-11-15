@@ -85,7 +85,7 @@ struct Contact: Identifiable, Equatable {
 enum UpdateStatus: Equatable { case available(String), current, failed }
 struct UpdatePreferences { var auto = true; var lastCheck: Int64 = 0; var ignored = "" }
 /// Kept in desktop.json beside the contacts. Unsigned output is never saved.
-struct DesktopPreferences { var requireSignature = false; var signKeyPath = ""; var publicKeyPath = ""; var sidebarOpen = true; var style = "miuix"; var recordName = true }
+struct DesktopPreferences { var requireSignature = false; var signKeyPath = ""; var publicKeyPath = ""; var sidebarOpen = true; var style = "miuix"; var recordName = true; var decryptFolder = "" }
 
 // Same limit as Core's NEKOKEM_MAX_RECIPIENTS for one NKEM v4/v5 file.
 let maxRecipients = 64
@@ -103,6 +103,11 @@ enum Backend {
         Outcome(try Bridge.call(["run_operation": ["request": request.json]], progress: progress))
     }
     static func saveOutput(_ destination: String) throws { _ = try Bridge.call(["save_output": ["destination": destination]]) }
+    /// Saves into the decrypt folder without replacing anything; returns the path used.
+    static func saveOutputIn(_ folder: String, _ name: String) throws -> String {
+        guard let saved = try Bridge.call(["save_output_in": ["folder": folder, "name": name]]) as? String else { throw BridgeFailure(code: "internal") }
+        return saved
+    }
     static func discardOutput() throws { _ = try Bridge.call("discard_output") }
     static func contacts() throws -> (contacts: [Contact], unreadable: Int) {
         let fields = try Bridge.call("list_contacts") as? [String: Any] ?? [:]
@@ -137,11 +142,12 @@ enum Backend {
         let fields = try Bridge.call("desktop_preferences") as? [String: Any] ?? [:]
         return DesktopPreferences(requireSignature: fields["requireSignature"] as? Bool ?? false, signKeyPath: fields["signKeyPath"] as? String ?? "",
                                   publicKeyPath: fields["publicKeyPath"] as? String ?? "", sidebarOpen: fields["sidebarOpen"] as? Bool ?? true,
-                                  style: fields["style"] as? String ?? "miuix", recordName: fields["recordName"] as? Bool ?? true)
+                                  style: fields["style"] as? String ?? "miuix", recordName: fields["recordName"] as? Bool ?? true,
+                                  decryptFolder: fields["decryptFolder"] as? String ?? "")
     }
     static func save(_ value: DesktopPreferences) throws {
         _ = try Bridge.call(["save_desktop_preferences": ["preferences": ["requireSignature": value.requireSignature, "signKeyPath": value.signKeyPath,
             "publicKeyPath": value.publicKeyPath, "sidebarOpen": value.sidebarOpen, "style": value.style,
-            "recordName": value.recordName]]])
+            "recordName": value.recordName, "decryptFolder": value.decryptFolder]]])
     }
 }

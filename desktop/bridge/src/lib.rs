@@ -46,6 +46,7 @@ enum Call {
     SetLanguage { language: String },
     RunOperation { request: Request },
     SaveOutput { destination: String },
+    SaveOutputIn { folder: String, name: String },
     DiscardOutput,
     ListContacts,
     SaveContact { contact: ContactImport },
@@ -109,6 +110,7 @@ fn run(call: Call, progress: Option<ProgressCallback>) -> Result<Value, Failure>
             json(result)
         }
         Call::SaveOutput { destination } => idle().and_then(|_| locked(|| backend().save_output(&destination))).map(|_| Value::Null),
+        Call::SaveOutputIn { folder, name } => json(idle().and_then(|_| locked(|| backend().save_output_in(&folder, &name)))),
         Call::DiscardOutput => idle().and_then(|_| locked(|| if backend().discard_output() { Ok(Value::Null) } else { Err(Failure::new("cleanup-error")) })),
         Call::ListContacts => json(locked(|| Store::open()?.list())),
         Call::SaveContact { contact } => json(contact_job(move |store| {
@@ -271,6 +273,25 @@ mod tests {
         assert_eq!(reply(&decrypt.replace("dec-2", "dec-3"))["ok"]["format"], 5);
         assert_eq!(reply(&format!(r#"{{"save_output":{{"destination":{}}}}}"#, path(&plain))), serde_json::json!({ "ok": null }));
         assert_eq!(std::fs::read(&plain).unwrap(), vec![9u8; 100_000]);
+
+        // The decrypt folder never replaces a file: a taken name gets a number.
+        let folder = directory.file("out");
+        std::fs::create_dir(&folder).unwrap();
+        std::fs::write(format!("{folder}/plain.txt"), b"mine").unwrap();
+        let into = |name: &str| reply(&format!(r#"{{"save_output_in":{{"folder":{},"name":{}}}}}"#, path(&folder), path(name)));
+        assert_eq!(into("plain.txt")["error"]["code"], "invalid-request");
+        assert_eq!(reply(&decrypt.replace("dec-2", "dec-4"))["ok"]["format"], 5);
+        assert_eq!(into("../plain.txt")["error"]["code"], "invalid-request");
+        let saved = into("plain.txt");
+        let numbered = std::path::Path::new(&folder).join("plain (1).txt");
+        assert_eq!(saved, serde_json::json!({ "ok": numbered.to_str().unwrap() }));
+        assert_eq!(std::fs::read(format!("{folder}/plain.txt")).unwrap(), b"mine");
+        assert_eq!(std::fs::read(&numbered).unwrap(), vec![9u8; 100_000]);
+        // A missing folder keeps the output, so the save dialog can still ask.
+        assert_eq!(reply(&decrypt.replace("dec-2", "dec-5"))["ok"]["format"], 5);
+        let gone = reply(&format!(r#"{{"save_output_in":{{"folder":{},"name":"plain.txt"}}}}"#, path(&directory.file("gone"))));
+        assert_eq!(gone["error"]["code"], "save-failed");
+        assert_eq!(reply(&format!(r#"{{"save_output":{{"destination":{}}}}}"#, path(&directory.file("again.txt")))), serde_json::json!({ "ok": null }));
     }
 
     #[test]
