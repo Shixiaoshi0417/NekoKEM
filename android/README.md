@@ -21,7 +21,7 @@ README 图标仅使用专用圆角展示图，Android launcher 继续使用现�
 
 ## 工具链
 
-- Kotlin 2.4.21（AGP 内置 Kotlin）、Jetpack Compose 1.12、Material 3 Expressive（`material3` 1.5.0-beta01）
+- Kotlin 2.4.21（AGP 内置 Kotlin）、Jetpack Compose 1.12、Material 3 Expressive（`material3` 1.5.0-rc01）
 - MIUIX（`top.yukonga.miuix.kmp` 0.9.4：`miuix-ui`、`miuix-icons`、`miuix-preference`、`miuix-blur`）
 - Android Gradle Plugin 9.5.1、Gradle 9.9.0（Kotlin DSL）、JDK 17 编译目标；运行 JVM 单元测试需要 JDK 21（miuix 以 Java 21 字节码发布）
 - Android SDK Platform 37.0、Build Tools 36.0.0（`compileSdk 37`、`minSdk 26`、`targetSdk 36`）
@@ -218,7 +218,7 @@ JNI 只做路径、字符串、字节数组、回调和返回值转换；不解�
 界面采用 Material 3 Expressive：表现力配色与弹簧动效、按下时圆角形变的按钮、
 加密与解密等成对操作的按钮组（标签放不下一行时改为整宽纵向排列）、
 删除操作使用错误色，进度对话框显示波浪进度条与加载指示器，切换页面时新页面淡入。
-`material3` 1.5.0-beta01 需要 `compileSdk 37` 与 AGP 9.1 以上。
+`material3` 1.5.0-rc01 需要 `compileSdk 37` 与 AGP 9.1 以上。
 
 新安装默认使用 MIUIX 界面，可在「设置 → 界面风格」随时切回 Material 3 Expressive，选择立即生效并保存在本机。
 MIUIX 界面每页使用可折叠的大标题，页面在悬浮的液态玻璃底栏下滚动：底栏对背后内容做模糊和透镜折射，

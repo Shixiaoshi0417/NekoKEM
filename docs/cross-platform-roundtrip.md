@@ -120,10 +120,10 @@ python3 -c "import subprocess,sys; p=b'roundtrip-test-password\n'; subprocess.ru
 
 成功时 `--lang en` 打印 `Generated identity keys (X448 + ML-KEM-1024 encryption, Ed448 + ML-DSA-87 signing): keys/public.key and keys/private.key.enc`。
 
-可选：菜单第 4 项打印公钥指纹（大写、冒号分隔的 SHA-256）。参数化命令没有单独的指纹子命令。无交互时：
+可选：`fingerprint` 子命令与菜单第 4 项一样，打印公钥指纹（大写、冒号分隔的 SHA-256）：
 
 ```sh
-printf '4\n1\n%s\n5\n' "$HOME/nekokem-roundtrip/keys/public.key" | nekokem --lang en
+nekokem --lang en fingerprint "$HOME/nekokem-roundtrip/keys/public.key"
 ```
 
 两边打印的指纹一致，说明复制过去的 `public.key` 与本机 Core 读到的是同一把公钥。指纹对 PEM 换行不敏感。四段式公钥打印的是身份指纹，解密签名文件时显示的签名者指纹就是它。

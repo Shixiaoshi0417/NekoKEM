@@ -120,10 +120,10 @@ python3 -c "import subprocess,sys; p=b'roundtrip-test-password\n'; subprocess.ru
 
 On success, `--lang en` prints `Generated identity keys (X448 + ML-KEM-1024 encryption, Ed448 + ML-DSA-87 signing): keys/public.key and keys/private.key.enc`.
 
-Optional: menu item 4 prints the public-key fingerprint (uppercase SHA-256, colon-separated). There is no parameterized fingerprint subcommand. Non-interactively:
+Optional: the `fingerprint` subcommand, like menu item 4, prints the public-key fingerprint (uppercase SHA-256, colon-separated):
 
 ```sh
-printf '4\n1\n%s\n5\n' "$HOME/nekokem-roundtrip/keys/public.key" | nekokem --lang en
+nekokem --lang en fingerprint "$HOME/nekokem-roundtrip/keys/public.key"
 ```
 
 The same fingerprint on both machines means the copied `public.key` is the public key Core read locally. The fingerprint does not depend on PEM line wrapping. A four-component public key prints its identity fingerprint, which is the signer fingerprint shown when a signed file is decrypted.
