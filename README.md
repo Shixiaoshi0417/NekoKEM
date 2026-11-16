@@ -58,14 +58,14 @@ README 使用专用圆角展示图；Android 保留现有方形白底图案，Wi
 
 一个文件可以同时加密给最多 64 位接收方，每位接收方用自己的私钥都能解开，其他人无法解密。
 桌面 GUI 在“公钥通讯录”页面勾选多位联系人后点击“加密给所选联系人”，或在加密页的接收方列表中勾选；
-Android 在“公钥通讯录”页面勾选“选为接收方”后点击“加密给所选接收方”。只选一位时仍写出 NKEM v3；
-选择两位及以上时写出一个 NKEM v4 文件。每位联系人都会在加密前重新读取并由 Core 校验指纹，
+Android 在“公钥通讯录”页面勾选“选为接收方”后点击“加密给所选接收方”。默认写出带签名的 NKEM v5，
+1 至 64 位接收方都是这一种格式；开启不签名加密时，只选一位写出 NKEM v3，选择两位及以上写出一个 NKEM v4 文件。每位联系人都会在加密前重新读取并由 Core 校验指纹，
 任何一位缺失、损坏或指纹不符都会让整个操作失败并指出该联系人，不会跳过或改用其他公钥。
 CLI 在原有命令后列出多个公钥即可，示例见[参数化命令](#参数化命令)。
 
-NKEM v4 为每位接收方保存一份 X448 + ML-KEM-1024 封装和被包装的文件密钥，文件数据只加密一次；
-HMAC-SHA512 头部 MAC 保证所有接收方解出相同内容。格式见 [`docs/NKEM-v4.md`](docs/NKEM-v4.md)。
-所有平台的解密都会自动识别 v3 与 v4。此功能自 v4.0.0 起提供；NekoKEM v3.3.2 及更早版本无法打开 v4 文件。
+NKEM v4 和 v5 为每位接收方保存一份 X448 + ML-KEM-1024 封装和被包装的文件密钥，文件数据只加密一次；
+HMAC-SHA512 头部 MAC 保证所有接收方解出相同内容。格式见 [`docs/NKEM-v4.md`](docs/NKEM-v4.md) 和 [`docs/NKEM-v5.md`](docs/NKEM-v5.md)。
+所有平台的解密都会自动识别 v3、v4 与 v5。多人加密自 v4.0.0 起提供，签名的 v5 自 v5.0.0 起提供；NekoKEM v3.3.2 及更早版本无法打开 v4 文件，4.x 及更早版本无法打开 v5 文件。
 
 ## Android 公钥通讯录
 
@@ -236,14 +236,14 @@ keys/
 5. 退出
 ```
 
-交互模式固定使用 NKEM v3 Hybrid。Hybrid 算法仍为 X448 + ML-KEM-1024、HKDF-SHA512 和 AES-256-GCM。
+交互模式的加密写出带签名的 NKEM v5：用 `keys/private.key.enc` 签名，并提示输入该私钥的密码。不签名的 NKEM v3/v4 只能用参数化命令的 `--unsigned` 写出。密钥建立和文件加密仍为 X448 + ML-KEM-1024、HKDF-SHA512 和 AES-256-GCM。
 
 ### 生成密钥
 
 选择“生成密钥”会确保当前工作目录存在权限为 `0700` 的 `keys/`，并生成：
 
-- `keys/public.key`：依次包含 X448 和 ML-KEM-1024 的明文公钥；
-- `keys/private.key.enc`：包含两个完整私钥 PEM 的加密 NKPR 容器，权限为 `0600`。
+- `keys/public.key`：四段式身份公钥，依次为 X448、ML-KEM-1024（加密）和 Ed448、ML-DSA-87（签名）的明文公钥；
+- `keys/private.key.enc`：包含对应四个私钥 PEM 的加密 NKPR v2 容器，权限为 `0600`。
 
 生成前会要求输入并确认私钥保护密码；终端回显在两次输入期间均关闭。不会创建明文 `private.key`。
 
@@ -251,7 +251,7 @@ keys/
 
 ### 加密文件
 
-可以输入公钥文件路径，也可以粘贴两个 PEM 公钥块。随后输入原文件路径。程序会确保当前工作目录下存在权限为 `0700` 的 `encrypted/` 目录；如果不存在则自动创建。
+可以输入公钥文件路径，也可以粘贴 PEM 公钥块（旧版密钥两个，身份密钥四个）。随后输入原文件路径，并输入 `keys/private.key.enc` 的密码用于签名；没有该私钥时加密会失败，并提示先生成密钥或改用参数化命令。程序会确保当前工作目录下存在权限为 `0700` 的 `encrypted/` 目录；如果不存在则自动创建。
 
 输出只使用原文件名，并保存到 `encrypted/`，同时追加 `.nkem`：
 
@@ -261,7 +261,7 @@ plaintext/test.jpg -> encrypted/test.jpg.nkem
 
 ### 解密文件
 
-可以输入私钥文件路径，也可以继续粘贴两个兼容的明文 PEM 私钥块。私钥文件内容是 NKPR 容器时（按文件头识别，与扩展名无关，例如 Android 导出的 `private.nkpr`），程序会自动关闭终端回显并提示输入密码，在内存中认证、解密并解析 NKPR；解出的 PEM 不会写入磁盘。旧的明文 PEM 私钥（如 `private.key`）不需要密码。
+可以输入私钥文件路径，也可以继续粘贴兼容的明文 PEM 私钥块（旧版密钥两个，身份密钥四个）。私钥文件内容是 NKPR 容器时（按文件头识别，与扩展名无关，例如 Android 导出的 `private.nkpr`），程序会自动关闭终端回显并提示输入密码，在内存中认证、解密并解析 NKPR；解出的 PEM 不会写入磁盘。旧的明文 PEM 私钥（如 `private.key`）不需要密码。
 
 粘贴旧式私钥内容时终端回显同样会被临时关闭；内部使用的 `0600` 临时密钥文件会在操作结束后删除。在隐藏输入的提示处按 Ctrl+Z 时，程序暂停期间恢复回显，`fg` 继续后再次隐藏。粘贴加密 PKCS#8 PEM 会立即拒绝并提示改用 NKPR 文件。Windows 检测到不能可靠关闭回显的 mintty/MSYS 伪终端时拒绝秘密输入，请改用 Windows Terminal 或重定向标准输入。
 
@@ -273,11 +273,11 @@ plaintext/test.jpg -> encrypted/test.jpg.nkem
 encrypted/test.jpg.nkem -> plaintext/test.jpg
 ```
 
-解密仍使用原子输出。只有 Hybrid 密钥解封装及 AES-GCM 认证全部成功，目标文件才会提交；失败时不会留下未认证明文。
+解密仍使用原子输出。只有 Hybrid 密钥解封装及 AES-GCM 认证全部成功，v5 文件的两个签名也都通过，目标文件才会提交；失败时不会留下未认证明文。解密成功后显示签名状态和签名者指纹，文件记录了原文件名时一并显示。
 
 ### 公钥指纹
 
-“查看公钥指纹”接受公钥文件或粘贴内容，并显示大写、冒号分隔的 SHA-256 指纹。指纹输入是带域分隔字符串的两个公钥 DER SubjectPublicKeyInfo 编码，按 X448、ML-KEM-1024 顺序排列，每段前带 4 字节大端长度。因此同一对公钥不受 PEM 换行方式影响。
+“查看公钥指纹”接受公钥文件或粘贴内容，并显示大写、冒号分隔的 SHA-256 指纹。四段式身份公钥显示身份指纹：对固定的二进制身份编码（四个原始公钥，见 [`docs/NKEM-v5.md`](docs/NKEM-v5.md#identity-fingerprint)）加域分隔字符串后取 SHA-256。旧版两段式公钥显示旧版指纹，输入是带域分隔字符串的两个公钥 DER SubjectPublicKeyInfo 编码，按 X448、ML-KEM-1024 顺序排列，每段前带 4 字节大端长度。两种指纹都不受 PEM 换行方式影响。
 
 ## 参数化命令
 
@@ -343,7 +343,7 @@ encrypted/test.jpg.nkem -> plaintext/test.jpg
 
 ## NKPR 加密私钥格式
 
-NKPR 是独立于 NKEM 文件容器的私钥存储格式；NKEM v3 不修改 NKPR version 1。当前 NKPR 固定使用：
+NKPR 是独立于 NKEM 文件容器的私钥存储格式。version 1 保存旧版两段式密钥，version 2 保存四段式身份密钥；两者的头部布局和参数相同，只有版本字节和内部 PEM 块的数量不同。NKPR 固定使用：
 
 - Argon2id：64 MiB（`65536` KiB）、3 次迭代、并行度 4、Argon2 version 1.3；
 - 32 字节随机 salt；
@@ -355,7 +355,7 @@ NKPR 是独立于 NKEM 文件容器的私钥存储格式；NKEM v3 不修改 NKP
 | 偏移 | 长度 | 字段 |
 |---:|---:|---|
 | 0 | 4 | magic：ASCII `NKPR` |
-| 4 | 1 | container version：`1` |
+| 4 | 1 | container version：`1`，身份密钥为 `2` |
 | 5 | 1 | KDF id：`1`，Argon2id |
 | 6 | 1 | cipher id：`1`，AES-256-GCM |
 | 7 | 1 | flags：`0` |
@@ -380,7 +380,7 @@ NKPR 的 AES-GCM 不具备密钥承诺性，不保证一个容器只能由唯一
 
 ## NKEM v3 hybrid 文件格式
 
-v3 使用 X448、ML-KEM-1024、共享秘密组合和 HKDF-SHA512，并将 HKDF salt 与 AES-GCM nonce 分离。每个文件分别通过 `RAND_bytes` 生成 32 字节 salt 和 12 字节 nonce；两者连同固定头部、X448 临时公钥和 ML-KEM 密文一起纳入 GCM AAD。完整布局见 [`docs/NKEM-v3.md`](docs/NKEM-v3.md)。`nekokem_encrypt_file()` 写出 v3，`nekokem_decrypt_file()` 接受 v3 与 v4。
+v3 使用 X448、ML-KEM-1024、共享秘密组合和 HKDF-SHA512，并将 HKDF salt 与 AES-GCM nonce 分离。每个文件分别通过 `RAND_bytes` 生成 32 字节 salt 和 12 字节 nonce；两者连同固定头部、X448 临时公钥和 ML-KEM 密文一起纳入 GCM AAD。完整布局见 [`docs/NKEM-v3.md`](docs/NKEM-v3.md)。`nekokem_encrypt_file()` 写出 v3，`nekokem_decrypt_file()` 接受 v3、v4 与 v5（v5 会完整验证签名，但不应用签名策略）。
 
 ## NKEM v4 多接收方文件格式
 
@@ -456,7 +456,7 @@ make -C linux test
 - 通过仅测试构建启用的故障注入覆盖短写、ENOSPC、文件/目录 `fsync`、第二次 rename、公私钥回滚和临时/备份文件清理；
 
 - Hybrid 加密私钥 keygen、正确密码解密、SHA-256 和 `cmp`；
-- 默认 v3 加密/解密回环，并验证旧版本号容器被拒绝；
+- 默认签名的 v5 加密/解密回环（要求签名者可信），不签名的 v3、v4 回环，并验证旧版本号容器被拒绝；
 - 错误密码和篡改 NKPR 必须认证失败，且不能产生目标明文；
 - 检查 Hybrid keygen 不留下明文 `private.key`、PEM 内容或原子临时文件；
 - hybrid 密文修改后必须认证失败，且不能产生目标明文；
@@ -480,11 +480,12 @@ make -C linux fuzz-build
 
 该目标使用 `afl-clang-fast` 和 UBSan 构建：
 
-- `core/fuzz/bin/fuzz_nkem`：仅解析 NKEM v3 与 v4 header 及容器总长度；
-- `core/fuzz/bin/fuzz_nkpr`：仅解析 NKPR header、参数与容器总长度；
-- `core/fuzz/bin/fuzz_decrypt`：对输入执行完整解密，覆盖 X448 与 ML-KEM-1024 解封装、v4 记录解包与头部 MAC、流式 AES-GCM 认证以及原子输出提交与回滚。
+- `core/fuzz/bin/fuzz_nkem`：仅解析 NKEM v3、v4 与 v5 header 及容器总长度；
+- `core/fuzz/bin/fuzz_nkpr`：仅解析 NKPR v1 与 v2 的 header、参数与容器总长度；
+- `core/fuzz/bin/fuzz_decrypt`：对输入执行完整解密，覆盖 X448 与 ML-KEM-1024 解封装、v4/v5 记录解包与头部 MAC、流式 AES-GCM 认证、v5 签名块与 Ed448 + ML-DSA-87 验签，以及原子输出提交与回滚；
+- `core/fuzz/bin/fuzz_identity`：把不可信的公钥交给正式的公钥 PEM 解析器（两段或四段），恰好 4291 字节的输入另交给签名块使用的 NKID 身份解码器；被接受的身份必须能编码回相同字节。
 
-三个 harness 都接受一个 `argv[1]` 文件路径。两个解析器 harness 拒绝超过 2 MiB 的输入，不执行密钥解封装、Argon2id、AES-GCM 或明文写出；`core/fuzz/seeds/` 中的解析器样本只是零填充的结构样本，不含密码、私钥或真实敏感数据，同时提供多个截断样本。`fuzz_decrypt` 的种子在每次构建时生成：一把一次性的明文 PEM 测试密钥，以及用它加密的真实 v3、空 v3 和双接收方 v4 容器，因此变异能深入试解密、MAC 和载荷认证路径；该密钥不保护任何数据，也不会提交到仓库。具体 AFL 命令见 `core/fuzz/README.md`。
+四个 harness 都接受一个 `argv[1]` 文件路径。两个解析器 harness 拒绝超过 2 MiB 的输入，不执行密钥解封装、Argon2id、AES-GCM 或明文写出；`core/fuzz/seeds/` 中的解析器样本只是零填充的结构样本，不含密码、私钥或真实敏感数据，同时提供多个截断样本。`fuzz_decrypt` 与 `fuzz_identity` 的种子在每次构建时生成：一把一次性的明文 PEM 身份密钥，以及用它加密的真实 v3、v4 和签名的 v5 容器（包括空文件和 64 位接收方），因此变异能深入试解密、MAC、载荷认证和验签路径；该密钥不保护任何数据，也不会提交到仓库。具体 AFL 命令见 `core/fuzz/README.md`。
 
 CI 在每个 PR 上对每个 harness 只跑 15 秒；[Fuzz workflow](.github/workflows/fuzz.yml) 每周日 18:00 UTC 对四个 harness 各跑一小时（也可在 Actions 页面手动运行 60–18000 秒），发现崩溃、挂起或 UBSan 报告即失败，AFL 输出保留 30 天。
 

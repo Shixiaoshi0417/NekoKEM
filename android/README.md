@@ -112,13 +112,15 @@ Activity 重建和删除。NKEM v3、NKPR 及其密码算法与参数保持不�
 
 在“公钥通讯录”页面勾选“选为接收方”后，页面顶部显示已选人数，点击“加密给所选接收方”返回文件页；
 勾选本身不会改变当前加密公钥，需显式点击按钮才生效。“清除选择”可取消全部勾选。
-选择一位时仍写出 NKEM v3；选择 2 至 64 位时写出一个 [NKEM v4](../docs/NKEM-v4.md) 文件，
+默认 1 至 64 位接收方共用一个带签名的 [NKEM v5](../docs/NKEM-v5.md) 文件；开启「不签名加密」后，
+选择一位写出 NKEM v3，选择 2 至 64 位写出一个 [NKEM v4](../docs/NKEM-v4.md) 文件。
 每位所选接收方都能用自己的私钥解密，其他人无法解密。文件页列出全部接收方及其完整指纹。
 
 加密前按选择顺序为每位联系人创建并校验私有快照（与单人加密相同）；任何一位缺失、损坏或指纹不符时
 不加密任何内容，已创建的快照立即删除，错误对话框指出该联系人，所选接收方保持不变，需由用户显式处理。
-重复联系人或超过 64 位会被拒绝。JNI 新增 `nativeEncryptFileMultiWithProgress()`，只转换路径、
-进度和取消，由 Core 校验每个公钥并写出 v4；解密自动识别 v3 与 v4。NekoKEM v3.3.2 及更早版本无法打开 v4 文件。
+重复联系人或超过 64 位会被拒绝。JNI 的 `nativeEncryptFileSignedWithProgress()`（签名的 v5）和
+`nativeEncryptFileMultiWithProgress()`（不签名的 v3/v4）只转换路径、口令、进度和取消，由 Core 校验每个公钥并写出
+容器；解密自动识别 v3、v4 与 v5。NekoKEM v3.3.2 及更早版本无法打开 v4 文件，4.x 及更早版本无法打开 v5 文件。
 API 26/29/35/36 设备测试覆盖两位联系人共享一个 v4 文件、各自解密、未选择的默认密钥无法解密、
 联系人缺失时整体失败并清理快照、重复与超限拒绝，以及真实页面中的勾选、显式应用和清除选择。
 
@@ -178,7 +180,7 @@ SAF output URI
 ## 进度与取消
 
 加解密在 `Dispatchers.IO` 后台协程运行。JNI 同步转发 Core 的
-`processedBytes`、`totalBytes` 回调；Core 默认 v3 数据以 64 KiB 分块处理。
+`processedBytes`、`totalBytes` 回调；Core 对 v3、v4、v5 的文件数据都以 64 KiB 分块处理。
 UI 每 150 ms 至多更新一次，速度使用最近两秒的滑动平均，并显示百分比、
 已处理/总大小、实时速度和预计剩余时间。
 
@@ -190,11 +192,16 @@ UI 每 150 ms 至多更新一次，速度使用最近两秒的滑动平均，并
 
 - `nativeGenerateKeypairWithPassword(publicPath, privatePath, password)`：已有密钥文件时失败，从不覆盖
 - `nativeReplaceKeypairWithPassword(publicPath, privatePath, password)`：仅在用户确认替换后使用
+- `nativeUpgradeToIdentityKeys(publicPath, privatePath, password)`：把 NekoKEM 4.x 密钥升级为身份密钥
 - `nativeCheckPassword(privatePath, password)`
+- `nativePrivateKeyFingerprint(privatePath, password)`
 - `nativeHasPrivateKey(privatePath)`
-- `nativeExportPublicKey(publicPath, outputPath)`
+- `nativeExportPublicKey(publicPath, outputPath)`、`nativeExportLegacyPublicKey(publicPath, outputPath)`
 - `nativeAcquirePairLock(keyPath)` / `nativeReleasePairLock(descriptor)`、`nativeDeletePrivateKeyUnderPairLock(privatePath)`：持有目录锁时删除私钥
-- `nativeGetFingerprint(publicPath)`
+- `nativeGetFingerprint(publicPath)`、`nativePublicKeyLegacyFingerprint(publicPath)`、`nativePublicKeyCanVerify(publicPath)`
+- `nativeEncryptFileSignedWithProgress(inputPath, outputPath, publicPaths, signKeyPath, password, originalName, callback)`：签名的 NKEM v5
+- `nativeEncryptFileMultiWithProgress(inputPath, outputPath, publicPaths, callback)`：不签名的 NKEM v3/v4
+- `nativeDecryptFileVerifiedWithProgress(...)`：解密 v3、v4、v5，由 Core 执行签名策略并返回签名状态、签名者指纹和原文件名
 - `nativeEncryptFileWithProgress(inputPath, outputPath, publicPath, callback)`
 - `nativeDecryptFileWithProgress(inputPath, outputPath, privatePath, password, callback)`
 - 原有 `nativeEncryptFile()`、`nativeDecryptFile()` 兼容入口

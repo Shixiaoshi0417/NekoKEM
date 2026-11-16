@@ -70,8 +70,9 @@ check changes no application, Core or container version.
 ## Toolchain version policy
 
 CI and Release explicitly select Rust `1.99.0`, Node.js `24.21.0` and Python
-`3.13.16`. OpenSSL remains `4.1.0`, Android build-tools remain `35.0.0`, and their
-existing checksum/SDK checks stay in place. Publish uses exactly build-tools
+`3.13.16`. OpenSSL remains `4.1.0`. The Android app is built with build-tools `36.0.0`; the APK
+is signed and verified with build-tools `35.0.0`. Their existing checksum/SDK checks
+stay in place. Publish uses exactly build-tools
 `35.0.0` even when a runner also has a newer version. The Publish token is
 available only to the publication step. Windows OpenSSL caches are saved only
 after successful build steps; Release continues to use no caches.
