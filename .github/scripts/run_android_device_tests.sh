@@ -20,8 +20,22 @@ collect_evidence() {
         adb exec-out run-as com.shixiaoshi0417.nekokem cat cache/i18n-screens/contacts-failure.txt || true
     fi
 }
+# Stream the crash and system buffers to the host while the tests run. When the
+# emulator's system server dies, the device drops offline and the log can no
+# longer be read afterwards, so this copy is the only record of why it died.
+# adb root restarts adbd and ends the stream, so it is started again after that.
+live_log_pid=
+start_live_log() {
+    adb logcat -v threadtime -b crash -b system "$@" >> "$report_dir/system-live.txt" 2>&1 &
+    live_log_pid=$!
+}
+stop_live_log() {
+    if [[ -n "$live_log_pid" ]]; then kill "$live_log_pid" 2>/dev/null || true; fi
+}
+adb logcat -c -b crash || true
+start_live_log
 # Failure collection preserves test status; successful runs verify the complete archive.
-trap 'collect_evidence || true' EXIT
+trap 'collect_evidence || true; stop_live_log' EXIT
 adb install -r android/app/build/outputs/apk/debug/app-debug.apk
 adb install -r android/app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk
 runner=com.shixiaoshi0417.nekokem.test/com.shixiaoshi0417.nekokem.TemporaryKeyInstrumentation
@@ -44,6 +58,9 @@ if ! timeout 30s adb root > "$root_log" 2>&1; then
 fi
 cat "$root_log"
 timeout 60s adb wait-for-device
+stop_live_log
+# Skip what the first stream already copied.
+start_live_log -T 1
 root_uid=$(timeout 10s adb shell id -u | tr -d '\r')
 if [[ "$root_uid" != 0 ]]; then
     printf 'Emulator root identity was not verified: %s\n' "$root_uid" >&2
@@ -127,4 +144,5 @@ with tarfile.open(sys.argv[1], 'r:gz') as archive:
 print('All 16 language/layout screenshots, 10 MIUIX screenshots, the contact selection, multi-select and predictive back screenshots archived')
 PY
 gzip -t "$report_dir/screens.tar.gz"
+stop_live_log
 trap - EXIT

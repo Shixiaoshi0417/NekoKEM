@@ -126,6 +126,8 @@ internal fun runMiuixUiTests(
             }
             instrumentation.waitForIdleSync()
             SystemClock.sleep(100)
+            // The next look must not be answered from a cache the last page change left stale.
+            automation.dropAccessibilityCache()
         }
     }
     // [past] scrolls one step before looking: the copy already found refused the press.
@@ -191,6 +193,7 @@ internal fun runMiuixUiTests(
                 if (exact(option)?.let(::tap) == true) return
                 instrumentation.waitForIdleSync()
                 SystemClock.sleep(100)
+                automation.dropAccessibilityCache()
             }
         }
         runCatching { capture("timeout") }

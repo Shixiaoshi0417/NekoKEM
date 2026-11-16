@@ -24,7 +24,7 @@ internal fun clickNavigationTab(instrumentation: Instrumentation, label: String)
         return current
     }
     // A node read while the bar recomposes can go stale and refuse the click,
-    // so look the tab up again until a click is accepted.
+    // so look the tab up again, past the cached tree, until a click is accepted.
     val deadline = SystemClock.uptimeMillis() + 10000
     while (true) {
         val target = clickable(find(instrumentation.uiAutomation.rootInActiveWindow))
@@ -33,6 +33,7 @@ internal fun clickNavigationTab(instrumentation: Instrumentation, label: String)
             if (target == null) "Missing enabled navigation tab: $label" else "Navigation tab refused the click: $label"
         }
         SystemClock.sleep(100)
+        instrumentation.uiAutomation.dropAccessibilityCache()
     }
     instrumentation.waitForIdleSync()
 }
