@@ -28,6 +28,17 @@ import java.io.RandomAccessFile
 import java.security.MessageDigest
 import java.util.concurrent.ConcurrentHashMap
 
+/**
+ * Most bytes a container adds to its plaintext: 1,716 for NKEM v3,
+ * 156 + 1,672 per recipient for v4, and 10,228 + 1,672 per recipient for a
+ * signed v5 that records the original file name (9,204 without the name).
+ * The largest, v5 for the most recipients, bounds them all.
+ */
+internal const val V5_CONTAINER_BASE_BYTES = 10_228L
+internal const val RECIPIENT_ENTRY_BYTES = 1_672L
+internal const val MAX_CONTAINER_OVERHEAD_BYTES =
+    V5_CONTAINER_BASE_BYTES + RECIPIENT_ENTRY_BYTES * NativeBridge.MAX_RECIPIENTS
+
 data class SelectedDocument(
     val uri: Uri,
     val displayName: String,
@@ -1352,10 +1363,8 @@ class SafFileWorkflow(
         val activeOutputBackups = ConcurrentHashMap.newKeySet<String>()
         const val COPY_BUFFER_SIZE = 64 * 1024
         // Plaintext and containers have separate limits, so every file that
-        // can be encrypted can also be decrypted again: a container adds
-        // 1,716 bytes (v3) or 156 + 1,672 per recipient (v4, up to 64).
+        // can be encrypted can also be decrypted again.
         const val MAX_PLAINTEXT_BYTES = 8L * 1024L * 1024L * 1024L
-        const val MAX_CONTAINER_OVERHEAD_BYTES = 156L + 1_672L * NativeBridge.MAX_RECIPIENTS
         const val MAX_CONTAINER_BYTES = MAX_PLAINTEXT_BYTES + MAX_CONTAINER_OVERHEAD_BYTES
         const val MAX_OUTPUT_BACKUP_BYTES = MAX_CONTAINER_BYTES
         const val MAX_KEY_IMPORT_BYTES = 16L * 1024L * 1024L
