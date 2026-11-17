@@ -10,8 +10,11 @@ import android.view.accessibility.AccessibilityNodeInfo
  * the icon-only MIUIX bar below Android 13 carries it as a content description.
  */
 internal fun clickNavigationTab(instrumentation: Instrumentation, label: String) {
+    // The API 35 and 36 emulators can serve cached nodes with an old child list after
+    // the interface style switches, so each node is refreshed from the app before it
+    // is read; refresh() fails for a node that no longer exists.
     fun find(root: AccessibilityNodeInfo?): AccessibilityNodeInfo? {
-        if (root == null) return null
+        if (root == null || !root.refresh()) return null
         if (root.text?.toString() == label || root.contentDescription?.toString() == label) return root
         for (index in 0 until root.childCount) find(root.getChild(index))?.let { return it }
         return null
