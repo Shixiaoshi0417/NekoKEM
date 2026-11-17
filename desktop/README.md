@@ -25,9 +25,12 @@ Expressive 两种风格，自带 Java 运行时；macOS 使用原生 SwiftUI 应
 
 ## Features / 功能
 
-- Generate an encrypted NKPR private key and public key; encrypt NKEM v3 files, or one
-  NKEM v4 file for several saved contacts; decrypt both; display public-key fingerprints.
-  密钥生成、文件加解密（含多人加密）、公钥指纹。
+- Generate an identity key pair (NKPR v2 private key and four-component public key), upgrade a
+  NekoKEM 4.x key and export the legacy public key; encrypt signed NKEM v5 files for 1 to 64
+  recipients, or unsigned NKEM v3/v4 when that is turned on in Settings; decrypt v3, v4 and v5
+  and show the signature status and signer; display public-key fingerprints.
+  密钥生成、旧版密钥升级和旧版公钥导出；默认写出带签名的 NKEM v5（1 至 64 位接收方），设置中开启
+  不签名加密后写出 NKEM v3/v4；解密 v3、v4、v5 并显示签名状态和签名者；公钥指纹。
 - Choose paths using native file dialogs or paste both PEM key blocks.
   支持系统文件选择器及粘贴 PEM 密钥。
 - Display progress and cancel file operations safely. Show errors and preserve
@@ -90,21 +93,23 @@ backups. NKEM v3, NKPR v1 and their cryptographic parameters are unchanged.
 
 Several contacts can share one encrypted file. Tick contacts on the contacts page, where a
 selection bar offers **Encrypt for selected** and **Clear selection**, or tick them in the
-encryption page's **Recipients** list. One recipient still writes NKEM v3; two to 64
-recipients write one [NKEM v4](../docs/NKEM-v4.md) file that each selected recipient decrypts
-with their own private key, and nobody else can. The footer shows the format that will be
-written. Every selected record is staged and verified exactly as above, in selection order,
+encryption page's **Recipients** list. By default 1 to 64 recipients share one signed
+[NKEM v5](../docs/NKEM-v5.md) file; with unsigned encryption turned on, one recipient writes
+NKEM v3 and two to 64 write one [NKEM v4](../docs/NKEM-v4.md) file. Each selected recipient
+decrypts the file with their own private key, and nobody else can. The completed result names
+the format that was written. Every selected record is staged and verified exactly as above, in selection order,
 before Core encrypts; if any one fails, nothing is encrypted, the error names that contact
 and only it is deselected. Duplicate contacts, more than 64 recipients and combined key
-sources are refused. Decryption detects v3 and v4 automatically; NekoKEM v3.3.2 and earlier
-cannot open v4 files.
+sources are refused. Decryption detects v3, v4 and v5 automatically; NekoKEM v3.3.2 and earlier
+cannot open v4 files, and 4.x and earlier cannot open v5 files.
 
 可以把同一个文件加密给多位联系人：在公钥通讯录页面勾选联系人后点击“加密给所选联系人”
-（也可“清除选择”），或在加密页的“接收方”列表中勾选。选择一位时仍写出 NKEM v3；选择 2 至 64 位时
-写出一个 [NKEM v4](../docs/NKEM-v4.md) 文件，每位所选接收方都能用自己的私钥解密，其他人无法解密，
-页面底部会显示将写出的格式。每位联系人都按选择顺序、按上述规则重新读取并校验后才加密；任何一位失败时
+（也可“清除选择”），或在加密页的“接收方”列表中勾选。默认 1 至 64 位接收方共用一个带签名的
+[NKEM v5](../docs/NKEM-v5.md) 文件；开启不签名加密后，选择一位写出 NKEM v3，选择 2 至 64 位写出一个
+[NKEM v4](../docs/NKEM-v4.md) 文件。每位所选接收方都能用自己的私钥解密，其他人无法解密，
+完成后的结果会标明写出的格式。每位联系人都按选择顺序、按上述规则重新读取并校验后才加密；任何一位失败时
 不加密任何内容，错误提示指出该联系人并只取消选择它。重复联系人、超过 64 位接收方以及与其他公钥来源混用
-都会被拒绝。解密会自动识别 v3 与 v4；NekoKEM v3.3.2 及更早版本无法打开 v4 文件。
+都会被拒绝。解密会自动识别 v3、v4 与 v5；NekoKEM v3.3.2 及更早版本无法打开 v4 文件，4.x 及更早版本无法打开 v5 文件。
 
 公钥通讯录位于“联系人”页：可从文件或粘贴内容保存接收方公钥，备注可选且最多 512 个字符，
 支持编辑备注和确认后删除。加密页选择“通讯录”后必须显式选择条目，条目上的“用于加密”会打开

@@ -19,19 +19,19 @@ Core 使用 OpenSSL EVP、NKEM v3（单接收方）、NKEM v4（多接收方）�
 - `nekokem_generate_keypair()`：生成四段式身份公钥和受口令保护的 NKPR v2 私钥
   （其中的 X448 + ML-KEM-1024 用于加解密，见下文 v5 部分）。
 - `nekokem_encrypt_file()`：写出不签名的 NKEM v3 Hybrid 文件；签名的 v5 见下文。
-- `nekokem_decrypt_file()`：接受 NKEM v3 与 v4，其他版本一律拒绝；v4 尝试全部接收方记录
-  （匹配后也不提前停止），验证头部 MAC 后才解密数据。Hybrid 路径同时兼容 NKPR
+- `nekokem_decrypt_file()`：接受 NKEM v3、v4 与 v5，其他版本一律拒绝；v4 和 v5 尝试全部接收方记录
+  （匹配后也不提前停止），验证头部 MAC 后才解密数据；v5 还要求两个签名都通过，但不应用签名策略。Hybrid 路径同时兼容 NKPR
   私钥和旧式明文 Hybrid PEM 私钥。
   加密 PKCS#8 PEM（包括 NKPR 内嵌的加密 PEM）会非交互地拒绝；Core
   不调用 OpenSSL 的默认终端密码输入回调。
-- `nekokem_encrypt_file_with_progress()`：与默认 v3 加密协议完全相同，
+- `nekokem_encrypt_file_with_progress()`：与 `nekokem_encrypt_file()` 的 v3 加密协议完全相同，
   额外报告 `processed_bytes` 和 `total_bytes`。
 - `nekokem_encrypt_file_multi_with_progress()`：为 2 至 `NEKOKEM_MAX_RECIPIENTS`（64）
   个公钥写出一个 NKEM v4 多接收方文件（见 [`docs/NKEM-v4.md`](../docs/NKEM-v4.md)），只有 1 个公钥时写出 v3。
   在创建输出前加载并校验全部公钥；空列表、超过上限、重复公钥或共用任一组件的公钥都会失败，
   不会跳过或替换任何接收方。
   进度、取消和原子提交与 v3 相同。
-- `nekokem_decrypt_file_with_progress()`：解密 v3、v4 时均按文件数据块报告进度。回调在调用线程同步执行，返回 `0` 请求取消。
+- `nekokem_decrypt_file_with_progress()`：解密 v3、v4、v5 时均按文件数据块报告进度。回调在调用线程同步执行，返回 `0` 请求取消。
 - `nekokem_public_key_fingerprint()`：返回大写、冒号分隔的 SHA-256
   公钥指纹。调用者至少提供 `NEKOKEM_FINGERPRINT_STRING_SIZE` 字节。
 - `nekokem_private_key_exists()`：只接受权限为 `0600`、结构有效的 NKPR
@@ -65,7 +65,7 @@ Core 使用 OpenSSL EVP、NKEM v3（单接收方）、NKEM v4（多接收方）�
   旧版指纹，以及导出 NekoKEM 4.x 可读的两段式公钥。
 
 进度 API 使用 `NEKOKEM_OPERATION_SUCCESS`、`NEKOKEM_OPERATION_ERROR` 和
-`NEKOKEM_OPERATION_CANCELLED`。v3、v4 文件数据均以 64 KiB 流式处理；错误或取消
+`NEKOKEM_OPERATION_CANCELLED`。v3、v4、v5 文件数据均以 64 KiB 流式处理；错误或取消
 会中止并删除 Core 原子输出，不会提交部分密文或未认证明文。原有无回调 API
 继续保持 `1/0` 返回约定。
 
