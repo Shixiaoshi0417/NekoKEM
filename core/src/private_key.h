@@ -111,4 +111,9 @@ int protected_private_key_container_parse(
     const unsigned char *input,
     size_t input_len);
 
+/* The NKPR version of a structurally valid container, or 0. Quiet. */
+unsigned int protected_private_key_container_version(
+    const unsigned char *input,
+    size_t input_len);
+
 #endif

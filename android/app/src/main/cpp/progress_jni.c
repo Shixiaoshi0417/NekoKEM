@@ -396,10 +396,23 @@ Java_com_shixiaoshi0417_nekokem_nativecore_NativeBridge_nativeDecryptFileWithPro
     if (result != PROGRESS_JNI_SUCCESS) {
         goto cleanup;
     }
-    core_result = nekokem_decrypt_file_with_progress(
-        input.value, output.value, private_path.value,
-        password, password_len,
-        progress_callback_bridge, &progress);
+    {
+        /* The app does not yet tell its own key from imported ones, so every
+     * key is accepted as in NekoKEM 5.2; see docs/key-commitment.md. */
+        NekoKEMVerifyPolicy own_key;
+
+        memset(&own_key, 0, sizeof(own_key));
+        own_key.struct_size = sizeof(own_key);
+        own_key.flags = NEKOKEM_VERIFY_LEGACY_PRIVATE_KEY;
+        core_result = nekokem_decrypt_file_verified_with_progress(
+            input.value, output.value, private_path.value,
+            password, password_len, &own_key, NULL,
+            progress_callback_bridge, &progress);
+        if (core_result != NEKOKEM_OPERATION_SUCCESS &&
+            core_result != NEKOKEM_OPERATION_CANCELLED) {
+            core_result = NEKOKEM_OPERATION_ERROR;
+        }
+    }
     result = (int)progress_result_to_jni(core_result, &progress);
 
 cleanup:
@@ -629,7 +642,9 @@ Java_com_shixiaoshi0417_nekokem_nativecore_NativeBridge_nativeEncryptFileSignedW
         goto cleanup;
     }
     options.struct_size = sizeof(options);
-    options.flags = 0U;
+    /* The app does not yet tell its own key from imported ones, so every
+     * key is accepted as in NekoKEM 5.2; see docs/key-commitment.md. */
+    options.flags = NEKOKEM_ENCRYPT_LEGACY_SENDER_KEY;
     options.original_name = original_name;
     options.sender_private_key_path = sign_path.value;
     options.password = password;
@@ -740,8 +755,11 @@ Java_com_shixiaoshi0417_nekokem_nativecore_NativeBridge_nativeDecryptFileVerifie
         goto cleanup;
     }
     policy.struct_size = sizeof(policy);
-    policy.flags = require_signature == JNI_TRUE
-                       ? NEKOKEM_VERIFY_REQUIRE_SIGNATURE : 0U;
+    /* The app does not yet tell its own key from imported ones, so every
+     * key is accepted as in NekoKEM 5.2; see docs/key-commitment.md. */
+    policy.flags = (require_signature == JNI_TRUE
+                        ? NEKOKEM_VERIFY_REQUIRE_SIGNATURE : 0U) |
+                   NEKOKEM_VERIFY_LEGACY_PRIVATE_KEY;
     policy.trusted_signer_paths = count > 0 ? (const char *const *)trusted_values : NULL;
     policy.trusted_signer_count = (size_t)count;
     policy.signer_public_key_output_path = signer_output.value;

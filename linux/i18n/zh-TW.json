@@ -309,7 +309,7 @@
   "Unsupported NKEM v3 header flags\n": "不支援的 NKEM v3 標頭旗標\n",
   "Unsupported NKPR private-key format\n": "不支援的 NKPR 私鑰格式\n",
   "Unsupported NKPR protection parameters\n": "不支援的 NKPR 保護參數\n",
-  "Usage:\n  %s\n  %s --version\n  %s keygen\n  %s keygen hybrid\n  %s keygen --replace\n  %s encrypt hybrid [--sign-key <private.key.enc>] [--unsigned] <input_file> <output_file> <public.key> [<public.key> ...]\n  %s decrypt hybrid [--trust <public.key>]... [--require-signature] [--require-trusted] [--save-signer <signer.key>] <input_file> <output_file> <private.key|private.key.enc>\n  %s upgrade-key [<public.key> <private.key.enc>]\n  %s export-legacy-public-key <public.key> <output.key>\n  %s fingerprint <public.key>\nEncryption signs with keys/private.key.enc unless --sign-key or --unsigned is given.\n": "用法：\n  %s\n  %s --version\n  %s keygen\n  %s keygen hybrid\n  %s keygen --replace\n  %s encrypt hybrid [--sign-key <private.key.enc>] [--unsigned] <input_file> <output_file> <public.key> [<public.key> ...]\n  %s decrypt hybrid [--trust <public.key>]... [--require-signature] [--require-trusted] [--save-signer <signer.key>] <input_file> <output_file> <private.key|private.key.enc>\n  %s upgrade-key [<public.key> <private.key.enc>]\n  %s export-legacy-public-key <public.key> <output.key>\n  %s fingerprint <public.key>\n加密預設使用 keys/private.key.enc 簽署，可用 --sign-key 指定簽署私鑰或用 --unsigned 不簽署。\n",
+  "Usage:\n  %s\n  %s --version\n  %s keygen\n  %s keygen hybrid\n  %s keygen --replace\n  %s encrypt hybrid [--sign-key <private.key.enc>] [--legacy-private-key] [--unsigned] <input_file> <output_file> <public.key> [<public.key> ...]\n  %s decrypt hybrid [--trust <public.key>]... [--require-signature] [--require-trusted] [--save-signer <signer.key>] [--legacy-private-key] <input_file> <output_file> <private.key|private.key.enc>\n  %s upgrade-key [<public.key> <private.key.enc>]\n  %s export-legacy-public-key <public.key> <output.key>\n  %s export-legacy-private-key <output.enc>\n  %s fingerprint <public.key>\nEncryption signs with keys/private.key.enc unless --sign-key or --unsigned is given.\nA private key in the NKPR v1 or v2 format opens only at keys/private.key.enc or with --legacy-private-key.\n": "用法：\n  %s\n  %s --version\n  %s keygen\n  %s keygen hybrid\n  %s keygen --replace\n  %s encrypt hybrid [--sign-key <private.key.enc>] [--legacy-private-key] [--unsigned] <input_file> <output_file> <public.key> [<public.key> ...]\n  %s decrypt hybrid [--trust <public.key>]... [--require-signature] [--require-trusted] [--save-signer <signer.key>] [--legacy-private-key] <input_file> <output_file> <private.key|private.key.enc>\n  %s upgrade-key [<public.key> <private.key.enc>]\n  %s export-legacy-public-key <public.key> <output.key>\n  %s export-legacy-private-key <output.enc>\n  %s fingerprint <public.key>\n加密預設使用 keys/private.key.enc 簽署，可用 --sign-key 指定簽署私鑰或用 --unsigned 不簽署。\nNKPR v1 或 v2 格式的私鑰只能在 keys/private.key.enc 使用，或加上 --legacy-private-key。\n",
   "Warning: this file is not signed; recipients cannot confirm that it came from you.\n": "警告：此檔案未簽署，收件者無法確認檔案來自你。\n",
   "Wrote the two-component public key for NekoKEM 4.x: %s\n": "已寫出供 NekoKEM 4.x 使用的兩元件公鑰：%s\n",
   "X448 key agreement failed": "X448 金鑰協議失敗",
@@ -343,5 +343,12 @@
   "The signer key path is a file this decryption reads or writes; choose another path\n": "簽署者公鑰的儲存路徑是本次解密讀取或寫入的檔案，請選擇其他路徑\n",
   "Original file name: %s\n": "原始檔名：%s\n",
   "The original file name cannot be recorded\n": "無法記錄原始檔名\n",
-  "The recorded original file name is invalid\n": "檔案中記錄的原始檔名無效\n"
+  "The recorded original file name is invalid\n": "檔案中記錄的原始檔名無效\n",
+  "This private key uses an older format that is accepted only as your own key\n": "此私鑰使用舊格式，只能作為你自己的私鑰使用\n",
+  "Only a protected NKPR private key can be exported\n": "只能匯出受密碼保護的 NKPR 私鑰\n",
+  "Pass --legacy-private-key only for a key you exported yourself from an older NekoKEM.\n": "只有你自己從舊版 NekoKEM 匯出的私鑰才可以加上 --legacy-private-key。\n",
+  "Your private key uses an older format. Run upgrade-key to rewrite it as NKPR v3.\n": "你的私鑰使用舊格式。執行 upgrade-key 可將其重寫為 NKPR v3。\n",
+  "The key pair is already in the current format\n": "金鑰對已經是最新格式\n",
+  "Rewrote %s as NKPR v3; the keys and password are unchanged\n": "已將 %s 重寫為 NKPR v3，金鑰和密碼均未改變\n",
+  "Wrote the private key for NekoKEM 5.2 and earlier: %s\n": "已寫出供 NekoKEM 5.2 及更早版本使用的私鑰：%s\n"
 }

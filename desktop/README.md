@@ -25,7 +25,7 @@ Expressive 两种风格，自带 Java 运行时；macOS 使用原生 SwiftUI 应
 
 ## Features / 功能
 
-- Generate an identity key pair (NKPR v2 private key and four-component public key), upgrade a
+- Generate an identity key pair (NKPR v3 private key and four-component public key), upgrade a
   NekoKEM 4.x key and export the legacy public key; encrypt signed NKEM v5 files for 1 to 64
   recipients, or unsigned NKEM v3/v4 when that is turned on in Settings; decrypt v3, v4 and v5
   and show the signature status and signer; display public-key fingerprints.

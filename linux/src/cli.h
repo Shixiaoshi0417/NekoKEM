@@ -20,13 +20,15 @@ int cli_run_hybrid_keygen(int replace);
 /*
  * One key writes v3 and more write v4 with unsigned_output; otherwise the
  * file is NKEM v5 signed with sign_key_path (keys/private.key.enc if NULL).
+ * legacy_key accepts an NKPR v1 or v2 signing key at another path.
  */
 int cli_run_hybrid_encrypt(const char *input_path,
                            const char *output_path,
                            const char *const *public_key_paths,
                            size_t public_key_count,
                            const char *sign_key_path,
-                           int unsigned_output);
+                           int unsigned_output,
+                           int legacy_key);
 
 typedef struct {
     const char *const *trusted_paths;
@@ -34,6 +36,8 @@ typedef struct {
     int require_signature;
     int require_trusted;
     const char *save_signer_path;
+    /* Accept an NKPR v1 or v2 private key at a path other than the own key. */
+    int legacy_private_key;
 } CliVerifyOptions;
 
 /* verify may be NULL: report the signature status without a policy. */
@@ -46,6 +50,8 @@ int cli_run_upgrade_key(const char *public_key_path,
                         const char *private_key_path);
 int cli_run_export_legacy_public_key(const char *public_key_path,
                                      const char *output_path);
+/* Writes keys/private.key.enc as NKPR v2 (or v1) for NekoKEM 5.2 and earlier. */
+int cli_run_export_legacy_private_key(const char *output_path);
 int cli_run_fingerprint(const char *public_key_path);
 
 #endif

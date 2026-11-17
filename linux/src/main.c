@@ -27,11 +27,14 @@ static int run_encrypt(int count, char **args, const char *program)
 {
     const char *sign_key = NULL;
     int unsigned_output = 0;
+    int legacy_key = 0;
     int index;
 
     for (index = 0; index < count; ++index) {
         if (strcmp(args[index], "--unsigned") == 0) {
             unsigned_output = 1;
+        } else if (strcmp(args[index], "--legacy-private-key") == 0) {
+            legacy_key = 1;
         } else if (strcmp(args[index], "--sign-key") == 0) {
             if (!option_value(count, args, &index, &sign_key)) {
                 goto usage;
@@ -40,13 +43,14 @@ static int run_encrypt(int count, char **args, const char *program)
             break;
         }
     }
-    if (count - index < 3 || (unsigned_output != 0 && sign_key != NULL)) {
+    if (count - index < 3 ||
+        (unsigned_output != 0 && (sign_key != NULL || legacy_key != 0))) {
         goto usage;
     }
     return cli_run_hybrid_encrypt(args[index], args[index + 1],
                                   (const char *const *)(args + index + 2),
                                   (size_t)(count - index - 2), sign_key,
-                                  unsigned_output)
+                                  unsigned_output, legacy_key)
                ? EXIT_SUCCESS
                : EXIT_FAILURE;
 
@@ -57,7 +61,7 @@ usage:
 
 static int run_decrypt(int count, char **args, const char *program)
 {
-    CliVerifyOptions verify = {NULL, 0U, 0, 0, NULL};
+    CliVerifyOptions verify = {NULL, 0U, 0, 0, NULL, 0};
     const char **trusted;
     int index;
     int result = EXIT_FAILURE;
@@ -77,6 +81,8 @@ static int run_decrypt(int count, char **args, const char *program)
             verify.require_signature = 1;
         } else if (strcmp(args[index], "--require-trusted") == 0) {
             verify.require_trusted = 1;
+        } else if (strcmp(args[index], "--legacy-private-key") == 0) {
+            verify.legacy_private_key = 1;
         } else if (strcmp(args[index], "--save-signer") == 0) {
             if (!option_value(count, args, &index,
                               &verify.save_signer_path)) {
@@ -164,6 +170,10 @@ int main(int argc, char **argv)
         return cli_run_export_legacy_public_key(argv[2], argv[3])
                    ? EXIT_SUCCESS
                    : EXIT_FAILURE;
+    }
+    if (argc == 3 && strcmp(argv[1], "export-legacy-private-key") == 0) {
+        return cli_run_export_legacy_private_key(argv[2]) ? EXIT_SUCCESS
+                                                          : EXIT_FAILURE;
     }
     if (argc == 3 && strcmp(argv[1], "fingerprint") == 0) {
         return cli_run_fingerprint(argv[2]) ? EXIT_SUCCESS : EXIT_FAILURE;

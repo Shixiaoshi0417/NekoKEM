@@ -80,7 +80,10 @@ elif phase == 'windows':
     assert windows_legacy != identity
     (root/'windows-legacy-fingerprint.txt').write_bytes(windows_legacy)
     for name in ['binary','empty']:
-        run('decrypt','hybrid',name+'.linux.nkem',name+'.from-linux','imported.enc',password=PASSWORD)
+        # The historical key is NKPR v1, which a current CLI opens at another
+        # path only when told it is the user's own older key.
+        run('decrypt','hybrid','--legacy-private-key',name+'.linux.nkem',name+'.from-linux','imported.enc',
+            password=PASSWORD)
         assert (root/(name+'.from-linux')).read_bytes() == (root/name).read_bytes()
         # Signed by default; Core verifies the signer against the trusted key.
         run('encrypt','hybrid',name,name+'.signed.nkem','keys/public.key',password=PASSWORD)

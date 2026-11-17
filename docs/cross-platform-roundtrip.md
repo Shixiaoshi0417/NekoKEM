@@ -23,12 +23,12 @@ Linux、macOS、Windows 的 CLI 共用 `linux/src/main.c` 的参数解析。Andr
 
 ## 前提
 
-- 两边都使用会读写 NKEM v3、v4、v5 和 NKPR v1、v2 的构建，即 NekoKEM 5.2.0 或更新版本：CLI 写出的签名文件总是记录原文件名，5.1.0 及更早版本打不开。本仓库 v5.2.0 的 CLI 执行 `nekokem --version`（Windows 为 `nekokem.exe --version`）时打印 `NekoKEM 5.2.0`。报告失败时写上两边的版本字符串。NekoKEM 3.3.2 及更早版本打不开 v4 文件，4.x 及更早版本打不开 v5 文件、NKPR v2 和四段式公钥。
+- 两边都使用会读写 NKEM v3、v4、v5 和 NKPR v1、v2、v3 的构建，即本仓库当前的构建：私钥留在各自机器上，NekoKEM 5.2.0 打不开新生成的 NKPR v3 私钥并不影响往返；CLI 写出的签名文件总是记录原文件名，5.1.0 及更早版本打不开。本仓库 v5.2.0 的 CLI 执行 `nekokem --version`（Windows 为 `nekokem.exe --version`）时打印 `NekoKEM 5.2.0`。报告失败时写上两边的版本字符串。NekoKEM 3.3.2 及更早版本打不开 v4 文件，4.x 及更早版本打不开 v5 文件、NKPR v2 和四段式公钥。
 - 发布包：Linux `NekoKEM-linux-x86_64.tar.gz` 或 `NekoKEM-linux-aarch64.tar.gz`，macOS Apple Silicon `NekoKEM-macos-arm64.tar.gz`（无 Intel 构建），Windows `NekoKEM-windows-x86_64.zip` 中的 `nekokem.exe`。也可以使用同一提交构建出的二进制。
 - 下文命令里的 `nekokem` 指该可执行文件。把它放进 `PATH`，或换成绝对路径。Windows 上把同一个参数交给 `nekokem.exe`。`--lang` 放在子命令之前。
 - 在操作者自己拥有的目录中工作。Windows CLI 只接受本地固定 NTFS；网络路径、FAT/exFAT、设备路径和重解析点会在密码运算之前被拒绝。把文件复制到本地 NTFS 目录后再运行。
 - 用一次性密钥和本文的公开样本。不要用仍在保护数据的密钥，也不要把 `keys/` 提交进 git。
-- `nekokem keygen` 在当前目录生成四段式身份密钥：`keys/public.key`（X448、ML-KEM-1024、Ed448、ML-DSA-87 四个公钥）与 `keys/private.key.enc`（NKPR v2）。任一文件已存在时，keygen 在询问口令之前拒绝，不会覆盖。`keygen hybrid` 与 `keygen` 相同。确需替换时才使用 `keygen --replace`，替换后旧公钥对应的文件只能用旧私钥解密。
+- `nekokem keygen` 在当前目录生成四段式身份密钥：`keys/public.key`（X448、ML-KEM-1024、Ed448、ML-DSA-87 四个公钥）与 `keys/private.key.enc`（NKPR v3）。任一文件已存在时，keygen 在询问口令之前拒绝，不会覆盖。`keygen hybrid` 与 `keygen` 相同。确需替换时才使用 `keygen --replace`，替换后旧公钥对应的文件只能用旧私钥解密。
 - 新口令必须是 1 至 1024 字节的有效 UTF-8，并输入两次。两次不一致时退出，`--lang en` 的提示是 `Passwords do not match`。口令从关闭回显的终端读取，或从 UTF-8 标准输入读取；不要放进命令行参数。读入时去掉行尾的一个 CR，因此以 LF 或 CRLF 结束的同一口令字节相同。解锁已有 NKPR 只提示一次，按文件头判断，不看扩展名。
 - 加密默认签名：使用当前目录的 `keys/private.key.enc`（或 `--sign-key` 指定的私钥），并提示输入它的口令。`--unsigned` 不签名，不需要私钥和口令，并在标准错误打印一行未签名警告。
 - NKPR 使用 Argon2id（64 MiB、3 次迭代、并行度 4）。生成密钥、签名加密和解密在提示口令后会停几秒，这是口令派生，不是挂起。
@@ -303,7 +303,7 @@ nekokem --lang en decrypt hybrid out/text.v3.truncated.nkem out/truncated.txt ke
 Android 与桌面 GUI 默认写签名的 NKEM v5（1 至 64 个接收方）；在设置中开启不签名加密后，选择 1 个接收方时写 NKEM v3，选择 2 至 64 个时写 NKEM v4。解密按头部版本自动识别，并显示签名状态和签名者指纹。用它们参加往返时，仍然用上一节的长度、版本字节和明文 SHA-256 判断。
 
 - 从 CLI 导出的 `keys/public.key` 导入应用或 GUI 的公钥通讯录，在应用里加密，再把得到的 `.nkem` 交给 CLI 解密。
-- CLI 使用应用导出的公钥加密；应用或 GUI 解密。Android 导出的 `private.nkpr` 按文件头识别为 NKPR，CLI 和桌面 GUI 不需要改扩展名。复制到 POSIX 后执行 `chmod 600`。
+- CLI 使用应用导出的公钥加密；应用或 GUI 解密。Android 导出的 `private.nkpr` 按文件头识别为 NKPR，CLI 和桌面 GUI 不需要改扩展名。复制到 POSIX 后执行 `chmod 600`。较早的应用生成的私钥是 NKPR v2，CLI 在 `keys/private.key.enc` 以外的路径只有加上 `--legacy-private-key` 才会打开，见 README 的[参数化命令](../README.md#参数化命令)。
 - 交互菜单和 GUI 的点击步骤见 [Android 文档](../android/README.md) 与 [桌面 GUI 文档](../desktop/README.md)。
 
 应用通过系统文件选择器读写字节，不改变 NKEM 内容。比较的是解密后的明文，不是两份 `.nkem` 是否相同。
