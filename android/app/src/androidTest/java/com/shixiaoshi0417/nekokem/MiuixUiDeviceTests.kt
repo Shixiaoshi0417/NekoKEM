@@ -57,39 +57,63 @@ internal fun runMiuixUiTests(
     Releases.source = releaseStub("99.0.0")
     instrumentation.runOnMainSync { check(AppLanguages.setSelection(context, language)) }
     var activity: Activity? = null
+    // After the interface style switches or a dialog closes, the API 35 and 36 emulators
+    // can keep serving cached nodes with an old child list: the screenshot showed the
+    // page while the tree never did. Every node is refreshed from the app before it is
+    // read, as the contacts tests do; refresh() fails for a node that no longer exists.
+    fun fresh(node: AccessibilityNodeInfo?): AccessibilityNodeInfo? = node?.takeIf { it.refresh() }
+    // Android 8 can keep reporting a closed dialog as the active window, so
+    // every window on screen is searched, not only the active one.
+    fun roots(): List<AccessibilityNodeInfo> =
+        (listOfNotNull(automation.rootInActiveWindow) +
+            runCatching { automation.windows.mapNotNull { it.root } }.getOrDefault(emptyList()))
+            .mapNotNull(::fresh)
     fun find(root: AccessibilityNodeInfo?, predicate: (AccessibilityNodeInfo) -> Boolean): AccessibilityNodeInfo? {
-        if (root == null) return null
-        if (predicate(root)) return root
-        for (index in 0 until root.childCount) find(root.getChild(index), predicate)?.let { return it }
+        val node = fresh(root) ?: return null
+        if (predicate(node)) return node
+        for (index in 0 until node.childCount) find(node.getChild(index), predicate)?.let { return it }
         return null
     }
-    fun exact(value: String): AccessibilityNodeInfo? {
-        // Android 8 can keep reporting a closed dialog as the active window, so
-        // every window on screen is searched, not only the active one.
-        val roots = listOfNotNull(automation.rootInActiveWindow) +
-            runCatching { automation.windows.mapNotNull { it.root } }.getOrDefault(emptyList())
-        return roots.firstNotNullOfOrNull { root ->
+    fun exact(value: String): AccessibilityNodeInfo? =
+        roots().firstNotNullOfOrNull { root ->
             find(root) { it.text?.toString() == value || it.contentDescription?.toString() == value }
         }
-    }
     // Every copy on screen. A window left over from the other shell can hold one that
     // cannot be pressed, so a press tries each of them.
     fun copies(value: String): List<AccessibilityNodeInfo> {
-        val roots = listOfNotNull(automation.rootInActiveWindow) +
-            runCatching { automation.windows.mapNotNull { it.root } }.getOrDefault(emptyList())
         val found = mutableListOf<AccessibilityNodeInfo>()
-        fun collect(node: AccessibilityNodeInfo?) {
-            if (node == null) return
+        fun collect(candidate: AccessibilityNodeInfo?) {
+            val node = fresh(candidate) ?: return
             if (node.text?.toString() == value || node.contentDescription?.toString() == value) found += node
             for (index in 0 until node.childCount) collect(node.getChild(index))
         }
-        roots.forEach(::collect)
+        roots().forEach(::collect)
         return found
     }
-    fun containing(value: String): AccessibilityNodeInfo? {
-        val roots = listOfNotNull(automation.rootInActiveWindow) +
-            runCatching { automation.windows.mapNotNull { it.root } }.getOrDefault(emptyList())
-        return roots.firstNotNullOfOrNull { root -> find(root) { it.text?.toString()?.contains(value) == true } }
+    fun containing(value: String): AccessibilityNodeInfo? =
+        roots().firstNotNullOfOrNull { root -> find(root) { it.text?.toString()?.contains(value) == true } }
+    // Every window's tree as text, kept beside the timeout screenshot.
+    fun dumpTrees(name: String) {
+        val text = StringBuilder()
+        fun dump(candidate: AccessibilityNodeInfo?, depth: Int) {
+            val node = fresh(candidate) ?: return
+            text.append("  ".repeat(depth)).append(node.className)
+            node.text?.let { text.append(" text=").append(it) }
+            node.contentDescription?.let { text.append(" desc=").append(it) }
+            if (node.isScrollable) text.append(" scrollable")
+            if (node.isClickable) text.append(" clickable")
+            text.append('\n')
+            for (index in 0 until node.childCount) dump(node.getChild(index), depth + 1)
+        }
+        runCatching { automation.windows }.getOrDefault(emptyList()).forEach { window ->
+            text.append("window type=").append(window.type).append(" layer=").append(window.layer)
+                .append(" active=").append(window.isActive).append(" title=").append(window.title).append('\n')
+            dump(window.root, 1)
+        }
+        text.append("rootInActiveWindow\n")
+        dump(automation.rootInActiveWindow, 1)
+        val directory = File(context.cacheDir, "i18n-screens").apply { check(isDirectory || mkdir()) }
+        File(directory, "$screenshotPrefix-miuix-$name.txt").writeText(text.toString())
     }
     fun string(resource: Int) = checkNotNull(activity).getString(resource)
     // Drags the page by half a screen (down when [forward]) so long pages are captured whole.
@@ -122,6 +146,7 @@ internal fun runMiuixUiTests(
             if (SystemClock.uptimeMillis() >= deadline) {
                 // Keep what the screen showed, since the accessibility tree may disagree with it.
                 runCatching { capture("timeout") }
+                runCatching { dumpTrees("timeout-tree") }
                 error("MIUIX: $description")
             }
             instrumentation.waitForIdleSync()
@@ -141,8 +166,8 @@ internal fun runMiuixUiTests(
                 skip = false
                 // The page is not always the first scrollable node, so each one is asked in turn.
                 val scrollables = mutableListOf<AccessibilityNodeInfo>()
-                fun collect(node: AccessibilityNodeInfo?) {
-                    if (node == null) return
+                fun collect(candidate: AccessibilityNodeInfo?) {
+                    val node = fresh(candidate) ?: return
                     if (node.isScrollable) scrollables += node
                     for (index in 0 until node.childCount) collect(node.getChild(index))
                 }
@@ -194,6 +219,7 @@ internal fun runMiuixUiTests(
             }
         }
         runCatching { capture("timeout") }
+        runCatching { dumpTrees("timeout-tree") }
         error("MIUIX: $title did not offer $option")
     }
     fun secureWindowShown(): Boolean {
@@ -358,13 +384,11 @@ internal fun runMiuixUiTests(
             // A window left over from the MIUIX shell can still hold a checked copy of
             // the row, so look at every copy on screen and refresh each before reading.
             reveal(string(R.string.settings_unsigned_title))
-            val roots = listOfNotNull(automation.rootInActiveWindow) +
-                runCatching { automation.windows.mapNotNull { it.root } }.getOrDefault(emptyList())
             val title = string(R.string.settings_unsigned_title)
-            roots.any { root ->
+            roots().any { root ->
                 val rows = mutableListOf<AccessibilityNodeInfo>()
-                fun collect(node: AccessibilityNodeInfo?) {
-                    if (node == null) return
+                fun collect(candidate: AccessibilityNodeInfo?) {
+                    val node = fresh(candidate) ?: return
                     if (node.text?.toString() == title || node.contentDescription?.toString() == title) rows += node
                     for (index in 0 until node.childCount) collect(node.getChild(index))
                 }
