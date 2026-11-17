@@ -21,7 +21,7 @@ ACL 策略比只看 POSIX mode 更保守：空 ACL 或只含 deny 条目的 ACL 
 
 原生 CI 在 `macos-15` arm64 runner 上运行 Core ASan/UBSan、文件故障注入、CLI/伪终端语言及密码回显、互操作和实际 GUI/包检查；Darwin ASan 不提供 Linux 的 LSan，原 Linux LSan 门槛保留。Release 只构建，但保留固定源码哈希、OpenSSL 运行时/线程配置、Mach-O arm64/PIE、系统动态库、deployment target、签名和包完整性检查。macOS 11.0 是构建 deployment target，不代表最低系统的实机测试已完成。
 
-CLI 与 GUI 的 ad-hoc hardened-runtime 签名只用于结构验证，不是 Developer ID 发布者身份验证，也没有 Apple 公证。Gatekeeper 可阻止未公证的下载应用；此适配不提供关闭系统保护的步骤。Android 签名密钥不用于 macOS。没有独立专业安全审计，也不保证跨操作系统或 M 系列代际速度相同；本项目不应用于保护重要或敏感数据。
+CLI 的 ad-hoc hardened-runtime 签名和 GUI 不带 hardened runtime 的 ad-hoc 签名只用于结构验证，不是 Developer ID 发布者身份验证，也没有 Apple 公证。Gatekeeper 可阻止未公证的下载应用；此适配不提供关闭系统保护的步骤。Android 签名密钥不用于 macOS。没有独立专业安全审计，也不保证跨操作系统或 M 系列代际速度相同；本项目不应用于保护重要或敏感数据。
 
 ---
 
@@ -46,4 +46,4 @@ Decrypted destinations are not committed before authentication succeeds. Ordinar
 
 Native CI on `macos-15` arm64 runs Core ASan/UBSan, file fault injection, CLI/pseudoterminal language and password-echo checks, interoperability and actual GUI/package checks. Darwin ASan does not provide Linux's LSan; the existing Linux LSan gate remains. Release builds only, retaining pinned source hashes, OpenSSL runtime/threading, Mach-O arm64/PIE, system dylib, deployment-target, signature and package-integrity requirements. macOS 11.0 is a build deployment target, without claiming completed testing on that minimum system.
 
-CLI/GUI ad-hoc hardened-runtime signatures validate structure rather than a Developer ID publisher identity, and Apple notarization is absent. Gatekeeper may block downloaded non-notarized applications; this port provides no steps to disable system protection. Android signing keys are not used for macOS. No independent professional security audit or identical speed across operating systems/M-series generations is claimed. This project must not protect important or sensitive data.
+The CLI's ad-hoc hardened-runtime signature and the GUI's ad-hoc signature (without the hardened runtime) validate structure rather than a Developer ID publisher identity, and Apple notarization is absent. Gatekeeper may block downloaded non-notarized applications; this port provides no steps to disable system protection. Android signing keys are not used for macOS. No independent professional security audit or identical speed across operating systems/M-series generations is claimed. This project must not protect important or sensitive data.

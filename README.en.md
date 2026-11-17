@@ -59,16 +59,18 @@ README uses a dedicated rounded display image. Android retains the existing squa
 One file can be encrypted for up to 64 recipients at once. Each recipient decrypts it with their own
 private key; nobody else can. In the desktop GUI, tick several contacts on the Public-key contacts page
 and choose Encrypt for selected, or tick recipients in the encryption page's recipient list. On Android,
-tick Select as recipient on the Public-key contacts page and choose Encrypt for Selected Recipients. One
-selected contact still writes NKEM v3; two or more write one NKEM v4 file. Every contact is re-read and its
+tick Select as recipient on the Public-key contacts page and choose Encrypt for Selected Recipients. The default is
+signed NKEM v5, one format for 1 to 64 recipients; with unsigned encryption turned on, one selected contact
+writes NKEM v3 and two or more write one NKEM v4 file. Every contact is re-read and its
 fingerprint re-validated by Core before encryption. A missing, damaged or mismatched contact fails the
 whole operation and is named; no recipient is skipped or replaced by another public key. On the CLI, list
 several public keys after the usual command; see [Parameterized commands](#parameterized-commands).
 
-NKEM v4 stores one X448 + ML-KEM-1024 encapsulation and wrapped file key per recipient and encrypts the
+NKEM v4 and v5 store one X448 + ML-KEM-1024 encapsulation and wrapped file key per recipient and encrypt the
 file data once. An HMAC-SHA512 header MAC ensures every recipient decrypts the same content. See
-[`docs/NKEM-v4.md`](docs/NKEM-v4.md) for the format. Decryption on every platform detects v3 and v4
-automatically. This feature is available from v4.0.0; NekoKEM v3.3.2 and earlier cannot open v4 files.
+[`docs/NKEM-v4.md`](docs/NKEM-v4.md) and [`docs/NKEM-v5.md`](docs/NKEM-v5.md) for the formats. Decryption on
+every platform detects v3, v4 and v5 automatically. Multi-recipient encryption is available from v4.0.0 and
+signed v5 from v5.0.0; NekoKEM v3.3.2 and earlier cannot open v4 files, and 4.x and earlier cannot open v5 files.
 
 ## Android public-key contacts
 
@@ -242,14 +244,14 @@ With English selected, the menu displays:
 5. Exit
 ```
 
-Interactive mode always uses NKEM v3 Hybrid. The Hybrid algorithms remain X448 + ML-KEM-1024, HKDF-SHA512, and AES-256-GCM.
+Interactive encryption writes signed NKEM v5: it signs with `keys/private.key.enc` and prompts for that key's password. Unsigned NKEM v3/v4 is written only by the parameterized command's `--unsigned`. Key establishment and file encryption remain X448 + ML-KEM-1024, HKDF-SHA512, and AES-256-GCM.
 
 ### Generating keys
 
 Selecting “Generate keys” ensures a `keys/` directory with mode `0700` exists in the working directory and generates:
 
-- `keys/public.key`: plaintext public keys, X448 followed by ML-KEM-1024;
-- `keys/private.key.enc`: an encrypted NKPR container containing both complete private-key PEM blocks, with mode `0600`.
+- `keys/public.key`: a four-component identity public key: the X448 and ML-KEM-1024 (encryption) and Ed448 and ML-DSA-87 (signing) plaintext public keys, in that order;
+- `keys/private.key.enc`: an encrypted NKPR v2 container holding the four matching private-key PEM blocks, with mode `0600`.
 
 Before generation, the program requests and confirms a private-key protection password; terminal echo is disabled during both inputs. It does not create plaintext `private.key`.
 
@@ -257,7 +259,7 @@ Key generation never overwrites keys: if `keys/public.key` or `keys/private.key.
 
 ### Encrypting files
 
-Enter a public-key file path or paste two PEM public-key blocks, then enter the source file path. The program ensures an `encrypted/` directory with mode `0700` exists in the working directory, creating it if necessary.
+Enter a public-key file path or paste the PEM public-key blocks (two for a legacy key, four for an identity key), then enter the source file path and the password of `keys/private.key.enc`, which signs the file; without that private key encryption fails and says to generate keys or use the parameterized command. The program ensures an `encrypted/` directory with mode `0700` exists in the working directory, creating it if necessary.
 
 Only the source filename is used for the output in `encrypted/`, with `.nkem` appended:
 
@@ -267,7 +269,7 @@ plaintext/test.jpg -> encrypted/test.jpg.nkem
 
 ### Decrypting files
 
-Enter a private-key file path or paste two compatible plaintext PEM private-key blocks. When the key file contains an NKPR container (recognized by its header, whatever the extension, for example `private.nkpr` exported by Android), the program automatically disables terminal echo and prompts for a password, then authenticates, decrypts, and parses NKPR in memory. The decrypted PEM is not written to disk. Legacy plaintext PEM private keys such as `private.key` need no password.
+Enter a private-key file path or paste the compatible plaintext PEM private-key blocks (two for a legacy key, four for an identity key). When the key file contains an NKPR container (recognized by its header, whatever the extension, for example `private.nkpr` exported by Android), the program automatically disables terminal echo and prompts for a password, then authenticates, decrypts, and parses NKPR in memory. The decrypted PEM is not written to disk. Legacy plaintext PEM private keys such as `private.key` need no password.
 
 Terminal echo is also temporarily disabled when pasting legacy private-key contents. The internal temporary key file has mode `0600` and is deleted after the operation. Ctrl+Z at a hidden prompt shows input again while the program is stopped, and `fg` hides it again. Encrypted PKCS#8 PEM paste is rejected immediately with guidance to select an NKPR file. Secret input is refused in detected mintty/MSYS ptys that cannot reliably hide echo; use Windows Terminal or redirected standard input.
 
@@ -279,11 +281,11 @@ The input file must end in `.nkem`. The program ensures a `plaintext/` directory
 encrypted/test.jpg.nkem -> plaintext/test.jpg
 ```
 
-Decryption still uses atomic output. The destination is committed only after Hybrid key decapsulation and AES-GCM authentication both succeed; failure does not leave unauthenticated plaintext in the destination.
+Decryption still uses atomic output. The destination is committed only after Hybrid key decapsulation and AES-GCM authentication both succeed and, for a v5 file, both signatures verify; failure does not leave unauthenticated plaintext in the destination. A successful decryption shows the signature status and the signer's fingerprint, and the original file name when the file records one.
 
 ### Public-key fingerprints
 
-“View public-key fingerprint” accepts a public-key file or pasted contents and displays an uppercase, colon-separated SHA-256 fingerprint. Its input consists of the two public-key DER SubjectPublicKeyInfo encodings with a domain-separation string, ordered X448 then ML-KEM-1024; each encoding is preceded by a 4-byte big-endian length. The same keypair therefore has the same fingerprint regardless of PEM line endings.
+“View public-key fingerprint” accepts a public-key file or pasted contents and displays an uppercase, colon-separated SHA-256 fingerprint. A four-component identity public key shows its identity fingerprint: SHA-256 over a domain-separation string and the fixed binary identity encoding of the four raw public keys (see [`docs/NKEM-v5.md`](docs/NKEM-v5.md#identity-fingerprint)). A legacy two-component public key shows the legacy fingerprint, whose input is a domain-separation string and the two public-key DER SubjectPublicKeyInfo encodings, ordered X448 then ML-KEM-1024, each preceded by a 4-byte big-endian length. Neither fingerprint depends on PEM line endings.
 
 ## Parameterized commands
 
@@ -349,7 +351,7 @@ Inputs must be regular files. The tool uses chunked I/O rather than loading an e
 
 ## NKPR encrypted private-key format
 
-NKPR is a private-key storage format independent of the NKEM file container. NKEM v3 does not change NKPR version 1. NKPR currently fixes these parameters:
+NKPR is a private-key storage format independent of the NKEM file container. Version 1 holds a legacy two-component key and version 2 a four-component identity key; both share the header layout and parameters and differ only in the version byte and the number of PEM blocks inside. NKPR fixes these parameters:
 
 - Argon2id: 64 MiB (`65536` KiB), 3 iterations, parallelism 4, Argon2 version 1.3;
 - 32-byte random salt;
@@ -361,7 +363,7 @@ The fixed header is 36 bytes; all multi-byte integers are big-endian:
 | Offset | Length | Field |
 |---:|---:|---|
 | 0 | 4 | magic: ASCII `NKPR` |
-| 4 | 1 | container version: `1` |
+| 4 | 1 | container version: `1`, or `2` for an identity key |
 | 5 | 1 | KDF id: `1`, Argon2id |
 | 6 | 1 | cipher id: `1`, AES-256-GCM |
 | 7 | 1 | flags: `0` |
@@ -386,7 +388,7 @@ NKPR's AES-GCM is not key-committing: it does not guarantee that only one passwo
 
 ## NKEM v3 hybrid file format
 
-v3 uses X448, ML-KEM-1024, combined shared secrets, and HKDF-SHA512, separating the HKDF salt from the AES-GCM nonce. For each file, `RAND_bytes` independently generates a 32-byte salt and a 12-byte nonce. Both are included in GCM AAD together with the fixed header, X448 ephemeral public key, and ML-KEM ciphertext. See [`docs/NKEM-v3.md`](docs/NKEM-v3.md) for the full layout. `nekokem_encrypt_file()` writes v3; `nekokem_decrypt_file()` accepts v3 and v4.
+v3 uses X448, ML-KEM-1024, combined shared secrets, and HKDF-SHA512, separating the HKDF salt from the AES-GCM nonce. For each file, `RAND_bytes` independently generates a 32-byte salt and a 12-byte nonce. Both are included in GCM AAD together with the fixed header, X448 ephemeral public key, and ML-KEM ciphertext. See [`docs/NKEM-v3.md`](docs/NKEM-v3.md) for the full layout. `nekokem_encrypt_file()` writes v3; `nekokem_decrypt_file()` accepts v3, v4 and v5 (v5 signatures are verified completely, without a signature policy).
 
 ## NKEM v4 multi-recipient file format
 
@@ -462,7 +464,7 @@ The tests run in temporary directories:
 - Checks cover existing `0700` private-directory type, ownership, and permissions, plus private-key `0600`, ownership, regular-file, symbolic-link, and hard-link restrictions.
 - Fault injection enabled only in test builds covers short writes, ENOSPC, file/directory `fsync`, the second rename, public/private rollback, and temporary/backup cleanup.
 - Hybrid encrypted private-key keygen, correct-password decryption, SHA-256, and `cmp`.
-- Default v3 encryption/decryption round trips and rejection of containers with legacy version numbers.
+- Default signed v5 encryption/decryption round trips that require a trusted signer, unsigned v3 and v4 round trips, and rejection of containers with legacy version numbers.
 - Wrong passwords and tampered NKPR must fail authentication without producing a plaintext destination.
 - Hybrid keygen must leave no plaintext `private.key`, PEM contents, or atomic temporary files.
 - Modified hybrid ciphertext must fail authentication without producing a plaintext destination.
@@ -485,11 +487,12 @@ make -C linux fuzz-build
 
 This target builds with `afl-clang-fast` and UBSan:
 
-- `core/fuzz/bin/fuzz_nkem`: parses only NKEM v3 and v4 headers and total container lengths;
-- `core/fuzz/bin/fuzz_nkpr`: parses only NKPR headers, parameters, and total container lengths;
-- `core/fuzz/bin/fuzz_decrypt`: fully decrypts the input, covering X448 and ML-KEM-1024 decapsulation, v4 entry unwrapping and header MAC, streaming AES-GCM authentication, and the atomic output commit and rollback.
+- `core/fuzz/bin/fuzz_nkem`: parses only NKEM v3, v4 and v5 headers and total container lengths;
+- `core/fuzz/bin/fuzz_nkpr`: parses only NKPR v1 and v2 headers, parameters, and total container lengths;
+- `core/fuzz/bin/fuzz_decrypt`: fully decrypts the input, covering X448 and ML-KEM-1024 decapsulation, v4/v5 entry unwrapping and header MAC, streaming AES-GCM authentication, the v5 signature block and Ed448 + ML-DSA-87 verification, and the atomic output commit and rollback;
+- `core/fuzz/bin/fuzz_identity`: feeds untrusted public keys to the production public-key PEM parser (two or four components) and, for inputs of exactly 4291 bytes, to the NKID identity decoder used inside signature blocks; every accepted identity must encode back to the same bytes.
 
-All three harnesses accept an `argv[1]` file path. The two parser harnesses reject inputs above 2 MiB and do not execute decapsulation, Argon2id, AES-GCM, or plaintext output; their seeds in `core/fuzz/seeds/` are zero-filled structural samples without passwords, private keys, or real sensitive data, and several truncated samples are included. Seeds for `fuzz_decrypt` are generated at every build: a throwaway plaintext-PEM test key and genuine v3, empty v3 and two-recipient v4 containers for it, so mutations reach trial decryption, the MAC and payload authentication. The key protects nothing and is never committed. See `core/fuzz/README.md` for AFL commands.
+All four harnesses accept an `argv[1]` file path. The two parser harnesses reject inputs above 2 MiB and do not execute decapsulation, Argon2id, AES-GCM, or plaintext output; their seeds in `core/fuzz/seeds/` are zero-filled structural samples without passwords, private keys, or real sensitive data, and several truncated samples are included. Seeds for `fuzz_decrypt` and `fuzz_identity` are generated at every build: a throwaway plaintext-PEM identity key and genuine v3, v4 and signed v5 containers for it, including empty files and 64 recipients, so mutations reach trial decryption, the MAC, payload authentication and signature verification. The key protects nothing and is never committed. See `core/fuzz/README.md` for AFL commands.
 
 CI fuzzes each harness for 15 seconds on every pull request. The [Fuzz workflow](.github/workflows/fuzz.yml) runs each of the four harnesses for an hour every Sunday at 18:00 UTC (or by hand from the Actions tab for 60–18000 seconds); a crash, hang or UBSan report fails it, and the AFL output is kept for 30 days.
 
