@@ -59,6 +59,12 @@ dd if=/dev/zero bs=1 count=61 status=none \
 # NKPR v2 (identity key) differs only in its version byte.
 { printf 'NKPR'; printf '\002'; dd if="$nkpr_dir/valid-nkpr" bs=1 skip=5 \
     status=none; } > "$nkpr_dir/valid-nkpr-v2"
+# NKPR v3 adds a 32-byte key commitment between the salt and the nonce.
+printf '%s' \
+    '4e4b5052030101000001000000000003000000040000001300200c100000000000000001' |
+    hex_to_binary > "$nkpr_dir/valid-nkpr-v3"
+dd if=/dev/zero bs=1 count=93 status=none \
+    >> "$nkpr_dir/valid-nkpr-v3"
 
 dd if="$nkem_dir/valid-v3" of="$nkem_dir/truncated-magic" \
     bs=1 count=3 status=none

@@ -484,9 +484,10 @@ cleanup:
     return success;
 }
 
+/* NKPR v1 holds a two-component key; v2 and v3 hold identity keys. */
 static unsigned int nkpr_components(unsigned int version)
 {
-    return version == NKPR_VERSION_IDENTITY ? 4U : 2U;
+    return version == NKPR_VERSION ? 2U : 4U;
 }
 
 int hybrid_load_protected_private_keys(

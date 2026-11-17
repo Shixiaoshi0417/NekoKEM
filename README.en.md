@@ -386,6 +386,8 @@ The complete `header || salt || nonce` is AES-GCM AAD. The reader strictly valid
 
 NKPR's AES-GCM is not key-committing: it does not guarantee that only one password or protection key can authenticate a container, or that different protection keys yield the same plaintext. This documents the existing format's boundary without changing NKPR or its cryptographic parameters. NKEM v4/v5 commit to the file key through the header HMAC-SHA512 and are not affected; the assessment of every AES-GCM use and a draft NKPR v3 design are in [Key commitment](docs/key-commitment.md).
 
+Core already reads NKPR v3, which adds a 32-byte key commitment after the NKPR v2 salt so that a container opens under one password only. Every application still writes NKPR v2 when generating or upgrading keys; writing NKPR v3 and the handling of older private-key formats come in a later release.
+
 ## NKEM v3 hybrid file format
 
 v3 uses X448, ML-KEM-1024, combined shared secrets, and HKDF-SHA512, separating the HKDF salt from the AES-GCM nonce. For each file, `RAND_bytes` independently generates a 32-byte salt and a 12-byte nonce. Both are included in GCM AAD together with the fixed header, X448 ephemeral public key, and ML-KEM ciphertext. See [`docs/NKEM-v3.md`](docs/NKEM-v3.md) for the full layout. `nekokem_encrypt_file()` writes v3; `nekokem_decrypt_file()` accepts v3, v4 and v5 (v5 signatures are verified completely, without a signature policy).

@@ -33,7 +33,7 @@ DEPS = $(OBJECTS:.o=.d)
 	fuzz-build test-key-management test-progress test-progress-large \
 	test-file-security test-version-rejection test-gcm-limit test-aes-stream \
 	test-hybrid-kdf test-asan test-input-boundaries test-pem-interaction test-openssl \
-	test-multi-recipient test-signature test-key-safety test-payload-hash
+	test-multi-recipient test-signature test-key-safety test-nkpr-v3 test-payload-hash
 
 all: $(TARGET)
 
@@ -282,6 +282,18 @@ test-key-safety:
 	ASAN_OPTIONS=detect_leaks=1:halt_on_error=1 \
 		UBSAN_OPTIONS=halt_on_error=1:print_stacktrace=1 "$$safety_binary"
 
+test-nkpr-v3:
+	@set -eu; \
+	nkpr_binary=$$(mktemp /tmp/nekokem-nkpr-v3-tests.XXXXXX); \
+	cleanup_nkpr() { rm -f "$$nkpr_binary"; }; \
+	trap cleanup_nkpr EXIT INT TERM; \
+	$(CC) $(CPPFLAGS) $(CFLAGS) -O1 -g -fno-omit-frame-pointer \
+		-fsanitize=address,undefined -fno-sanitize-recover=undefined \
+		$(LDFLAGS) ../core/tests/nkpr_v3_tests.c $(CORE_SOURCES) \
+		$(LDLIBS) -fsanitize=address,undefined -o "$$nkpr_binary"; \
+	ASAN_OPTIONS=detect_leaks=1:halt_on_error=1 \
+		UBSAN_OPTIONS=halt_on_error=1:print_stacktrace=1 "$$nkpr_binary"
+
 test-progress test-progress-large: $(CORE_LIBRARY)
 	@set -eu; \
 	progress_binary=$$(mktemp /tmp/nekokem-progress-tests.XXXXXX); \
@@ -299,7 +311,7 @@ test-progress test-progress-large: $(CORE_LIBRARY)
 
 test: $(TARGET) test-openssl analyze test-ubsan test-parser test-file-security test-gcm-limit test-aes-stream \
 	test-key-management test-version-rejection test-progress test-hybrid-kdf test-input-boundaries \
-	test-asan test-pem-interaction test-i18n test-multi-recipient test-signature test-key-safety test-payload-hash test-interrupts \
+	test-asan test-pem-interaction test-i18n test-multi-recipient test-signature test-key-safety test-nkpr-v3 test-payload-hash test-interrupts \
 	test-cli-audit test-crypto-audit
 	@set -eu; \
 	test_dir=$$(mktemp -d); \
