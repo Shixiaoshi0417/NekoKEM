@@ -16,9 +16,8 @@
 #include "windows_io.h"
 #endif
 
-#define MANAGED_NKPR_MAX_SIZE \
-    (NKPR_HEADER_SIZE + NKPR_SALT_SIZE + NKPR_NONCE_SIZE + \
-     NKPR_MAX_PEM_SIZE + NKPR_TAG_SIZE)
+/* The same limit as the reader, so every readable NKPR version is found. */
+#define MANAGED_NKPR_MAX_SIZE NKPR_MAX_CONTAINER_SIZE
 
 static int managed_path_is_valid(const char *path)
 {

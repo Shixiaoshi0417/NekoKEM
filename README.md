@@ -378,6 +378,8 @@ NKPR 是独立于 NKEM 文件容器的私钥存储格式。version 1 保存旧�
 
 NKPR 的 AES-GCM 不具备密钥承诺性，不保证一个容器只能由唯一口令或保护密钥认证，也不提供跨保护密钥的明文一致性保证。此处说明现有格式的边界，不改变 NKPR 格式或密码参数。NKEM v4/v5 通过头部 HMAC-SHA512 承诺文件密钥，不受此限制；各处 AES-GCM 的评估和 NKPR v3 设计草案见 [密钥承诺评估](docs/key-commitment.md)。
 
+Core 已经能读取 NKPR v3：它在 NKPR v2 的 salt 之后加入 32 字节密钥承诺，一个容器只能被一个口令打开。目前各端生成和升级密钥仍写 NKPR v2；写出 NKPR v3 和旧格式私钥的处理在之后的版本中提供。
+
 ## NKEM v3 hybrid 文件格式
 
 v3 使用 X448、ML-KEM-1024、共享秘密组合和 HKDF-SHA512，并将 HKDF salt 与 AES-GCM nonce 分离。每个文件分别通过 `RAND_bytes` 生成 32 字节 salt 和 12 字节 nonce；两者连同固定头部、X448 临时公钥和 ML-KEM 密文一起纳入 GCM AAD。完整布局见 [`docs/NKEM-v3.md`](docs/NKEM-v3.md)。`nekokem_encrypt_file()` 写出 v3，`nekokem_decrypt_file()` 接受 v3、v4 与 v5（v5 会完整验证签名，但不应用签名策略）。
