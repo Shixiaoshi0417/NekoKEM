@@ -91,12 +91,18 @@ This needs both:
    from someone else; and
 2. the attacker observing success or failure.
 
-Core already reports a wrong password and a damaged container with one
-message, which does not hide success itself. A crafted file that opens under
-the victim's password decrypts to bytes that are not a key for all but one
-candidate, so the victim sees a key-parse error instead of the wrong-password
-message: the outcome is visible either way. The exposure is low, but it is
-the one place in NekoKEM where key commitment matters and is missing.
+Core reports a wrong password, a damaged container and authenticated bytes
+that are not a key with one message, "Private-key password is incorrect or
+NKPR data is corrupted". A crafted file decrypts to a usable key under at
+most one of its candidate passwords. Under the others AES-GCM accepts the
+tag, the plaintext fails to parse, and the user sees the same message as for
+a password outside the set. What still differs is timing: only an accepted
+tag makes Core parse the plaintext, up to 1 MiB, before it fails, and a
+front end may act differently afterwards. The partitioning oracle therefore
+needs an attacker who can time the unlock, or who learns the outcome some
+other way. The exposure is low, but it is the one place in NekoKEM where key
+commitment matters and is missing, and it should not rest on a message
+being identical.
 
 The files at risk are the ones a user unlocks without having written them:
 a private key imported on Android or the desktop, an Android "temporary
