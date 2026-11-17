@@ -2260,12 +2260,18 @@ mod tests {
     fn is_legacy(key: &str) -> bool {
         unsafe { nekokem_private_key_is_legacy(path(key).unwrap().as_ptr()) == 1 }
     }
-    struct OwnKeys;
+    // Holds OWN_KEYS_TESTS for its whole lifetime, so tests that run in
+    // parallel never see each other's saved own key.
+    static OWN_KEYS_TESTS: Mutex<()> = Mutex::new(());
+    struct OwnKeys(#[allow(dead_code)] std::sync::MutexGuard<'static, ()>);
     impl OwnKeys {
         fn set(private: &str, public: &str) -> Self {
+            let serial = OWN_KEYS_TESTS
+                .lock()
+                .unwrap_or_else(|error| error.into_inner());
             *OWN_KEYS.lock().unwrap_or_else(|error| error.into_inner()) =
                 Some((private.into(), public.into()));
-            Self
+            Self(serial)
         }
     }
     impl Drop for OwnKeys {
