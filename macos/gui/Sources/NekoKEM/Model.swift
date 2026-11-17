@@ -1,7 +1,7 @@
 import Foundation
 
 /// The commands of desktop/bridge/src/lib.rs, typed for Swift.
-enum Kind: String { case keygen, encrypt, decrypt, fingerprint, upgrade, exportLegacy = "export-legacy" }
+enum Kind: String { case keygen, encrypt, decrypt, fingerprint, upgrade, exportLegacy = "export-legacy", exportLegacyPrivate = "export-legacy-private" }
 
 struct OperationRequest {
     var id: String
@@ -38,6 +38,8 @@ struct Outcome {
     var canVerify: Bool? = nil
     /// The file name a signed file recorded, already safe for this system.
     var originalName: String? = nil
+    /// The own private key was NKPR v2 and is now NKPR v3; keys and password are unchanged.
+    var keyUpdated = false
 
     init(fingerprint: String? = nil) { self.fingerprint = fingerprint }
     init(_ value: Any) {
@@ -48,6 +50,7 @@ struct Outcome {
         format = fields["format"] as? Int
         canVerify = fields["canVerify"] as? Bool
         originalName = fields["originalName"] as? String
+        keyUpdated = fields["keyUpdated"] as? Bool ?? false
         if let signed = fields["signature"] as? [String: Any] {
             signature = Signature(status: signed["status"] as? String ?? "unsigned", fingerprint: signed["fingerprint"] as? String,
                                   contact: signed["contact"] as? String, signerKey: signed["signerKey"] as? String)

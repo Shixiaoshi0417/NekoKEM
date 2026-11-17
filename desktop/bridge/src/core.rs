@@ -56,6 +56,8 @@ pub enum Kind {
     Fingerprint,
     Upgrade,
     ExportLegacy,
+    // The user's own private key as NKPR v2, for NekoKEM 5.2 and earlier.
+    ExportLegacyPrivate,
 }
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
@@ -131,6 +133,10 @@ pub struct Outcome {
     // Decryption: the file name a signed file recorded, made safe for this system.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub original_name: Option<String>,
+    // The user's own private key was NKPR v2 and has been rewritten as NKPR v3
+    // after it opened; the keys and the password are unchanged.
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub key_updated: bool,
 }
 // Core decides the status and matches the signer; the GUI only reports it.
 #[derive(Serialize, Debug)]
@@ -486,6 +492,8 @@ impl Drop for Reservation {
 
 type Progress = unsafe extern "C" fn(u64, u64, *mut c_void) -> c_int;
 const ENCRYPT_UNSIGNED: u32 = 0x1;
+// NKPR v1/v2 private keys open only with these flags, which the bridge sets
+// for the user's own key alone (docs/key-commitment.md).
 const ENCRYPT_LEGACY_SENDER_KEY: u32 = 0x2;
 const VERIFY_REQUIRE_SIGNATURE: u32 = 0x1;
 const VERIFY_LEGACY_PRIVATE_KEY: u32 = 0x4;
@@ -575,6 +583,19 @@ extern "C" {
         size: usize,
     ) -> c_int;
     fn nekokem_public_key_can_verify(key: *const c_char) -> c_int;
+    fn nekokem_private_key_is_legacy(path: *const c_char) -> c_int;
+    fn nekokem_update_private_key_format(
+        public_key: *const c_char,
+        private_key: *const c_char,
+        password: *const u8,
+        password_len: usize,
+    ) -> c_int;
+    fn nekokem_export_private_key_legacy(
+        private_key: *const c_char,
+        password: *const u8,
+        password_len: usize,
+        output: *const c_char,
+    ) -> c_int;
     fn file_path_exists(path: *const c_char, exists: *mut c_int) -> c_int;
     fn file_paths_are_same_file(
         first: *const c_char,
@@ -591,6 +612,52 @@ extern "C" {
     fn cli_language_preference() -> *const c_char;
     #[cfg(test)]
     fn desktop_private_directory(path: *const c_char) -> c_int;
+}
+// The own key pair saved in the desktop settings ("My private key" and "My
+// public key"). Choosing that private key there is the user's statement that
+// it is theirs, so only it may still be in an older NKPR format; any other
+// private key file must be NKPR v3.
+#[cfg(test)]
+pub(crate) static OWN_KEYS: Mutex<Option<(String, String)>> = Mutex::new(None);
+fn own_keys() -> (String, String) {
+    // Tests name the pair instead of reading the user's settings.
+    #[cfg(test)]
+    return OWN_KEYS
+        .lock()
+        .unwrap_or_else(|error| error.into_inner())
+        .clone()
+        .unwrap_or_default();
+    #[cfg(not(test))]
+    crate::update::config_directory()
+        .map(|directory| crate::preferences::load(&directory))
+        .map(|saved| (saved.sign_key_path, saved.public_key_path))
+        .unwrap_or_default()
+}
+fn is_own_private_key(candidate: &str, own: &str) -> Result<bool, Failure> {
+    if candidate.is_empty() || own.is_empty() {
+        return Ok(false);
+    }
+    Ok(candidate == own || same_file(&path(candidate)?, &path(own)?) == Some(true))
+}
+// After the own key opened: rewrite NKPR v2 as v3. Best effort: a failure
+// leaves the old file in place, which still opens next time. A NekoKEM 4.x key
+// (v1) is left for the explicit upgrade, which also adds the signing keys.
+fn update_own_key(private: &str, public: &str, password: &[u8]) -> bool {
+    let (Ok(private), Ok(public)) = (path(private), path(public)) else {
+        return false;
+    };
+    if unsafe { nekokem_private_key_is_legacy(private.as_ptr()) } != 1 || !can_verify(&public) {
+        return false;
+    }
+    let updated = unsafe {
+        nekokem_update_private_key_format(
+            public.as_ptr(),
+            private.as_ptr(),
+            password.as_ptr(),
+            password.len(),
+        )
+    };
+    updated == 1
 }
 pub fn path(value: &str) -> Result<CString, Failure> {
     if value.is_empty() || value.len() > 32767 {
@@ -835,7 +902,7 @@ pub fn execute<F: Fn(u64, u64)>(
     if request.overwrite
         && !matches!(
             request.kind,
-            Kind::Encrypt | Kind::Decrypt | Kind::ExportLegacy
+            Kind::Encrypt | Kind::Decrypt | Kind::ExportLegacy | Kind::ExportLegacyPrivate
         )
     {
         return Err(Failure::new("invalid-request"));
@@ -950,6 +1017,23 @@ pub fn execute<F: Fn(u64, u64)>(
         None => request.output.clone(),
     };
     let signing = request.kind == Kind::Encrypt && !request.unsigned;
+    // The private key this operation opens, and whether it is the user's own.
+    let (own_private, own_public) = own_keys();
+    let private_key = match request.kind {
+        Kind::Encrypt if signing => request.sign_key_path.as_str(),
+        Kind::Decrypt | Kind::ExportLegacyPrivate if !request.paste => request.key_path.as_str(),
+        _ => "",
+    };
+    let own_key = is_own_private_key(private_key, &own_private)?;
+    if request.kind == Kind::ExportLegacyPrivate {
+        // Only the own key leaves in the older format, and only with its password.
+        if request.paste || !own_key {
+            return Err(Failure::new("not-own-key"));
+        }
+        if request.password.is_empty() {
+            return Err(Failure::new("password-empty"));
+        }
+    }
     if signing {
         // Signing never silently falls back to an unsigned file.
         if request.sign_key_path.is_empty() {
@@ -968,7 +1052,7 @@ pub fn execute<F: Fn(u64, u64)>(
     // Core refuses an output that is the key in use; this names the reason.
     if matches!(
         request.kind,
-        Kind::Encrypt | Kind::Decrypt | Kind::ExportLegacy
+        Kind::Encrypt | Kind::Decrypt | Kind::ExportLegacy | Kind::ExportLegacyPrivate
     ) && !request.key_path.is_empty()
         && !request.paste
         && same_file(&path(&target)?, &path(&request.key_path)?) == Some(true)
@@ -1046,7 +1130,7 @@ pub fn execute<F: Fn(u64, u64)>(
             });
         }
         // Exporting a legacy key reads only the key and writes the output.
-        let input = if request.kind == Kind::ExportLegacy {
+        let input = if matches!(request.kind, Kind::ExportLegacy | Kind::ExportLegacyPrivate) {
             CString::default()
         } else {
             path(&request.input)?
@@ -1098,13 +1182,10 @@ pub fn execute<F: Fn(u64, u64)>(
                         keys.iter().map(|key| key.as_ptr()).collect();
                     let options = EncryptOptions {
                         struct_size: std::mem::size_of::<EncryptOptions>(),
-                        // The apps do not yet tell their own key from other key files,
-                        // so every key is accepted as in NekoKEM 5.2; see
-                        // docs/key-commitment.md.
-                        flags: if signing {
-                            ENCRYPT_LEGACY_SENDER_KEY
-                        } else {
-                            ENCRYPT_UNSIGNED
+                        flags: match (signing, own_key) {
+                            (false, _) => ENCRYPT_UNSIGNED,
+                            (true, true) => ENCRYPT_LEGACY_SENDER_KEY,
+                            (true, false) => 0,
                         },
                         sender_private_key_path: sign_key
                             .as_ref()
@@ -1133,13 +1214,15 @@ pub fn execute<F: Fn(u64, u64)>(
                 Kind::Decrypt => {
                     let policy = VerifyPolicy {
                         struct_size: std::mem::size_of::<VerifyPolicy>(),
-                        // As for encryption: every key is accepted as in NekoKEM 5.2.
-                        flags: VERIFY_LEGACY_PRIVATE_KEY
-                            | if request.require_signature {
-                                VERIFY_REQUIRE_SIGNATURE
-                            } else {
-                                0
-                            },
+                        flags: if own_key {
+                            VERIFY_LEGACY_PRIVATE_KEY
+                        } else {
+                            0
+                        } | if request.require_signature {
+                            VERIFY_REQUIRE_SIGNATURE
+                        } else {
+                            0
+                        },
                         trusted_signer_paths: if signer_paths.is_empty() {
                             std::ptr::null()
                         } else {
@@ -1166,6 +1249,12 @@ pub fn execute<F: Fn(u64, u64)>(
                 Kind::ExportLegacy => {
                     nekokem_export_legacy_public_key(keys[0].as_ptr(), output.as_ptr())
                 }
+                Kind::ExportLegacyPrivate => nekokem_export_private_key_legacy(
+                    keys[0].as_ptr(),
+                    request.password.as_ptr(),
+                    request.password.len(),
+                    output.as_ptr(),
+                ),
                 _ => unreachable!(),
             }
         };
@@ -1180,6 +1269,7 @@ pub fn execute<F: Fn(u64, u64)>(
             -10 => return Err(Failure::new("signature-invalid")),
             -11 => return Err(Failure::new("signature-required")),
             -12 => return Err(Failure::new("signer-not-trusted")),
+            -13 => return Err(Failure::new("legacy-private-key")),
             _ => return Err(Failure::new("core-error")),
         }
         let fingerprint = if recipients.len() == 1 && keys.len() == 1 {
@@ -1226,6 +1316,10 @@ pub fn execute<F: Fn(u64, u64)>(
                 });
             }
             _ => {}
+        }
+        if own_key && matches!(request.kind, Kind::Encrypt | Kind::Decrypt) {
+            outcome.key_updated =
+                update_own_key(private_key, &own_public, request.password.as_bytes());
         }
         Ok(outcome)
     })();
@@ -2104,6 +2198,20 @@ mod tests {
         identity_private: &str,
         password: &str,
     ) -> (String, String) {
+        let public =
+            crate::contacts::tests::legacy_export(identity_public, dir.file("legacy.public.key"));
+        let private = dir.file("legacy.private.key.enc");
+        older_private_key(identity_private, password, 2, 1, &private);
+        (public, private)
+    }
+    // Writes the first `components` keys of `source` to `target` as NKPR `version`.
+    fn older_private_key(
+        source: &str,
+        password: &str,
+        components: usize,
+        version: u32,
+        target: &str,
+    ) {
         extern "C" {
             fn protected_private_key_write_version(
                 path: *const c_char,
@@ -2114,9 +2222,7 @@ mod tests {
                 version: u32,
             ) -> c_int;
         }
-        let public =
-            crate::contacts::tests::legacy_export(identity_public, dir.file("legacy.public.key"));
-        let source = path(identity_private).unwrap();
+        let source = path(source).unwrap();
         let mut pem = std::ptr::null_mut();
         let mut length = 0;
         assert_eq!(
@@ -2135,23 +2241,169 @@ mod tests {
             unsafe { String::from_utf8(std::slice::from_raw_parts(pem, length).to_vec()).unwrap() };
         unsafe { CRYPTO_clear_free(pem.cast(), length, std::ptr::null(), 0) };
         let end = "-----END PRIVATE KEY-----\n";
-        let two: String = text.split_inclusive(end).take(2).collect();
-        let private = dir.file("legacy.private.key.enc");
-        let target = path(&private).unwrap();
+        let keys: String = text.split_inclusive(end).take(components).collect();
+        let target = path(target).unwrap();
         assert_eq!(
             unsafe {
                 protected_private_key_write_version(
                     target.as_ptr(),
-                    two.as_ptr(),
-                    two.len(),
+                    keys.as_ptr(),
+                    keys.len(),
                     password.as_ptr(),
                     password.len(),
-                    1,
+                    version,
                 )
             },
             1
         );
-        (public, private)
+    }
+    fn is_legacy(key: &str) -> bool {
+        unsafe { nekokem_private_key_is_legacy(path(key).unwrap().as_ptr()) == 1 }
+    }
+    struct OwnKeys;
+    impl OwnKeys {
+        fn set(private: &str, public: &str) -> Self {
+            *OWN_KEYS.lock().unwrap_or_else(|error| error.into_inner()) =
+                Some((private.into(), public.into()));
+            Self
+        }
+    }
+    impl Drop for OwnKeys {
+        fn drop(&mut self) {
+            *OWN_KEYS.lock().unwrap_or_else(|error| error.into_inner()) = None;
+        }
+    }
+    #[test]
+    fn older_private_keys_open_only_as_the_own_key_and_are_rewritten() {
+        let dir = Directory::new();
+        let backend = Arc::new(Backend::default());
+        let password = "public test password";
+        let mut r = request(Kind::Keygen);
+        r.public_path = dir.file("public.key");
+        r.private_path = dir.file("current.key.enc");
+        r.password = Zeroizing::new(password.into());
+        r.confirmation = r.password.clone();
+        run(&backend, r).unwrap();
+        let public = dir.file("public.key");
+        let own = dir.file("own.key.enc");
+        let other = dir.file("other.key.enc");
+        {
+            let _core = CORE_LOCK.lock().unwrap_or_else(|error| error.into_inner());
+            older_private_key(&dir.file("current.key.enc"), password, 4, 2, &own);
+            older_private_key(&dir.file("current.key.enc"), password, 4, 2, &other);
+        }
+        assert!(is_legacy(&own) && is_legacy(&other));
+        fs::write(dir.file("plain"), b"public test input").unwrap();
+        let mut r = request(Kind::Encrypt);
+        r.input = dir.file("plain");
+        r.output = dir.file("sealed.nkem");
+        r.key_path = public.clone();
+        run(&backend, r).unwrap();
+        let decrypt = |key: &str, output: &str| {
+            let mut r = request(Kind::Decrypt);
+            r.input = dir.file("sealed.nkem");
+            r.output = dir.file(output);
+            r.key_path = key.into();
+            r.password = Zeroizing::new(password.into());
+            r
+        };
+        let sign = |key: &str, output: &str| {
+            let mut r = request(Kind::Encrypt);
+            r.input = dir.file("plain");
+            r.output = dir.file(output);
+            r.key_path = public.clone();
+            r.unsigned = false;
+            r.sign_key_path = key.into();
+            r.password = Zeroizing::new(password.into());
+            r
+        };
+        let export = |key: &str, output: &str, password: &str| {
+            let mut r = request(Kind::ExportLegacyPrivate);
+            r.key_path = key.into();
+            r.output = dir.file(output);
+            r.password = Zeroizing::new(password.into());
+            r
+        };
+        // With no own key saved, no older key opens and none is exported.
+        for r in [decrypt(&own, "a.out"), sign(&own, "a.nkem")] {
+            assert_eq!(run(&backend, r).err().unwrap().code, "legacy-private-key");
+        }
+        assert_eq!(
+            run(
+                &backend,
+                export(&dir.file("current.key.enc"), "a.key.enc", password)
+            )
+            .err()
+            .unwrap()
+            .code,
+            "not-own-key"
+        );
+        assert!(is_legacy(&own));
+        let _own = OwnKeys::set(&own, &public);
+        // Another older key stays refused while the own key is saved.
+        for r in [decrypt(&other, "b.out"), sign(&other, "b.nkem")] {
+            assert_eq!(run(&backend, r).err().unwrap().code, "legacy-private-key");
+        }
+        assert_eq!(
+            run(&backend, export(&other, "b.key.enc", password))
+                .err()
+                .unwrap()
+                .code,
+            "not-own-key"
+        );
+        // A wrong password leaves the own key as it was.
+        let mut r = decrypt(&own, "c.out");
+        r.password = Zeroizing::new("wrong".into());
+        assert_eq!(run(&backend, r).err().unwrap().code, "core-error");
+        assert!(is_legacy(&own));
+        // The own key opens and is rewritten as NKPR v3 with the same password.
+        let outcome = run(&backend, decrypt(&own, "d.out")).unwrap();
+        assert!(outcome.key_updated);
+        assert_eq!(fs::read(dir.file("d.out")).unwrap(), b"public test input");
+        assert!(!is_legacy(&own));
+        assert!(!run(&backend, decrypt(&own, "e.out")).unwrap().key_updated);
+        // Signing with it rewrites it as well.
+        drop(_own);
+        {
+            let _core = CORE_LOCK.lock().unwrap_or_else(|error| error.into_inner());
+            older_private_key(&dir.file("current.key.enc"), password, 4, 2, &own);
+        }
+        let _own = OwnKeys::set(&own, &public);
+        let outcome = run(&backend, sign(&own, "f.nkem")).unwrap();
+        assert_eq!((outcome.format, outcome.key_updated), (Some(5), true));
+        assert!(!is_legacy(&own));
+        // The own key leaves as NKPR v2 only with its password, never over itself.
+        assert_eq!(
+            run(&backend, export(&own, "g.key.enc", ""))
+                .err()
+                .unwrap()
+                .code,
+            "password-empty"
+        );
+        assert_eq!(
+            run(&backend, export(&own, "g.key.enc", "wrong"))
+                .err()
+                .unwrap()
+                .code,
+            "core-error"
+        );
+        assert_eq!(
+            run(&backend, export(&own, "own.key.enc", password))
+                .err()
+                .unwrap()
+                .code,
+            "output-is-key"
+        );
+        run(&backend, export(&own, "g.key.enc", password)).unwrap();
+        assert!(is_legacy(&dir.file("g.key.enc")) && !is_legacy(&own));
+        // The exported copy is not the saved key, so it does not open here.
+        assert_eq!(
+            run(&backend, decrypt(&dir.file("g.key.enc"), "h.out"))
+                .err()
+                .unwrap()
+                .code,
+            "legacy-private-key"
+        );
     }
     #[test]
     fn signed_files_report_the_signer_and_the_policy_is_enforced_by_core() {
@@ -2452,7 +2704,7 @@ mod tests {
         r.output = dir.file("old.nkem");
         r.key_path = public.clone();
         run(&backend, r).unwrap();
-        // A legacy key cannot sign.
+        // A legacy key that is not the saved own key does not open at all.
         let mut r = request(Kind::Encrypt);
         r.input = dir.file("plain");
         r.output = dir.file("signed.nkem");
@@ -2460,7 +2712,19 @@ mod tests {
         r.unsigned = false;
         r.sign_key_path = private.clone();
         r.password = Zeroizing::new("public test password".into());
-        assert_eq!(run(&backend, r).err().unwrap().code, "core-error");
+        assert_eq!(run(&backend, r).err().unwrap().code, "legacy-private-key");
+        // As the saved own key it decrypts, and stays NKPR v1 until the upgrade.
+        {
+            let _own = OwnKeys::set(&private, &public);
+            let mut r = request(Kind::Decrypt);
+            r.input = dir.file("old.nkem");
+            r.output = dir.file("own.out");
+            r.key_path = private.clone();
+            r.password = Zeroizing::new("public test password".into());
+            assert!(!run(&backend, r).unwrap().key_updated);
+            assert_eq!(fs::read(dir.file("own.out")).unwrap(), b"public test input");
+            assert!(is_legacy(&private));
+        }
         let upgrade = |password: &str| {
             let mut r = request(Kind::Upgrade);
             r.public_path = public.clone();

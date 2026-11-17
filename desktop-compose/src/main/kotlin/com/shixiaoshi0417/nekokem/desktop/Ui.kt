@@ -192,7 +192,7 @@ private fun OperationCard(state: AppState) {
                 state.busy || state.contactBusy -> state.t("working")
                 state.view == View.Contacts -> state.t("saveContact")
                 state.view == View.Keygen && state.keyMode == KeyMode.Upgrade -> state.t("upgradeKey")
-                state.view == View.Keygen && state.keyMode == KeyMode.Export -> state.t("exportLegacy")
+                state.view == View.Keygen && state.keyMode == KeyMode.Export -> state.t(if (state.exportPrivate) "exportLegacyPrivate" else "exportLegacy")
                 state.view == View.Keygen && state.replace -> state.t("replaceKeysAction")
                 else -> state.t(state.view.key)
             }
@@ -204,8 +204,15 @@ private fun OperationCard(state: AppState) {
 @Composable
 private fun KeyFields(state: AppState) {
     if (state.keyMode == KeyMode.Export) {
-        PathInput(state, PathField.KeyPath, state.t("publicKey"), "keyPath")
-        PathInput(state, PathField.Output, state.t("legacyOutput"), "output")
+        val kit = LocalKit.current
+        kit.Segments(listOf(state.t("exportPublicTarget"), state.t("exportPrivateTarget")), if (state.exportPrivate) 1 else 0, state.editable) { state.changeExportPrivate(it == 1) }
+        if (state.exportPrivate) {
+            Hint(state.t("exportPrivateHint"), danger = true)
+            PathInput(state, PathField.Output, state.t("legacyPrivateOutput"), "output")
+        } else {
+            PathInput(state, PathField.KeyPath, state.t("publicKey"), "keyPath")
+            PathInput(state, PathField.Output, state.t("legacyOutput"), "output")
+        }
     } else {
         val upgrade = state.keyMode == KeyMode.Upgrade
         PathInput(state, PathField.PublicPath, state.t(if (upgrade) "publicKey" else "publicPath"), "publicPath")
@@ -427,6 +434,7 @@ private fun FormFeedback(state: AppState, first: Boolean = false) {
             if (FingerprintQr.isFingerprint(fingerprint)) { Spacer(Modifier.height(8.dp)); kit.SecondaryButton(state.t("showQr")) { state.showQr(fingerprint) } }
         }
         if (result.canVerify == false) Hint(state.t("legacyKeyHint"), danger = true)
+        if (result.keyUpdated) Hint(state.t("keyUpdated"))
     }
     val signature = result.signature ?: return
     val title = when (signature.status) { "trusted" -> "signatureTrusted"; "untrusted" -> "signatureUntrusted"; else -> "signatureNone" }
