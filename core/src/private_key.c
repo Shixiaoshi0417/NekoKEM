@@ -326,7 +326,7 @@ static int nkpr_v3_hkdf(const unsigned char master[32],
 
     if (algorithm == NULL ||
         (context = EVP_KDF_CTX_new(algorithm)) == NULL) {
-        print_openssl_error("Cannot create the NKPR v3 HKDF context");
+        print_openssl_error("HKDF-SHA512 derivation failed");
         goto cleanup;
     }
     parameters[0] = OSSL_PARAM_construct_utf8_string(
@@ -339,7 +339,7 @@ static int nkpr_v3_hkdf(const unsigned char master[32],
         OSSL_KDF_PARAM_INFO, (void *)label, strlen(label));
     parameters[4] = OSSL_PARAM_construct_end();
     if (EVP_KDF_derive(context, output, output_len, parameters) <= 0) {
-        print_openssl_error("NKPR v3 key derivation failed");
+        print_openssl_error("HKDF-SHA512 derivation failed");
         goto cleanup;
     }
     success = 1;
