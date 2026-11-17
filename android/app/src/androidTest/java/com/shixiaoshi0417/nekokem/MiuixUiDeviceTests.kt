@@ -171,7 +171,8 @@ internal fun runMiuixUiTests(
                     if (node.isScrollable) scrollables += node
                     for (index in 0 until node.childCount) collect(node.getChild(index))
                 }
-                collect(automation.rootInActiveWindow)
+                // The topmost window on screen first: the active window can be a closed dialog.
+                screenRoots(automation).forEach(::collect)
                 if (scrollables.none { it.performAction(action) }) {
                     // A row scrolled out of view leaves the tree; one drag brings the page back when no node scrolls.
                     if (dragged) return@repeat
