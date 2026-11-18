@@ -152,7 +152,7 @@ kotlin {
 
 dependencies {
     testImplementation("junit:junit:4.13.2")
-    testImplementation("org.robolectric:robolectric:4.17")
+    testImplementation("org.robolectric:robolectric:4.18")
     // Renders the password dialogs off device: they are secure windows, so
     // device screenshots come out blank.
     testImplementation(platform("androidx.compose:compose-bom:2026.09.00"))
