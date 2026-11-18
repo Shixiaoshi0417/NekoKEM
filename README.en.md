@@ -251,7 +251,7 @@ Interactive encryption writes signed NKEM v5: it signs with `keys/private.key.en
 Selecting “Generate keys” ensures a `keys/` directory with mode `0700` exists in the working directory and generates:
 
 - `keys/public.key`: a four-component identity public key: the X448 and ML-KEM-1024 (encryption) and Ed448 and ML-DSA-87 (signing) plaintext public keys, in that order;
-- `keys/private.key.enc`: an encrypted NKPR v2 container holding the four matching private-key PEM blocks, with mode `0600`.
+- `keys/private.key.enc`: an encrypted NKPR v3 container (with key commitment) holding the four matching private-key PEM blocks, with mode `0600`.
 
 Before generation, the program requests and confirms a private-key protection password; terminal echo is disabled during both inputs. It does not create plaintext `private.key`.
 
@@ -338,6 +338,14 @@ Listing two or more public keys after the usual encryption command writes one fi
 
 Hybrid decrypt prompts once for a password when the key file contains NKPR; it decides by the file header, not the extension. For compatibility with existing deployments, the command still accepts legacy plaintext `private.key` containing X448 and ML-KEM-1024 PEM blocks.
 
+Private keys in the NKPR v1 and v2 formats (written by NekoKEM 5.2 and earlier) have no key commitment: someone else can build such a file to open under several passwords and use your password entry to test them all at once. The CLI therefore opens them only at `keys/private.key.enc`. An older-format key at any other path is refused before the password prompt unless `--legacy-private-key` is given (for the private key when decrypting, for `--sign-key` when encrypting); use it only for a key you exported yourself from an older release. An older `keys/private.key.enc` prints a hint to run `upgrade-key`, which rewrites the key as NKPR v3 with the same keys and password. To move the key to NekoKEM 5.2 or earlier, `export-legacy-private-key` writes an NKPR v2 copy:
+
+```sh
+./nekokem decrypt hybrid --legacy-private-key encrypted/old.nkem old.txt backup/private.key.enc
+./nekokem upgrade-key
+./nekokem export-legacy-private-key private-for-5.2.enc
+```
+
 The output path cannot be a key file the operation uses: decryption cannot write over the private key, and encryption cannot write over any public key. Public-key reads refuse symbolic links. Existing regular files are compared by identity, so aliases such as `./keys/../keys/private.key.enc` naming the same file are refused. This check does not promise isolation from every path-resolution alias or external writers that ignore locks.
 
 Commands can use the corresponding PEM keys from other locations:
@@ -351,7 +359,7 @@ Inputs must be regular files. The tool uses chunked I/O rather than loading an e
 
 ## NKPR encrypted private-key format
 
-NKPR is a private-key storage format independent of the NKEM file container. Version 1 holds a legacy two-component key and version 2 a four-component identity key; both share the header layout and parameters and differ only in the version byte and the number of PEM blocks inside. NKPR fixes these parameters:
+NKPR is a private-key storage format independent of the NKEM file container. Version 1 holds a legacy two-component key, version 2 a four-component identity key, and version 3 an identity key with a 32-byte key commitment after the version 2 salt; all share the header layout and parameters. New and upgraded keys are written as version 3. NKPR fixes these parameters:
 
 - Argon2id: 64 MiB (`65536` KiB), 3 iterations, parallelism 4, Argon2 version 1.3;
 - 32-byte random salt;
@@ -363,7 +371,7 @@ The fixed header is 36 bytes; all multi-byte integers are big-endian:
 | Offset | Length | Field |
 |---:|---:|---|
 | 0 | 4 | magic: ASCII `NKPR` |
-| 4 | 1 | container version: `1`, or `2` for an identity key |
+| 4 | 1 | container version: `1`, `2`, or `3` with key commitment |
 | 5 | 1 | KDF id: `1`, Argon2id |
 | 6 | 1 | cipher id: `1`, AES-256-GCM |
 | 7 | 1 | flags: `0` |
@@ -386,7 +394,7 @@ The complete `header || salt || nonce` is AES-GCM AAD. The reader strictly valid
 
 NKPR's AES-GCM is not key-committing: it does not guarantee that only one password or protection key can authenticate a container, or that different protection keys yield the same plaintext. This documents the existing format's boundary without changing NKPR or its cryptographic parameters. NKEM v4/v5 commit to the file key through the header HMAC-SHA512 and are not affected; the assessment of every AES-GCM use and a draft NKPR v3 design are in [Key commitment](docs/key-commitment.md).
 
-Core already reads NKPR v3, which adds a 32-byte key commitment after the NKPR v2 salt so that a container opens under one password only. Every application still writes NKPR v2 when generating or upgrading keys; writing NKPR v3 and the handling of older private-key formats come in a later release.
+NKPR v3 adds a 32-byte key commitment after the NKPR v2 salt so that a container opens under one password only. Every application writes NKPR v3 when generating or upgrading keys. Core accepts NKPR v1 and v2 only when the caller says the file is the installation's own key; the CLI rules are under [Parameterized commands](#parameterized-commands). The Android and desktop apps still treat every private key as their own; a later release tells their own key apart from imported ones.
 
 ## NKEM v3 hybrid file format
 

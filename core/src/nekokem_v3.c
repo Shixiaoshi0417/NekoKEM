@@ -261,6 +261,7 @@ static int decrypt_v3_opened(
     const char *private_key_path,
     const unsigned char *password,
     size_t password_len,
+    int accept_legacy,
     NekoKEMProgressCallback progress_callback,
     void *progress_user_data)
 {
@@ -280,6 +281,7 @@ static int decrypt_v3_opened(
     size_t mlkem_secret_len = 0U;
     size_t aad_len = 0U;
     int aes_result;
+    int loaded;
     int result = NEKOKEM_OPERATION_ERROR;
 
     if (!nkem_v3_header_decode(raw_header, &header) ||
@@ -300,8 +302,13 @@ static int decrypt_v3_opened(
         !file_read_exact(input, nonce, sizeof(nonce))) {
         goto cleanup;
     }
-    if (!hybrid_load_decryption_keys(private_key_path, password,
-                                     password_len, &private_keys)) {
+    loaded = hybrid_load_decryption_keys(private_key_path, password,
+                                         password_len, accept_legacy,
+                                         &private_keys);
+    if (loaded != 1) {
+        if (loaded == HYBRID_LEGACY_KEY_REFUSED) {
+            result = NEKOKEM_ERROR_LEGACY_PRIVATE_KEY;
+        }
         goto cleanup;
     }
     if (!hybrid_x448_decapsulate(
@@ -379,6 +386,7 @@ int nekokem_decrypt_file_verified_with_progress(
     unsigned char raw_header[NKEM_V3_HEADER_SIZE];
     uint64_t container_size = 0U;
     uint32_t flags = policy == NULL ? 0U : policy->flags;
+    int accept_legacy = (flags & NEKOKEM_VERIFY_LEGACY_PRIVATE_KEY) != 0U;
     int result = NEKOKEM_OPERATION_ERROR;
 
     if (verify_result != NULL) {
@@ -431,13 +439,13 @@ int nekokem_decrypt_file_verified_with_progress(
                          ? nekokem_v4_decrypt_opened(
                                input, container_size, raw_header,
                                output_path, private_key_path, password,
-                               password_len, progress_callback,
-                               progress_user_data)
+                               password_len, accept_legacy,
+                               progress_callback, progress_user_data)
                          : decrypt_v3_opened(
                                input, container_size, raw_header,
                                output_path, private_key_path, password,
-                               password_len, progress_callback,
-                               progress_user_data);
+                               password_len, accept_legacy,
+                               progress_callback, progress_user_data);
             if (result == NEKOKEM_OPERATION_SUCCESS && verify_result != NULL) {
                 verify_result->format_version = version;
             }

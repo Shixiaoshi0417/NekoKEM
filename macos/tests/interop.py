@@ -65,7 +65,10 @@ if phase == 'macos':
     assert macos_legacy != identity
     (root/'macos-legacy-fingerprint.txt').write_bytes(macos_legacy)
     for name in ['binary', 'empty']:
-        run('decrypt', 'hybrid', name+'.linux.nkem', name+'.from-linux', 'linux-private.enc', password=PASSWORD)
+        # The historical key is NKPR v1, which a current CLI opens at another
+        # path only when told it is the user's own older key.
+        run('decrypt', 'hybrid', '--legacy-private-key', name+'.linux.nkem', name+'.from-linux',
+            'linux-private.enc', password=PASSWORD)
         assert (root/(name+'.from-linux')).read_bytes() == (root/name).read_bytes()
         run('encrypt', 'hybrid', '--sign-key', 'macos-private.enc', name, name+'.signed', 'macos-public.key',
             password=PASSWORD)

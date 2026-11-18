@@ -178,7 +178,7 @@ int main(int argc, char **argv)
         result = hybrid_load_public_keys(argv[2], &keys);
     } else if (strcmp(argv[1], "protected") == 0) {
         result = hybrid_load_protected_private_keys(
-            argv[2], password, sizeof(password) - 1U, &keys);
+            argv[2], password, sizeof(password) - 1U, 1, &keys) == 1;
     } else {
         return EXIT_FAILURE;
     }

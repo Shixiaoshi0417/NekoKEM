@@ -306,9 +306,10 @@ int nekokem_internal_private_key_fingerprint(
         goto cleanup;
     }
     output[0] = '\0';
+    /* Front ends ask for the fingerprint of the installation's own key. */
     if (!nekokem_private_key_exists(private_key_path) ||
-        !hybrid_load_protected_private_keys(
-            private_key_path, password, password_len, &keys) ||
+        hybrid_load_protected_private_keys(
+            private_key_path, password, password_len, 1, &keys) != 1 ||
         !fingerprint_hybrid_keys(&keys, output, output_size)) {
         goto cleanup;
     }
@@ -320,6 +321,76 @@ cleanup:
     }
     hybrid_keys_cleanup(&keys);
     return success;
+}
+
+int nekokem_private_key_is_legacy(const char *private_key_path)
+{
+    unsigned char header[sizeof(NKPR_MAGIC)];
+    int legacy;
+
+    if (!valid_path(private_key_path) ||
+        !file_peek_regular(private_key_path, header, sizeof(header))) {
+        return 0;
+    }
+    legacy = private_key_data_is_protected(header, sizeof(header)) &&
+             (header[4] == NKPR_VERSION || header[4] == NKPR_VERSION_IDENTITY);
+    secure_mem_clear(header, sizeof(header));
+    return legacy;
+}
+
+int nekokem_update_private_key_format(const char *public_key_path,
+                                      const char *private_key_path,
+                                      const unsigned char *password,
+                                      size_t password_len)
+{
+    unsigned char header[sizeof(NKPR_MAGIC)];
+    unsigned int version;
+
+    if (!valid_path(public_key_path) || !valid_path(private_key_path)) {
+        fprintf(stderr, file_message("NekoKEM Core received an empty key path\n"));
+        return 0;
+    }
+    if (password == NULL || password_len == 0U) {
+        fprintf(stderr, file_message("A non-empty private-key password is required\n"));
+        return 0;
+    }
+    if (!nekokem_private_key_exists(private_key_path) ||
+        !file_peek_regular(private_key_path, header, sizeof(header))) {
+        fprintf(stderr, file_message("Only a protected NKPR private key can be upgraded\n"));
+        return 0;
+    }
+    version = header[4];
+    secure_mem_clear(header, sizeof(header));
+    if (version == NKPR_VERSION_COMMITTED) {
+        return 1;
+    }
+    return version == NKPR_VERSION
+               ? hybrid_upgrade_to_identity(public_key_path, private_key_path,
+                                            password, password_len)
+               : hybrid_rewrite_identity_keys(public_key_path,
+                                              private_key_path, password,
+                                              password_len);
+}
+
+int nekokem_export_private_key_legacy(const char *private_key_path,
+                                      const unsigned char *password,
+                                      size_t password_len,
+                                      const char *output_path)
+{
+    if (!valid_path(private_key_path) || !valid_path(output_path)) {
+        fprintf(stderr, file_message("NekoKEM Core received an empty key path\n"));
+        return 0;
+    }
+    if (password == NULL || password_len == 0U) {
+        fprintf(stderr, file_message("A non-empty private-key password is required\n"));
+        return 0;
+    }
+    if (!nekokem_private_key_exists(private_key_path)) {
+        fprintf(stderr, file_message("Only a protected NKPR private key can be exported\n"));
+        return 0;
+    }
+    return hybrid_export_private_key_legacy(private_key_path, password,
+                                            password_len, output_path);
 }
 
 int nekokem_private_key_requires_password(const char *private_key_path)

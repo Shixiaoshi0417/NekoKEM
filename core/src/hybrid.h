@@ -30,7 +30,7 @@ int hybrid_keys_have_identity(const HybridKeys *keys);
 void hybrid_keys_cleanup(HybridKeys *keys);
 
 /*
- * Generates a four-component identity key pair (NKPR v2). replace == 0
+ * Generates a four-component identity key pair (NKPR v3). replace == 0
  * never overwrites: an existing key file fails the commit.
  */
 int hybrid_generate_keypair(const char *public_path,
@@ -39,13 +39,26 @@ int hybrid_generate_keypair(const char *public_path,
                             size_t password_len,
                             int replace);
 /*
- * Writes a four-component identity key pair: four public PEM blocks and an
- * NKPR v2 private key, committed together.
+ * Adds signing keys to an NKPR v1 key pair and writes both files: four
+ * public PEM blocks and an NKPR v3 private key, committed together.
  */
 int hybrid_upgrade_to_identity(const char *public_path,
                                const char *private_path,
                                const unsigned char *password,
                                size_t password_len);
+/*
+ * Rewrites an NKPR v2 identity key pair as NKPR v3 with the same keys and
+ * password; the public file must hold this private key's four public keys.
+ */
+int hybrid_rewrite_identity_keys(const char *public_path,
+                                 const char *private_path,
+                                 const unsigned char *password,
+                                 size_t password_len);
+/* Writes the key in output_path as NKPR v2 (identity) or v1 (two parts). */
+int hybrid_export_private_key_legacy(const char *private_path,
+                                     const unsigned char *password,
+                                     size_t password_len,
+                                     const char *output_path);
 /* Two or four PEM public keys; a fifth or anything else fails. */
 int hybrid_parse_public_keys(const unsigned char *pem,
                              size_t pem_len,
@@ -55,19 +68,30 @@ int hybrid_load_public_keys(const char *path, HybridKeys *keys);
 int hybrid_write_public_keys(FILE *output, const HybridKeys *keys,
                              int include_identity);
 int hybrid_load_private_keys(const char *path, HybridKeys *keys);
+/*
+ * Returned by the private-key loaders when the file is NKPR v1 or v2 and the
+ * caller did not accept older formats. Checked before the password is used;
+ * see docs/key-commitment.md.
+ */
+#define HYBRID_LEGACY_KEY_REFUSED (-1)
+
+/* Returns 1, 0 or HYBRID_LEGACY_KEY_REFUSED. */
 int hybrid_load_protected_private_keys(
     const char *path,
     const unsigned char *password,
     size_t password_len,
+    int accept_legacy,
     HybridKeys *keys);
 /*
  * NKPR keys require a password; a plaintext Hybrid PEM key does not. The
  * format is read from the file contents, never inferred from its name.
+ * Returns 1, 0 or HYBRID_LEGACY_KEY_REFUSED.
  */
 int hybrid_load_decryption_keys(
     const char *path,
     const unsigned char *password,
     size_t password_len,
+    int accept_legacy,
     HybridKeys *keys);
 
 int hybrid_x448_encapsulate(

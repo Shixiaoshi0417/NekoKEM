@@ -225,6 +225,17 @@ int protected_private_key_container_parse(
     return nkpr_container_decode_internal(input, input_len, &header, 0);
 }
 
+unsigned int protected_private_key_container_version(
+    const unsigned char *input,
+    size_t input_len)
+{
+    NkprHeader header;
+
+    return nkpr_container_decode_internal(input, input_len, &header, 0)
+               ? header.version
+               : 0U;
+}
+
 static int derive_protection_key(
     const unsigned char *password,
     size_t password_len,

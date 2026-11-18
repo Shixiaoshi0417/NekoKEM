@@ -173,8 +173,11 @@ static jint check_private_key_password(JNIEnv *env,
     if (result != PASSWORD_JNI_SUCCESS) {
         goto cleanup;
     }
-    result = nekokem_check_private_key_password(
-                 private_path.value, password, password_len) == 1
+    /* The app does not yet tell its own key from imported ones, so every
+     * key is accepted as in NekoKEM 5.2; see docs/key-commitment.md. */
+    result = nekokem_check_private_key_password_flags(
+                 private_path.value, password, password_len,
+                 NEKOKEM_PRIVATE_KEY_LEGACY) == 1
                  ? PASSWORD_JNI_SUCCESS
                  : PASSWORD_JNI_CORE_ERROR;
 

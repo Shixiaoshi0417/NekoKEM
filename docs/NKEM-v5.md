@@ -91,7 +91,8 @@ two encryption blocks.
 
 ### NKPR v2 private key
 
-NKPR v2 is NKPR v1 with version byte `2`. Header layout, Argon2id
+NKPR v2 is NKPR v1 with version byte `2`. New keys are written as NKPR v3,
+which adds a key commitment; see [Key commitment](key-commitment.md). Header layout, Argon2id
 parameters (64 MiB, 3 iterations, 4 lanes), AES-256-GCM and the AAD
 (header, salt and nonce) are unchanged. The decrypted plaintext holds four
 PEM private keys in component order, followed only by whitespace. Loading

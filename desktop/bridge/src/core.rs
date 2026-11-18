@@ -486,7 +486,9 @@ impl Drop for Reservation {
 
 type Progress = unsafe extern "C" fn(u64, u64, *mut c_void) -> c_int;
 const ENCRYPT_UNSIGNED: u32 = 0x1;
+const ENCRYPT_LEGACY_SENDER_KEY: u32 = 0x2;
 const VERIFY_REQUIRE_SIGNATURE: u32 = 0x1;
+const VERIFY_LEGACY_PRIVATE_KEY: u32 = 0x4;
 #[repr(C)]
 struct EncryptOptions {
     struct_size: usize,
@@ -1096,7 +1098,14 @@ pub fn execute<F: Fn(u64, u64)>(
                         keys.iter().map(|key| key.as_ptr()).collect();
                     let options = EncryptOptions {
                         struct_size: std::mem::size_of::<EncryptOptions>(),
-                        flags: if signing { 0 } else { ENCRYPT_UNSIGNED },
+                        // The apps do not yet tell their own key from other key files,
+                        // so every key is accepted as in NekoKEM 5.2; see
+                        // docs/key-commitment.md.
+                        flags: if signing {
+                            ENCRYPT_LEGACY_SENDER_KEY
+                        } else {
+                            ENCRYPT_UNSIGNED
+                        },
                         sender_private_key_path: sign_key
                             .as_ref()
                             .map_or(std::ptr::null(), |key| key.as_ptr()),
@@ -1124,11 +1133,13 @@ pub fn execute<F: Fn(u64, u64)>(
                 Kind::Decrypt => {
                     let policy = VerifyPolicy {
                         struct_size: std::mem::size_of::<VerifyPolicy>(),
-                        flags: if request.require_signature {
-                            VERIFY_REQUIRE_SIGNATURE
-                        } else {
-                            0
-                        },
+                        // As for encryption: every key is accepted as in NekoKEM 5.2.
+                        flags: VERIFY_LEGACY_PRIVATE_KEY
+                            | if request.require_signature {
+                                VERIFY_REQUIRE_SIGNATURE
+                            } else {
+                                0
+                            },
                         trusted_signer_paths: if signer_paths.is_empty() {
                             std::ptr::null()
                         } else {

@@ -112,7 +112,10 @@ directory is not, unless an attacker can already replace files there.
 
 ## Proposed NKPR v3
 
-Status: design for review. Nothing below is implemented.
+Status: the reader, the writer and the Core legacy rule are implemented,
+with the CLI rules below. The Android and desktop apps still pass the
+own-key flag on every call, so they open every key as before; telling their
+own key from imported ones is the remaining step.
 
 ### Format
 
@@ -186,7 +189,9 @@ says the file is the installation's own managed key:
   the key is rewritten as NKPR v3 in place, with the same password, under
   the existing pair lock and atomic replace. A v1 key is upgraded to an
   identity key at the same time, which already keeps its encryption keys and
-  password; the user is told once.
+  password; the user is told once. The CLI never changes key files as a side
+  effect of encrypting or decrypting, which scripts would not expect: it
+  prints a hint instead, and `upgrade-key` performs the rewrite.
 - **Every other source**: private-key import on Android and the desktop,
   Android temporary private keys, other key paths in the desktop apps and
   any other key path in the CLI. These refuse NKPR v1 and v2 with a dedicated
@@ -224,6 +229,25 @@ in a later release once those keys are rare.
   (NKPR v1 and v2) are opened through the explicit legacy action.
 - NKEM containers do not change, and every key keeps its public key and
   fingerprints.
+
+### Core interface
+
+The own-key decision is an explicit input on every call that unlocks a
+private key, and the default refuses NKPR v1 and v2:
+
+- `NEKOKEM_VERIFY_LEGACY_PRIVATE_KEY` in the decryption policy,
+  `NEKOKEM_ENCRYPT_LEGACY_SENDER_KEY` for the signing key, and
+  `NEKOKEM_PRIVATE_KEY_LEGACY` for `nekokem_check_private_key_password_flags()`.
+  A refusal returns `NEKOKEM_ERROR_LEGACY_PRIVATE_KEY`. The calls without
+  flags, `nekokem_decrypt_file*()` and `nekokem_check_private_key_password()`,
+  refuse older formats.
+- The loader checks the version of the same bytes it then decrypts, before
+  Argon2id runs, so a refusal never uses the password.
+- `nekokem_private_key_is_legacy()` reads only the header, so a front end can
+  explain the rule before asking for a password.
+- `nekokem_update_private_key_format()` rewrites the own key pair and
+  `nekokem_export_private_key_legacy()` writes the NKPR v2 copy; both treat
+  the key as the installation's own.
 
 ### Implementation notes
 

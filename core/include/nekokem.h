@@ -35,8 +35,14 @@ typedef int (*NekoKEMProgressCallback)(uint64_t processed_bytes,
  * Functions return 1 on success and 0 on error. Password bytes
  * are borrowed for the duration of the call and are never retained by Core.
  *
- * Creates a new key pair and never overwrites: if either key file already
- * exists, nothing is written and 0 is returned.
+ * Private keys: NKPR v3 commits to its password, so a file someone else
+ * wrote cannot be built to open under several passwords. NKPR v1 and v2 do
+ * not; calls that unlock a private key refuse them unless the caller says
+ * the file is the installation's own key (the *_LEGACY_* flags below), and
+ * the refusal comes before the password is used. See docs/key-commitment.md.
+ *
+ * Creates a new identity key pair (NKPR v3) and never overwrites: if either
+ * key file already exists, nothing is written and 0 is returned.
  */
 NEKOKEM_API int nekokem_generate_keypair(
     const char *public_key_path,
@@ -96,7 +102,10 @@ NEKOKEM_API int nekokem_encrypt_file_multi_with_progress(
 /*
  * Decrypts the NKEM v3 single-recipient container, the NKEM v4
  * multi-recipient container and the signed NKEM v5 container, which is
- * verified completely without a policy. Other versions are rejected.
+ * verified completely without a policy. Other versions are rejected. With
+ * no policy, an NKPR v1 or v2 private key is refused; use
+ * nekokem_decrypt_file_verified_with_progress() with
+ * NEKOKEM_VERIFY_LEGACY_PRIVATE_KEY for the installation's own older key.
  */
 NEKOKEM_API int nekokem_decrypt_file(
     const char *input_path,
@@ -133,8 +142,9 @@ NEKOKEM_API int nekokem_public_key_fingerprint(
 
 /*
  * Adds Ed448 and ML-DSA-87 keys to an NKPR v1 key pair, keeping its X448
- * and ML-KEM-1024 keys, and atomically replaces both files (NKPR v2, same
+ * and ML-KEM-1024 keys, and atomically replaces both files (NKPR v3, same
  * password). The public file must hold this private key's public keys.
+ * The key is the caller's own, so NKPR v1 is accepted.
  */
 NEKOKEM_API int nekokem_upgrade_to_identity_keys(
     const char *public_key_path,
@@ -161,6 +171,8 @@ NEKOKEM_API int nekokem_export_legacy_public_key(
 
 /* Encryption signs unless this flag is set; then it writes v3 or v4. */
 #define NEKOKEM_ENCRYPT_UNSIGNED 0x1U
+/* The sender key is the installation's own: NKPR v1 and v2 are accepted. */
+#define NEKOKEM_ENCRYPT_LEGACY_SENDER_KEY 0x2U
 
 /* Longest original file name a v5 container records, in UTF-8 bytes. */
 #define NEKOKEM_ORIGINAL_NAME_MAX 1016U
@@ -218,6 +230,8 @@ NEKOKEM_API int nekokem_encrypt_file_v5_with_progress(
 #define NEKOKEM_VERIFY_REQUIRE_SIGNATURE 0x1U
 /* Reject v5 signers outside trusted_signer_paths (implies a signature). */
 #define NEKOKEM_VERIFY_REQUIRE_TRUSTED 0x2U
+/* The private key is the installation's own: NKPR v1 and v2 are accepted. */
+#define NEKOKEM_VERIFY_LEGACY_PRIVATE_KEY 0x4U
 
 typedef struct {
     size_t struct_size;               /* sizeof(NekoKEMVerifyPolicy) */
@@ -248,6 +262,11 @@ typedef struct {
 #define NEKOKEM_ERROR_SIGNATURE_INVALID (-10)
 #define NEKOKEM_ERROR_SIGNATURE_REQUIRED (-11)
 #define NEKOKEM_ERROR_SIGNER_NOT_TRUSTED (-12)
+/*
+ * The private key is NKPR v1 or v2 and the call did not accept older formats.
+ * Nothing was unlocked; front ends offer the explicit legacy import instead.
+ */
+#define NEKOKEM_ERROR_LEGACY_PRIVATE_KEY (-13)
 
 /*
  * Decrypts v3, v4 and v5 and enforces policy (NULL means no flags). Core
@@ -275,11 +294,56 @@ NEKOKEM_API int nekokem_decrypt_file_verified_with_progress(
 NEKOKEM_API int nekokem_private_key_exists(
     const char *private_key_path);
 
-/* Decrypts and validates an NKPR key once, then immediately frees it. */
+/*
+ * Decrypts and validates an NKPR key once, then immediately frees it. An
+ * NKPR v1 or v2 key is refused; see nekokem_check_private_key_password_flags.
+ */
 NEKOKEM_API int nekokem_check_private_key_password(
     const char *private_key_path,
     const unsigned char *password,
     size_t password_len);
+
+/* The key is the installation's own: NKPR v1 and v2 are accepted. */
+#define NEKOKEM_PRIVATE_KEY_LEGACY 0x1U
+
+/* As above with NEKOKEM_PRIVATE_KEY_* flags. Returns 1, 0 or
+ * NEKOKEM_ERROR_LEGACY_PRIVATE_KEY. */
+NEKOKEM_API int nekokem_check_private_key_password_flags(
+    const char *private_key_path,
+    const unsigned char *password,
+    size_t password_len,
+    uint32_t flags);
+
+/*
+ * 1 when the file is an NKPR v1 or v2 private key, judged from its header
+ * without a password, so front ends can explain the legacy rule before
+ * asking for one. 0 for NKPR v3, plaintext PEM or anything else.
+ */
+NEKOKEM_API int nekokem_private_key_is_legacy(const char *private_key_path);
+
+/*
+ * Rewrites the installation's own key pair as NKPR v3 with the same
+ * password: an NKPR v2 key keeps its keys, an NKPR v1 key is upgraded to an
+ * identity key first, as nekokem_upgrade_to_identity_keys() does. Both files
+ * are replaced atomically under the pair lock. An NKPR v3 key is left as it
+ * is and 1 is returned.
+ */
+NEKOKEM_API int nekokem_update_private_key_format(
+    const char *public_key_path,
+    const char *private_key_path,
+    const unsigned char *password,
+    size_t password_len);
+
+/*
+ * Writes the installation's own private key to output_path in the format
+ * NekoKEM 5.2 and earlier read (NKPR v2, or v1 for a two-component key),
+ * protected by the same password, for moving it to an older installation.
+ */
+NEKOKEM_API int nekokem_export_private_key_legacy(
+    const char *private_key_path,
+    const unsigned char *password,
+    size_t password_len,
+    const char *output_path);
 
 NEKOKEM_API int nekokem_export_public_key(
     const char *public_key_path,

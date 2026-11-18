@@ -26,6 +26,7 @@ int nekokem_v4_decrypt_opened(
     const char *private_key_path,
     const unsigned char *password,
     size_t password_len,
+    int accept_legacy,
     NekoKEMProgressCallback progress_callback,
     void *progress_user_data);
 

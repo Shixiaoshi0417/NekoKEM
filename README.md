@@ -243,7 +243,7 @@ keys/
 选择“生成密钥”会确保当前工作目录存在权限为 `0700` 的 `keys/`，并生成：
 
 - `keys/public.key`：四段式身份公钥，依次为 X448、ML-KEM-1024（加密）和 Ed448、ML-DSA-87（签名）的明文公钥；
-- `keys/private.key.enc`：包含对应四个私钥 PEM 的加密 NKPR v2 容器，权限为 `0600`。
+- `keys/private.key.enc`：包含对应四个私钥 PEM 的加密 NKPR v3 容器（带密钥承诺），权限为 `0600`。
 
 生成前会要求输入并确认私钥保护密码；终端回显在两次输入期间均关闭。不会创建明文 `private.key`。
 
@@ -330,6 +330,14 @@ encrypted/test.jpg.nkem -> plaintext/test.jpg
 
 私钥文件内容是 NKPR 时，Hybrid decrypt 会自动提示一次密码；判断依据是文件头，不看扩展名。为兼容已有部署，命令仍接受包含 X448、ML-KEM-1024 两个 PEM 块的旧式明文 `private.key`。
 
+NKPR v1、v2 格式的私钥（NekoKEM 5.2 及更早版本生成）不带密钥承诺，别人写的这种文件可以被构造成能用多个口令打开，借你输入口令来一次试多个候选。因此 CLI 只在 `keys/private.key.enc` 打开它们；其他路径上的旧格式私钥会在询问口令之前被拒绝，只有加上 `--legacy-private-key`（解密时用于私钥，加密时用于 `--sign-key`）才会打开。这个选项只用于你自己从旧版导出的私钥。用旧格式的 `keys/private.key.enc` 时会提示运行 `upgrade-key`，它会把私钥重写为 NKPR v3，密钥和密码都不变。需要把私钥交给 NekoKEM 5.2 及更早版本时，用 `export-legacy-private-key` 导出 NKPR v2 副本：
+
+```sh
+./nekokem decrypt hybrid --legacy-private-key encrypted/old.nkem old.txt backup/private.key.enc
+./nekokem upgrade-key
+./nekokem export-legacy-private-key private-for-5.2.enc
+```
+
 输出路径不能是本次操作使用的密钥文件：解密时不能写到私钥上，加密时不能写到任一公钥上。公钥读取拒绝符号链接。对已存在的普通文件比较身份，`./keys/../keys/private.key.enc` 这类指向同一文件的别名会被拒绝；此检查不承诺隔离所有路径解析或忽略锁的外部写入。
 
 命令可以使用其他位置的相应 PEM 密钥：
@@ -343,7 +351,7 @@ encrypted/test.jpg.nkem -> plaintext/test.jpg
 
 ## NKPR 加密私钥格式
 
-NKPR 是独立于 NKEM 文件容器的私钥存储格式。version 1 保存旧版两段式密钥，version 2 保存四段式身份密钥；两者的头部布局和参数相同，只有版本字节和内部 PEM 块的数量不同。NKPR 固定使用：
+NKPR 是独立于 NKEM 文件容器的私钥存储格式。version 1 保存旧版两段式密钥，version 2 保存四段式身份密钥，version 3 是在 version 2 的 salt 之后加入 32 字节密钥承诺的身份密钥；三者的头部布局和参数相同。新生成和升级的密钥都写 version 3。NKPR 固定使用：
 
 - Argon2id：64 MiB（`65536` KiB）、3 次迭代、并行度 4、Argon2 version 1.3；
 - 32 字节随机 salt；
@@ -355,7 +363,7 @@ NKPR 是独立于 NKEM 文件容器的私钥存储格式。version 1 保存旧�
 | 偏移 | 长度 | 字段 |
 |---:|---:|---|
 | 0 | 4 | magic：ASCII `NKPR` |
-| 4 | 1 | container version：`1`，身份密钥为 `2` |
+| 4 | 1 | container version：`1`、`2`，或带密钥承诺的 `3` |
 | 5 | 1 | KDF id：`1`，Argon2id |
 | 6 | 1 | cipher id：`1`，AES-256-GCM |
 | 7 | 1 | flags：`0` |
@@ -378,7 +386,7 @@ NKPR 是独立于 NKEM 文件容器的私钥存储格式。version 1 保存旧�
 
 NKPR 的 AES-GCM 不具备密钥承诺性，不保证一个容器只能由唯一口令或保护密钥认证，也不提供跨保护密钥的明文一致性保证。此处说明现有格式的边界，不改变 NKPR 格式或密码参数。NKEM v4/v5 通过头部 HMAC-SHA512 承诺文件密钥，不受此限制；各处 AES-GCM 的评估和 NKPR v3 设计草案见 [密钥承诺评估](docs/key-commitment.md)。
 
-Core 已经能读取 NKPR v3：它在 NKPR v2 的 salt 之后加入 32 字节密钥承诺，一个容器只能被一个口令打开。目前各端生成和升级密钥仍写 NKPR v2；写出 NKPR v3 和旧格式私钥的处理在之后的版本中提供。
+NKPR v3 在 NKPR v2 的 salt 之后加入 32 字节密钥承诺，一个容器只能被一个口令打开。各端生成和升级的密钥都写 NKPR v3。Core 只在调用方声明「这是本机自己的私钥」时才接受 NKPR v1、v2，CLI 的规则见上文[参数化命令](#参数化命令)；Android 和桌面 GUI 暂时对所有私钥都按自己的私钥处理，之后的版本再区分本机私钥和导入的私钥。
 
 ## NKEM v3 hybrid 文件格式
 

@@ -1,8 +1,9 @@
 /*
  * NKPR v3 key commitment (docs/key-commitment.md): known-answer vectors from
  * an independent implementation (nkpr_v3_vectors.py), the commitment check
- * before AES-GCM, exact container lengths, and identity keys stored as v3
- * working everywhere Core reads a private key.
+ * before AES-GCM, exact container lengths, new keys written as v3, and the
+ * rule that NKPR v1 and v2 open only as the installation's own key, which
+ * can be rewritten as v3 or exported back to v2.
  */
 #include "nekokem.h"
 #include "nekokem_internal.h"
@@ -167,13 +168,6 @@ static int known_answer_and_commitment(void)
     return 1;
 }
 
-static long file_size(const char *path)
-{
-    struct stat status;
-
-    return stat(path, &status) == 0 ? (long)status.st_size : -1L;
-}
-
 static int write_text(const char *path, const char *text)
 {
     FILE *output = fopen(path, "wb");
@@ -211,15 +205,45 @@ static int files_equal(const char *first, const char *second)
     return equal;
 }
 
-/* An identity key rewritten as NKPR v3 works wherever Core reads keys. */
+static int nkpr_version_of(const char *path)
+{
+    unsigned char header[5] = {0};
+    FILE *input = fopen(path, "rb");
+    int version = -1;
+
+    if (input != NULL && fread(header, 1U, sizeof(header), input) == sizeof(header) &&
+        memcmp(header, NKPR_MAGIC, 4U) == 0) {
+        version = header[4];
+    }
+    if (input != NULL) {
+        fclose(input);
+    }
+    return version;
+}
+
+static int fingerprint_of(const char *public_path,
+                          char output[NEKOKEM_FINGERPRINT_STRING_SIZE])
+{
+    return nekokem_public_key_fingerprint(public_path, output,
+                                          NEKOKEM_FINGERPRINT_STRING_SIZE);
+}
+
+/*
+ * New keys are NKPR v3 and work wherever Core reads keys. NKPR v1 and v2 are
+ * refused before the password is used unless the call says the key is the
+ * installation's own, and such a key can be rewritten as v3 or exported back.
+ */
 static int identity_key_as_v3(void)
 {
     static const char password[] = "nkpr v3 identity password";
     const unsigned char *bytes = (const unsigned char *)password;
+    const unsigned char *wrong = (const unsigned char *)"wrong password";
     const size_t password_len = strlen(password);
     const char *recipients[1] = {"public.key"};
     char v2_fingerprint[NEKOKEM_FINGERPRINT_STRING_SIZE];
     char v3_fingerprint[NEKOKEM_FINGERPRINT_STRING_SIZE];
+    char legacy_before[NEKOKEM_FINGERPRINT_STRING_SIZE];
+    char legacy_after[NEKOKEM_FINGERPRINT_STRING_SIZE];
     unsigned char *pem = NULL;
     size_t pem_len = 0U;
     char *text = NULL;
@@ -227,26 +251,30 @@ static int identity_key_as_v3(void)
     unsigned int version = 0U;
     NekoKEMEncryptOptions options;
     NekoKEMEncryptResult encrypted;
+    NekoKEMVerifyPolicy own_key;
     NekoKEMVerifyResult verified;
     char *second_end;
     int success = 0;
 
-    if (!nekokem_generate_keypair("public.key", "v2.enc", bytes, password_len) ||
-        !protected_private_key_read_version("v2.enc", bytes, password_len,
+    /* Key generation writes NKPR v3; an NKPR v2 copy holds the same keys. */
+    CHECK(nekokem_generate_keypair("public.key", "v3.enc", bytes, password_len));
+    CHECK(nkpr_version_of("v3.enc") == (int)NKPR_VERSION_COMMITTED);
+    if (!protected_private_key_read_version("v3.enc", bytes, password_len,
                                             &pem, &pem_len, &version) ||
-        version != NKPR_VERSION_IDENTITY ||
-        !protected_private_key_write_version("v3.enc", pem, pem_len, bytes,
+        version != NKPR_VERSION_COMMITTED ||
+        !protected_private_key_write_version("v2.enc", pem, pem_len, bytes,
                                              password_len,
-                                             NKPR_VERSION_COMMITTED)) {
-        fprintf(stderr, "Cannot prepare the NKPR v3 identity key\n");
+                                             NKPR_VERSION_IDENTITY)) {
+        fprintf(stderr, "Cannot prepare the NKPR v2 copy\n");
         goto cleanup;
     }
-    if (file_size("v3.enc") != file_size("v2.enc") + (long)NKPR_COMMITMENT_SIZE ||
-        nekokem_private_key_exists("v3.enc") != 1 ||
+    if (nekokem_private_key_exists("v3.enc") != 1 ||
         nekokem_private_key_requires_password("v3.enc") != 1 ||
+        nekokem_private_key_is_legacy("v3.enc") != 0 ||
+        nekokem_private_key_is_legacy("v2.enc") != 1 ||
+        nekokem_private_key_is_legacy("public.key") != 0 ||
         nekokem_check_private_key_password("v3.enc", bytes, password_len) != 1 ||
-        nekokem_check_private_key_password(
-            "v3.enc", (const unsigned char *)"wrong", 5U) != 0 ||
+        nekokem_check_private_key_password("v3.enc", wrong, 14U) != 0 ||
         !nekokem_internal_private_key_fingerprint(
             "v2.enc", bytes, password_len, v2_fingerprint,
             sizeof(v2_fingerprint)) ||
@@ -254,37 +282,104 @@ static int identity_key_as_v3(void)
             "v3.enc", bytes, password_len, v3_fingerprint,
             sizeof(v3_fingerprint)) ||
         strcmp(v2_fingerprint, v3_fingerprint) != 0) {
-        fprintf(stderr, "The NKPR v3 identity key is not read like NKPR v2\n");
+        fprintf(stderr, "The NKPR v3 key is not read like NKPR v2\n");
         goto cleanup;
     }
 
-    /* Signs with and decrypts with the v3 key. */
+    /* NKPR v2 needs the legacy flag, and is refused even for a wrong
+     * password: the format is checked before the password is used. */
+    if (nekokem_check_private_key_password("v2.enc", bytes, password_len) != 0 ||
+        nekokem_check_private_key_password_flags(
+            "v2.enc", bytes, password_len, 0U) != NEKOKEM_ERROR_LEGACY_PRIVATE_KEY ||
+        nekokem_check_private_key_password_flags(
+            "v2.enc", wrong, 14U, 0U) != NEKOKEM_ERROR_LEGACY_PRIVATE_KEY ||
+        nekokem_check_private_key_password_flags(
+            "v2.enc", bytes, password_len, NEKOKEM_PRIVATE_KEY_LEGACY) != 1 ||
+        nekokem_check_private_key_password_flags(
+            "v2.enc", wrong, 14U, NEKOKEM_PRIVATE_KEY_LEGACY) != 0 ||
+        nekokem_check_private_key_password_flags(
+            "v3.enc", bytes, password_len, 0x80U) != 0) {
+        fprintf(stderr, "The legacy rule for checking passwords is wrong\n");
+        goto cleanup;
+    }
+
+    /* Signs with the v3 key, and with the v2 key only as the own key. */
     memset(&options, 0, sizeof(options));
     memset(&encrypted, 0, sizeof(encrypted));
-    memset(&verified, 0, sizeof(verified));
     options.struct_size = sizeof(options);
     options.sender_private_key_path = "v3.enc";
     options.password = bytes;
     options.password_len = password_len;
     encrypted.struct_size = sizeof(encrypted);
+    CHECK(write_text("plain.txt", "signed with an NKPR v3 key\n"));
+    CHECK(nekokem_encrypt_file_v5_with_progress(
+              "plain.txt", "file.nkem", recipients, 1U, &options, &encrypted,
+              NULL, NULL) == NEKOKEM_OPERATION_SUCCESS &&
+          encrypted.format_version == 5);
+    options.sender_private_key_path = "v2.enc";
+    CHECK(nekokem_encrypt_file_v5_with_progress(
+              "plain.txt", "legacy.nkem", recipients, 1U, &options, &encrypted,
+              NULL, NULL) == NEKOKEM_ERROR_LEGACY_PRIVATE_KEY);
+    CHECK(access("legacy.nkem", F_OK) != 0);
+    options.flags = NEKOKEM_ENCRYPT_LEGACY_SENDER_KEY;
+    CHECK(nekokem_encrypt_file_v5_with_progress(
+              "plain.txt", "legacy.nkem", recipients, 1U, &options, &encrypted,
+              NULL, NULL) == NEKOKEM_OPERATION_SUCCESS);
+
+    /* Decrypts with the v3 key; the v2 key needs the own-key flag. */
+    memset(&verified, 0, sizeof(verified));
     verified.struct_size = sizeof(verified);
-    if (!write_text("plain.txt", "signed with an NKPR v3 key\n") ||
-        nekokem_encrypt_file_v5_with_progress(
-            "plain.txt", "file.nkem", recipients, 1U, &options, &encrypted,
-            NULL, NULL) != NEKOKEM_OPERATION_SUCCESS ||
-        encrypted.format_version != 5 ||
-        nekokem_decrypt_file_verified_with_progress(
-            "file.nkem", "restored.txt", "v3.enc", bytes, password_len, NULL,
-            &verified, NULL, NULL) != NEKOKEM_OPERATION_SUCCESS ||
-        verified.signature_status != NEKOKEM_SIGNATURE_VALID_UNTRUSTED ||
-        strcmp(verified.signer_fingerprint, v3_fingerprint) != 0 ||
-        !files_equal("plain.txt", "restored.txt")) {
-        fprintf(stderr, "Signing or decrypting with the NKPR v3 key failed\n");
-        goto cleanup;
-    }
+    CHECK(nekokem_decrypt_file_verified_with_progress(
+              "file.nkem", "restored.txt", "v3.enc", bytes, password_len, NULL,
+              &verified, NULL, NULL) == NEKOKEM_OPERATION_SUCCESS &&
+          verified.signature_status == NEKOKEM_SIGNATURE_VALID_UNTRUSTED &&
+          strcmp(verified.signer_fingerprint, v3_fingerprint) == 0 &&
+          files_equal("plain.txt", "restored.txt"));
+    CHECK(remove("restored.txt") == 0);
+    CHECK(nekokem_decrypt_file_verified_with_progress(
+              "legacy.nkem", "restored.txt", "v2.enc", bytes, password_len,
+              NULL, &verified, NULL, NULL) == NEKOKEM_ERROR_LEGACY_PRIVATE_KEY);
+    CHECK(access("restored.txt", F_OK) != 0);
+    CHECK(nekokem_decrypt_file("legacy.nkem", "restored.txt", "v2.enc", bytes,
+                               password_len) == 0);
+    memset(&own_key, 0, sizeof(own_key));
+    own_key.struct_size = sizeof(own_key);
+    own_key.flags = NEKOKEM_VERIFY_LEGACY_PRIVATE_KEY;
+    CHECK(nekokem_decrypt_file_verified_with_progress(
+              "legacy.nkem", "restored.txt", "v2.enc", bytes, password_len,
+              &own_key, &verified, NULL, NULL) == NEKOKEM_OPERATION_SUCCESS &&
+          files_equal("plain.txt", "restored.txt"));
+
+    /* Exported for an older installation: NKPR v2 with the same password. */
+    CHECK(nekokem_export_private_key_legacy("v3.enc", bytes, password_len,
+                                            "exported.enc") == 1);
+    CHECK(nkpr_version_of("exported.enc") == (int)NKPR_VERSION_IDENTITY);
+    CHECK(nekokem_check_private_key_password_flags(
+              "exported.enc", bytes, password_len,
+              NEKOKEM_PRIVATE_KEY_LEGACY) == 1);
+    CHECK(nekokem_export_private_key_legacy("v3.enc", bytes, password_len,
+                                            "v3.enc") == 0);
+    CHECK(nekokem_export_private_key_legacy("v3.enc", wrong, 14U,
+                                            "wrong.enc") == 0);
+    CHECK(access("wrong.enc", F_OK) != 0);
+
+    /* Rewriting the own v2 key keeps its keys; a v3 key is left alone. */
+    CHECK(nekokem_update_private_key_format("public.key", "v2.enc", bytes,
+                                            password_len) == 1);
+    CHECK(nkpr_version_of("v2.enc") == (int)NKPR_VERSION_COMMITTED);
+    CHECK(fingerprint_of("public.key", v2_fingerprint) &&
+          strcmp(v2_fingerprint, v3_fingerprint) == 0);
+    CHECK(nekokem_check_private_key_password("v2.enc", bytes, password_len) == 1);
+    CHECK(nekokem_update_private_key_format("public.key", "v3.enc", bytes,
+                                            password_len) == 1);
+    CHECK(nkpr_version_of("v3.enc") == (int)NKPR_VERSION_COMMITTED);
+    CHECK(nekokem_update_private_key_format("public.key", "exported.enc",
+                                            wrong, 14U) == 0);
+    CHECK(nkpr_version_of("exported.enc") == (int)NKPR_VERSION_IDENTITY);
 
     /* NKPR v3 always holds four keys: two-component PEM in v3 is refused,
-     * while the same PEM stays valid as NKPR v1. */
+     * while the same PEM stays valid as NKPR v1, which is upgraded to an
+     * identity key when its format is updated. */
     text = OPENSSL_zalloc(pem_len + 1U);
     if (text == NULL) {
         goto cleanup;
@@ -306,13 +401,26 @@ static int identity_key_as_v3(void)
         !protected_private_key_write_version("legacy-v3.enc", pem, legacy_len,
                                              bytes, password_len,
                                              NKPR_VERSION_COMMITTED) ||
-        nekokem_check_private_key_password("legacy-v1.enc", bytes,
-                                           password_len) != 1 ||
+        nekokem_check_private_key_password_flags(
+            "legacy-v1.enc", bytes, password_len,
+            NEKOKEM_PRIVATE_KEY_LEGACY) != 1 ||
         nekokem_check_private_key_password("legacy-v3.enc", bytes,
-                                           password_len) != 0) {
+                                           password_len) != 0 ||
+        !nekokem_export_legacy_public_key("public.key", "legacy.pub") ||
+        !nekokem_public_key_legacy_fingerprint("legacy.pub", legacy_before,
+                                               sizeof(legacy_before))) {
         fprintf(stderr, "NKPR v3 accepted a two-component key\n");
         goto cleanup;
     }
+    CHECK(nekokem_update_private_key_format("legacy.pub", "legacy-v1.enc",
+                                            bytes, password_len) == 1);
+    CHECK(nkpr_version_of("legacy-v1.enc") == (int)NKPR_VERSION_COMMITTED);
+    CHECK(nekokem_public_key_can_verify("legacy.pub") == 1);
+    CHECK(nekokem_public_key_legacy_fingerprint("legacy.pub", legacy_after,
+                                                sizeof(legacy_after)) &&
+          strcmp(legacy_before, legacy_after) == 0);
+    CHECK(nekokem_check_private_key_password("legacy-v1.enc", bytes,
+                                             password_len) == 1);
     success = 1;
 
 cleanup:
@@ -327,7 +435,8 @@ int main(void)
 {
     static const char *const files[] = {
         "public.key", "v2.enc", "v3.enc", "plain.txt", "file.nkem",
-        "restored.txt", "legacy-v1.enc", "legacy-v3.enc", ".nekokem-pair.lock",
+        "legacy.nkem", "restored.txt", "exported.enc", "wrong.enc",
+        "legacy-v1.enc", "legacy-v3.enc", "legacy.pub", ".nekokem-pair.lock",
     };
     char directory[] = "/tmp/nekokem-nkpr-v3.XXXXXX";
     size_t index;

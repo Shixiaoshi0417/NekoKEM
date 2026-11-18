@@ -273,9 +273,10 @@ class AuditTests(unittest.TestCase):
         legacy = (self.root / 'legacy.key').read_bytes()
         self.assertEqual(legacy.count(b'-----BEGIN PUBLIC KEY-----'), 2)
         self.assertIn(b'cannot sign', self.cli('fingerprint', 'legacy.key').stdout)
-        result = self.cli('upgrade-key', 'keys/public.key', 'keys/private.key.enc', data=PASSWORD)
-        self.assertEqual(result.returncode, 1)
-        self.assertIn(b'already a signing identity key', result.stderr)
+        # An identity key that is already NKPR v3 needs nothing and asks nothing.
+        result = self.cli('upgrade-key', 'keys/public.key', 'keys/private.key.enc')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn(b'already in the current format', result.stdout)
         result = self.cli(data=b'2\n2\n' + legacy + b'input\n' + PASSWORD + b'5\n')
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual((self.root / 'encrypted/input.nkem').read_bytes()[4], 5)
@@ -283,6 +284,62 @@ class AuditTests(unittest.TestCase):
                           data=PASSWORD)
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual((self.root / 'out3').read_bytes(), b'signed payload')
+
+    def test_older_private_key_formats_open_only_as_the_own_key(self):
+        """NKPR v1 and v2 do not commit to the password (docs/key-commitment.md)."""
+        self.keys()
+        own = self.root / 'keys/private.key.enc'
+        self.assertEqual(own.read_bytes()[4], 3)
+        (self.root / 'input').write_bytes(b'payload')
+        result = self.cli('export-legacy-private-key', 'older.enc', data=PASSWORD)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual((self.root / 'older.enc').read_bytes()[4], 2)
+        result = self.cli('encrypt', 'hybrid', 'input', 'cipher.nkem', 'keys/public.key', data=PASSWORD)
+        self.assertEqual(result.returncode, 0, result.stderr)
+
+        # Another path is refused before the password prompt, for both uses.
+        result = self.cli('decrypt', 'hybrid', 'cipher.nkem', 'out', 'older.enc', data=PASSWORD)
+        self.assertEqual(result.returncode, 1)
+        self.assertIn(b'accepted only as your own key', result.stderr)
+        self.assertIn(b'--legacy-private-key', result.stderr)
+        self.assertNotIn(b'password', result.stdout + result.stderr)
+        self.assertFalse((self.root / 'out').exists())
+        result = self.cli('encrypt', 'hybrid', '--sign-key', 'older.enc', 'input', 'x.nkem',
+                          'keys/public.key', data=PASSWORD)
+        self.assertEqual(result.returncode, 1)
+        self.assertIn(b'accepted only as your own key', result.stderr)
+        self.assertFalse((self.root / 'x.nkem').exists())
+        result = self.cli('encrypt', 'hybrid', '--unsigned', '--legacy-private-key', 'input', 'x.nkem',
+                          'keys/public.key')
+        self.assertEqual(result.returncode, 1)
+        self.assertIn(b'Usage:', result.stderr)
+
+        # The explicit option opens it.
+        result = self.cli('decrypt', 'hybrid', '--legacy-private-key', 'cipher.nkem', 'out',
+                          'older.enc', data=PASSWORD)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual((self.root / 'out').read_bytes(), b'payload')
+        result = self.cli('encrypt', 'hybrid', '--sign-key', 'older.enc', '--legacy-private-key',
+                          'input', 'x.nkem', 'keys/public.key', data=PASSWORD)
+        self.assertEqual(result.returncode, 0, result.stderr)
+
+        # At the own key's path it opens, with a hint, and upgrade-key rewrites it.
+        own.write_bytes((self.root / 'older.enc').read_bytes())
+        result = self.cli('decrypt', 'hybrid', 'cipher.nkem', 'out2', 'keys/private.key.enc', data=PASSWORD)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn(b'Run upgrade-key', result.stderr)
+        before = self.cli('fingerprint', 'keys/public.key').stdout
+        result = self.cli('upgrade-key', data=PASSWORD)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn(b'Rewrote keys/private.key.enc as NKPR v3', result.stdout)
+        self.assertEqual(own.read_bytes()[4], 3)
+        self.assertEqual(self.cli('fingerprint', 'keys/public.key').stdout, before)
+        result = self.cli('upgrade-key')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn(b'already in the current format', result.stdout)
+        result = self.cli('decrypt', 'hybrid', 'cipher.nkem', 'out3', 'keys/private.key.enc', data=PASSWORD)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertNotIn(b'Run upgrade-key', result.stderr)
 
     def test_installer_uses_one_release_and_requires_requested_attestation(self):
         fixtures = self.root / 'fixtures'

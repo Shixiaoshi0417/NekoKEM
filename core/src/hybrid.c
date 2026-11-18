@@ -174,7 +174,7 @@ int hybrid_write_public_keys(FILE *output, const HybridKeys *keys,
     return 1;
 }
 
-/* Writes an identity key pair as public PEM and NKPR v2, committed together. */
+/* Writes an identity key pair as public PEM and NKPR v3, committed together. */
 static int write_identity_key_files(const HybridKeys *keys,
                                     const char *public_path,
                                     const char *private_path,
@@ -212,7 +212,7 @@ static int write_identity_key_files(const HybridKeys *keys,
             &private_file, private_path,
             (const unsigned char *)private_buffer->data,
             private_buffer->length, password, password_len,
-            NKPR_VERSION_IDENTITY) ||
+            NKPR_VERSION_COMMITTED) ||
         !(replace != 0
               ? atomic_file_commit_pair(&public_file, &private_file)
               : atomic_file_commit_pair_new(&public_file, &private_file))) {
@@ -264,8 +264,8 @@ int hybrid_upgrade_to_identity(const char *public_path,
     HybridKeys public_keys = {0};
     int success = 0;
 
-    if (!hybrid_load_protected_private_keys(private_path, password,
-                                            password_len, &keys)) {
+    if (hybrid_load_protected_private_keys(private_path, password,
+                                           password_len, 1, &keys) != 1) {
         goto cleanup;
     }
     if (hybrid_keys_have_identity(&keys)) {
@@ -291,6 +291,85 @@ int hybrid_upgrade_to_identity(const char *public_path,
 
 cleanup:
     hybrid_keys_cleanup(&public_keys);
+    hybrid_keys_cleanup(&keys);
+    return success;
+}
+
+int hybrid_rewrite_identity_keys(const char *public_path,
+                                 const char *private_path,
+                                 const unsigned char *password,
+                                 size_t password_len)
+{
+    HybridKeys keys = {0};
+    HybridKeys public_keys = {0};
+    int success = 0;
+
+    if (hybrid_load_protected_private_keys(private_path, password,
+                                           password_len, 1, &keys) != 1) {
+        goto cleanup;
+    }
+    /* The rewritten pair must be this key's own pair, as for an upgrade. */
+    if (!hybrid_keys_have_identity(&keys) ||
+        !hybrid_load_public_keys(public_path, &public_keys) ||
+        !hybrid_keys_have_identity(&public_keys) ||
+        EVP_PKEY_eq(public_keys.x448, keys.x448) != 1 ||
+        EVP_PKEY_eq(public_keys.mlkem, keys.mlkem) != 1 ||
+        EVP_PKEY_eq(public_keys.ed448, keys.ed448) != 1 ||
+        EVP_PKEY_eq(public_keys.mldsa, keys.mldsa) != 1) {
+        fprintf(stderr, file_message("The public key does not belong to this private key\n"));
+        goto cleanup;
+    }
+    success = write_identity_key_files(&keys, public_path, private_path,
+                                       password, password_len, 1);
+
+cleanup:
+    hybrid_keys_cleanup(&public_keys);
+    hybrid_keys_cleanup(&keys);
+    return success;
+}
+
+int hybrid_export_private_key_legacy(const char *private_path,
+                                     const unsigned char *password,
+                                     size_t password_len,
+                                     const char *output_path)
+{
+    HybridKeys keys = {0};
+    BIO *private_bio = NULL;
+    BUF_MEM *private_buffer = NULL;
+    const char *key_paths[1];
+    int success = 0;
+
+    key_paths[0] = private_path;
+    if (!file_output_spares_keys(output_path, key_paths, 1U) ||
+        hybrid_load_protected_private_keys(private_path, password,
+                                           password_len, 1, &keys) != 1) {
+        goto cleanup;
+    }
+    private_bio = BIO_new(BIO_s_mem());
+    if (private_bio == NULL) {
+        print_openssl_error("Cannot create hybrid private-key memory BIO");
+        goto cleanup;
+    }
+    if (!write_private_pem(private_bio, &keys) ||
+        BIO_get_mem_ptr(private_bio, &private_buffer) <= 0 ||
+        private_buffer == NULL || private_buffer->data == NULL ||
+        private_buffer->length == 0U ||
+        private_buffer->length > NKPR_MAX_PEM_SIZE) {
+        fprintf(stderr, file_message("Invalid serialized hybrid private-key length\n"));
+        goto cleanup;
+    }
+    /* NekoKEM 5.2 and earlier read NKPR v2 identity keys and v1 legacy keys. */
+    success = protected_private_key_write_version(
+        output_path, (const unsigned char *)private_buffer->data,
+        private_buffer->length, password, password_len,
+        hybrid_keys_have_identity(&keys) ? NKPR_VERSION_IDENTITY
+                                         : NKPR_VERSION);
+
+cleanup:
+    if (private_buffer != NULL && private_buffer->data != NULL) {
+        secure_mem_clear(private_buffer->data, private_buffer->max);
+    }
+    BIO_free(private_bio);
     hybrid_keys_cleanup(&keys);
     return success;
 }
@@ -490,20 +569,52 @@ static unsigned int nkpr_components(unsigned int version)
     return version == NKPR_VERSION ? 2U : 4U;
 }
 
+/*
+ * NKPR v1 and v2 are not key-committing, so a file someone else wrote can be
+ * built to open under several passwords. Only a caller that knows the file
+ * is its own key accepts them; the check runs before any password is used.
+ */
+static int legacy_key_refused(const unsigned char *contents,
+                              size_t contents_len,
+                              int accept_legacy)
+{
+    unsigned int version =
+        protected_private_key_container_version(contents, contents_len);
+
+    if (accept_legacy != 0 || version == 0U ||
+        version >= NKPR_VERSION_COMMITTED) {
+        return 0;
+    }
+    fprintf(stderr, file_message("This private key uses an older format that is accepted only as your own key\n"));
+    return 1;
+}
+
 int hybrid_load_protected_private_keys(
     const char *path,
     const unsigned char *password,
     size_t password_len,
+    int accept_legacy,
     HybridKeys *keys)
 {
+    unsigned char *contents = NULL;
     unsigned char *pem = NULL;
+    size_t contents_len = 0U;
     size_t pem_len = 0U;
     unsigned int version = 0U;
     int success = 0;
 
     hybrid_keys_reset(keys);
-    if (!protected_private_key_read_version(path, password, password_len,
-                                            &pem, &pem_len, &version)) {
+    if (!file_read_sensitive(path, NKPR_MAX_CONTAINER_SIZE,
+                             &contents, &contents_len)) {
+        goto cleanup;
+    }
+    if (legacy_key_refused(contents, contents_len, accept_legacy)) {
+        success = HYBRID_LEGACY_KEY_REFUSED;
+        goto cleanup;
+    }
+    if (!protected_private_key_decode_version(contents, contents_len,
+                                              password, password_len,
+                                              &pem, &pem_len, &version)) {
         goto cleanup;
     }
     success = parse_hybrid_private_keys(pem, pem_len, 1,
@@ -515,6 +626,7 @@ int hybrid_load_protected_private_keys(
 
 cleanup:
     secure_free(pem, pem_len);
+    secure_free(contents, contents_len);
     return success;
 }
 
@@ -555,6 +667,7 @@ int hybrid_load_decryption_keys(
     const char *path,
     const unsigned char *password,
     size_t password_len,
+    int accept_legacy,
     HybridKeys *keys)
 {
     unsigned char *contents = NULL;
@@ -570,6 +683,10 @@ int hybrid_load_decryption_keys(
         goto cleanup;
     }
     if (private_key_data_is_protected(contents, contents_len)) {
+        if (legacy_key_refused(contents, contents_len, accept_legacy)) {
+            loaded = HYBRID_LEGACY_KEY_REFUSED;
+            goto cleanup;
+        }
         if (password == NULL || password_len == 0U) {
             fprintf(stderr, file_message("A password is required for this private key\n"));
             goto cleanup;
@@ -589,7 +706,7 @@ int hybrid_load_decryption_keys(
 cleanup:
     secure_free(pem, pem_len);
     secure_free(contents, contents_len);
-    if (loaded && !x448_private_key_is_usable(keys->x448)) {
+    if (loaded == 1 && !x448_private_key_is_usable(keys->x448)) {
         hybrid_keys_cleanup(keys);
         return 0;
     }
