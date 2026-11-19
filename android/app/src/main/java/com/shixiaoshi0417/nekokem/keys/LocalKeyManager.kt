@@ -554,10 +554,16 @@ class LocalKeyManager internal constructor(
         RESULT_STORAGE_ERROR
     }
 
-    /** NKPR v1 or v2 by the header alone; no password is used. */
+    /**
+     * NKPR v1 or v2 by the header alone; no password is used. Only explains the
+     * rule early: Core refuses a legacy key that is not the device's own on
+     * every unlock anyway, so false when the library is unavailable is safe.
+     */
     fun privateKeyIsLegacy(input: File): Boolean = try {
         NativeBridge.nativePrivateKeyIsLegacy(input.absolutePath)
     } catch (_: Exception) {
+        false
+    } catch (_: LinkageError) {
         false
     }
 
