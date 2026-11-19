@@ -513,7 +513,7 @@ final class AppState: ObservableObject {
         request.replace = kind == .keygen && replaceOffered && replace
         request.overwrite = exporting && overwriteOffered && overwrite
         withdrawReplace(); withdrawOverwrite()
-        let remember = keys && saveToKeychain
+        let remember = (keys || kind == .exportLegacyPrivate) && saveToKeychain
         // The native layer keeps its own copy until it finishes; the fields are cleared now.
         clearSecrets()
         let id = jobId
