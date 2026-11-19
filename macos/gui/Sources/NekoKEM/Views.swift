@@ -76,7 +76,7 @@ private struct KeysModePicker: View {
         })) {
             Text(state.t("keygen")).tag(0)
             Text(state.t("upgradeKey")).tag(1)
-            Text(state.t("exportLegacy")).tag(2)
+            Text(state.t("exportOlder")).tag(2)
             Text(state.t("fingerprintTab")).tag(3)
         }
         .pickerStyle(.segmented).labelsHidden().disabled(!state.editable)
@@ -308,8 +308,19 @@ private struct KeysPage: View {
                 if state.pasteKey { PasteInput(state: state, label: state.t("paste"), name: "keyText", text: $state.keyText) }
                 else { PathInput(state: state, field: .keyPath, label: state.t("key")) }
             } else if state.keyMode == .export {
-                PathInput(state: state, field: .keyPath, label: state.t("publicKey"))
-                PathInput(state: state, field: .output, label: state.t("legacyOutput"))
+                Picker("", selection: Binding(get: { state.exportPrivate ? 1 : 0 }, set: { state.changeExportPrivate($0 == 1) })) {
+                    Text(state.t("exportPublicOption")).tag(0)
+                    Text(state.t("exportPrivateOption")).tag(1)
+                }
+                .pickerStyle(.segmented).labelsHidden().fixedSize().disabled(!state.editable)
+                if state.exportPrivate {
+                    Text(state.t("legacyPrivateHint")).font(.callout).foregroundStyle(.secondary)
+                    PathInput(state: state, field: .privatePath, label: state.t("privateKey"))
+                    PathInput(state: state, field: .output, label: state.t("legacyPrivateOutput"))
+                } else {
+                    PathInput(state: state, field: .keyPath, label: state.t("publicKey"))
+                    PathInput(state: state, field: .output, label: state.t("legacyOutput"))
+                }
             } else {
                 let upgrade = state.keyMode == .upgrade
                 PathInput(state: state, field: .publicPath, label: state.t(upgrade ? "publicKey" : "publicPath"))
@@ -351,7 +362,7 @@ private struct OperationFooter: View {
         case .contacts: return state.t("saveContact")
         case .keygen:
             if state.keyMode == .upgrade { return state.t("upgradeKey") }
-            if state.keyMode == .export { return state.t("exportLegacy") }
+            if state.keyMode == .export { return state.t(state.exportPrivate ? "exportLegacyPrivate" : "exportLegacy") }
             return state.t(state.replace ? "replaceKeysAction" : "keygen")
         default: return state.t(state.screen.rawValue)
         }

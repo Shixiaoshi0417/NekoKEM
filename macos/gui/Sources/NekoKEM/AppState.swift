@@ -108,6 +108,8 @@ final class AppState: ObservableObject {
     // Unverified contacts are encrypted to only after a second, warned press.
     @Published private(set) var unverifiedWarned = false
     @Published private(set) var keyMode = KeyMode.generate
+    // Export mode: the private key for NekoKEM 5.2 instead of the public key for 4.x.
+    @Published private(set) var exportPrivate = false
     // Turning off signing needs an explicit, red-marked confirmation.
     @Published var confirmingUnsigned = false
 
@@ -160,19 +162,24 @@ final class AppState: ObservableObject {
     }
     var kind: Kind {
         switch screen {
-        case .keygen: return keyMode == .generate ? .keygen : (keyMode == .upgrade ? .upgrade : .exportLegacy)
+        case .keygen:
+            switch keyMode {
+            case .generate: return .keygen
+            case .upgrade: return .upgrade
+            case .export: return exportPrivate ? .exportLegacyPrivate : .exportLegacy
+            }
         default: return .fingerprint
         }
     }
     var signing: Bool { fileAction == .encrypt && !unsigned }
-    var passwordRequired: Bool { screen == .keygen && keyMode != .export }
+    var passwordRequired: Bool { screen == .keygen && (keyMode != .export || exportPrivate) }
     /// The private key whose password the visible password field asks for.
     var keychainKeyPath: String {
         if screen == .keygen { return privatePath }
         return fileAction == .encrypt ? signKeyPath : decryptKey
     }
     /// A new key has no saved password to fill in.
-    var keychainFillOffered: Bool { askingPassword || (screen == .keygen && keyMode == .upgrade) }
+    var keychainFillOffered: Bool { askingPassword || (screen == .keygen && (keyMode == .upgrade || (keyMode == .export && exportPrivate))) }
 
     /// Reads the saved password into the field, after Touch ID or the login password.
     func fillFromKeychain() {
@@ -375,6 +382,15 @@ final class AppState: ObservableObject {
         output = ""
         keyMode = mode
         withdrawReplace(); withdrawOverwrite(); resetFeedback()
+        if mode == .export && exportPrivate && privatePath.isEmpty { privatePath = signKeyPath }
+    }
+    /// Export mode's choice; the private key starts as the user's own.
+    func changeExportPrivate(_ value: Bool) {
+        if locked || !loaded || value == exportPrivate { return }
+        password = ""; output = ""
+        exportPrivate = value
+        if value && privatePath.isEmpty { privatePath = signKeyPath }
+        withdrawOverwrite(); resetFeedback()
     }
     func changeContactSource(paste: Bool) {
         if locked || !loaded || paste == contactPaste { return }
@@ -398,13 +414,14 @@ final class AppState: ObservableObject {
         choosing = true
         defer { choosing = false }
         // Upgrading changes existing key files, so it opens them.
-        let saving = [.output, .publicPath, .privatePath].contains(field) && !(screen == .keygen && keyMode == .upgrade)
+        let opening = screen == .keygen && (keyMode == .upgrade || (keyMode == .export && field == .privatePath))
+        let saving = [.output, .publicPath, .privatePath].contains(field) && !opening
         let value: String?
         if saving {
             switch field {
             case .publicPath: value = chooseSave("public.key")
             case .privatePath: value = chooseSave("private.key.enc")
-            default: value = chooseSave("legacy-public.key")
+            default: value = chooseSave(exportPrivate ? "private-5.2.nkpr" : "legacy-public.key")
             }
         } else { value = chooseOpen() }
         if let value { setPath(field, value) }
@@ -435,7 +452,11 @@ final class AppState: ObservableObject {
         }
         if password.utf8.count > 1024 { return invalid("password-limit", "password") }
         if confirmation.utf8.count > 1024 { return invalid("password-limit", "confirmation") }
-        if screen == .keygen && keyMode == .export {
+        if screen == .keygen && keyMode == .export && exportPrivate {
+            if privatePath.isEmpty { return invalid("invalid-path", "privatePath") }
+            if output.isEmpty { return invalid("invalid-path", "output") }
+            if password.isEmpty { return invalid("password-empty", "password") }
+        } else if screen == .keygen && keyMode == .export {
             if keyPath.isEmpty { return invalid("invalid-path", "keyPath") }
             if output.isEmpty { return invalid("invalid-path", "output") }
         } else if screen == .keygen {
@@ -477,14 +498,14 @@ final class AppState: ObservableObject {
         jobId = UUID().uuidString
         busy = true; cancelling = false
         let kind = self.kind
-        let exporting = kind == .exportLegacy
+        let exporting = kind == .exportLegacy || kind == .exportLegacyPrivate
         let keys = kind == .keygen || kind == .upgrade
         let pasting = kind == .fingerprint && pasteKey
         var request = OperationRequest(id: jobId, kind: kind)
         request.output = exporting ? output : ""
-        request.keyPath = exporting || (kind == .fingerprint && !pasting) ? keyPath : ""
+        request.keyPath = kind == .exportLegacy || (kind == .fingerprint && !pasting) ? keyPath : ""
         request.publicPath = keys ? publicPath : ""
-        request.privatePath = keys ? privatePath : ""
+        request.privatePath = keys || kind == .exportLegacyPrivate ? privatePath : ""
         request.password = passwordRequired ? password : ""
         request.confirmation = kind == .keygen ? confirmation : ""
         request.keyText = pasting ? keyText : ""
@@ -514,6 +535,7 @@ final class AppState: ObservableObject {
                 switch kind {
                 case .upgrade: successMessage = "keyUpgraded"
                 case .exportLegacy: successMessage = "legacyExported"
+                case .exportLegacyPrivate: successMessage = "legacyPrivateExported"
                 default: successMessage = "success"
                 }
             } catch {
@@ -915,6 +937,9 @@ final class AppState: ObservableObject {
                 result = done; successMessage = "encryptedSigned"; ownRecipient = true; recipients = [contacts[1]]
             }
         case "keys": screen = .keygen; keyMode = .generate
+        case "keys-export-private":
+            screen = .keygen; keyMode = .export; exportPrivate = true; privatePath = signKeyPath
+            output = "/Users/shawn/Keys/private-5.2.nkpr"
         case "fingerprint":
             screen = .fingerprint; keyPath = ownPublicKey
             result = Outcome(fingerprint: contacts[1].fingerprint); result?.canVerify = true

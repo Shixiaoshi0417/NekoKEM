@@ -26,10 +26,11 @@ Expressive 两种风格，自带 Java 运行时；macOS 使用原生 SwiftUI 应
 ## Features / 功能
 
 - Generate an identity key pair (NKPR v3 private key and four-component public key), upgrade a
-  NekoKEM 4.x key and export the legacy public key; encrypt signed NKEM v5 files for 1 to 64
+  NekoKEM 4.x or 5.2 key, and export the legacy public key for 4.x or the private key for 5.2;
+  encrypt signed NKEM v5 files for 1 to 64
   recipients, or unsigned NKEM v3/v4 when that is turned on in Settings; decrypt v3, v4 and v5
   and show the signature status and signer; display public-key fingerprints.
-  密钥生成、旧版密钥升级和旧版公钥导出；默认写出带签名的 NKEM v5（1 至 64 位接收方），设置中开启
+  密钥生成、旧版密钥升级、导出给 4.x 的旧版公钥和给 5.2 的私钥；默认写出带签名的 NKEM v5（1 至 64 位接收方），设置中开启
   不签名加密后写出 NKEM v3/v4；解密 v3、v4、v5 并显示签名状态和签名者；公钥指纹。
 - Choose paths using native file dialogs or paste both PEM key blocks.
   支持系统文件选择器及粘贴 PEM 密钥。
@@ -218,6 +219,22 @@ Core 也会拒绝。请先备份旧密钥，再选择新的保存位置，或勾
 Core 按已有普通文件的身份比较（包括同一文件的不同路径写法），符号链接或 reparse point 密钥输入会直接拒绝，不会跟随。后端仅接受同一应用会话中上一次“密钥已存在”响应指明的完全相同路径，授权五分钟内有效且被下一次操作消耗。私钥按文件内容识别 NKPR，Android 导出的
 `private.nkpr` 无需改名即可使用。
 
+Private keys from NekoKEM 5.2 and earlier (NKPR v1/v2) have no key commitment: such a
+file can be built to open under several passwords, so typing a password into someone
+else's file could tell them whether yours is one of them. The apps therefore open an
+NKPR v1/v2 key only when it is the private key set as yours in Settings (key generation
+and upgrading set it); any other v1/v2 key is refused before a password is tried
+(“This private key uses the format of NekoKEM 5.2 and earlier…”). After your own NKPR v2
+key opens, it is rewritten as NKPR v3 with the same keys and password. **Upgrade key**
+does the same for a 5.2 key chosen there, and **For older versions → Private key for
+5.2** writes your key in the format NekoKEM 5.2 reads, with the same password, for
+moving it back to an older version.
+NekoKEM 5.2 及更早版本的私钥（NKPR v1/v2）没有密钥承诺：这种文件可以被构造成能用多个口令打开，
+在别人的文件上输入口令可能让对方得知你的口令是否在其中。因此应用只在 NKPR v1/v2 私钥正是设置里的
+“我的私钥”时才打开它（生成和升级密钥会设置它）；其他 v1/v2 私钥在尝试口令之前就被拒绝。你自己的
+NKPR v2 私钥打开后会以相同的密钥和口令改写为 NKPR v3。“升级密钥”对在那里选择的 5.2 私钥做同样的改写；
+“给旧版本 → 给 5.2 的私钥”以相同口令写出 NekoKEM 5.2 能读取的格式，用于把私钥搬回旧版本。
+
 The file page works as on Android: choose a file, press **Encrypt** or **Decrypt**,
 answer the recipient and password questions, and choose where to save in the system
 dialog once the work is done. Until then the output is a private staged file on disk
@@ -226,13 +243,13 @@ destination is checked by Core before the staged file is moved there; an existin
 is replaced only after the system dialog's own confirmation. Closing the dialog discards
 the result. If the chosen place cannot be written, the result is kept and **Save as…**
 asks again. Starting another operation, switching pages or quitting deletes an unsaved
-result. Only legacy-key export still asks for its output first and reports an existing
-file with “Replace the existing output file”.
+result. Only the exports for older versions still ask for their output first and report an
+existing file with “Replace the existing output file”.
 文件页与 Android 一致：选择文件，按“加密”或“解密”，回答收件人与口令，处理完成后再在系统对话框里
 选择保存位置。在此之前输出是磁盘上的私有暂存文件（不使用 tmpfs 运行时目录），写入时经过相同的 Core 检查。
 所选位置先由 Core 检查，再把暂存文件移过去；已有文件只有在系统对话框确认后才会被替换。关闭对话框即放弃结果。
 所选位置无法写入时结果会保留，可用“保存到…”重新选择。开始新的操作、切换页面或退出都会删除未保存的结果。
-只有导出旧版密钥仍然先选输出，并用“覆盖已有输出文件”提示已有文件。
+只有导出给旧版本的密钥仍然先选输出，并用“覆盖已有输出文件”提示已有文件。
 
 On Windows, the same local fixed-NTFS, owner/ACL, ancestor pinning, regular-file, hard-link,
 reparse-point, device/pipe/ADS and atomic-output checks apply. The app cannot

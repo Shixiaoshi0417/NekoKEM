@@ -1,7 +1,7 @@
 import Foundation
 
 /// The commands of desktop/bridge/src/lib.rs, typed for Swift.
-enum Kind: String { case keygen, encrypt, decrypt, fingerprint, upgrade, exportLegacy = "export-legacy" }
+enum Kind: String { case keygen, encrypt, decrypt, fingerprint, upgrade, exportLegacy = "export-legacy", exportLegacyPrivate = "export-legacy-private" }
 
 struct OperationRequest {
     var id: String

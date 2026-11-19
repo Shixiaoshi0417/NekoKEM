@@ -11,7 +11,7 @@ import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.longOrNull
 
 /** The bridge's commands (desktop/bridge/src/lib.rs), typed for Kotlin. */
-enum class Kind(val wire: String) { Keygen("keygen"), Encrypt("encrypt"), Decrypt("decrypt"), Fingerprint("fingerprint"), Upgrade("upgrade"), ExportLegacy("export-legacy") }
+enum class Kind(val wire: String) { Keygen("keygen"), Encrypt("encrypt"), Decrypt("decrypt"), Fingerprint("fingerprint"), Upgrade("upgrade"), ExportLegacy("export-legacy"), ExportLegacyPrivate("export-legacy-private") }
 
 /** One operation. The secret fields are read from the text fields when the request is written. */
 class OperationRequest(
