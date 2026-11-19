@@ -323,6 +323,20 @@ class AuditTests(unittest.TestCase):
                           'input', 'x.nkem', 'keys/public.key', data=PASSWORD)
         self.assertEqual(result.returncode, 0, result.stderr)
 
+        # upgrade-key unlocks the file too, so another path follows the same rule.
+        older = (self.root / 'older.enc').read_bytes()
+        result = self.cli('upgrade-key', 'keys/public.key', 'older.enc', data=PASSWORD)
+        self.assertEqual(result.returncode, 1)
+        self.assertIn(b'accepted only as your own key', result.stderr)
+        self.assertNotIn(b'password', result.stdout + result.stderr)
+        self.assertEqual((self.root / 'older.enc').read_bytes(), older)
+        (self.root / 'copy.pub').write_bytes((self.root / 'keys/public.key').read_bytes())
+        (self.root / 'copy.enc').write_bytes(older)
+        (self.root / 'copy.enc').chmod(0o600)
+        result = self.cli('upgrade-key', '--legacy-private-key', 'copy.pub', 'copy.enc', data=PASSWORD)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual((self.root / 'copy.enc').read_bytes()[4], 3)
+
         # At the own key's path it opens, with a hint, and upgrade-key rewrites it.
         own.write_bytes((self.root / 'older.enc').read_bytes())
         result = self.cli('decrypt', 'hybrid', 'cipher.nkem', 'out2', 'keys/private.key.enc', data=PASSWORD)

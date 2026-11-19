@@ -385,7 +385,7 @@ static void print_usage(FILE *output, const char *program)
             "[--require-signature] [--require-trusted] "
             "[--save-signer <signer.key>] [--legacy-private-key] "
             "<input_file> <output_file> <private.key|private.key.enc>\n"
-            "  %s upgrade-key [<public.key> <private.key.enc>]\n"
+            "  %s upgrade-key [[--legacy-private-key] <public.key> <private.key.enc>]\n"
             "  %s export-legacy-public-key <public.key> <output.key>\n"
             "  %s export-legacy-private-key <output.enc>\n"
             "  %s fingerprint <public.key>\n"
@@ -860,19 +860,27 @@ cleanup:
 /*
  * Brings the user's own key pair up to date: an NKPR v1 key gains signing
  * keys and an NKPR v2 key keeps its keys; both are rewritten as NKPR v3 with
- * the same password. The paths name the user's own keys, so older formats
- * are accepted here.
+ * the same password. Unlocking an older format at any path but the own key
+ * needs --legacy-private-key, as for decryption: the file might have been
+ * written by someone else to open under several passwords.
  */
 int cli_run_upgrade_key(const char *public_key_path,
-                        const char *private_key_path)
+                        const char *private_key_path,
+                        int legacy_key)
 {
     PasswordBuffer password = {0};
+    int accept_legacy = 0;
+    int legacy = 0;
     int identity;
     int success = 0;
 
     if (public_key_path == NULL) {
         public_key_path = PUBLIC_KEY_PATH;
         private_key_path = PROTECTED_PRIVATE_KEY_PATH;
+    }
+    if (!legacy_key_allowed(private_key_path, legacy_key, &accept_legacy,
+                            &legacy)) {
+        goto cleanup;
     }
     identity = nekokem_public_key_can_verify(public_key_path) == 1;
     if (identity && nekokem_private_key_exists(private_key_path) == 1 &&

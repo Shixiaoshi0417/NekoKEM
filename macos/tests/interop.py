@@ -84,7 +84,8 @@ if phase == 'macos':
     shutil.copyfile(root/'linux-public.key', root/'upgraded-public.key')
     shutil.copyfile(root/'linux-private.enc', root/'upgraded.enc')
     (root/'upgraded.enc').chmod(0o600)
-    run('upgrade-key', 'upgraded-public.key', 'upgraded.enc', password=PASSWORD)
+    # The historical key is NKPR v1 at another path: opened only with the option.
+    run('upgrade-key', '--legacy-private-key', 'upgraded-public.key', 'upgraded.enc', password=PASSWORD)
     run('export-legacy-public-key', 'upgraded-public.key', 'upgraded-legacy.key')
     assert fingerprint('upgraded-legacy.key') == legacy and fingerprint('upgraded-public.key') != legacy
     run('decrypt', 'hybrid', 'binary.linux.nkem', 'binary.upgraded', 'upgraded.enc', password=PASSWORD)
