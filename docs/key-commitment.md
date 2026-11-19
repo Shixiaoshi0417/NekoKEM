@@ -1,8 +1,8 @@
 # Key commitment: assessment and design
 
-Status: proposal. This document changes no format; it records where
-NekoKEM's use of AES-GCM depends on key commitment, which uses are already
-covered, and what a future format would change for the one that is not.
+Status: implemented as NKPR v3. This document records where NekoKEM's use
+of AES-GCM depends on key commitment, which uses were already covered, and
+how NKPR v3 covers the one that was not.
 
 ## Background
 
@@ -31,6 +31,7 @@ open under.
 | NKEM v4/v5 payload | HKDF of the random file key | The sender |
 | NKEM v5 signature block | HKDF of the file key | The sender |
 | NKPR v1/v2 private key | Argon2id of the password, used directly | Whoever writes the NKPR file |
+| NKPR v3 private key | HKDF of Argon2id of the password, with a stored key commitment | Whoever writes the NKPR file, but only one password matches the commitment |
 
 ## Assessment
 
@@ -110,12 +111,14 @@ private key", and any key path chosen for decryption in the desktop apps or
 the CLI. The key a NekoKEM installation generated and keeps in its own key
 directory is not, unless an attacker can already replace files there.
 
-## Proposed NKPR v3
+## NKPR v3
 
-Status: the reader, the writer and the Core legacy rule are implemented,
-with the CLI rules below. The Android and desktop apps still pass the
-own-key flag on every call, so they open every key as before; telling their
-own key from imported ones is the remaining step.
+Status: implemented in Core, the CLI, Android and the desktop apps. Android
+treats the key in its key directory as its own, and private-key import says
+the chosen file is the user's own key; temporary private keys refuse NKPR v1
+and v2. The desktop apps treat the private key set in Settings as their own,
+and their Upgrade key page rewrites a chosen 5.2 key. Both rewrite their own
+NKPR v2 key as NKPR v3 after it unlocks, and both export the NKPR v2 copy.
 
 ### Format
 
@@ -187,9 +190,10 @@ says the file is the installation's own managed key:
   own key, and the CLI's default `keys/private.key.enc`. These keep reading
   v1 and v2, and after the first successful unlock with a writer release,
   the key is rewritten as NKPR v3 in place, with the same password, under
-  the existing pair lock and atomic replace. A v1 key is upgraded to an
-  identity key at the same time, which already keeps its encryption keys and
-  password; the user is told once. The CLI never changes key files as a side
+  the existing pair lock and atomic replace. A v1 key is not rewritten as a
+  side effect, because upgrading it to an identity key changes its public
+  key and fingerprint; the apps' Upgrade key action and the CLI's
+  `upgrade-key` do that, keeping its encryption keys and password. The CLI never changes key files as a side
   effect of encrypting or decrypting, which scripts would not expect: it
   prints a hint instead, and `upgrade-key` performs the rewrite.
 - **Every other source**: private-key import on Android and the desktop,

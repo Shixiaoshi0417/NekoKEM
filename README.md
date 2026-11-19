@@ -384,9 +384,9 @@ NKPR 是独立于 NKEM 文件容器的私钥存储格式。version 1 保存旧�
 
 `header || salt || nonce` 全部作为 AES-GCM AAD。读取器严格验证版本、算法、参数、长度和 GCM 标签；错误密码与任何受认证字段或密文的修改都会失败，并对外统一报告无法解锁私钥，不区分错误口令与容器损坏。解密缓冲区即使在标签验证前产生数据也始终只驻留内存，并在失败路径清零。
 
-NKPR 的 AES-GCM 不具备密钥承诺性，不保证一个容器只能由唯一口令或保护密钥认证，也不提供跨保护密钥的明文一致性保证。此处说明现有格式的边界，不改变 NKPR 格式或密码参数。NKEM v4/v5 通过头部 HMAC-SHA512 承诺文件密钥，不受此限制；各处 AES-GCM 的评估和 NKPR v3 设计草案见 [密钥承诺评估](docs/key-commitment.md)。
+AES-GCM 不具备密钥承诺性：NKPR v1、v2 不保证一个容器只能由唯一口令或保护密钥认证，也不提供跨保护密钥的明文一致性保证。NKPR v3 为此加入密钥承诺，见下段。NKEM v4/v5 通过头部 HMAC-SHA512 承诺文件密钥，不受此限制；各处 AES-GCM 的评估和 NKPR v3 设计见 [密钥承诺评估](docs/key-commitment.md)。
 
-NKPR v3 在 NKPR v2 的 salt 之后加入 32 字节密钥承诺，一个容器只能被一个口令打开。各端生成和升级的密钥都写 NKPR v3。Core 只在调用方声明「这是本机自己的私钥」时才接受 NKPR v1、v2，CLI 的规则见上文[参数化命令](#参数化命令)；Android 和桌面 GUI 暂时对所有私钥都按自己的私钥处理，之后的版本再区分本机私钥和导入的私钥。
+NKPR v3 在 NKPR v2 的 salt 之后加入 32 字节密钥承诺，一个容器只能被一个口令打开。各端生成和升级的密钥都写 NKPR v3。Core 只在调用方声明「这是本机自己的私钥」时才接受 NKPR v1、v2，CLI 的规则见上文[参数化命令](#参数化命令)。Android 只把应用内的密钥当作自己的私钥，导入私钥时也接受旧格式（导入即表明是自己的私钥），临时私钥则拒绝旧格式；桌面 GUI 只把设置里的「我的私钥」当作自己的私钥，见[桌面 GUI 文档](desktop/README.md)。自己的 NKPR v2 私钥解锁后会改写为 NKPR v3，Android 和桌面 GUI 都可以导出给 5.2 的私钥副本。
 
 ## NKEM v3 hybrid 文件格式
 
@@ -398,7 +398,7 @@ v4 用随机 32 字节文件密钥只加密一次文件数据，并为每位接�
 
 ## NKEM v5 签名文件格式
 
-v5 在 v4 多接收方结构上加入发送方认证：发送方用四段式身份密钥（X448、ML-KEM-1024、Ed448、ML-DSA-87）对整个容器做 Ed448 + ML-DSA-87 混合签名，两个签名都通过才接受文件。签名和发送方身份用文件密钥加密，只有接收方能看到是谁发送的。一个格式覆盖 1 至 64 位接收方；身份私钥保存为 NKPR v2，旧的两段式密钥可升级。完整布局、签名策略和升级规则见 [`docs/NKEM-v5.md`](docs/NKEM-v5.md)。`nekokem_encrypt_file_v5_with_progress()` 默认写出 v5，`nekokem_decrypt_file_verified_with_progress()` 解密 v3、v4、v5 并按策略检查签名。
+v5 在 v4 多接收方结构上加入发送方认证：发送方用四段式身份密钥（X448、ML-KEM-1024、Ed448、ML-DSA-87）对整个容器做 Ed448 + ML-DSA-87 混合签名，两个签名都通过才接受文件。签名和发送方身份用文件密钥加密，只有接收方能看到是谁发送的。一个格式覆盖 1 至 64 位接收方；身份私钥保存为 NKPR v3（5.2 及更早版本写 NKPR v2），旧的两段式密钥可升级。完整布局、签名策略和升级规则见 [`docs/NKEM-v5.md`](docs/NKEM-v5.md)。`nekokem_encrypt_file_v5_with_progress()` 默认写出 v5，`nekokem_decrypt_file_verified_with_progress()` 解密 v3、v4、v5 并按策略检查签名。
 
 ## 安全实现说明
 
