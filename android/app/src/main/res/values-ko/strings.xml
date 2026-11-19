@@ -246,6 +246,12 @@
     <string name="upgrade_password_title">신원 키로 업그레이드</string>
     <string name="upgrade_password_message">이 NekoKEM 4.x 키 쌍에 서명 키를 추가합니다. 암호화 키, 암호, 기존 파일은 그대로입니다. 개인 키 암호를 입력하세요. 먼저 두 키의 백업을 내보내세요.</string>
     <string name="legacy_export_hint">NekoKEM 4.x 이하를 쓰는 수신자용입니다. 서명 확인에는 쓸 수 없습니다.</string>
+    <string name="action_export_legacy_private_key">5.2 이하용 개인 키 내보내기</string>
+    <string name="operation_export_legacy_private_key">5.2 이하용 개인 키 내보내기</string>
+    <string name="legacy_private_export_hint">NekoKEM 5.2 이하는 이 기기의 개인 키를 열 수 없습니다. 이 사본은 이전 형식이고 암호는 같습니다. 키를 이전 버전으로 옮길 때만 쓰세요.</string>
+    <string name="export_legacy_private_password_title">이전 버전용으로 내보내기</string>
+    <string name="export_legacy_private_password_message">개인 키 암호를 입력하세요. NekoKEM 5.2 이하용 사본도 같은 암호로 보호됩니다.</string>
+    <string name="error_reason_legacy_private_key">이 개인 키는 NekoKEM 5.2 이하의 형식입니다. 이 형식의 파일은 여러 암호로 열리도록 만들 수 있어, 한 번의 입력으로 내 암호가 그중에 있는지 알려질 수 있습니다. 그래서 임시 개인 키로는 열지 않습니다. 내 키라면 「암호화된 개인 키 가져오기」로 가져오세요.</string>
     <string name="contact_verifies">신원 키 · 서명 확인 가능</string>
     <string name="contact_legacy">이전 형식 키 · 서명 확인 불가</string>
     <string name="error_settings_save">설정을 저장할 수 없습니다. 이전 설정이 계속 적용됩니다.</string>

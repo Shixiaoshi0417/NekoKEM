@@ -103,6 +103,7 @@ class TemporaryKeyInstrumentation : Instrumentation() {
             testTemporaryKeys(manager, workflow, context.cacheDir, plaintext)
             testInvalidKeys(manager, workflow, context.cacheDir)
             testKeyPairMatching(manager, workflow, context.cacheDir)
+            testOlderPrivateKeyFormats(manager, workflow, context)
             testCancellationCleanup(workflow, context.cacheDir, plaintext)
             runPublicKeyContactsTests(context, manager, workflow, plaintext, DEFAULT_PASSWORD)
             testKeyDeletion(manager, context)
@@ -707,6 +708,53 @@ class TemporaryKeyInstrumentation : Instrumentation() {
         deleteTree(pairDirectory)
     }
 
+    /**
+     * NKPR v1 and v2 do not commit to the password, so they open only as this
+     * device's own key (docs/key-commitment.md): a temporary key in an older
+     * format is refused before the password is asked for, the explicit import
+     * accepts it and rewrites it as NKPR v3, and the export for NekoKEM 5.2
+     * writes NKPR v2 with the same password.
+     */
+    private fun testOlderPrivateKeyFormats(
+        manager: LocalKeyManager,
+        workflow: SafFileWorkflow,
+        context: Context,
+    ) {
+        val directory = File(context.cacheDir, LEGACY_PAIR_DIRECTORY)
+        check(directory.mkdir())
+        Os.chmod(directory.absolutePath, PRIVATE_DIRECTORY_MODE)
+        val ownPrivate = File(File(context.filesDir, "keys"), "private.nkpr.enc")
+        val original = checkNotNull(manager.readState().fingerprint)
+        check(!manager.privateKeyIsLegacy(ownPrivate))
+
+        // The export for older versions, staged before the destination is chosen.
+        val wrong = workflow.prepareLegacyPrivateKeyExport(password(WRONG_PASSWORD))
+        check(wrong.code != NativeBridge.RESULT_SUCCESS && wrong.prepared == null)
+        val prepared = workflow.prepareLegacyPrivateKeyExport(password(DEFAULT_PASSWORD))
+        check(prepared.code == NativeBridge.RESULT_SUCCESS)
+        val older = File(directory, LEGACY_PRIVATE_NAME)
+        check(older.createNewFile())
+        Os.chmod(older.absolutePath, PRIVATE_FILE_MODE)
+        check(workflow.commitKeyExport(checkNotNull(prepared.prepared), Uri.fromFile(older)) ==
+            NativeBridge.RESULT_SUCCESS)
+        check(older.readBytes()[4] == 2.toByte())
+        check(manager.privateKeyIsLegacy(older))
+
+        // As a temporary key it is refused before any password is used.
+        val staged = workflow.stageTemporaryPrivateKey(Uri.fromFile(older), LEGACY_PRIVATE_NAME)
+        check(staged.code == LocalKeyManager.RESULT_LEGACY_PRIVATE_KEY && staged.key == null)
+        check(manager.privateKeyFingerprint(older, password(DEFAULT_PASSWORD)) == null)
+
+        // Imported as this device's own key, it opens and becomes NKPR v3.
+        check(workflow.importEncryptedPrivateKey(Uri.fromFile(older), password(DEFAULT_PASSWORD)) ==
+            NativeBridge.RESULT_SUCCESS)
+        check(!manager.privateKeyIsLegacy(ownPrivate))
+        check(ownPrivate.readBytes()[4] == 3.toByte())
+        check(manager.readState().fingerprint == original)
+        check(manager.checkPassword(password(DEFAULT_PASSWORD)) == NativeBridge.RESULT_SUCCESS)
+        deleteTree(directory)
+    }
+
     private fun testCancellationCleanup(
         workflow: SafFileWorkflow,
         cache: File,
@@ -904,6 +952,8 @@ class TemporaryKeyInstrumentation : Instrumentation() {
         const val CANCEL_PAIR_DIRECTORY = "cancel-pair"
         const val OTHER_PAIR_DIRECTORY = "other-pair"
         const val OWN_PRIVATE_EXPORT_NAME = "own-private.nkpr"
+        const val LEGACY_PAIR_DIRECTORY = "legacy-pair"
+        const val LEGACY_PRIVATE_NAME = "private-5.2.nkpr"
         const val TEMPORARY_PUBLIC_NAME = "public.key"
         const val TEMPORARY_PRIVATE_NAME = "private.nkpr"
         const val TEMPORARY_CIPHERTEXT_NAME = "temporary.nkem"

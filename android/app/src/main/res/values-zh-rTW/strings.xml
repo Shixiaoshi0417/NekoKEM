@@ -246,6 +246,12 @@
     <string name="upgrade_password_title">升級為身分金鑰</string>
     <string name="upgrade_password_message">為此 NekoKEM 4.x 金鑰對加入簽章金鑰。加密金鑰、密碼和舊檔案都保持不變。請輸入私密金鑰密碼，並先匯出兩個金鑰的備份。</string>
     <string name="legacy_export_hint">供使用 NekoKEM 4.x 及更早版本的接收者使用，無法驗證簽章。</string>
+    <string name="action_export_legacy_private_key">匯出給 5.2 及更早版本的私密金鑰</string>
+    <string name="operation_export_legacy_private_key">匯出給 5.2 及更早版本的私密金鑰</string>
+    <string name="legacy_private_export_hint">NekoKEM 5.2 及更早版本打不開本機私密金鑰。這份副本使用舊格式，密碼不變，只用於把私密金鑰搬到舊版本。</string>
+    <string name="export_legacy_private_password_title">匯出給舊版本</string>
+    <string name="export_legacy_private_password_message">請輸入私密金鑰密碼。給 NekoKEM 5.2 及更早版本的副本使用同一個密碼保護。</string>
+    <string name="error_reason_legacy_private_key">這個私密金鑰使用 NekoKEM 5.2 及更早版本的格式。別人可以把這種檔案構造成能被多個密碼開啟，藉你輸入一次密碼判斷你的密碼是否在其中，所以它不能作為臨時私密金鑰開啟。如果這是你自己的私密金鑰，請用「匯入加密私鑰」匯入。</string>
     <string name="contact_verifies">身分金鑰 · 可驗證簽章</string>
     <string name="contact_legacy">舊版金鑰 · 無法驗證簽章</string>
     <string name="error_settings_save">無法儲存設定，先前的設定仍然有效。</string>

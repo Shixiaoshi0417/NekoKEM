@@ -190,8 +190,8 @@ Java_com_shixiaoshi0417_nekokem_nativecore_NativeBridge_nativeDecryptFile(
         goto cleanup;
     }
     {
-        /* The app does not yet tell its own key from imported ones, so every
-     * key is accepted as in NekoKEM 5.2; see docs/key-commitment.md. */
+        /* Only this device's own key is used here, which may still be
+         * NKPR v1 or v2; see docs/key-commitment.md. */
         NekoKEMVerifyPolicy own_key;
 
         memset(&own_key, 0, sizeof(own_key));

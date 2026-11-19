@@ -195,6 +195,9 @@ static int progress_callback_bridge(uint64_t processed_bytes,
     return should_continue == JNI_TRUE;
 }
 
+static jint signature_result_to_jni(int core_result,
+                                    const ProgressJniCallback *callback);
+
 static jint progress_result_to_jni(int core_result,
                                    const ProgressJniCallback *callback)
 {
@@ -363,6 +366,7 @@ Java_com_shixiaoshi0417_nekokem_nativecore_NativeBridge_nativeDecryptFileWithPro
     jstring output_path,
     jstring private_key_path,
     jbyteArray password_array,
+    jboolean own_key,
     jobject callback)
 {
     ProgressJniPath input = {0};
@@ -397,23 +401,26 @@ Java_com_shixiaoshi0417_nekokem_nativecore_NativeBridge_nativeDecryptFileWithPro
         goto cleanup;
     }
     {
-        /* The app does not yet tell its own key from imported ones, so every
-     * key is accepted as in NekoKEM 5.2; see docs/key-commitment.md. */
-        NekoKEMVerifyPolicy own_key;
+        /* NKPR v1 and v2 open only as this device's own key; a temporary
+         * private key may come from someone else. See
+         * docs/key-commitment.md. */
+        NekoKEMVerifyPolicy policy;
 
-        memset(&own_key, 0, sizeof(own_key));
-        own_key.struct_size = sizeof(own_key);
-        own_key.flags = NEKOKEM_VERIFY_LEGACY_PRIVATE_KEY;
+        memset(&policy, 0, sizeof(policy));
+        policy.struct_size = sizeof(policy);
+        policy.flags = own_key == JNI_TRUE ? NEKOKEM_VERIFY_LEGACY_PRIVATE_KEY
+                                           : 0U;
         core_result = nekokem_decrypt_file_verified_with_progress(
             input.value, output.value, private_path.value,
-            password, password_len, &own_key, NULL,
+            password, password_len, &policy, NULL,
             progress_callback_bridge, &progress);
         if (core_result != NEKOKEM_OPERATION_SUCCESS &&
-            core_result != NEKOKEM_OPERATION_CANCELLED) {
+            core_result != NEKOKEM_OPERATION_CANCELLED &&
+            core_result != NEKOKEM_ERROR_LEGACY_PRIVATE_KEY) {
             core_result = NEKOKEM_OPERATION_ERROR;
         }
     }
-    result = (int)progress_result_to_jni(core_result, &progress);
+    result = (int)signature_result_to_jni(core_result, &progress);
 
 cleanup:
     OPENSSL_clear_free(password, password_len);
@@ -570,7 +577,8 @@ static jint signature_result_to_jni(int core_result,
     if (callback->java_exception == 0 &&
         (core_result == NEKOKEM_ERROR_SIGNATURE_INVALID ||
          core_result == NEKOKEM_ERROR_SIGNATURE_REQUIRED ||
-         core_result == NEKOKEM_ERROR_SIGNER_NOT_TRUSTED)) {
+         core_result == NEKOKEM_ERROR_SIGNER_NOT_TRUSTED ||
+         core_result == NEKOKEM_ERROR_LEGACY_PRIVATE_KEY)) {
         return (jint)core_result;
     }
     return progress_result_to_jni(core_result, callback);
@@ -642,8 +650,8 @@ Java_com_shixiaoshi0417_nekokem_nativecore_NativeBridge_nativeEncryptFileSignedW
         goto cleanup;
     }
     options.struct_size = sizeof(options);
-    /* The app does not yet tell its own key from imported ones, so every
-     * key is accepted as in NekoKEM 5.2; see docs/key-commitment.md. */
+    /* The app signs only with this device's own key, which may still be
+     * NKPR v1 or v2; see docs/key-commitment.md. */
     options.flags = NEKOKEM_ENCRYPT_LEGACY_SENDER_KEY;
     options.original_name = original_name;
     options.sender_private_key_path = sign_path.value;
@@ -683,6 +691,7 @@ Java_com_shixiaoshi0417_nekokem_nativecore_NativeBridge_nativeDecryptFileVerifie
     jstring output_path,
     jstring private_key_path,
     jbyteArray password_array,
+    jboolean own_key,
     jobjectArray trusted_paths,
     jboolean require_signature,
     jstring signer_output_path,
@@ -755,11 +764,12 @@ Java_com_shixiaoshi0417_nekokem_nativecore_NativeBridge_nativeDecryptFileVerifie
         goto cleanup;
     }
     policy.struct_size = sizeof(policy);
-    /* The app does not yet tell its own key from imported ones, so every
-     * key is accepted as in NekoKEM 5.2; see docs/key-commitment.md. */
+    /* NKPR v1 and v2 open only as this device's own key; see
+     * docs/key-commitment.md. */
     policy.flags = (require_signature == JNI_TRUE
                         ? NEKOKEM_VERIFY_REQUIRE_SIGNATURE : 0U) |
-                   NEKOKEM_VERIFY_LEGACY_PRIVATE_KEY;
+                   (own_key == JNI_TRUE ? NEKOKEM_VERIFY_LEGACY_PRIVATE_KEY
+                                        : 0U);
     policy.trusted_signer_paths = count > 0 ? (const char *const *)trusted_values : NULL;
     policy.trusted_signer_count = (size_t)count;
     policy.signer_public_key_output_path = signer_output.value;

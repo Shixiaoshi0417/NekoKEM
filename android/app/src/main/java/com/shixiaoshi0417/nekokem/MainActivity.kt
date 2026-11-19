@@ -36,6 +36,7 @@ import androidx.compose.ui.unit.dp
 import com.shixiaoshi0417.nekokem.files.PageCache
 import com.shixiaoshi0417.nekokem.files.PreparedDecryption
 import com.shixiaoshi0417.nekokem.files.PreparedEncryption
+import com.shixiaoshi0417.nekokem.files.PreparedKeyExport
 import com.shixiaoshi0417.nekokem.files.SafFileWorkflow
 import com.shixiaoshi0417.nekokem.files.SaveDocumentContract
 import com.shixiaoshi0417.nekokem.files.SelectedDocument
@@ -47,6 +48,7 @@ import com.shixiaoshi0417.nekokem.files.encryptedDocumentRequest
 import com.shixiaoshi0417.nekokem.files.encryptedPrivateKeyExportRequest
 import com.shixiaoshi0417.nekokem.files.publicKeyExportRequest
 import com.shixiaoshi0417.nekokem.files.legacyPublicKeyExportRequest
+import com.shixiaoshi0417.nekokem.files.legacyPrivateKeyExportRequest
 import com.shixiaoshi0417.nekokem.keys.SignatureReport
 import com.shixiaoshi0417.nekokem.ui.SignatureSettings
 import com.shixiaoshi0417.nekokem.ui.SignatureSettingsStore
@@ -169,6 +171,7 @@ private enum class PendingOutputAction {
     EXPORT_PUBLIC_KEY,
     EXPORT_PRIVATE_KEY,
     EXPORT_LEGACY_PUBLIC_KEY,
+    EXPORT_LEGACY_PRIVATE_KEY,
 }
 
 private enum class PendingKeyImport {
@@ -192,6 +195,7 @@ private enum class PasswordPrompt {
     DECRYPT_FILE,
     SIGN_ENCRYPTION,
     UPGRADE_KEY,
+    EXPORT_LEGACY_PRIVATE_KEY,
 }
 
 private enum class DeleteTarget(
@@ -285,6 +289,7 @@ private fun NekoKEMRoute(
         mutableStateOf<TemporaryPublicKey?>(null)
     }
     var preparedEncryption by remember { mutableStateOf<PreparedEncryption?>(null) }
+    var preparedKeyExport by remember { mutableStateOf<PreparedKeyExport?>(null) }
     var encryptionPreparationProgress by remember {
         mutableStateOf<OperationProgressSnapshot?>(null)
     }
@@ -897,6 +902,15 @@ private fun NekoKEMRoute(
                     }
                 }
 
+                PendingOutputAction.EXPORT_LEGACY_PRIVATE_KEY -> {
+                    val abandoned = preparedKeyExport
+                    preparedKeyExport = null
+                    scope.launch {
+                        pageWork { fileWorkflow.discardKeyExport(abandoned) }
+                        showSnackbar(R.string.snackbar_operation_cancelled)
+                    }
+                }
+
                 PendingOutputAction.EXPORT_PUBLIC_KEY,
                 PendingOutputAction.EXPORT_PRIVATE_KEY,
                 PendingOutputAction.EXPORT_LEGACY_PUBLIC_KEY,
@@ -1001,6 +1015,24 @@ private fun NekoKEMRoute(
                 ) {
                     destinationName = fileWorkflow.describe(destination).displayName
                     fileWorkflow.exportEncryptedPrivateKey(destination)
+                }
+            }
+
+            PendingOutputAction.EXPORT_LEGACY_PRIVATE_KEY -> {
+                val prepared = preparedKeyExport
+                preparedKeyExport = null
+                runKeyOperation(
+                    operationResource = R.string.operation_export_legacy_private_key,
+                    completionDetails = {
+                        keyCompletionDetails(destinationName)
+                    },
+                ) {
+                    destinationName = fileWorkflow.describe(destination).displayName
+                    if (prepared == null) {
+                        NativeBridge.RESULT_INVALID_ARGUMENT
+                    } else {
+                        fileWorkflow.commitKeyExport(prepared, destination)
+                    }
                 }
             }
         }
@@ -1258,6 +1290,7 @@ private fun NekoKEMRoute(
             PasswordPrompt.DECRYPT_FILE -> R.string.decrypt_password_title
             PasswordPrompt.SIGN_ENCRYPTION -> R.string.sign_password_title
             PasswordPrompt.UPGRADE_KEY -> R.string.upgrade_password_title
+            PasswordPrompt.EXPORT_LEGACY_PRIVATE_KEY -> R.string.export_legacy_private_password_title
         }
         val message = when (prompt) {
             PasswordPrompt.CHECK_PRIVATE_KEY -> R.string.check_password_message
@@ -1268,6 +1301,7 @@ private fun NekoKEMRoute(
             PasswordPrompt.DECRYPT_FILE -> R.string.decrypt_password_message
             PasswordPrompt.SIGN_ENCRYPTION -> R.string.sign_password_message
             PasswordPrompt.UPGRADE_KEY -> R.string.upgrade_password_message
+            PasswordPrompt.EXPORT_LEGACY_PRIVATE_KEY -> R.string.export_legacy_private_password_message
         }
         val label = if (prompt == PasswordPrompt.DECRYPT_FILE) {
             R.string.decrypt_password_label
@@ -1445,6 +1479,32 @@ private fun NekoKEMRoute(
                         },
                     ) {
                         keyManager.upgradeToIdentityKeys(password.copyOf())
+                    }
+
+                    PasswordPrompt.EXPORT_LEGACY_PRIVATE_KEY -> {
+                        // The copy is written first, so the password is cleared
+                        // before the save dialog opens.
+                        running = true
+                        scope.launch {
+                            val outcome = try {
+                                pageWork { fileWorkflow.prepareLegacyPrivateKeyExport(password) }
+                            } catch (_: Exception) {
+                                null
+                            } finally {
+                                password.fill(0)
+                                running = false
+                            }
+                            if (outcome?.code == NativeBridge.RESULT_SUCCESS && outcome.prepared != null) {
+                                preparedKeyExport = outcome.prepared
+                                pendingOutputAction = PendingOutputAction.EXPORT_LEGACY_PRIVATE_KEY
+                                createOutputLauncher.launch(legacyPrivateKeyExportRequest())
+                            } else {
+                                reportFailure(
+                                    R.string.operation_export_legacy_private_key,
+                                    outcome?.code ?: LocalKeyManager.RESULT_STORAGE_ERROR,
+                                )
+                            }
+                        }
                     }
                 }
             },
@@ -2177,6 +2237,9 @@ private fun NekoKEMRoute(
                 pendingOutputAction = PendingOutputAction.EXPORT_LEGACY_PUBLIC_KEY
                 createOutputLauncher.launch(legacyPublicKeyExportRequest())
             },
+            onExportLegacyPrivateKey = {
+                passwordPrompt = PasswordPrompt.EXPORT_LEGACY_PRIVATE_KEY
+            },
             onUnsignedEncryptionChange = { enabled ->
                 // Turning signing off always asks first; turning it back on never does.
                 if (enabled) {
@@ -2256,6 +2319,7 @@ private fun resultReason(
         LocalKeyManager.RESULT_SIGNATURE_INVALID -> R.string.error_reason_signature_invalid
         LocalKeyManager.RESULT_SIGNATURE_REQUIRED -> R.string.error_reason_signature_required
         LocalKeyManager.RESULT_SIGNER_NOT_TRUSTED -> R.string.error_reason_signer_not_trusted
+        LocalKeyManager.RESULT_LEGACY_PRIVATE_KEY -> R.string.error_reason_legacy_private_key
         NativeBridge.RESULT_INVALID_ARGUMENT -> R.string.error_reason_invalid_argument
         NativeBridge.RESULT_ALLOCATION_ERROR -> R.string.error_reason_memory
         NativeBridge.RESULT_JAVA_EXCEPTION -> R.string.error_reason_jni
@@ -2279,6 +2343,7 @@ private fun resultReason(
             R.string.operation_export_public_key,
             R.string.operation_export_legacy_public_key,
             R.string.operation_export_private_key -> R.string.error_reason_export
+            R.string.operation_export_legacy_private_key -> R.string.error_reason_authentication
             R.string.operation_delete_public_key,
             R.string.operation_delete_private_key,
             R.string.operation_delete_contact,

@@ -261,6 +261,12 @@
     <string name="upgrade_password_title">Upgrade to an identity key</string>
     <string name="upgrade_password_message">Adds signing keys to this NekoKEM 4.x key pair. Its encryption keys, password and old files stay unchanged. Enter the private key password. Export a backup of both keys first.</string>
     <string name="legacy_export_hint">For recipients on NekoKEM 4.x and earlier. It cannot verify signatures.</string>
+    <string name="action_export_legacy_private_key">Export private key for 5.2 and earlier</string>
+    <string name="operation_export_legacy_private_key">Export private key for 5.2 and earlier</string>
+    <string name="legacy_private_export_hint">NekoKEM 5.2 and earlier cannot open this device’s private key. This copy uses the older format with the same password; use it only to move your key to an older version.</string>
+    <string name="export_legacy_private_password_title">Export for older versions</string>
+    <string name="export_legacy_private_password_message">Enter the private key password. The copy for NekoKEM 5.2 and earlier is protected by the same password.</string>
+    <string name="error_reason_legacy_private_key">This private key uses the format of NekoKEM 5.2 and earlier. Someone could build such a file to open under several passwords and learn from your attempt whether yours is one of them, so it is not opened as a temporary key. If it is your own key, import it with Import Encrypted Private Key.</string>
     <string name="contact_verifies">Identity key · verifies signatures</string>
     <string name="contact_legacy">Legacy key · cannot verify signatures</string>
     <string name="error_settings_save">The setting could not be saved. The previous setting is still in effect.</string>

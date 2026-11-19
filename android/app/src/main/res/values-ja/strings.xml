@@ -246,6 +246,12 @@
     <string name="upgrade_password_title">ID 鍵にアップグレード</string>
     <string name="upgrade_password_message">この NekoKEM 4.x の鍵ペアに署名鍵を追加します。暗号化鍵、パスワード、既存ファイルはそのままです。秘密鍵のパスワードを入力してください。先に両方の鍵のバックアップを書き出してください。</string>
     <string name="legacy_export_hint">NekoKEM 4.x 以前を使う受信者向けです。署名の検証には使えません。</string>
+    <string name="action_export_legacy_private_key">5.2 以前向けに秘密鍵を書き出す</string>
+    <string name="operation_export_legacy_private_key">5.2 以前向けの秘密鍵の書き出し</string>
+    <string name="legacy_private_export_hint">NekoKEM 5.2 以前はこの端末の秘密鍵を開けません。このコピーは旧形式で、パスワードは同じです。鍵を旧バージョンへ移すときだけ使ってください。</string>
+    <string name="export_legacy_private_password_title">旧バージョン向けに書き出す</string>
+    <string name="export_legacy_private_password_message">秘密鍵のパスワードを入力してください。NekoKEM 5.2 以前向けのコピーも同じパスワードで保護されます。</string>
+    <string name="error_reason_legacy_private_key">この秘密鍵は NekoKEM 5.2 以前の形式です。この形式のファイルは複数のパスワードで開けるように作れるため、1 回の入力からあなたのパスワードがその中にあるかを知られるおそれがあります。そのため一時的な秘密鍵としては開きません。自分の鍵なら「暗号化された秘密鍵をインポート」で取り込んでください。</string>
     <string name="contact_verifies">ID 鍵 · 署名を検証できます</string>
     <string name="contact_legacy">旧形式の鍵 · 署名を検証できません</string>
     <string name="error_settings_save">設定を保存できませんでした。以前の設定が引き続き有効です。</string>
