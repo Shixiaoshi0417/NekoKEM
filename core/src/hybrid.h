@@ -47,13 +47,16 @@ int hybrid_upgrade_to_identity(const char *public_path,
                                const unsigned char *password,
                                size_t password_len);
 /*
- * Rewrites an NKPR v2 identity key pair as NKPR v3 with the same keys and
- * password; the public file must hold this private key's four public keys.
+ * Unlocks an identity private key as the installation's own and checks that
+ * the public file holds its four public keys. With rewrite, the pair is then
+ * written again as NKPR v3 with the same keys and password; without it,
+ * nothing is written.
  */
 int hybrid_rewrite_identity_keys(const char *public_path,
                                  const char *private_path,
                                  const unsigned char *password,
-                                 size_t password_len);
+                                 size_t password_len,
+                                 int rewrite);
 /* Writes the key in output_path as NKPR v2 (identity) or v1 (two parts). */
 int hybrid_export_private_key_legacy(const char *private_path,
                                      const unsigned char *password,

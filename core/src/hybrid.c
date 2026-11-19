@@ -298,7 +298,8 @@ cleanup:
 int hybrid_rewrite_identity_keys(const char *public_path,
                                  const char *private_path,
                                  const unsigned char *password,
-                                 size_t password_len)
+                                 size_t password_len,
+                                 int rewrite)
 {
     HybridKeys keys = {0};
     HybridKeys public_keys = {0};
@@ -319,7 +320,8 @@ int hybrid_rewrite_identity_keys(const char *public_path,
         fprintf(stderr, file_message("The public key does not belong to this private key\n"));
         goto cleanup;
     }
-    success = write_identity_key_files(&keys, public_path, private_path,
+    success = rewrite == 0 ||
+              write_identity_key_files(&keys, public_path, private_path,
                                        password, password_len, 1);
 
 cleanup:

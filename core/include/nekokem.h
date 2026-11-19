@@ -325,8 +325,9 @@ NEKOKEM_API int nekokem_private_key_is_legacy(const char *private_key_path);
  * Rewrites the installation's own key pair as NKPR v3 with the same
  * password: an NKPR v2 key keeps its keys, an NKPR v1 key is upgraded to an
  * identity key first, as nekokem_upgrade_to_identity_keys() does. Both files
- * are replaced atomically under the pair lock. An NKPR v3 key is left as it
- * is and 1 is returned.
+ * are replaced atomically under the pair lock. An NKPR v3 key is not
+ * rewritten; its password and pair are still checked, so 1 always means the
+ * password is right and the public file belongs to the private key.
  */
 NEKOKEM_API int nekokem_update_private_key_format(
     const char *public_key_path,

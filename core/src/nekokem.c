@@ -293,30 +293,41 @@ int nekokem_internal_private_key_fingerprint(
     const char *private_key_path,
     const unsigned char *password,
     size_t password_len,
+    uint32_t flags,
     char *output,
     size_t output_size)
 {
     HybridKeys keys = {0};
+    int loaded;
     int success = 0;
 
     if (!valid_path(private_key_path) || password == NULL ||
         password_len == 0U || output == NULL ||
-        output_size < NEKOKEM_FINGERPRINT_STRING_SIZE) {
+        output_size < NEKOKEM_FINGERPRINT_STRING_SIZE ||
+        (flags & ~(uint32_t)NEKOKEM_PRIVATE_KEY_LEGACY) != 0U) {
         fprintf(stderr, file_message("Invalid private-key fingerprint argument\n"));
         goto cleanup;
     }
     output[0] = '\0';
-    /* Front ends ask for the fingerprint of the installation's own key. */
-    if (!nekokem_private_key_exists(private_key_path) ||
-        hybrid_load_protected_private_keys(
-            private_key_path, password, password_len, 1, &keys) != 1 ||
-        !fingerprint_hybrid_keys(&keys, output, output_size)) {
+    if (!nekokem_private_key_exists(private_key_path)) {
+        goto cleanup;
+    }
+    /* A temporary or imported key may come from someone else: the caller
+     * decides whether this is the installation's own key. */
+    loaded = hybrid_load_protected_private_keys(
+        private_key_path, password, password_len,
+        (flags & NEKOKEM_PRIVATE_KEY_LEGACY) != 0U, &keys);
+    if (loaded == HYBRID_LEGACY_KEY_REFUSED) {
+        success = NEKOKEM_ERROR_LEGACY_PRIVATE_KEY;
+        goto cleanup;
+    }
+    if (loaded != 1 || !fingerprint_hybrid_keys(&keys, output, output_size)) {
         goto cleanup;
     }
     success = 1;
 
 cleanup:
-    if (success == 0 && output != NULL && output_size > 0U) {
+    if (success != 1 && output != NULL && output_size > 0U) {
         output[0] = '\0';
     }
     hybrid_keys_cleanup(&keys);
@@ -361,15 +372,14 @@ int nekokem_update_private_key_format(const char *public_key_path,
     }
     version = header[4];
     secure_mem_clear(header, sizeof(header));
-    if (version == NKPR_VERSION_COMMITTED) {
-        return 1;
-    }
+    /* An NKPR v3 key is not written again, but the password and the pair
+     * are still checked, so success always means both are right. */
     return version == NKPR_VERSION
                ? hybrid_upgrade_to_identity(public_key_path, private_key_path,
                                             password, password_len)
-               : hybrid_rewrite_identity_keys(public_key_path,
-                                              private_key_path, password,
-                                              password_len);
+               : hybrid_rewrite_identity_keys(
+                     public_key_path, private_key_path, password,
+                     password_len, version != NKPR_VERSION_COMMITTED);
 }
 
 int nekokem_export_private_key_legacy(const char *private_key_path,

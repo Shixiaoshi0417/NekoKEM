@@ -224,9 +224,9 @@ Java_com_shixiaoshi0417_nekokem_nativecore_NativeBridge_nativePrivateKeyFingerpr
     if (status != PASSWORD_JNI_SUCCESS) {
         goto cleanup;
     }
-    if (!nekokem_internal_private_key_fingerprint(
+    if (nekokem_internal_private_key_fingerprint(
             private_path.value, password, password_len,
-            fingerprint, sizeof(fingerprint))) {
+            NEKOKEM_PRIVATE_KEY_LEGACY, fingerprint, sizeof(fingerprint)) != 1) {
         goto cleanup;
     }
     result = (*env)->NewStringUTF(env, fingerprint);
