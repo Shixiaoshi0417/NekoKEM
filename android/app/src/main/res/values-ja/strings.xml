@@ -253,9 +253,12 @@
     <string name="export_legacy_private_password_message">秘密鍵のパスワードを入力してください。NekoKEM 5.2 以前向けのコピーも同じパスワードで保護されます。</string>
     <string name="error_reason_legacy_private_key">この秘密鍵は NekoKEM 5.2 以前の形式です。この形式のファイルは複数のパスワードで開けるように作れるため、1 回の入力からあなたのパスワードがその中にあるかを知られるおそれがあります。そのため一時的な秘密鍵としては開きません。自分の鍵なら「暗号化された秘密鍵をインポート」で取り込んでください。</string>
     <string name="legacy_import_title">古い NekoKEM の秘密鍵</string>
-    <string name="legacy_import_v2_message">この秘密鍵は NekoKEM 5.2 以前の形式です。この形式のファイルは複数のパスワードで開けるように作れるため、1 回の入力からあなたのパスワードがその中にあるかを知られるおそれがあります。古い NekoKEM から自分で書き出した鍵の場合だけインポートしてください。インポート後は現在の形式に書き換えます。鍵、パスワード、フィンガープリントは変わりません。</string>
+    <string name="legacy_import_v2_message">この秘密鍵は NekoKEM 5.2 以前の形式です。この形式のファイルは複数のパスワードで開けるように作れるため、1 回の入力からあなたのパスワードがその中にあるかを知られるおそれがあります。古い NekoKEM から自分で書き出した鍵の場合だけインポートしてください。インポート後、対応する ID 公開鍵が端末にあれば現在の形式に書き換えます。鍵、パスワード、フィンガープリントは変わりません。</string>
     <string name="legacy_import_v1_message">この秘密鍵は NekoKEM 4.x のものです。この形式のファイルは複数のパスワードで開けるように作れるため、1 回の入力からあなたのパスワードがその中にあるかを知られるおそれがあります。自分の鍵の場合だけインポートしてください。アップグレードすると署名鍵を追加して現在の形式で保存します。公開鍵とフィンガープリントが変わるので、新しい公開鍵を連絡先に送ってください。アップグレードしない場合は古い形式のままで、署名できません。</string>
     <string name="legacy_import_v1_needs_public">アップグレードには、この秘密鍵に対応する公開鍵が端末にある必要があります。先に公開鍵をインポートするか、アップグレードせずにインポートして後で「鍵をアップグレード」を使ってください。</string>
+    <string name="legacy_import_v1_upgrade_note">対応する公開鍵がすでに端末にあるので、すぐにアップグレードできます。</string>
+    <string name="legacy_import_v1_other_pair">この端末にはすでに ID 鍵ペアがあり、4.x の秘密鍵はそのペアになれません。この鍵をここで使うには、先に現在の鍵ペアを削除してから、この鍵の公開鍵と秘密鍵をインポートしてください。</string>
+    <string name="error_reason_imported_not_upgraded">秘密鍵は NekoKEM 4.x の形式でインポートしましたが、アップグレードに失敗しました。「鍵をアップグレード」でもう一度試してください。</string>
     <string name="legacy_import_keep_title">アップグレードせずにインポートしますか？</string>
     <string name="legacy_import_keep_message">この鍵は NekoKEM 4.x の形式のままで、鍵コミットメントがなく、署名もできません。自分の鍵の場合だけインポートしてください。後で「鍵をアップグレード」でアップグレードできます。</string>
     <string name="action_legacy_import">インポート</string>

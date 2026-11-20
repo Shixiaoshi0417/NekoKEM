@@ -267,9 +267,12 @@
     <string name="export_legacy_private_password_message">请输入私钥密码。给 NekoKEM 5.2 及更早版本的副本使用同一个密码保护。</string>
     <string name="error_reason_legacy_private_key">这个私钥使用 NekoKEM 5.2 及更早版本的格式。别人可以把这种文件构造成能被多个密码打开，借你输入一次密码判断你的密码是否在其中，所以它不能作为临时私钥打开。如果这是你自己的私钥，请用「导入加密私钥」导入。</string>
     <string name="legacy_import_title">来自旧版 NekoKEM 的私钥</string>
-    <string name="legacy_import_v2_message">这个私钥使用 NekoKEM 5.2 及更早版本的格式。别人可以把这种文件构造成能被多个密码打开，借你输入一次密码判断你的密码是否在其中，所以只有当它是你自己从旧版 NekoKEM 导出的私钥时才导入。导入后会改写为当前格式，密钥、密码和指纹都不变。</string>
+    <string name="legacy_import_v2_message">这个私钥使用 NekoKEM 5.2 及更早版本的格式。别人可以把这种文件构造成能被多个密码打开，借你输入一次密码判断你的密码是否在其中，所以只有当它是你自己从旧版 NekoKEM 导出的私钥时才导入。导入后，设备上有它对应的身份公钥时会改写为当前格式，密钥、密码和指纹都不变。</string>
     <string name="legacy_import_v1_message">这个私钥来自 NekoKEM 4.x。别人可以把这种文件构造成能被多个密码打开，借你输入一次密码判断你的密码是否在其中，所以只有当它是你自己的私钥时才导入。升级会添加签名密钥并存为当前格式，公钥和指纹会改变，之后请把新公钥发给联系人。不升级则保持旧格式，无法签名。</string>
     <string name="legacy_import_v1_needs_public">升级需要设备上有这个私钥对应的公钥。请先导入公钥，或者先不升级导入，之后再用「升级密钥」升级。</string>
+    <string name="legacy_import_v1_upgrade_note">设备上已有它对应的公钥，可以立即升级。</string>
+    <string name="legacy_import_v1_other_pair">这台设备已有身份密钥对，4.x 的私钥不可能与它配对。要在这里使用这个私钥，请先删除当前密钥对，再导入它的公钥和私钥。</string>
+    <string name="error_reason_imported_not_upgraded">私钥已按 NekoKEM 4.x 的格式导入，但升级失败。请用「升级密钥」重试。</string>
     <string name="legacy_import_keep_title">不升级直接导入？</string>
     <string name="legacy_import_keep_message">这个私钥会保持 NekoKEM 4.x 的格式，没有密钥承诺，也无法签名。只有当它是你自己的私钥时才导入；之后可以用「升级密钥」升级。</string>
     <string name="action_legacy_import">导入</string>

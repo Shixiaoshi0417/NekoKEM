@@ -953,7 +953,6 @@ class SafFileWorkflow(
         )
     }
 
-    /** Takes ownership of [password] and clears it before returning. */
     /**
      * The NKPR version of a private key to import, from its header alone (no
      * password): 1 or 2 for NekoKEM 5.2 and earlier, 3 for the current format,
@@ -979,6 +978,10 @@ class SafFileWorkflow(
         0
     }
 
+    /**
+     * Takes ownership of [password] and clears it before returning. [legacy]
+     * is the user's answer about an older format; see [LegacyImport].
+     */
     fun importEncryptedPrivateKey(
         source: Uri,
         password: ByteArray,

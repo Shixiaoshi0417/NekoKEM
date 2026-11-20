@@ -970,7 +970,10 @@ class LocalKeyManager internal constructor(
                     }
                     if (result == NativeBridge.RESULT_SUCCESS) {
                         if (legacy == LegacyImport.UPGRADE) {
-                            result = upgradeToIdentityKeys(rewrite.copyOf())
+                            // The import itself stands; only the upgrade is reported.
+                            if (upgradeToIdentityKeys(rewrite.copyOf()) != NativeBridge.RESULT_SUCCESS) {
+                                result = RESULT_IMPORTED_NOT_UPGRADED
+                            }
                         } else {
                             updateOwnKeyFormat(rewrite)
                         }
@@ -1419,6 +1422,9 @@ class LocalKeyManager internal constructor(
          * was opened or imported.
          */
         const val RESULT_LEGACY_IMPORT_UNCONFIRMED = -34
+
+        /** A 4.x private key was imported, but upgrading it to an identity key failed. */
+        const val RESULT_IMPORTED_NOT_UPGRADED = -35
 
         fun signatureCode(code: Int): Int = when (code) {
             NativeBridge.RESULT_SIGNATURE_INVALID -> RESULT_SIGNATURE_INVALID

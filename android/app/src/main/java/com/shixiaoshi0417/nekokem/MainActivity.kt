@@ -1919,21 +1919,49 @@ private fun NekoKEMRoute(
         // Asked before the password: such a file could be built to open under
         // several passwords, so only the user's own exported key belongs here.
         val canUpgrade = keyState.fingerprint != null && !keyState.canSign
+        // A 4.x private key cannot belong to an identity key pair already here.
+        val otherPair = legacyVersion == 1 && keyState.canSign
+        val keepOrCancel: @Composable () -> Unit = {
+            if (legacyVersion == 1) {
+                DialogButton(
+                    text = stringResource(R.string.action_legacy_keep),
+                    onClick = {
+                        legacyImportVersion = 0
+                        confirmLegacyKeep = true
+                    },
+                )
+            } else {
+                DialogButton(
+                    text = stringResource(R.string.action_cancel),
+                    onClick = { cancelPrivateImport() },
+                )
+            }
+        }
         AppAlertDialog(
             onDismissRequest = { cancelPrivateImport() },
             title = { Text(stringResource(R.string.legacy_import_title)) },
             text = {
                 Text(
                     if (legacyVersion == 1) {
-                        stringResource(R.string.legacy_import_v1_message) +
-                            if (canUpgrade) "" else "\n\n" + stringResource(R.string.legacy_import_v1_needs_public)
+                        stringResource(R.string.legacy_import_v1_message) + "\n\n" + stringResource(
+                            when {
+                                otherPair -> R.string.legacy_import_v1_other_pair
+                                canUpgrade -> R.string.legacy_import_v1_upgrade_note
+                                else -> R.string.legacy_import_v1_needs_public
+                            },
+                        )
                     } else {
                         stringResource(R.string.legacy_import_v2_message)
                     },
                 )
             },
             confirmButton = {
-                if (legacyVersion == 1) {
+                if (otherPair) {
+                    DialogButton(
+                        text = stringResource(R.string.action_cancel),
+                        onClick = { cancelPrivateImport() },
+                    )
+                } else if (legacyVersion == 1) {
                     DialogButton(
                         text = stringResource(R.string.action_legacy_upgrade),
                         enabled = canUpgrade,
@@ -1954,22 +1982,7 @@ private fun NekoKEMRoute(
                     )
                 }
             },
-            dismissButton = {
-                if (legacyVersion == 1) {
-                    DialogButton(
-                        text = stringResource(R.string.action_legacy_keep),
-                        onClick = {
-                            legacyImportVersion = 0
-                            confirmLegacyKeep = true
-                        },
-                    )
-                } else {
-                    DialogButton(
-                        text = stringResource(R.string.action_cancel),
-                        onClick = { cancelPrivateImport() },
-                    )
-                }
-            },
+            dismissButton = if (otherPair) null else keepOrCancel,
         )
     }
 
@@ -2465,6 +2478,7 @@ private fun resultReason(
         LocalKeyManager.RESULT_SIGNER_NOT_TRUSTED -> R.string.error_reason_signer_not_trusted
         LocalKeyManager.RESULT_LEGACY_PRIVATE_KEY -> R.string.error_reason_legacy_private_key
         LocalKeyManager.RESULT_LEGACY_IMPORT_UNCONFIRMED -> R.string.error_reason_legacy_import_changed
+        LocalKeyManager.RESULT_IMPORTED_NOT_UPGRADED -> R.string.error_reason_imported_not_upgraded
         NativeBridge.RESULT_INVALID_ARGUMENT -> R.string.error_reason_invalid_argument
         NativeBridge.RESULT_ALLOCATION_ERROR -> R.string.error_reason_memory
         NativeBridge.RESULT_JAVA_EXCEPTION -> R.string.error_reason_jni
