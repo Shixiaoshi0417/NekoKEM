@@ -25,6 +25,7 @@ PACKAGES = (
     'app-release.apk',
     'NekoKEM-Windows-GUI.zip',
     'NekoKEM-Windows-GUI.msi',
+    'NekoKEM-Windows-GUI.exe',
     'NekoKEM-windows-x86_64.zip',
     'NekoKEM-macos-arm64.tar.gz',
     'NekoKEM-macos-arm64-GUI.zip',
@@ -87,7 +88,7 @@ def sums_text(hashes):
 
 
 def collect(artifacts, output):
-    """Copy the 17 packages into a new directory and add SHA256SUMS.txt."""
+    """Copy the 18 packages into a new directory and add SHA256SUMS.txt."""
     output = Path(output)
     output.mkdir(parents=True)
     hashes = {}
@@ -231,7 +232,7 @@ def build_records(language, source, ci_run, release_run, hashes):
 
 
 def fill_notes(notes, source, ci_run, release_run, hashes):
-    require(sorted(hashes) == sorted(PACKAGES), 'Release notes must list the 17 packages')
+    require(sorted(hashes) == sorted(PACKAGES), 'Release notes must list the 18 packages')
     require(notes.count(ZH_PLACEHOLDER) == 1 and notes.count(EN_PLACEHOLDER) == 1,
             'Release notes need each build-record placeholder exactly once')
     notes = notes.replace(ZH_PLACEHOLDER, build_records('zh', source, ci_run, release_run, hashes))

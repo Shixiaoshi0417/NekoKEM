@@ -1066,17 +1066,18 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Screenshots failed' }
           $count = (Get-ChildItem build\screenshots -Filter *.png | Where-Object Length -gt 0).Count
           if ($count -lt 40) { throw "Only $count screenshots" }
-      - name: Build the application folder and the MSI installer
+      - name: Build the application folder and the MSI and EXE installers
         shell: pwsh
         working-directory: desktop-compose
         run: |
           $ErrorActionPreference = 'Stop'
-          .\gradlew.bat --no-daemon createDistributable packageMsi
+          .\gradlew.bat --no-daemon createDistributable packageMsi packageExe
           if ($LASTEXITCODE -ne 0) { throw 'Packaging failed' }
           # The same command the Release workflow runs: licences, the bridge and build records.
           $msi = (Get-ChildItem build\compose\binaries\main\msi\*.msi | Select-Object -First 1).FullName
+          $exe = (Get-ChildItem build\compose\binaries\main\exe\*.exe | Select-Object -First 1).FullName
           python ..\desktop\scripts\package-desktop.py windows --app build\compose\binaries\main\app\NekoKEM `
-            --msi $msi --output (Join-Path $env:RUNNER_TEMP 'windows-gui') --source-sha $env:GITHUB_SHA
+            --msi $msi --exe $exe --output (Join-Path $env:RUNNER_TEMP 'windows-gui') --source-sha $env:GITHUB_SHA
           if ($LASTEXITCODE -ne 0) { throw 'Package checks failed' }
           $out = Join-Path $env:RUNNER_TEMP 'compose-windows'
           New-Item -ItemType Directory -Force $out | Out-Null
@@ -1122,6 +1123,39 @@ jobs:
             Get-Content "$out\startup-out.log", "$out\startup-err.log"
             throw 'The window did not open'
           }
+          Get-Process -Name NekoKEM -ErrorAction SilentlyContinue | Stop-Process
+      - name: Install with the EXE installer and verify the installed window opens
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $out = Join-Path $env:RUNNER_TEMP 'compose-windows'
+          $installer = Join-Path $env:RUNNER_TEMP 'windows-gui\NekoKEM-Windows-GUI.exe'
+          # The installer passes its arguments on to msiexec, so it installs silently for all users.
+          $setup = Start-Process -FilePath $installer -ArgumentList '/quiet', '/norestart', '/log', "`"$out\exe-install.log`"" -PassThru -Wait
+          if ($setup.ExitCode -ne 0) {
+            Get-Content "$out\exe-install.log" -ErrorAction SilentlyContinue | Select-Object -Last 60
+            throw "The EXE installer exited with $($setup.ExitCode)"
+          }
+          $installed = Join-Path $env:ProgramFiles 'NekoKEM'
+          if (!(Test-Path "$installed\NekoKEM.exe")) { throw "NekoKEM.exe is not in $installed" }
+          # The installed bridge is the one the folder package carries.
+          $folder = 'desktop-compose\build\compose\binaries\main\app\NekoKEM\app\resources\nekokem_native.dll'
+          if ((Get-FileHash "$installed\app\resources\nekokem_native.dll").Hash -ne (Get-FileHash $folder).Hash) {
+            throw 'The installed bridge differs from the application folder'
+          }
+          $env:LOCALAPPDATA = Join-Path $env:RUNNER_TEMP 'compose-windows-installed-config'
+          New-Item -ItemType Directory -Force $env:LOCALAPPDATA | Out-Null
+          $process = Start-Process -FilePath "$installed\NekoKEM.exe" -PassThru
+          $shown = $false
+          foreach ($attempt in 1..60) {
+            Start-Sleep -Seconds 1
+            if (Get-Process -Name NekoKEM -ErrorAction SilentlyContinue | Where-Object MainWindowTitle -eq 'NekoKEM') { $shown = $true; break }
+            $process.Refresh()
+            if ($process.HasExited -and !(Get-Process -Name NekoKEM -ErrorAction SilentlyContinue)) {
+              throw "The installed application exited with $($process.ExitCode)"
+            }
+          }
+          if (!$shown) { throw 'The installed window did not open' }
           Get-Process -Name NekoKEM -ErrorAction SilentlyContinue | Stop-Process
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: always()

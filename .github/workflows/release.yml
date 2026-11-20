@@ -238,12 +238,12 @@ jobs:
             --openssl-license "$env:RUNNER_TEMP\windows-cli\OPENSSL-LICENSE.txt" `
             --target "$env:GITHUB_WORKSPACE\desktop-compose\native\windows-x64"
           if ($LASTEXITCODE -ne 0) { throw 'Cannot prepare the application resources' }
-      - name: Build the application folder and the MSI installer
+      - name: Build the application folder and the MSI and EXE installers
         shell: pwsh
         working-directory: desktop-compose
         run: |
           $ErrorActionPreference = 'Stop'
-          .\gradlew.bat --no-daemon createDistributable packageMsi
+          .\gradlew.bat --no-daemon createDistributable packageMsi packageExe
           if ($LASTEXITCODE -ne 0) { throw 'Packaging failed' }
       - name: Package unsigned Windows CLI
         shell: pwsh
@@ -265,8 +265,9 @@ jobs:
         run: |
           $ErrorActionPreference = 'Stop'
           $msi = (Get-ChildItem build\compose\binaries\main\msi\*.msi | Select-Object -First 1).FullName
+          $exe = (Get-ChildItem build\compose\binaries\main\exe\*.exe | Select-Object -First 1).FullName
           & '${{ steps.python.outputs.python-path }}' ..\desktop\scripts\package-desktop.py windows --app build\compose\binaries\main\app\NekoKEM `
-            --msi $msi --output (Join-Path $env:RUNNER_TEMP 'windows-gui') --source-sha $env:GITHUB_SHA
+            --msi $msi --exe $exe --output (Join-Path $env:RUNNER_TEMP 'windows-gui') --source-sha $env:GITHUB_SHA
           if ($LASTEXITCODE -ne 0) { throw 'Package checks failed' }
           Remove-Item $env:TEMP -Recurse -Force
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
@@ -275,6 +276,7 @@ jobs:
           path: |
             ${{ runner.temp }}/windows-gui/NekoKEM-Windows-GUI.zip
             ${{ runner.temp }}/windows-gui/NekoKEM-Windows-GUI.msi
+            ${{ runner.temp }}/windows-gui/NekoKEM-Windows-GUI.exe
             ${{ runner.temp }}/windows-gui/gui-SHA256SUMS.txt
           compression-level: 0
           retention-days: 14
@@ -440,7 +442,7 @@ jobs:
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           path: ${{ runner.temp }}/release-artifacts
-      # The same selection the Publish workflow uploads: the 17 packages and
+      # The same selection the Publish workflow uploads: the 18 packages and
       # their SHA256SUMS.txt, never the encrypted signing recovery envelope.
       - name: Select exactly the public packages
         run: python3 .github/scripts/release_assets.py collect "$RUNNER_TEMP/release-artifacts" "$RUNNER_TEMP/public"
