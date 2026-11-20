@@ -8,10 +8,7 @@
     "--share=ipc",
     "--socket=x11",
     "--device=dri",
-    "--share=network",
-    "--filesystem=home",
-    "--filesystem=/media",
-    "--filesystem=/run/media"
+    "--share=network"
   ],
   "modules": [
     {

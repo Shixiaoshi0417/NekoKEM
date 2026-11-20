@@ -193,7 +193,7 @@ flatpak run io.github.shixiaoshi0417.NekoKEM
 flatpak run --command=nekokem io.github.shixiaoshi0417.NekoKEM --help
 ```
 
-在发布单文件包之前，也可以用仓库中的 [`linux/flatpak`](linux/flatpak/README.md) 清单从已发布的 v5.2.0 归档自行构建。沙盒可读写主目录和 `/media`、`/run/media` 下的移动存储，可联网（仅用于检查更新），图形走 X11（Wayland 下经 XWayland）。设置、通讯录和语言保存在 `~/.var/app/io.github.shixiaoshi0417.NekoKEM/config/nekokem`，与 DEB/RPM 版的 `~/.config/nekokem` 分开。中日韩字体沿用系统已安装的字体。清单同样固定指向已发布版本，发布后由 `scripts/update_flatpak_manifest.py <版本>` 更新；CI 在两种架构上用本次构建的归档打包、安装，以中英文启动 GUI 确认窗口打开。上架 Flathub 需要维护者本人提交，步骤见 [linux/flatpak/README.md](linux/flatpak/README.md)。
+仓库中的 [`linux/flatpak`](linux/flatpak/README.md) 清单从已发布的归档构建，文件选择框需要 5.2.0 之后的版本，因此清单要在下一个版本发布后才能直接构建和上架。沙盒不开放任何文件系统权限：要处理的文件、密钥文件和解密目录都在桌面的文件选择框（xdg-desktop-portal）中选择，应用只能访问选中的文件和目录；新生成和升级的密钥先在沙盒内的私有目录里写好，再复制到选定位置。沙盒内的 `nekokem` 命令行只能访问自己的数据目录，处理其他文件时需临时授权目录（如 `--filesystem=xdg-documents`）或改用静态命令行归档。沙盒可联网（仅用于检查更新），图形走 X11（Wayland 下经 XWayland）。设置、通讯录和语言保存在 `~/.var/app/io.github.shixiaoshi0417.NekoKEM/config/nekokem`，与 DEB/RPM 版的 `~/.config/nekokem` 分开。中日韩字体沿用系统已安装的字体。清单同样固定指向已发布版本，发布后由 `scripts/update_flatpak_manifest.py <版本>` 更新；CI 在两种架构上用本次构建的归档打包、安装，以中英文启动 GUI 确认窗口打开。上架 Flathub 需要维护者本人提交，步骤见 [linux/flatpak/README.md](linux/flatpak/README.md)。
 
 构建与原生 CI 基线为 Ubuntu 24.04，CI 另在同架构 Fedora 44 容器中安装并启动 RPM。应用自带 Java 运行时；运行需要 glibc 2.39 或更新版本，DEB/RPM 依赖 Noto Sans CJK 字体和 `curl`（检查更新）。OpenSSL 4.1.0 静态链接进桥接库并隐藏符号，保留完整 RELRO、立即绑定和不可执行栈。Linux 文件权限、认证后提交及取消清理沿用 CLI/Core；NKEM、NKPR、KDF 参数与 64 KiB 流式处理不变。详见 [桌面 GUI 文档](desktop/README.md)。
 

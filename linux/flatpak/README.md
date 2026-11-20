@@ -35,13 +35,26 @@ flatpak-builder --user --install --install-deps-from=flathub --force-clean \
 
 ## 沙盒 / Sandbox
 
-- `--filesystem=home`, `/media`, `/run/media`: the files to encrypt, decrypt and
-  sign, and key files, can be anywhere in the home folder or on removable media.
-  The GUI's file dialogs are GTK's, inside the sandbox.
+- No file system permission. Files to encrypt, decrypt and sign, key files and
+  the decryption folder are chosen in the desktop's file chooser through
+  `xdg-desktop-portal`; the app then sees only those files and folders (under
+  `/run/user/<uid>/doc/`), and the portal remembers them across restarts. New
+  and upgraded key pairs are written in a private folder inside the sandbox and
+  then copied to the chosen paths, because the portal's file system cannot lock
+  a key pair's folder.
 - `--share=network`: only the update check (one HTTPS request to GitHub through
   the runtime's `curl`). The release page opens through the desktop portal.
 - `--socket=x11`, `--share=ipc`, `--device=dri`: the Java/Compose window draws
   through X11 (XWayland on a Wayland desktop) with OpenGL when available.
+
+The `nekokem` command inside the Flatpak sees only its own data folder. To use
+it on other files, grant a folder for that run, for example
+`flatpak run --filesystem=xdg-documents --command=nekokem io.github.shixiaoshi0417.NekoKEM …`,
+or use the static CLI archive.
+
+The portal file chooser needs a release after 5.2.0: the 5.2.0 GUI uses Java's
+own dialogs, which see only the sandbox. Build the manifest, and submit it to
+Flathub, once it points at a later release.
 
 Settings, contacts and the language are in
 `~/.var/app/io.github.shixiaoshi0417.NekoKEM/config/nekokem`, apart from
@@ -66,7 +79,8 @@ Chinese.
 ## 上架 Flathub / Publishing on Flathub
 
 Flathub publishes only what its own maintainer submits; nothing in this
-repository does it. Once the screenshots are on `main`:
+repository does it. Once the screenshots are on `main` and the manifest points
+at a release after 5.2.0:
 
 1. Fork [flathub/flathub](https://github.com/flathub/flathub) and branch from
    its `new-pr` branch.
