@@ -6,8 +6,8 @@ and the update check.
 
 | System | App | Packages |
 |---|---|---|
-| Windows 10/11 x64 | Compose Multiplatform (`desktop-compose`) | `NekoKEM-Windows-GUI.msi` installer, `NekoKEM-Windows-GUI.zip` folder |
-| Linux x86_64 and ARM64 | Compose Multiplatform (`desktop-compose`) | `NekoKEM-linux-<arch>-GUI.deb`, `.rpm`, `.tar.gz` folder |
+| Windows 10/11 x64 | Compose Multiplatform (`desktop-compose`) | `NekoKEM-Windows-GUI.msi` and `.exe` installers, `NekoKEM-Windows-GUI.zip` folder |
+| Linux x86_64 and ARM64 | Compose Multiplatform (`desktop-compose`) | `NekoKEM-linux-<arch>-GUI.deb`, `.rpm`, `.tar.gz` folder, `.AppImage` |
 | macOS, Apple Silicon | SwiftUI (`macos/gui`) | `NekoKEM-macos-arm64-GUI.zip`, `.dmg` |
 
 The Windows and Linux app offers the Android app's two styles, MIUIX (the
@@ -129,7 +129,10 @@ decrypts, refused duplicates and recipient limits, and failures that name the co
 ## Install / 安装
 
 Windows: run the MSI, then open **NekoKEM** from the Start menu. Or unpack the
-ZIP anywhere and open `NekoKEM\NekoKEM.exe`.
+ZIP anywhere and open `NekoKEM\NekoKEM.exe`. Releases after 5.2.0 also have
+`NekoKEM-Windows-GUI.exe`, an installer that carries the same MSI and installs the
+same app; it passes its arguments to `msiexec`, so `/quiet` installs silently.
+5.2.0 之后的版本另有 EXE 安装程序，双击安装，与 MSI 装的是同一个应用。
 
 Linux: use the package matching `uname -m` (`x86_64` is Debian `amd64`,
 `aarch64` is Debian `arm64`), then open **NekoKEM** from the application menu.
@@ -142,8 +145,19 @@ sudo dnf install ./NekoKEM-linux-x86_64-GUI.rpm     # Fedora
 tar -xzf NekoKEM-linux-x86_64-GUI.tar.gz && NekoKEM-linux-x86_64-GUI/bin/NekoKEM
 ```
 
-The DEB and RPM depend on Noto Sans CJK and curl; with the folder archive,
-install a Chinese, Japanese and Korean font and curl yourself.
+The DEB and RPM depend on Noto Sans CJK and curl; with the folder archive or
+the AppImage, install a Chinese, Japanese and Korean font and curl yourself.
+
+Releases after 5.2.0 also have an AppImage, one file that runs without
+installing. It mounts itself through FUSE and needs `fusermount3` (the `fuse3`
+package on Debian and Ubuntu); without FUSE, add `--appimage-extract-and-run`.
+
+```sh
+chmod +x NekoKEM-linux-x86_64-GUI.AppImage && ./NekoKEM-linux-x86_64-GUI.AppImage
+```
+
+5.2.0 之后的版本另有 AppImage：单个文件，`chmod +x` 后直接运行，不需要安装；需要 FUSE
+（`fuse3` 包），没有 FUSE 时加 `--appimage-extract-and-run`。字体和 curl 需要系统自行安装。
 
 macOS: open the DMG or unpack the ZIP and move `NekoKEM.app` to Applications.
 The app is ad-hoc signed, so the first launch needs **Open** from the context
@@ -157,7 +171,8 @@ workflow run exactly these steps. CI also checks the bridge with
 `cargo fmt --check` and `cargo clippy --all-targets -- -D warnings`, so run
 `cargo fmt` in `desktop/bridge` before committing.
 
-Linux, on the native architecture, with Rust, JDK 25, `fakeroot` and `rpm`:
+Linux, on the native architecture, with Rust, JDK 25, `fakeroot`, `rpm`,
+`squashfs-tools` and GnuPG:
 
 ```sh
 architecture=$(uname -m)
@@ -170,6 +185,12 @@ python3 desktop/scripts/package-desktop.py resources \
   --openssl-license "$NEKOKEM_OPENSSL_PREFIX/LICENSE.txt" \
   --target "desktop-compose/native/$resources"
 (cd desktop-compose && ./gradlew createDistributable packageDeb packageRpm)
+bash desktop/scripts/fetch-appimage-runtime.sh "$architecture" appimage-runtime
+python3 desktop/scripts/package-desktop.py linux --arch "$architecture" \
+  --app desktop-compose/build/compose/binaries/main/app/NekoKEM \
+  --deb desktop-compose/build/compose/binaries/main/deb/*.deb \
+  --rpm desktop-compose/build/compose/binaries/main/rpm/*.rpm \
+  --appimage-runtime appimage-runtime --output linux-gui --source-sha "$(git rev-parse HEAD)"
 ```
 
 Windows, with MSYS2 UCRT64 GCC, Rust for `x86_64-pc-windows-gnu` and JDK 25:
@@ -177,7 +198,7 @@ build OpenSSL and the CLI with `windows/scripts/build-windows-cli.sh`, build the
 bridge with `cargo build --locked --release --target x86_64-pc-windows-gnu`,
 copy `nekokem_native.dll` and the licences into `desktop-compose/native/windows-x64`
 with `package-desktop.py resources`, then run
-`gradlew.bat createDistributable packageMsi` in `desktop-compose`.
+`gradlew.bat createDistributable packageMsi packageExe` in `desktop-compose`.
 
 macOS, on an Apple Silicon Mac with the macOS 26 SDK and Rust:
 
@@ -190,7 +211,13 @@ bash macos/gui/scripts/build-app.sh /absolute/path/to/output
 `desktop/scripts/package-desktop.py linux|windows|macos` then checks the built
 app (the bridge's hardening and licences, versions, package dependencies, the
 macOS signature) and writes the public packages with `gui-SHA256SUMS.txt` and
-their build records.
+their build records. On Linux it also writes the AppImage: the application
+folder with a desktop entry, icon and `AppRun` as a zstd SquashFS image
+(`mksquashfs`), after the AppImage runtime. `fetch-appimage-runtime.sh` takes
+that runtime from a pinned release of AppImage's
+[type2-runtime](https://github.com/AppImage/type2-runtime) and accepts it only
+with a valid signature from the release key kept in `desktop/appimage` and the
+pinned SHA-256; the runtime's licence goes into the image.
 
 While developing the Compose app, `./gradlew run -Pnekokem.bridge=<library>`
 starts it and `./gradlew screenshots -Pnekokem.bridge=<library>` renders every
