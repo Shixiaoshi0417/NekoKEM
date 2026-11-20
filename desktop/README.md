@@ -137,7 +137,16 @@ same app; it passes its arguments to `msiexec`, so `/quiet` installs silently.
 Linux: use the package matching `uname -m` (`x86_64` is Debian `amd64`,
 `aarch64` is Debian `arm64`), then open **NekoKEM** from the application menu.
 The app installs to `/opt/nekokem`. Ubuntu 24.04 (glibc 2.39) is the build and
-test baseline; CI also installs the RPM on Fedora 44.
+test baseline; CI also installs the RPM on Fedora 44 and builds and installs
+the Arch Linux package.
+
+Arch Linux: `linux/arch/PKGBUILD` (`nekokem-bin`) repackages the release's CLI and
+GUI folder archives for pacman, with `noto-fonts-cjk` and `curl` as dependencies.
+Arch Linux 用 `linux/arch` 里的 PKGBUILD：
+
+```sh
+cd linux/arch && makepkg -si                         # Arch Linux, Arch Linux ARM
+```
 
 ```sh
 sudo apt install ./NekoKEM-linux-x86_64-GUI.deb     # Debian, Ubuntu

@@ -175,6 +175,15 @@ Linux GUI 支持 `x86_64` 与 `aarch64`（ARM64），与 Windows 使用同一个
 
 5.2.0 之后的版本每种架构还提供 `NekoKEM-linux-<架构>-GUI.AppImage`：单个文件，不需要安装或 root 权限，`chmod +x` 后直接运行。它通过 FUSE 挂载自身，系统需要 `fusermount3`（Debian/Ubuntu 的 `fuse3` 包）；没有 FUSE 时加 `--appimage-extract-and-run` 运行。与便携包一样，AppImage 不会带来中日韩字体和 `curl`，需要系统自行安装。文件开头的 AppImage 运行时取自 AppImage 项目 [type2-runtime](https://github.com/AppImage/type2-runtime) 的固定版本，构建时核对其发布签名和 SHA-256；CI 通过 FUSE 启动 AppImage 并确认窗口打开。v5.2.0 及更早的发布不含 AppImage。
 
+Arch Linux 使用仓库中的 [`linux/arch/PKGBUILD`](linux/arch/PKGBUILD)（包名 `nekokem-bin`）：它把已发布的静态 CLI 和 GUI 便携包重新打成 pacman 包，不在本机编译。GUI 装到 `/opt/nekokem`，同时提供 `nekokem`、`nekokem-gui` 命令和应用菜单项，并依赖 Arch 官方仓库的 `noto-fonts-cjk` 与 `curl`。x86_64 与 Arch Linux ARM 的 aarch64 都可用：
+
+```sh
+git clone --depth 1 https://github.com/Shixiaoshi0417/NekoKEM.git
+cd NekoKEM/linux/arch && makepkg -si
+```
+
+PKGBUILD 固定指向某个已发布版本并核对其 SHA-256，发布新版本后由 `scripts/update_arch_package.py <版本>` 更新版本号、校验值和 `.SRCINFO`（也可直接作为 AUR 包内容）。CI 在 archlinux 容器中用本次构建的归档执行 `makepkg`、`pacman -U` 安装，并以中英文启动 GUI 确认窗口打开。
+
 构建与原生 CI 基线为 Ubuntu 24.04，CI 另在同架构 Fedora 44 容器中安装并启动 RPM。应用自带 Java 运行时；运行需要 glibc 2.39 或更新版本，DEB/RPM 依赖 Noto Sans CJK 字体和 `curl`（检查更新）。OpenSSL 4.1.0 静态链接进桥接库并隐藏符号，保留完整 RELRO、立即绑定和不可执行栈。Linux 文件权限、认证后提交及取消清理沿用 CLI/Core；NKEM、NKPR、KDF 参数与 64 KiB 流式处理不变。详见 [桌面 GUI 文档](desktop/README.md)。
 
 v5.2.0 Release 包含上述两种架构的全部 Linux GUI 安装包和便携包，现有静态 Linux CLI 包继续保留。原生窗口测试使用 X11 会话，不代表已验证所有 Linux 发行版或 Wayland 实机。

@@ -183,6 +183,15 @@ The Linux GUI supports `x86_64` and `aarch64` (ARM64) and is the same Compose Mu
 
 Releases after 5.2.0 also provide `NekoKEM-linux-<arch>-GUI.AppImage` for each architecture: a single file that runs without installation or root access after `chmod +x`. It mounts itself through FUSE, so the system needs `fusermount3` (the `fuse3` package on Debian/Ubuntu); without FUSE, run it with `--appimage-extract-and-run`. Like the portable archive, the AppImage brings no Chinese, Japanese and Korean fonts or `curl`; install them on the system. The AppImage runtime at the start of the file is a pinned release of the AppImage project's [type2-runtime](https://github.com/AppImage/type2-runtime), checked against its release signature and SHA-256 at build time; CI starts the AppImage through FUSE and checks that its window opens. Releases up to v5.2.0 have no AppImage.
 
+On Arch Linux, use [`linux/arch/PKGBUILD`](linux/arch/PKGBUILD) (package `nekokem-bin`). It repackages the published static CLI and GUI portable archives as a pacman package and compiles nothing. The GUI installs to `/opt/nekokem`, with the `nekokem` and `nekokem-gui` commands and an application menu entry, and depends on `noto-fonts-cjk` and `curl` from the official Arch repositories. It works on x86_64 and on aarch64 with Arch Linux ARM:
+
+```sh
+git clone --depth 1 https://github.com/Shixiaoshi0417/NekoKEM.git
+cd NekoKEM/linux/arch && makepkg -si
+```
+
+The PKGBUILD points at one published release and checks its SHA-256 digests. After each release, `scripts/update_arch_package.py <version>` updates its version, checksums and `.SRCINFO` (the directory can also serve as the AUR package). CI runs `makepkg` on this build's archives in an archlinux container, installs the result with `pacman -U`, and starts the GUI in English and Chinese to check that its window opens.
+
 Builds and native CI use Ubuntu 24.04, and CI also installs and starts the RPM in Fedora 44 containers of the same architecture. The app carries its own Java runtime; it requires glibc 2.39 or newer, and the DEB/RPM depend on Noto Sans CJK fonts and `curl` (for the update check). OpenSSL 4.1.0 is linked statically into the bridge library with hidden symbols, full RELRO, immediate binding and a non-executable stack. Linux file permissions, authenticated commit and cancellation cleanup follow the CLI/Core; NKEM, NKPR, KDF parameters and 64 KiB streaming are unchanged. See the [desktop GUI documentation](desktop/README.md).
 
 The v5.2.0 Release includes every Linux GUI installation and portable package for both architectures, alongside the existing static CLI packages. Native window tests use X11 and do not establish testing on every Linux distribution or a physical Wayland session.

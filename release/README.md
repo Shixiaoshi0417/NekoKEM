@@ -43,6 +43,11 @@ uploads artifacts to Actions. Publishing is a separate maintainer step:
    placeholders) into `main`, then wait for that commit's CI run.
 2. Run Release on `main` for the same commit.
 3. Run Publish: `gh workflow run publish.yml --ref main -f tag=v5.2.0 -f ci_run=<CI run ID> -f release_run=<Release run ID>`.
+4. Point the Arch Linux package at the published release:
+   `python3 scripts/update_arch_package.py 5.2.0` reads that release's
+   `SHA256SUMS.txt` and rewrites `linux/arch/PKGBUILD` and `linux/arch/.SRCINFO`;
+   commit the result. To publish on the AUR, copy `PKGBUILD`, `.SRCINFO` and
+   `nekokem.desktop` into the `nekokem-bin` AUR repository and push.
 
 Publish checks that both runs succeeded on the same `main` commit, that the CI
 run came from a push to `main` or a manual run and the Release run from a manual
