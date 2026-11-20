@@ -76,7 +76,7 @@ private struct KeysModePicker: View {
         })) {
             Text(state.t("keygen")).tag(0)
             Text(state.t("upgradeKey")).tag(1)
-            Text(state.t("exportLegacy")).tag(2)
+            Text(state.t("exportOlder")).tag(2)
             Text(state.t("fingerprintTab")).tag(3)
         }
         .pickerStyle(.segmented).labelsHidden().disabled(!state.editable)
@@ -309,12 +309,13 @@ private struct KeysPage: View {
                 else { PathInput(state: state, field: .keyPath, label: state.t("key")) }
             } else if state.keyMode == .export {
                 Picker("", selection: Binding(get: { state.exportPrivate ? 1 : 0 }, set: { state.changeExportPrivate($0 == 1) })) {
-                    Text(state.t("exportPublicTarget")).tag(0)
-                    Text(state.t("exportPrivateTarget")).tag(1)
+                    Text(state.t("exportPublicOption")).tag(0)
+                    Text(state.t("exportPrivateOption")).tag(1)
                 }
                 .pickerStyle(.segmented).labelsHidden().fixedSize().disabled(!state.editable)
                 if state.exportPrivate {
-                    Text(state.t("exportPrivateHint")).font(.callout).foregroundStyle(danger)
+                    Text(state.t("legacyPrivateHint")).font(.callout).foregroundStyle(.secondary)
+                    PathInput(state: state, field: .privatePath, label: state.t("privateKey"))
                     PathInput(state: state, field: .output, label: state.t("legacyPrivateOutput"))
                 } else {
                     PathInput(state: state, field: .keyPath, label: state.t("publicKey"))
@@ -327,6 +328,10 @@ private struct KeysPage: View {
                 if state.replaceOffered {
                     Toggle(state.t("replaceKeys"), isOn: $state.replace).disabled(!state.editable)
                     Text(state.t("replaceKeysHint")).font(.callout).foregroundStyle(danger)
+                }
+                if upgrade && state.legacyOffered {
+                    Toggle(state.t("legacyConfirm") + (state.legacyWait > 0 ? " (\(state.legacyWait))" : ""), isOn: $state.legacyConfirmed)
+                        .disabled(!state.editable || state.legacyWait > 0)
                 }
             }
             OperationFooter(state: state)

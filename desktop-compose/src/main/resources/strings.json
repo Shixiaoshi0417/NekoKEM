@@ -1031,6 +1031,62 @@
    "旧形式の公開鍵を書き出しました",
    "이전 형식 공개 키를 내보냈습니다"
   ],
+  "exportOlder": [
+   "For older versions",
+   "给旧版本",
+   "給舊版本",
+   "旧バージョン向け",
+   "이전 버전용"
+  ],
+  "exportPublicOption": [
+   "Public key for 4.x",
+   "给 4.x 的公钥",
+   "給 4.x 的公開金鑰",
+   "4.x 向けの公開鍵",
+   "4.x용 공개 키"
+  ],
+  "exportPrivateOption": [
+   "Private key for 5.2",
+   "给 5.2 的私钥",
+   "給 5.2 的私密金鑰",
+   "5.2 向けの秘密鍵",
+   "5.2용 개인 키"
+  ],
+  "exportLegacyPrivate": [
+   "Export private key for 5.2 and earlier",
+   "导出给 5.2 及更早版本的私钥",
+   "匯出給 5.2 及更早版本的私密金鑰",
+   "5.2 以前向けに秘密鍵を書き出す",
+   "5.2 이하용 개인 키 내보내기"
+  ],
+  "legacyPrivateOutput": [
+   "Save private key for 5.2",
+   "给 5.2 的私钥保存位置",
+   "給 5.2 的私密金鑰儲存位置",
+   "5.2 向け秘密鍵の保存先",
+   "5.2용 개인 키 저장 위치"
+  ],
+  "legacyPrivateHint": [
+   "NekoKEM 5.2 and earlier cannot open your private key. This copy uses the older format with the same password; use it only to move your key to an older version.",
+   "NekoKEM 5.2 及更早版本打不开你的私钥。这份副本使用旧格式，密码不变，只用于把私钥搬到旧版本。",
+   "NekoKEM 5.2 及更早版本打不開你的私密金鑰。這份副本使用舊格式，密碼不變，只用於把私密金鑰搬到舊版本。",
+   "NekoKEM 5.2 以前はあなたの秘密鍵を開けません。このコピーは旧形式で、パスワードは同じです。鍵を旧バージョンへ移すときだけ使ってください。",
+   "NekoKEM 5.2 이하는 내 개인 키를 열 수 없습니다. 이 사본은 이전 형식이고 암호는 같습니다. 키를 이전 버전으로 옮길 때만 쓰세요."
+  ],
+  "legacyPrivateExported": [
+   "Private key for 5.2 exported",
+   "给 5.2 的私钥已导出",
+   "給 5.2 的私密金鑰已匯出",
+   "5.2 向けの秘密鍵を書き出しました",
+   "5.2용 개인 키를 내보냈습니다"
+  ],
+  "legacy-private-key": [
+   "This private key uses the format of NekoKEM 5.2 and earlier. Someone could build such a file to open under several passwords and learn from your attempt whether yours is one of them, so only the private key set as yours in Settings may use it. If it is your own key, choose it there or rewrite it on the Upgrade key page.",
+   "这个私钥使用 NekoKEM 5.2 及更早版本的格式。别人可以把这种文件构造成能被多个密码打开，借你输入一次密码判断你的密码是否在其中，所以只有设置里的「我的私钥」可以使用这种格式。如果这是你自己的私钥，请在设置里选择它，或在「升级密钥」页面改写。",
+   "這個私密金鑰使用 NekoKEM 5.2 及更早版本的格式。別人可以把這種檔案構造成能被多個密碼開啟，藉你輸入一次密碼判斷你的密碼是否在其中，所以只有設定裡的「我的私密金鑰」可以使用這種格式。如果這是你自己的私密金鑰，請在設定裡選擇它，或在「升級金鑰」頁面改寫。",
+   "この秘密鍵は NekoKEM 5.2 以前の形式です。この形式のファイルは複数のパスワードで開けるように作れるため、1 回の入力からあなたのパスワードがその中にあるかを知られるおそれがあります。そのため、設定で自分の鍵として選んだ秘密鍵だけがこの形式を使えます。自分の鍵なら設定で選ぶか、「鍵をアップグレード」で書き換えてください。",
+   "이 개인 키는 NekoKEM 5.2 이하의 형식입니다. 이 형식의 파일은 여러 암호로 열리도록 만들 수 있어, 한 번의 입력으로 내 암호가 그중에 있는지 알려질 수 있습니다. 그래서 설정에서 내 키로 고른 개인 키만 이 형식을 쓸 수 있습니다. 내 키라면 설정에서 고르거나 「키 업그레이드」에서 다시 쓰세요."
+  ],
   "legacyKeyHint": [
    "This legacy key cannot sign or verify signatures. Its owner can upgrade it on the key page.",
    "此旧版密钥无法签名或验证签名，持有人可在密钥页面升级。",
@@ -1304,19 +1360,19 @@
    "パスワードをキーチェーンに保存できませんでした。",
    "비밀번호를 키체인에 저장하지 못했습니다."
   ],
-  "legacy-private-key": [
-   "This private key uses an older format. Only the key set as My private key in Settings may still use it; NekoKEM then rewrites it in the current format.",
-   "此私钥使用旧格式。只有在设置中设为「我的私钥」的密钥可以继续使用旧格式，NekoKEM 会随后将其改写为当前格式。",
-   "此私密金鑰使用舊格式。只有在設定中設為「我的私密金鑰」的金鑰可以繼續使用舊格式，NekoKEM 會隨後將其改寫為目前格式。",
-   "この秘密鍵は旧形式です。旧形式のまま使えるのは、設定で「自分の秘密鍵」にした鍵だけです。その鍵は NekoKEM が現在の形式に書き換えます。",
-   "이 개인 키는 이전 형식입니다. 설정에서 '내 개인 키'로 지정한 키만 이전 형식으로 계속 쓸 수 있으며, NekoKEM이 그 키를 현재 형식으로 다시 씁니다."
+  "legacy-unconfirmed": [
+   "This private key uses the format of NekoKEM 5.2 and earlier and is not the private key set as yours in Settings. Someone could build such a file to open under several passwords and learn from your attempt whether yours is one of them, so your password has not been used yet. Upgrade it only if it is your own key, exported from an older NekoKEM: once it can be ticked, tick “This is my own key, exported from an older NekoKEM” and press Upgrade key again. Afterwards NekoKEM 5.2 and earlier cannot open it; if you need a copy for them, export one under For older versions.",
+   "这个私钥使用 NekoKEM 5.2 及更早版本的格式，而且不是设置里的「我的私钥」。别人可以把这种文件构造成能被多个密码打开，借你输入一次密码判断你的密码是否在其中，所以还没有使用你的密码。只有当它是你自己从旧版导出的私钥时才升级：等「这是我自己从旧版 NekoKEM 导出的私钥」可以勾选后勾选，再点一次「升级密钥」。升级后 NekoKEM 5.2 及更早版本无法再打开它，需要时可在「给旧版本」里导出副本。",
+   "這個私密金鑰使用 NekoKEM 5.2 及更早版本的格式，而且不是設定裡的「我的私密金鑰」。別人可以把這種檔案構造成能被多個密碼開啟，藉你輸入一次密碼判斷你的密碼是否在其中，所以還沒有使用你的密碼。只有當它是你自己從舊版匯出的私密金鑰時才升級：等「這是我自己從舊版 NekoKEM 匯出的私密金鑰」可以勾選後勾選，再點一次「升級金鑰」。升級後 NekoKEM 5.2 及更早版本無法再開啟它，需要時可在「給舊版本」裡匯出副本。",
+   "この秘密鍵は NekoKEM 5.2 以前の形式で、設定で自分の鍵として選んだ秘密鍵でもありません。この形式のファイルは複数のパスワードで開けるように作れるため、1 回の入力からあなたのパスワードがその中にあるかを知られるおそれがあります。そのため、まだパスワードは使っていません。古い NekoKEM から自分で書き出した鍵の場合だけアップグレードしてください。「古い NekoKEM から自分で書き出した自分の鍵です」をチェックできるようになったらチェックし、もう一度「鍵をアップグレード」を押します。アップグレード後は NekoKEM 5.2 以前では開けません。必要なら「旧バージョン向け」でコピーを書き出せます。",
+   "이 개인 키는 NekoKEM 5.2 이하의 형식이며 설정에서 내 키로 고른 개인 키도 아닙니다. 이 형식의 파일은 여러 암호로 열리도록 만들 수 있어, 한 번의 입력으로 내 암호가 그중에 있는지 알려질 수 있으므로 아직 암호를 사용하지 않았습니다. 이전 NekoKEM에서 직접 내보낸 내 키일 때만 업그레이드하세요. 「이전 NekoKEM에서 직접 내보낸 내 키입니다」를 선택할 수 있게 되면 선택하고 「키 업그레이드」를 다시 누르세요. 업그레이드 후에는 NekoKEM 5.2 이하에서 열 수 없으며, 필요하면 「이전 버전용」에서 사본을 내보낼 수 있습니다."
   ],
-  "not-own-key": [
-   "Only the key set as My private key in Settings can be exported. Choose it in Settings first.",
-   "只能导出在设置中设为「我的私钥」的密钥，请先在设置中选择。",
-   "只能匯出在設定中設為「我的私密金鑰」的金鑰，請先在設定中選擇。",
-   "書き出せるのは、設定で「自分の秘密鍵」にした鍵だけです。先に設定で選んでください。",
-   "설정에서 '내 개인 키'로 지정한 키만 내보낼 수 있습니다. 먼저 설정에서 선택하세요."
+  "legacyConfirm": [
+   "This is my own key, exported from an older NekoKEM",
+   "这是我自己从旧版 NekoKEM 导出的私钥",
+   "這是我自己從舊版 NekoKEM 匯出的私密金鑰",
+   "古い NekoKEM から自分で書き出した自分の鍵です",
+   "이전 NekoKEM에서 직접 내보낸 내 키입니다"
   ],
   "keyUpdated": [
    "Your private key was rewritten in the current format (NKPR v3). The keys and the password are unchanged.",
@@ -1324,48 +1380,6 @@
    "你的私密金鑰已改寫為目前格式（NKPR v3），金鑰和密碼均未改變。",
    "秘密鍵を現在の形式（NKPR v3）に書き換えました。鍵とパスワードは変わりません。",
    "개인 키를 현재 형식(NKPR v3)으로 다시 썼습니다. 키와 암호는 바뀌지 않았습니다."
-  ],
-  "exportPublicTarget": [
-   "Public key for NekoKEM 4.x",
-   "公钥（NekoKEM 4.x）",
-   "公開金鑰（NekoKEM 4.x）",
-   "公開鍵（NekoKEM 4.x）",
-   "공개 키(NekoKEM 4.x)"
-  ],
-  "exportPrivateTarget": [
-   "My private key for NekoKEM 5.2",
-   "我的私钥（NekoKEM 5.2）",
-   "我的私密金鑰（NekoKEM 5.2）",
-   "自分の秘密鍵（NekoKEM 5.2）",
-   "내 개인 키(NekoKEM 5.2)"
-  ],
-  "exportLegacyPrivate": [
-   "Export private key",
-   "导出私钥",
-   "匯出私密金鑰",
-   "秘密鍵を書き出す",
-   "개인 키 내보내기"
-  ],
-  "exportPrivateHint": [
-   "Writes My private key from Settings in the older format NekoKEM 5.2 and earlier read, protected by the same password. The older format lacks the key commitment of the current one; use it only to move the key to an older NekoKEM.",
-   "将设置中的「我的私钥」以 NekoKEM 5.2 及更早版本可读的旧格式写出，仍由同一密码保护。旧格式缺少当前格式的密钥承诺，仅在需要把密钥移到旧版 NekoKEM 时使用。",
-   "將設定中的「我的私密金鑰」以 NekoKEM 5.2 及更早版本可讀的舊格式寫出，仍由同一密碼保護。舊格式缺少目前格式的金鑰承諾，僅在需要把金鑰移到舊版 NekoKEM 時使用。",
-   "設定の「自分の秘密鍵」を、NekoKEM 5.2 以前が読める旧形式で、同じパスワードで保護して書き出します。旧形式には現在の形式の鍵コミットメントがありません。古い NekoKEM へ鍵を移すときだけ使ってください。",
-   "설정의 '내 개인 키'를 NekoKEM 5.2 이하가 읽을 수 있는 이전 형식으로, 같은 암호로 보호해 씁니다. 이전 형식에는 현재 형식의 키 커밋먼트가 없으니 이전 NekoKEM으로 키를 옮길 때만 사용하세요."
-  ],
-  "legacyPrivateOutput": [
-   "Save older private key",
-   "旧格式私钥保存位置",
-   "舊格式私密金鑰儲存位置",
-   "旧形式の秘密鍵の保存先",
-   "이전 형식 개인 키 저장 위치"
-  ],
-  "legacyPrivateExported": [
-   "Private key exported for NekoKEM 5.2 and earlier",
-   "已导出供 NekoKEM 5.2 及更早版本使用的私钥",
-   "已匯出供 NekoKEM 5.2 及更早版本使用的私密金鑰",
-   "NekoKEM 5.2 以前用の秘密鍵を書き出しました",
-   "NekoKEM 5.2 이하용 개인 키를 내보냈습니다"
   ]
  }
 }

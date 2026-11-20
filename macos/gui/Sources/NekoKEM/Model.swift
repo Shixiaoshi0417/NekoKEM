@@ -17,13 +17,15 @@ struct OperationRequest {
     var omitName = false
     // Encryption and decryption write to a private staged file; saveOutput moves it to the chosen place.
     var stage = false
+    // Upgrade only: the user confirmed, after the bridge's warning, that an older-format key is their own.
+    var legacyConfirmed = false
 
     var json: [String: Any] {
         ["id": id, "kind": kind.rawValue, "input": input, "output": output, "keyPath": keyPath,
          "publicPath": publicPath, "privatePath": privatePath, "password": password, "confirmation": confirmation,
          "keyText": keyText, "paste": paste, "contacts": contacts, "keyPaths": keyPaths, "replace": replace,
          "overwrite": overwrite, "signKeyPath": signKeyPath, "unsigned": unsigned, "requireSignature": requireSignature,
-         "omitName": omitName, "stage": stage]
+         "omitName": omitName, "stage": stage, "legacyConfirmed": legacyConfirmed]
     }
 }
 

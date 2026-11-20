@@ -48,6 +48,10 @@ mapping.txt
 *.keystore
 *.jks
 nekokem-release.jks
+# Exception: a throwaway NekoKEM 4.x test key pair (password in the device
+# test) for the Android import tests; it protects nothing.
+!/android/app/src/androidTest/assets/legacy-v1/*.nkpr
+!/android/app/src/androidTest/assets/legacy-v1/*.key
 nekokem-keystore-password.enc
 *.pk8
 *.csr

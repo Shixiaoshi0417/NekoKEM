@@ -71,6 +71,12 @@ fun encryptedPrivateKeyExportRequest(): SaveDocumentRequest = SaveDocumentReques
     mimeType = BINARY_MIME_TYPE,
 )
 
+/** The NKPR v2 copy for NekoKEM 5.2 and earlier. */
+fun legacyPrivateKeyExportRequest(): SaveDocumentRequest = SaveDocumentRequest(
+    displayName = LEGACY_PRIVATE_KEY_EXPORT_NAME,
+    mimeType = BINARY_MIME_TYPE,
+)
+
 internal fun encryptedOutputName(inputName: String, defaultName: String): String =
     safeDocumentName(inputName, defaultName) + NKEM_EXTENSION
 
@@ -127,6 +133,7 @@ internal const val BINARY_MIME_TYPE = "application/octet-stream"
 private const val PUBLIC_KEY_EXPORT_NAME = "public.key"
 private const val LEGACY_PUBLIC_KEY_EXPORT_NAME = "public-legacy.key"
 private const val PRIVATE_KEY_EXPORT_NAME = "private.nkpr"
+private const val LEGACY_PRIVATE_KEY_EXPORT_NAME = "private-5.2.nkpr"
 private const val NKEM_EXTENSION = ".nkem"
 /** NEKOKEM_ORIGINAL_NAME_MAX in Core. */
 private const val MAX_RECORDED_NAME_BYTES = 1016

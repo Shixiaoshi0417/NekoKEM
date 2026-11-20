@@ -26,6 +26,8 @@ class OperationRequest(
     val omitName: Boolean = false,
     // Encryption and decryption write to a private staged file; saveOutput moves it to the chosen place.
     val stage: Boolean = false,
+    // Upgrade only: the user confirmed, after the bridge's warning, that an older-format key is their own.
+    val legacyConfirmed: Boolean = false,
 )
 
 data class Signature(val status: String, val fingerprint: String?, val contact: String?, val signerKey: String?)
@@ -51,6 +53,8 @@ data class DesktopPreferences(val requireSignature: Boolean = false, val signKey
 
 // Same limit as Core's NEKOKEM_MAX_RECIPIENTS for one NKEM v4/v5 file.
 const val MAX_RECIPIENTS = 64
+// Same as the bridge's LEGACY_CONFIRM_DELAY: an older-format key's warning stays up this long.
+const val LEGACY_CONFIRM_SECONDS = 3
 
 object Backend {
     private fun JsonElement.obj() = jsonObject
@@ -78,6 +82,7 @@ object Backend {
                     field("replace", request.replace); field("overwrite", request.overwrite)
                     field("signKeyPath", request.signKeyPath); field("unsigned", request.unsigned); field("requireSignature", request.requireSignature)
                     field("omitName", request.omitName); field("stage", request.stage)
+                    field("legacyConfirmed", request.legacyConfirmed)
                 }
             }
         }

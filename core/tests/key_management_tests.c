@@ -142,12 +142,12 @@ int main(void)
     }
     if (!nekokem_internal_private_key_fingerprint(
             private_path, password,
-            sizeof(initial_password) - 1U,
+            sizeof(initial_password) - 1U, 0U,
             private_fingerprint, sizeof(private_fingerprint)) ||
         strcmp(first_fingerprint, private_fingerprint) != 0 ||
         nekokem_internal_private_key_fingerprint(
             private_path, wrong_password,
-            sizeof(wrong_password_value) - 1U,
+            sizeof(wrong_password_value) - 1U, 0U,
             private_fingerprint, sizeof(private_fingerprint))) {
         fprintf(stderr, "Private/public fingerprint validation failed\n");
         goto cleanup;

@@ -112,6 +112,17 @@ fun main(args: Array<String>): Unit = runBlocking(Dispatchers.Main) {
 
         state.switchTab(View.Keygen); settle()
         shot("keygen")
+        // The user's own private key, exported for NekoKEM 5.2 with the same password.
+        state.changeKeyMode(KeyMode.Export)
+        state.changeExportPrivate(true)
+        check(state.privatePath == file("me.private.key.enc")) { "Export did not start from the user's own private key" }
+        state.setPath(PathField.Output, file("${style.wire}-${theme.name}-private-5.2.nkpr"))
+        shot("keys-export-private")
+        state.password.edit { append(password) }
+        state.submit(); settle()
+        check(state.successMessage == "legacyPrivateExported" && File(file("${style.wire}-${theme.name}-private-5.2.nkpr")).length() > 0) { "Private key was not exported: ${state.failure}" }
+        shot("keys-export-private-done")
+        state.changeKeyMode(KeyMode.Generate)
 
         state.switchTab(View.Contacts); settle()
         shot("contacts")

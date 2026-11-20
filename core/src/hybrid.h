@@ -39,26 +39,36 @@ int hybrid_generate_keypair(const char *public_path,
                             size_t password_len,
                             int replace);
 /*
+ * The three functions below open the private key with
+ * hybrid_load_protected_private_keys(), so accept_legacy is checked on the
+ * bytes that are decrypted, before the password is used. Each returns 1, 0
+ * or HYBRID_LEGACY_KEY_REFUSED.
+ *
  * Adds signing keys to an NKPR v1 key pair and writes both files: four
  * public PEM blocks and an NKPR v3 private key, committed together.
  */
 int hybrid_upgrade_to_identity(const char *public_path,
                                const char *private_path,
                                const unsigned char *password,
-                               size_t password_len);
+                               size_t password_len,
+                               int accept_legacy);
 /*
- * Rewrites an NKPR v2 identity key pair as NKPR v3 with the same keys and
- * password; the public file must hold this private key's four public keys.
+ * Unlocks an identity private key and checks that the public file holds its
+ * four public keys. With rewrite, the pair is then written again as NKPR v3
+ * with the same keys and password; without it, nothing is written.
  */
 int hybrid_rewrite_identity_keys(const char *public_path,
                                  const char *private_path,
                                  const unsigned char *password,
-                                 size_t password_len);
+                                 size_t password_len,
+                                 int rewrite,
+                                 int accept_legacy);
 /* Writes the key in output_path as NKPR v2 (identity) or v1 (two parts). */
 int hybrid_export_private_key_legacy(const char *private_path,
                                      const unsigned char *password,
                                      size_t password_len,
-                                     const char *output_path);
+                                     const char *output_path,
+                                     int accept_legacy);
 /* Two or four PEM public keys; a fifth or anything else fails. */
 int hybrid_parse_public_keys(const unsigned char *pem,
                              size_t pem_len,

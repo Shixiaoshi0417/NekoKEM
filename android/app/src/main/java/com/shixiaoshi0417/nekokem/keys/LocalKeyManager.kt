@@ -14,6 +14,23 @@ import java.security.MessageDigest
 import java.util.concurrent.locks.ReentrantLock
 import kotlin.concurrent.withLock
 
+/**
+ * The user's answer, before the password, for a private key to import in the
+ * NKPR v1 or v2 format of NekoKEM 5.2 and earlier. Such a file can be built to
+ * open under several passwords, so it is opened only after the user said it
+ * is their own key; see docs/key-commitment.md.
+ */
+enum class LegacyImport {
+    /** Not confirmed: an older-format file is refused before the password is used. */
+    NONE,
+
+    /** Confirmed as the user's own key; an NKPR v2 key is rewritten as NKPR v3 afterwards. */
+    KEEP,
+
+    /** Confirmed, and a NekoKEM 4.x key (NKPR v1) is upgraded to an identity key right away. */
+    UPGRADE,
+}
+
 data class LocalKeyState(
     val privateKeyExists: Boolean,
     val fingerprint: String?,
@@ -180,7 +197,7 @@ class LocalKeyManager internal constructor(
             NativeBridge.nativeCheckPassword(
                 privateKey.absolutePath,
                 password,
-            )
+            ).also { if (it == NativeBridge.RESULT_SUCCESS) updateOwnKeyFormat(password) }
         }
     } catch (_: Exception) {
         RESULT_STORAGE_ERROR
@@ -257,7 +274,7 @@ class LocalKeyManager internal constructor(
             password,
             originalName?.toByteArray(Charsets.UTF_8),
             progress,
-        )
+        ).also { if (it == NativeBridge.RESULT_SUCCESS) updateOwnKeyFormat(password) }
     }
 
     /**
@@ -350,7 +367,7 @@ class LocalKeyManager internal constructor(
                 output.absolutePath,
                 privateKey.absolutePath,
                 password,
-            )
+            ).also { if (it == NativeBridge.RESULT_SUCCESS) updateOwnKeyFormat(password) }
         }
     } catch (_: Exception) {
         RESULT_STORAGE_ERROR
@@ -388,6 +405,7 @@ class LocalKeyManager internal constructor(
                 NativeBridge.nativePrivateKeyFingerprint(
                     selectedPath.absolutePath,
                     password,
+                    false,
                 )
             }
             when {
@@ -396,13 +414,20 @@ class LocalKeyManager internal constructor(
                 temporaryKey != null &&
                     currentFingerprint != temporaryKey.fingerprint ->
                     RESULT_FINGERPRINT_MISMATCH
-                else -> NativeBridge.nativeDecryptFileWithProgress(
-                    input.absolutePath,
-                    output.absolutePath,
-                    selectedPath.absolutePath,
-                    password,
-                    progress,
-                )
+                else -> signatureCode(
+                    NativeBridge.nativeDecryptFileWithProgress(
+                        input.absolutePath,
+                        output.absolutePath,
+                        selectedPath.absolutePath,
+                        password,
+                        temporaryKey == null,
+                        progress,
+                    ),
+                ).also {
+                    if (it == NativeBridge.RESULT_SUCCESS && temporaryKey == null) {
+                        updateOwnKeyFormat(password)
+                    }
+                }
             }
         }
     } catch (_: Exception) {
@@ -430,7 +455,7 @@ class LocalKeyManager internal constructor(
         } else {
             val selectedPath = temporaryKey?.file ?: privateKey
             val currentFingerprint = temporaryKey?.let {
-                NativeBridge.nativePrivateKeyFingerprint(selectedPath.absolutePath, password)
+                NativeBridge.nativePrivateKeyFingerprint(selectedPath.absolutePath, password, false)
             }
             when {
                 temporaryKey != null && currentFingerprint == null ->
@@ -451,6 +476,7 @@ class LocalKeyManager internal constructor(
                         output.absolutePath,
                         selectedPath.absolutePath,
                         password,
+                        temporaryKey == null,
                         trusted.map { it.absolutePath }.toTypedArray(),
                         requireSignature,
                         null,
@@ -462,6 +488,7 @@ class LocalKeyManager internal constructor(
                     if (code != NativeBridge.RESULT_SUCCESS) {
                         VerifiedDecryptionResult(signatureCode(code), null)
                     } else {
+                        if (temporaryKey == null) updateOwnKeyFormat(password)
                         val index = report[2]
                         VerifiedDecryptionResult(
                             code,
@@ -501,7 +528,11 @@ class LocalKeyManager internal constructor(
         null
     }
 
-    /** Takes ownership of [password] and never retains an unlocked key. */
+    /**
+     * Takes ownership of [password] and never retains an unlocked key. [input]
+     * is a key from outside this device, so an NKPR v1 or v2 file is refused
+     * before the password is used (null); see [privateKeyIsLegacy].
+     */
     fun privateKeyFingerprint(
         input: File,
         password: ByteArray,
@@ -512,6 +543,7 @@ class LocalKeyManager internal constructor(
             NativeBridge.nativePrivateKeyFingerprint(
                 input.absolutePath,
                 password,
+                false,
             )
         }
     } catch (_: Exception) {
@@ -537,6 +569,77 @@ class LocalKeyManager internal constructor(
     } catch (_: Exception) {
         clearAndDeleteRegularFile(output)
         RESULT_STORAGE_ERROR
+    }
+
+    /**
+     * NKPR v1 or v2 by the header alone; no password is used. Only explains the
+     * rule early: Core refuses a legacy key that is not the device's own on
+     * every unlock anyway, so false when the library is unavailable is safe.
+     */
+    fun privateKeyIsLegacy(input: File): Boolean = try {
+        NativeBridge.nativePrivateKeyIsLegacy(input.absolutePath)
+    } catch (_: Exception) {
+        false
+    } catch (_: LinkageError) {
+        false
+    }
+
+    /**
+     * After this device's own key was unlocked with [password]: an NKPR v2
+     * identity key is rewritten as NKPR v3 with the same keys and password,
+     * so it gains the key commitment. A NekoKEM 4.x key (NKPR v1) waits for
+     * the explicit identity upgrade, which changes its public key. Best
+     * effort: the key stays usable as it was when this fails. Does not clear
+     * [password].
+     */
+    private fun updateOwnKeyFormat(password: ByteArray) {
+        try {
+            keyMutationLock.withLock {
+                if (NativeBridge.nativePrivateKeyIsLegacy(privateKey.absolutePath) &&
+                    NativeBridge.nativePublicKeyCanVerify(publicKey.absolutePath) &&
+                    NativeBridge.nativeUpdatePrivateKeyFormat(
+                        publicKey.absolutePath,
+                        privateKey.absolutePath,
+                        password,
+                    ) == NativeBridge.RESULT_SUCCESS
+                ) {
+                    setAndVerifyRegularFileMode(publicKey, PRIVATE_FILE_MODE)
+                }
+            }
+        } catch (_: Exception) {
+            // The own key keeps working in its older format.
+        }
+    }
+
+    /**
+     * This device's private key in the format NekoKEM 5.2 and earlier read
+     * (NKPR v2, or v1 for a 4.x key), with the same password. Takes ownership
+     * of [password].
+     */
+    fun exportLegacyPrivateKey(output: File, password: ByteArray): Int = try {
+        if (password.isEmpty()) {
+            NativeBridge.RESULT_INVALID_ARGUMENT
+        } else {
+            val result = NativeBridge.nativeExportPrivateKeyLegacy(
+                privateKey.absolutePath,
+                password,
+                output.absolutePath,
+            )
+            if (result != NativeBridge.RESULT_SUCCESS) {
+                clearAndDeleteRegularFile(output)
+                result
+            } else if (!setAndVerifyRegularFileMode(output, PRIVATE_FILE_MODE)) {
+                clearAndDeleteRegularFile(output)
+                RESULT_STORAGE_ERROR
+            } else {
+                NativeBridge.RESULT_SUCCESS
+            }
+        }
+    } catch (_: Exception) {
+        clearAndDeleteRegularFile(output)
+        RESULT_STORAGE_ERROR
+    } finally {
+        password.fill(0)
     }
 
     /** Copies only the structurally valid encrypted NKPR container. */
@@ -675,7 +778,7 @@ class LocalKeyManager internal constructor(
         if (password == null || password.isEmpty()) {
             return NativeBridge.RESULT_INVALID_ARGUMENT
         }
-        val pair = NativeBridge.nativePrivateKeyFingerprint(privateKey.absolutePath, password)
+        val pair = NativeBridge.nativePrivateKeyFingerprint(privateKey.absolutePath, password, true)
         return when (pair) {
             null -> RESULT_KEY_PAIR_PASSWORD_FAILED
             fingerprint -> NativeBridge.RESULT_SUCCESS
@@ -851,17 +954,45 @@ class LocalKeyManager internal constructor(
      * and a private key that does not belong to the current public key is
      * refused, so the two key files always form one pair.
      */
-    fun importEncryptedPrivateKey(input: File, password: ByteArray): Int =
+    fun importEncryptedPrivateKey(
+        input: File,
+        password: ByteArray,
+        legacy: LegacyImport = LegacyImport.NONE,
+    ): Int =
         keyMutationLock.withLock {
             try {
-                withPairDirectoryLock { importEncryptedPrivateKeyLocked(input, password) }
+                // The rewrite and the upgrade take Core's pair lock themselves,
+                // so they run after the import has released it.
+                val rewrite = password.copyOf()
+                try {
+                    var result = withPairDirectoryLock {
+                        importEncryptedPrivateKeyLocked(input, password, legacy)
+                    }
+                    if (result == NativeBridge.RESULT_SUCCESS) {
+                        if (legacy == LegacyImport.UPGRADE) {
+                            // The import itself stands; only the upgrade is reported.
+                            if (upgradeToIdentityKeys(rewrite.copyOf()) != NativeBridge.RESULT_SUCCESS) {
+                                result = RESULT_IMPORTED_NOT_UPGRADED
+                            }
+                        } else {
+                            updateOwnKeyFormat(rewrite)
+                        }
+                    }
+                    result
+                } finally {
+                    rewrite.fill(0)
+                }
             } catch (_: Exception) {
                 password.fill(0)
                 RESULT_STORAGE_ERROR
             }
         }
 
-    private fun importEncryptedPrivateKeyLocked(input: File, password: ByteArray): Int {
+    private fun importEncryptedPrivateKeyLocked(
+        input: File,
+        password: ByteArray,
+        legacy: LegacyImport,
+    ): Int {
         var candidate: File? = null
 
         return try {
@@ -873,10 +1004,18 @@ class LocalKeyManager internal constructor(
                 candidate = createPrivateCandidate(PRIVATE_IMPORT_PREFIX)
                 if (!copySensitiveRegularFile(input, candidate)) {
                     RESULT_STORAGE_ERROR
+                } else if (legacy == LegacyImport.NONE && privateKeyIsLegacy(candidate)) {
+                    // The private copy is what Core opens, so this is decided
+                    // on those bytes: a file that turned into an older format
+                    // after the user was asked is not opened with the password.
+                    RESULT_LEGACY_IMPORT_UNCONFIRMED
                 } else {
+                    // Importing is the explicit action for the user's own key:
+                    // NKPR v1 and v2 open only after the user confirmed it.
                     val pair = NativeBridge.nativePrivateKeyFingerprint(
                         candidate.absolutePath,
                         password,
+                        legacy != LegacyImport.NONE,
                     )
                     if (pair == null) {
                         // Invalid data and wrong passwords share the authentication failure.
@@ -1269,11 +1408,29 @@ class LocalKeyManager internal constructor(
         const val RESULT_SIGNATURE_INVALID = -30
         const val RESULT_SIGNATURE_REQUIRED = -31
         const val RESULT_SIGNER_NOT_TRUSTED = -32
+        /**
+         * A private key in the NKPR v1 or v2 format (NekoKEM 5.2 and earlier)
+         * was offered as a temporary key. Such a file can be built to open
+         * under several passwords, so it is used only as this device's own
+         * key, through the private-key import; see docs/key-commitment.md.
+         */
+        const val RESULT_LEGACY_PRIVATE_KEY = -33
+
+        /**
+         * An imported file was in the NKPR v1 or v2 format although the user
+         * was not asked about it: it changed after it was checked. Nothing
+         * was opened or imported.
+         */
+        const val RESULT_LEGACY_IMPORT_UNCONFIRMED = -34
+
+        /** A 4.x private key was imported, but upgrading it to an identity key failed. */
+        const val RESULT_IMPORTED_NOT_UPGRADED = -35
 
         fun signatureCode(code: Int): Int = when (code) {
             NativeBridge.RESULT_SIGNATURE_INVALID -> RESULT_SIGNATURE_INVALID
             NativeBridge.RESULT_SIGNATURE_REQUIRED -> RESULT_SIGNATURE_REQUIRED
             NativeBridge.RESULT_SIGNER_NOT_TRUSTED -> RESULT_SIGNER_NOT_TRUSTED
+            NativeBridge.RESULT_LEGACY_PRIVATE_KEY -> RESULT_LEGACY_PRIVATE_KEY
             else -> code
         }
         private const val CACHE_CLEAR_BUFFER_SIZE = 64 * 1024

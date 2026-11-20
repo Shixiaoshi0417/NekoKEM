@@ -119,7 +119,7 @@ private fun ColumnScope.Page(state: AppState) {
         Destination.Keys -> {
             // Generate, upgrade and export are the key page's modes; the fingerprint is the fourth tab.
             val selected = if (state.view == View.Fingerprint) 3 else state.keyMode.ordinal
-            kit.Segments(listOf(state.t("keygen"), state.t("upgradeKey"), state.t("exportLegacy"), state.t("fingerprintTab")), selected, state.editable) {
+            kit.Segments(listOf(state.t("keygen"), state.t("upgradeKey"), state.t("exportOlder"), state.t("fingerprintTab")), selected, state.editable) {
                 if (it == 3) state.switchTab(View.Fingerprint) else { state.switchTab(View.Keygen); state.changeKeyMode(KeyMode.entries[it]) }
             }
             Spacer(Modifier.height(16.dp))
@@ -204,10 +204,10 @@ private fun OperationCard(state: AppState) {
 @Composable
 private fun KeyFields(state: AppState) {
     if (state.keyMode == KeyMode.Export) {
-        val kit = LocalKit.current
-        kit.Segments(listOf(state.t("exportPublicTarget"), state.t("exportPrivateTarget")), if (state.exportPrivate) 1 else 0, state.editable) { state.changeExportPrivate(it == 1) }
+        LocalKit.current.Segments(listOf(state.t("exportPublicOption"), state.t("exportPrivateOption")), if (state.exportPrivate) 1 else 0, state.editable) { state.changeExportPrivate(it == 1) }
         if (state.exportPrivate) {
-            Hint(state.t("exportPrivateHint"), danger = true)
+            Hint(state.t("legacyPrivateHint"))
+            PathInput(state, PathField.PrivatePath, state.t("privateKey"), "privatePath")
             PathInput(state, PathField.Output, state.t("legacyPrivateOutput"), "output")
         } else {
             PathInput(state, PathField.KeyPath, state.t("publicKey"), "keyPath")
@@ -221,6 +221,11 @@ private fun KeyFields(state: AppState) {
             Spacer(Modifier.height(8.dp))
             CheckRow(state.replace, state.t("replaceKeys"), state.editable) { state.replace = !state.replace }
             Hint(state.t("replaceKeysHint"), danger = true)
+        }
+        if (upgrade && state.legacyOffered) {
+            Spacer(Modifier.height(8.dp))
+            val label = state.t("legacyConfirm") + if (state.legacyWait > 0) " (${state.legacyWait})" else ""
+            CheckRow(state.legacyConfirmed, label, state.editable && state.legacyWait == 0) { state.legacyConfirmed = !state.legacyConfirmed }
         }
     }
 }

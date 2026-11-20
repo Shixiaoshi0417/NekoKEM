@@ -45,9 +45,13 @@ int cli_run_hybrid_decrypt(const char *input_path,
                            const char *output_path,
                            const char *private_key_path,
                            const CliVerifyOptions *verify);
-/* NULL paths mean keys/public.key and keys/private.key.enc. */
+/*
+ * NULL paths mean keys/public.key and keys/private.key.enc. An NKPR v1 or v2
+ * key at another path is unlocked only with legacy_key, as for decryption.
+ */
 int cli_run_upgrade_key(const char *public_key_path,
-                        const char *private_key_path);
+                        const char *private_key_path,
+                        int legacy_key);
 int cli_run_export_legacy_public_key(const char *public_key_path,
                                      const char *output_path);
 /* Writes keys/private.key.enc as NKPR v2 (or v1) for NekoKEM 5.2 and earlier. */

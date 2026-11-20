@@ -7,6 +7,7 @@ import androidx.annotation.WorkerThread
 import android.system.Os
 import android.system.OsConstants
 import com.shixiaoshi0417.nekokem.R
+import com.shixiaoshi0417.nekokem.keys.LegacyImport
 import com.shixiaoshi0417.nekokem.keys.LocalKeyManager
 import com.shixiaoshi0417.nekokem.keys.PendingTemporaryPrivateKey
 import com.shixiaoshi0417.nekokem.keys.PendingTemporaryPrivateKeyResult
@@ -116,6 +117,28 @@ class PreparedEncryption internal constructor(
         }
         active = false
         return encryptedFile
+    }
+}
+
+data class PreparedKeyExportResult(
+    val code: Int,
+    val prepared: PreparedKeyExport?,
+)
+
+/** A private-key export staged in its own workspace until a destination is chosen. */
+class PreparedKeyExport internal constructor(
+    private val stagedFile: File,
+    internal val workspace: File,
+) {
+    private var active = true
+
+    @Synchronized
+    internal fun consume(): File? {
+        if (!active) {
+            return null
+        }
+        active = false
+        return stagedFile
     }
 }
 
@@ -545,7 +568,12 @@ class SafFileWorkflow(
         return TemporaryPublicKeyResult(result, selected)
     }
 
-    /** Stages an NKPR candidate; no parsing or password handling occurs here. */
+    /**
+     * Stages an NKPR candidate; no password handling occurs here. An NKPR v1
+     * or v2 file is refused at once, before the password is asked for: it may
+     * have been built to open under several passwords, so only the explicit
+     * private-key import takes it, as this device's own key.
+     */
     fun stageTemporaryPrivateKey(
         source: Uri,
         displayName: String,
@@ -571,6 +599,8 @@ class SafFileWorkflow(
                     )
                 ) {
                     result = LocalKeyManager.RESULT_STORAGE_ERROR
+                } else if (keyManager.privateKeyIsLegacy(candidate)) {
+                    result = LocalKeyManager.RESULT_LEGACY_PRIVATE_KEY
                 } else {
                     pending = PendingTemporaryPrivateKey(
                         candidate,
@@ -799,6 +829,63 @@ class SafFileWorkflow(
         }
 
     /**
+     * Writes this device's private key for NekoKEM 5.2 and earlier, which
+     * cannot read NKPR v3, into a private workspace before the destination is
+     * chosen, so the password is not kept while the picker is open. Takes
+     * ownership of [password] and clears it.
+     */
+    fun prepareLegacyPrivateKeyExport(password: ByteArray): PreparedKeyExportResult {
+        var workspace: File? = null
+        return try {
+            workspace = createWorkspace()
+                ?: return PreparedKeyExportResult(LocalKeyManager.RESULT_STORAGE_ERROR, null)
+            val staged = createPrivateTemporaryPath(KEY_EXPORT_PREFIX, workspace)
+            val result = keyManager.exportLegacyPrivateKey(staged, password.copyOf())
+            if (result != NativeBridge.RESULT_SUCCESS) {
+                PreparedKeyExportResult(result, null)
+            } else {
+                PreparedKeyExportResult(result, PreparedKeyExport(staged, workspace)).also {
+                    workspace = null
+                }
+            }
+        } catch (_: Exception) {
+            PreparedKeyExportResult(LocalKeyManager.RESULT_STORAGE_ERROR, null)
+        } finally {
+            password.fill(0)
+            removeWorkspace(workspace)
+        }
+    }
+
+    /** Copies a prepared key export to [destination] and removes the staged copy. */
+    fun commitKeyExport(prepared: PreparedKeyExport, destination: Uri): Int {
+        val staged = prepared.consume() ?: return NativeBridge.RESULT_INVALID_ARGUMENT
+        var transfer: UriOutputTransaction? = null
+        var outputCommitted = false
+        return try {
+            val currentTransfer = copyFileToUri(staged, destination, null, false)
+            transfer = currentTransfer
+            if (!currentTransfer.success) {
+                LocalKeyManager.RESULT_STORAGE_ERROR
+            } else {
+                currentTransfer.commit()
+                outputCommitted = true
+                NativeBridge.RESULT_SUCCESS
+            }
+        } catch (_: Exception) {
+            LocalKeyManager.RESULT_STORAGE_ERROR
+        } finally {
+            if (!outputCommitted) transfer?.rollback()
+            clearAndDelete(staged)
+            removeWorkspace(prepared.workspace)
+        }
+    }
+
+    fun discardKeyExport(prepared: PreparedKeyExport?) {
+        prepared?.consume()?.let(::clearAndDelete)
+        removeWorkspace(prepared?.workspace)
+    }
+
+    /**
      * Takes ownership of [privateKeyPassword], which proves the key belongs
      * to the existing private key, and clears it before returning.
      */
@@ -866,8 +953,40 @@ class SafFileWorkflow(
         )
     }
 
-    /** Takes ownership of [password] and clears it before returning. */
-    fun importEncryptedPrivateKey(source: Uri, password: ByteArray): Int {
+    /**
+     * The NKPR version of a private key to import, from its header alone (no
+     * password): 1 or 2 for NekoKEM 5.2 and earlier, 3 for the current format,
+     * 0 for anything else or when it cannot be read. Only lets the page ask
+     * about an older format first; the import decides on its own copy.
+     */
+    fun privateKeyImportVersion(source: Uri): Int = try {
+        contentResolver.openInputStream(source)?.use { stream ->
+            val header = ByteArray(NKPR_HEADER_PEEK)
+            var read = 0
+            while (read < header.size) {
+                val count = stream.read(header, read, header.size - read)
+                if (count < 0) break
+                read += count
+            }
+            if (read == header.size && header.copyOf(4).contentEquals(NKPR_MAGIC)) {
+                header[4].toInt() and 0xff
+            } else {
+                0
+            }
+        } ?: 0
+    } catch (_: Exception) {
+        0
+    }
+
+    /**
+     * Takes ownership of [password] and clears it before returning. [legacy]
+     * is the user's answer about an older format; see [LegacyImport].
+     */
+    fun importEncryptedPrivateKey(
+        source: Uri,
+        password: ByteArray,
+        legacy: LegacyImport = LegacyImport.NONE,
+    ): Int {
         var stagedInput: File? = null
         var workspace: File? = null
 
@@ -888,7 +1007,7 @@ class SafFileWorkflow(
             ) {
                 return LocalKeyManager.RESULT_STORAGE_ERROR
             }
-            keyManager.importEncryptedPrivateKey(stagedInput, password)
+            keyManager.importEncryptedPrivateKey(stagedInput, password, legacy)
         } catch (_: Exception) {
             LocalKeyManager.RESULT_STORAGE_ERROR
         } finally {
@@ -1395,5 +1514,8 @@ class SafFileWorkflow(
         const val WRITE_TRUNCATE_MODE = "wt"
         const val READ_WRITE_MODE = "rw"
         const val SHA256_ALGORITHM = "SHA-256"
+        // "NKPR" and the version byte.
+        const val NKPR_HEADER_PEEK = 5
+        val NKPR_MAGIC = byteArrayOf(0x4e, 0x4b, 0x50, 0x52)
     }
 }
