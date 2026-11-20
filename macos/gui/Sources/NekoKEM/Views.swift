@@ -308,8 +308,18 @@ private struct KeysPage: View {
                 if state.pasteKey { PasteInput(state: state, label: state.t("paste"), name: "keyText", text: $state.keyText) }
                 else { PathInput(state: state, field: .keyPath, label: state.t("key")) }
             } else if state.keyMode == .export {
-                PathInput(state: state, field: .keyPath, label: state.t("publicKey"))
-                PathInput(state: state, field: .output, label: state.t("legacyOutput"))
+                Picker("", selection: Binding(get: { state.exportPrivate ? 1 : 0 }, set: { state.changeExportPrivate($0 == 1) })) {
+                    Text(state.t("exportPublicTarget")).tag(0)
+                    Text(state.t("exportPrivateTarget")).tag(1)
+                }
+                .pickerStyle(.segmented).labelsHidden().fixedSize().disabled(!state.editable)
+                if state.exportPrivate {
+                    Text(state.t("exportPrivateHint")).font(.callout).foregroundStyle(danger)
+                    PathInput(state: state, field: .output, label: state.t("legacyPrivateOutput"))
+                } else {
+                    PathInput(state: state, field: .keyPath, label: state.t("publicKey"))
+                    PathInput(state: state, field: .output, label: state.t("legacyOutput"))
+                }
             } else {
                 let upgrade = state.keyMode == .upgrade
                 PathInput(state: state, field: .publicPath, label: state.t(upgrade ? "publicKey" : "publicPath"))
@@ -351,7 +361,7 @@ private struct OperationFooter: View {
         case .contacts: return state.t("saveContact")
         case .keygen:
             if state.keyMode == .upgrade { return state.t("upgradeKey") }
-            if state.keyMode == .export { return state.t("exportLegacy") }
+            if state.keyMode == .export { return state.t(state.exportPrivate ? "exportLegacyPrivate" : "exportLegacy") }
             return state.t(state.replace ? "replaceKeysAction" : "keygen")
         default: return state.t(state.screen.rawValue)
         }
@@ -387,6 +397,7 @@ private struct FormFeedback: View {
                     if FingerprintQr.isFingerprint(fingerprint) { Button(state.t("showQr")) { state.qrFingerprint = fingerprint } }
                 }
                 if result.canVerify == false { Text(state.t("legacyKeyHint")).font(.callout).foregroundStyle(danger) }
+                if result.keyUpdated { Text(state.t("keyUpdated")).font(.callout) }
             }
             if let signature = result.signature {
                 let title = signature.status == "trusted" ? "signatureTrusted" : (signature.status == "untrusted" ? "signatureUntrusted" : "signatureNone")

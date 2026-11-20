@@ -15,7 +15,8 @@ import kotlinx.coroutines.withContext
 enum class View(val key: String) { Keygen("keygen"), Files("navFiles"), Fingerprint("fingerprint"), Contacts("contacts"), Settings("settings") }
 enum class KeySource { Path, Paste }
 // The key page generates identity keys, upgrades a 4.x key pair or exports the
-// two-component public key that NekoKEM 4.x and earlier read.
+// two-component public key that NekoKEM 4.x and earlier read, or the own
+// private key in the format NekoKEM 5.2 and earlier read.
 enum class KeyMode { Generate, Upgrade, Export }
 enum class PathField { Input, Output, KeyPath, PublicPath, PrivatePath, ContactKeyPath, SignKeyPath, OwnPublicKey, OtherPrivateKey, DecryptFolder }
 enum class Feedback { Form, List }
@@ -94,6 +95,8 @@ class AppState(private val scope: CoroutineScope, private val files: FileChooser
     var sidebarOpen by mutableStateOf(true); private set
     var style by mutableStateOf(Style.Miuix); private set
     var keyMode by mutableStateOf(KeyMode.Generate); private set
+    /** Export mode: the own private key for NekoKEM 5.2 instead of a public key for 4.x. */
+    var exportPrivate by mutableStateOf(false); private set
     // Turning off signing needs an explicit, red-marked confirmation.
     var confirmingUnsigned by mutableStateOf(false); private set
 
@@ -137,11 +140,11 @@ class AppState(private val scope: CoroutineScope, private val files: FileChooser
     fun label(contact: Contact) = contact.note.ifEmpty { contact.name.ifEmpty { t("pastedKey") } }
 
     val kind get() = when (view) {
-        View.Keygen -> when (keyMode) { KeyMode.Generate -> Kind.Keygen; KeyMode.Upgrade -> Kind.Upgrade; KeyMode.Export -> Kind.ExportLegacy }
+        View.Keygen -> when (keyMode) { KeyMode.Generate -> Kind.Keygen; KeyMode.Upgrade -> Kind.Upgrade; KeyMode.Export -> if (exportPrivate) Kind.ExportLegacyPrivate else Kind.ExportLegacy }
         else -> Kind.Fingerprint
     }
     val signing get() = fileAction == Kind.Encrypt && !unsigned
-    val passwordRequired get() = view == View.Keygen && keyMode != KeyMode.Export
+    val passwordRequired get() = view == View.Keygen && (keyMode != KeyMode.Export || exportPrivate)
     val percent get() = progress?.takeIf { it.second > 0 }?.let { (it.first * 100 / it.second).toInt().coerceIn(0, 100) }
     val selectedContacts get() = selected.mapNotNull { id -> contacts.firstOrNull { it.id == id } }
     val recipientCount get() = selected.size + otherKeys.size + if (ownSelected) 1 else 0
@@ -284,6 +287,13 @@ class AppState(private val scope: CoroutineScope, private val files: FileChooser
         keyMode = mode
         withdrawReplace(); withdrawOverwrite(); resetFeedback()
     }
+    fun changeExportPrivate(value: Boolean) {
+        if (locked || !loaded || value == exportPrivate) return
+        clear(password)
+        setPath(PathField.Output, "")
+        exportPrivate = value
+        withdrawOverwrite(); resetFeedback()
+    }
     fun changeContactSource(paste: Boolean) {
         if (locked || !loaded || paste == contactPaste) return
         clear(contactKeyText); contactPaste = paste; resetFeedback()
@@ -302,7 +312,7 @@ class AppState(private val scope: CoroutineScope, private val files: FileChooser
                     files.save(when (field) {
                         PathField.PublicPath -> "public.key"
                         PathField.PrivatePath -> "private.key.enc"
-                        else -> "legacy-public.key"
+                        else -> if (exportPrivate) "legacy-private.key.enc" else "legacy-public.key"
                     }, null)
                 } else files.open()
                 if (value != null) setPath(field, value)
@@ -339,7 +349,11 @@ class AppState(private val scope: CoroutineScope, private val files: FileChooser
         }
         if (bytes(password.text) > 1024) return invalid("password-limit", "password")
         if (bytes(confirmation.text) > 1024) return invalid("password-limit", "confirmation")
-        if (view == View.Keygen && keyMode == KeyMode.Export) {
+        if (view == View.Keygen && keyMode == KeyMode.Export && exportPrivate) {
+            if (signKeyPath.isEmpty()) return invalid("not-own-key", "output")
+            if (output.isEmpty()) return invalid("invalid-path", "output")
+            if (password.text.isEmpty()) return invalid("password-empty", "password")
+        } else if (view == View.Keygen && keyMode == KeyMode.Export) {
             if (keyPath.isEmpty()) return invalid("invalid-path", "keyPath")
             if (output.isEmpty()) return invalid("invalid-path", "output")
         } else if (view == View.Keygen) {
@@ -379,12 +393,14 @@ class AppState(private val scope: CoroutineScope, private val files: FileChooser
         jobId = UUID.randomUUID().toString()
         busy = true; cancelling = false
         val kind = kind
-        val exporting = kind == Kind.ExportLegacy
+        val exportingPrivate = kind == Kind.ExportLegacyPrivate
+        val exporting = kind == Kind.ExportLegacy || exportingPrivate
         val keys = kind == Kind.Keygen || kind == Kind.Upgrade
         val pasted = kind == Kind.Fingerprint && source == KeySource.Paste
         val request = OperationRequest(
             id = jobId, kind = kind, output = if (exporting) output else "",
-            keyPath = if (exporting || (kind == Kind.Fingerprint && !pasted)) keyPath else "",
+            // The bridge exports only the private key saved as the user's own.
+            keyPath = if (exportingPrivate) signKeyPath else if (exporting || (kind == Kind.Fingerprint && !pasted)) keyPath else "",
             publicPath = if (keys) publicPath else "", privatePath = if (keys) privatePath else "",
             password = if (passwordRequired) password.text else "", confirmation = if (kind == Kind.Keygen) confirmation.text else "",
             keyText = if (pasted) keyText.text else "", paste = pasted,
@@ -398,7 +414,7 @@ class AppState(private val scope: CoroutineScope, private val files: FileChooser
                 result = native { Backend.run(request, ::reportProgress) }
                 // A new or upgraded key pair becomes the user's own keys.
                 if (keys) { ownPublicKey = request.publicPath; signKeyPath = request.privatePath; storePreferences() }
-                successMessage = when (kind) { Kind.Upgrade -> "keyUpgraded"; Kind.ExportLegacy -> "legacyExported"; else -> "success" }
+                successMessage = when (kind) { Kind.Upgrade -> "keyUpgraded"; Kind.ExportLegacy -> "legacyExported"; Kind.ExportLegacyPrivate -> "legacyPrivateExported"; else -> "success" }
             } catch (error: Throwable) {
                 val message = code(error)
                 failure = message

@@ -11,7 +11,7 @@ import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.longOrNull
 
 /** The bridge's commands (desktop/bridge/src/lib.rs), typed for Kotlin. */
-enum class Kind(val wire: String) { Keygen("keygen"), Encrypt("encrypt"), Decrypt("decrypt"), Fingerprint("fingerprint"), Upgrade("upgrade"), ExportLegacy("export-legacy") }
+enum class Kind(val wire: String) { Keygen("keygen"), Encrypt("encrypt"), Decrypt("decrypt"), Fingerprint("fingerprint"), Upgrade("upgrade"), ExportLegacy("export-legacy"), ExportLegacyPrivate("export-legacy-private") }
 
 /** One operation. The secret fields are read from the text fields when the request is written. */
 class OperationRequest(
@@ -34,6 +34,8 @@ data class Outcome(
     val format: Int? = null, val signature: Signature? = null, val canVerify: Boolean? = null,
     /** The file name a signed file recorded, already safe for this system. */
     val originalName: String? = null,
+    /** The own private key was NKPR v2 and is now NKPR v3; keys and password are unchanged. */
+    val keyUpdated: Boolean = false,
 )
 data class Contact(val id: String, val fingerprint: String, val name: String, val note: String, val canVerify: Boolean, val legacyFingerprint: String?, val pinned: Boolean = false, val verified: Boolean = false)
 data class ContactList(val contacts: List<Contact>, val unreadable: Int)
@@ -96,6 +98,7 @@ object Backend {
             format = (it["format"] as? JsonPrimitive)?.intOrNull, signature = signature,
             canVerify = it.flag("canVerify"),
             originalName = it.text("originalName"),
+            keyUpdated = it.flag("keyUpdated") ?: false,
         )
     }
 

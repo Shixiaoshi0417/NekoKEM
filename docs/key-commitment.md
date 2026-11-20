@@ -113,8 +113,8 @@ directory is not, unless an attacker can already replace files there.
 ## Proposed NKPR v3
 
 Status: the reader, the writer and the Core legacy rule are implemented,
-with the CLI rules below. The Android and desktop apps still pass the
-own-key flag on every call, so they open every key as before; telling their
+with the CLI and desktop rules below. The Android app still passes the
+own-key flag on every call, so it opens every key as before; telling its
 own key from imported ones is the remaining step.
 
 ### Format
@@ -191,7 +191,11 @@ says the file is the installation's own managed key:
   identity key at the same time, which already keeps its encryption keys and
   password; the user is told once. The CLI never changes key files as a side
   effect of encrypting or decrypting, which scripts would not expect: it
-  prints a hint instead, and `upgrade-key` performs the rewrite.
+  prints a hint instead, and `upgrade-key` performs the rewrite. The desktop
+  apps rewrite an own NKPR v2 key after it opens for encryption or
+  decryption and say so in the result; an own NKPR v1 key keeps opening and
+  is left for the key page's upgrade, which writes NKPR v3 and adds the
+  signing keys.
 - **Every other source**: private-key import on Android and the desktop,
   Android temporary private keys, other key paths in the desktop apps and
   any other key path in the CLI. These refuse NKPR v1 and v2 with a dedicated
@@ -200,6 +204,9 @@ says the file is the installation's own managed key:
   older NekoKEM", which states that only the user's own exported key should
   be opened this way; on success it writes the key back as NKPR v3. The CLI
   accepts a legacy file at another path only with `--legacy-private-key`.
+  In the desktop apps that action is choosing the file as "My private key"
+  in Settings: the bridge compares every private key it opens with that
+  saved path, so the GUI cannot widen the rule.
 
 The explicit action leaves a narrow social-engineering path, in which the
 attacker persuades the user that their file is the user's own old key. It
