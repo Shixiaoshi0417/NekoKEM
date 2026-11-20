@@ -8,6 +8,7 @@ import android.net.Uri
 import android.os.Bundle
 import android.system.Os
 import com.shixiaoshi0417.nekokem.files.SafFileWorkflow
+import com.shixiaoshi0417.nekokem.keys.LegacyImport
 import com.shixiaoshi0417.nekokem.keys.LocalKeyManager
 import com.shixiaoshi0417.nekokem.nativecore.NativeBridge
 import com.shixiaoshi0417.nekokem.progress.CancellableProgressCallback
@@ -711,8 +712,9 @@ class TemporaryKeyInstrumentation : Instrumentation() {
     /**
      * NKPR v1 and v2 do not commit to the password, so they open only as this
      * device's own key (docs/key-commitment.md): a temporary key in an older
-     * format is refused before the password is asked for, the explicit import
-     * accepts it and rewrites it as NKPR v3, and the export for NekoKEM 5.2
+     * format is refused before the password is asked for, the import accepts
+     * it only after the user confirmed it and rewrites it as NKPR v3, and the
+     * export for NekoKEM 5.2
      * writes NKPR v2 with the same password.
      */
     private fun testOlderPrivateKeyFormats(
@@ -745,9 +747,21 @@ class TemporaryKeyInstrumentation : Instrumentation() {
         check(staged.code == LocalKeyManager.RESULT_LEGACY_PRIVATE_KEY && staged.key == null)
         check(manager.privateKeyFingerprint(older, password(DEFAULT_PASSWORD)) == null)
 
-        // Imported as this device's own key, it opens and becomes NKPR v3.
+        // The page asks about the older format before the password; without
+        // that answer the import refuses it on its own copy, unopened.
+        check(workflow.privateKeyImportVersion(Uri.fromFile(older)) == 2)
+        check(workflow.privateKeyImportVersion(Uri.fromFile(ownPrivate)) == 3)
+        val before = ownPrivate.readBytes()
         check(workflow.importEncryptedPrivateKey(Uri.fromFile(older), password(DEFAULT_PASSWORD)) ==
-            NativeBridge.RESULT_SUCCESS)
+            LocalKeyManager.RESULT_LEGACY_IMPORT_UNCONFIRMED)
+        check(ownPrivate.readBytes().contentEquals(before))
+
+        // Confirmed as this device's own key, it opens and becomes NKPR v3.
+        check(workflow.importEncryptedPrivateKey(
+            Uri.fromFile(older),
+            password(DEFAULT_PASSWORD),
+            LegacyImport.KEEP,
+        ) == NativeBridge.RESULT_SUCCESS)
         check(!manager.privateKeyIsLegacy(ownPrivate))
         check(ownPrivate.readBytes()[4] == 3.toByte())
         check(manager.readState().fingerprint == original)

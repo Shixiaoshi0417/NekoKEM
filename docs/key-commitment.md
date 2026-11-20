@@ -114,9 +114,9 @@ directory is not, unless an attacker can already replace files there.
 ## NKPR v3
 
 Status: implemented in Core, the CLI, Android and the desktop apps. Android
-treats the key in its key directory as its own, and private-key import says
-the chosen file is the user's own key; temporary private keys refuse NKPR v1
-and v2. The desktop apps treat the private key set in Settings as their own.
+treats the key in its key directory as its own; private-key import asks
+about an older-format file before the password and opens it only after the
+user said it is their own key; temporary private keys refuse NKPR v1 and v2. The desktop apps treat the private key set in Settings as their own.
 Their Upgrade key page rewrites that key directly, and any other older-format
 key only after a warning that stays up for three seconds and the user's
 confirmation that it is their own exported key. Both rewrite their own NKPR v2
@@ -205,11 +205,14 @@ says the file is the installation's own managed key:
   older format.
 - **Explicit action**: each front end has one way to open such a file as the
   user's own key, which says that only the user's own exported key belongs
-  there: Android's private-key import, the desktop Upgrade key page after its
-  warning (the bridge refuses a confirmation given before the three seconds
-  have passed), and the CLI's `--legacy-private-key`. The key is then written
-  as NKPR v3: an NKPR v2 key keeps its keys, and an NKPR v1 key is upgraded to
-  an identity key, on Android with its "Upgrade to identity key" action.
+  there: Android's private-key import after its dialog (an NKPR v2 key is
+  imported; an NKPR v1 key is upgraded right away, or kept as it is after a
+  three-second warning), the desktop Upgrade key page after its warning (the
+  bridge refuses a confirmation given before the three seconds have passed),
+  and the CLI's `--legacy-private-key`. Android decides on its private copy of
+  the file, so a file that changed after the dialog is refused unopened. The
+  key is then written as NKPR v3: an NKPR v2 key keeps its keys, and an NKPR
+  v1 key is upgraded to an identity key, unless the user kept it as it is.
 
 The explicit action leaves a narrow social-engineering path, in which the
 attacker persuades the user that their file is the user's own old key. It

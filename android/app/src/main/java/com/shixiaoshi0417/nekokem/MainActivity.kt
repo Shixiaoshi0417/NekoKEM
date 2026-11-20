@@ -22,6 +22,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -54,6 +55,7 @@ import com.shixiaoshi0417.nekokem.ui.SignatureSettings
 import com.shixiaoshi0417.nekokem.ui.SignatureSettingsStore
 import com.shixiaoshi0417.nekokem.ui.UnsignedEncryptionWarningDialog
 import com.shixiaoshi0417.nekokem.ui.UpdateAvailableDialog
+import com.shixiaoshi0417.nekokem.keys.LegacyImport
 import com.shixiaoshi0417.nekokem.keys.LocalKeyManager
 import com.shixiaoshi0417.nekokem.keys.LocalKeyState
 import com.shixiaoshi0417.nekokem.keys.PasswordManagerCredentials
@@ -101,6 +103,7 @@ import com.shixiaoshi0417.nekokem.update.UpdateResult
 import com.shixiaoshi0417.nekokem.update.UpdateSettings
 import com.shixiaoshi0417.nekokem.update.UpdateSettingsStore
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
@@ -275,6 +278,12 @@ private fun NekoKEMRoute(
     var pendingOutputAction by remember { mutableStateOf<PendingOutputAction?>(null) }
     var pendingKeyImport by remember { mutableStateOf<PendingKeyImport?>(null) }
     var pendingPrivateImportUri by remember { mutableStateOf<Uri?>(null) }
+    // A private key to import in the format of NekoKEM 5.2 and earlier is
+    // asked about before the password: the NKPR version shown (1 or 2), the
+    // warning before keeping a 4.x key as it is, and the user's answer.
+    var legacyImportVersion by remember { mutableIntStateOf(0) }
+    var confirmLegacyKeep by remember { mutableStateOf(false) }
+    var privateImportChoice by remember { mutableStateOf(LegacyImport.NONE) }
     var pendingPublicImportUri by remember { mutableStateOf<Uri?>(null) }
     var pendingTemporaryPrivateKey by remember {
         mutableStateOf<PendingTemporaryPrivateKey?>(null)
@@ -654,6 +663,38 @@ private fun NekoKEMRoute(
         }
     }
 
+    fun cancelPrivateImport() {
+        legacyImportVersion = 0
+        confirmLegacyKeep = false
+        privateImportChoice = LegacyImport.NONE
+        pendingPrivateImportUri = null
+    }
+
+    /** Reads the chosen key's header (no password) and asks about an older format first. */
+    fun continuePrivateImport() {
+        val uri = pendingPrivateImportUri ?: return
+        privateImportChoice = LegacyImport.NONE
+        if (running) {
+            cancelPrivateImport()
+            return
+        }
+        running = true
+        scope.launch {
+            val version = try {
+                pageWork { fileWorkflow.privateKeyImportVersion(uri) }
+            } catch (_: Exception) {
+                0
+            } finally {
+                running = false
+            }
+            if (pendingPrivateImportUri != uri) return@launch
+            when (version) {
+                1, 2 -> legacyImportVersion = version
+                else -> passwordPrompt = PasswordPrompt.IMPORT_PRIVATE_KEY
+            }
+        }
+    }
+
     val importKeyLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.OpenDocument(),
     ) { uri ->
@@ -675,7 +716,7 @@ private fun NekoKEMRoute(
             if (keyState.privateKeyExists) {
                 confirmPrivateKeyReplacement = true
             } else {
-                passwordPrompt = PasswordPrompt.IMPORT_PRIVATE_KEY
+                continuePrivateImport()
             }
         }
     }
@@ -1334,6 +1375,7 @@ private fun NekoKEMRoute(
             onDismiss = {
                 if (prompt == PasswordPrompt.IMPORT_PRIVATE_KEY) {
                     pendingPrivateImportUri = null
+                    privateImportChoice = LegacyImport.NONE
                 } else if (prompt == PasswordPrompt.IMPORT_PUBLIC_KEY) {
                     pendingPublicImportUri = null
                 } else if (
@@ -1367,7 +1409,9 @@ private fun NekoKEMRoute(
 
                     PasswordPrompt.IMPORT_PRIVATE_KEY -> {
                         val uri = pendingPrivateImportUri
+                        val legacy = privateImportChoice
                         pendingPrivateImportUri = null
+                        privateImportChoice = LegacyImport.NONE
                         if (uri == null) {
                             password.fill(0)
                             showSnackbar(R.string.snackbar_operation_cancelled)
@@ -1378,12 +1422,17 @@ private fun NekoKEMRoute(
                                     R.string.operation_import_private_key,
                                 sensitiveInput = password,
                                 passwordToSave = if (savePassword) password.copyOf() else null,
-                                completionDetails = {
-                                    keyCompletionDetails(displayName)
+                                completionDetails = { state ->
+                                    // An upgraded 4.x key has a new public key.
+                                    if (legacy == LegacyImport.UPGRADE) {
+                                        keyCompletionDetails(displayName, state.fingerprint)
+                                    } else {
+                                        keyCompletionDetails(displayName)
+                                    }
                                 },
                             ) {
                                 displayName = fileWorkflow.describe(uri).displayName
-                                fileWorkflow.importEncryptedPrivateKey(uri, password)
+                                fileWorkflow.importEncryptedPrivateKey(uri, password, legacy)
                             }
                         }
                     }
@@ -1849,9 +1898,7 @@ private fun NekoKEMRoute(
                     text = stringResource(R.string.action_replace),
                     onClick = {
                         confirmPrivateKeyReplacement = false
-                        if (pendingPrivateImportUri != null) {
-                            passwordPrompt = PasswordPrompt.IMPORT_PRIVATE_KEY
-                        }
+                        continuePrivateImport()
                     },
                 )
             },
@@ -1862,6 +1909,103 @@ private fun NekoKEMRoute(
                         confirmPrivateKeyReplacement = false
                         pendingPrivateImportUri = null
                     },
+                )
+            },
+        )
+    }
+
+    val legacyVersion = legacyImportVersion
+    if (legacyVersion != 0) {
+        // Asked before the password: such a file could be built to open under
+        // several passwords, so only the user's own exported key belongs here.
+        val canUpgrade = keyState.fingerprint != null && !keyState.canSign
+        AppAlertDialog(
+            onDismissRequest = { cancelPrivateImport() },
+            title = { Text(stringResource(R.string.legacy_import_title)) },
+            text = {
+                Text(
+                    if (legacyVersion == 1) {
+                        stringResource(R.string.legacy_import_v1_message) +
+                            if (canUpgrade) "" else "\n\n" + stringResource(R.string.legacy_import_v1_needs_public)
+                    } else {
+                        stringResource(R.string.legacy_import_v2_message)
+                    },
+                )
+            },
+            confirmButton = {
+                if (legacyVersion == 1) {
+                    DialogButton(
+                        text = stringResource(R.string.action_legacy_upgrade),
+                        enabled = canUpgrade,
+                        onClick = {
+                            legacyImportVersion = 0
+                            privateImportChoice = LegacyImport.UPGRADE
+                            passwordPrompt = PasswordPrompt.IMPORT_PRIVATE_KEY
+                        },
+                    )
+                } else {
+                    DialogButton(
+                        text = stringResource(R.string.action_legacy_import),
+                        onClick = {
+                            legacyImportVersion = 0
+                            privateImportChoice = LegacyImport.KEEP
+                            passwordPrompt = PasswordPrompt.IMPORT_PRIVATE_KEY
+                        },
+                    )
+                }
+            },
+            dismissButton = {
+                if (legacyVersion == 1) {
+                    DialogButton(
+                        text = stringResource(R.string.action_legacy_keep),
+                        onClick = {
+                            legacyImportVersion = 0
+                            confirmLegacyKeep = true
+                        },
+                    )
+                } else {
+                    DialogButton(
+                        text = stringResource(R.string.action_cancel),
+                        onClick = { cancelPrivateImport() },
+                    )
+                }
+            },
+        )
+    }
+
+    if (confirmLegacyKeep) {
+        // Kept as a 4.x key only after this warning was up for a few seconds.
+        var wait by remember { mutableIntStateOf(LEGACY_KEEP_WAIT_SECONDS) }
+        LaunchedEffect(Unit) {
+            while (wait > 0) {
+                delay(1000)
+                wait -= 1
+            }
+        }
+        AppAlertDialog(
+            onDismissRequest = { cancelPrivateImport() },
+            title = { Text(stringResource(R.string.legacy_import_keep_title)) },
+            text = { Text(stringResource(R.string.legacy_import_keep_message)) },
+            confirmButton = {
+                DialogButton(
+                    text = if (wait > 0) {
+                        stringResource(R.string.action_legacy_keep_confirm_wait, wait)
+                    } else {
+                        stringResource(R.string.action_legacy_keep_confirm)
+                    },
+                    enabled = wait == 0,
+                    destructive = true,
+                    onClick = {
+                        confirmLegacyKeep = false
+                        privateImportChoice = LegacyImport.KEEP
+                        passwordPrompt = PasswordPrompt.IMPORT_PRIVATE_KEY
+                    },
+                )
+            },
+            dismissButton = {
+                DialogButton(
+                    text = stringResource(R.string.action_cancel),
+                    onClick = { cancelPrivateImport() },
                 )
             },
         )
@@ -2320,6 +2464,7 @@ private fun resultReason(
         LocalKeyManager.RESULT_SIGNATURE_REQUIRED -> R.string.error_reason_signature_required
         LocalKeyManager.RESULT_SIGNER_NOT_TRUSTED -> R.string.error_reason_signer_not_trusted
         LocalKeyManager.RESULT_LEGACY_PRIVATE_KEY -> R.string.error_reason_legacy_private_key
+        LocalKeyManager.RESULT_LEGACY_IMPORT_UNCONFIRMED -> R.string.error_reason_legacy_import_changed
         NativeBridge.RESULT_INVALID_ARGUMENT -> R.string.error_reason_invalid_argument
         NativeBridge.RESULT_ALLOCATION_ERROR -> R.string.error_reason_memory
         NativeBridge.RESULT_JAVA_EXCEPTION -> R.string.error_reason_jni
@@ -2392,6 +2537,9 @@ private fun signatureDetails(
 }
 
 private const val ANY_MIME_TYPE = "*/*"
+// How long the warning before keeping a NekoKEM 4.x private key stays up
+// before it can be confirmed; the desktop apps wait as long.
+private const val LEGACY_KEEP_WAIT_SECONDS = 3
 
 /** This App's versionName, such as "5.0.0". */
 private fun installedVersion(context: Context): String = try {

@@ -7,6 +7,7 @@ import androidx.annotation.WorkerThread
 import android.system.Os
 import android.system.OsConstants
 import com.shixiaoshi0417.nekokem.R
+import com.shixiaoshi0417.nekokem.keys.LegacyImport
 import com.shixiaoshi0417.nekokem.keys.LocalKeyManager
 import com.shixiaoshi0417.nekokem.keys.PendingTemporaryPrivateKey
 import com.shixiaoshi0417.nekokem.keys.PendingTemporaryPrivateKeyResult
@@ -953,7 +954,36 @@ class SafFileWorkflow(
     }
 
     /** Takes ownership of [password] and clears it before returning. */
-    fun importEncryptedPrivateKey(source: Uri, password: ByteArray): Int {
+    /**
+     * The NKPR version of a private key to import, from its header alone (no
+     * password): 1 or 2 for NekoKEM 5.2 and earlier, 3 for the current format,
+     * 0 for anything else or when it cannot be read. Only lets the page ask
+     * about an older format first; the import decides on its own copy.
+     */
+    fun privateKeyImportVersion(source: Uri): Int = try {
+        contentResolver.openInputStream(source)?.use { stream ->
+            val header = ByteArray(NKPR_HEADER_PEEK)
+            var read = 0
+            while (read < header.size) {
+                val count = stream.read(header, read, header.size - read)
+                if (count < 0) break
+                read += count
+            }
+            if (read == header.size && header.copyOf(4).contentEquals(NKPR_MAGIC)) {
+                header[4].toInt() and 0xff
+            } else {
+                0
+            }
+        } ?: 0
+    } catch (_: Exception) {
+        0
+    }
+
+    fun importEncryptedPrivateKey(
+        source: Uri,
+        password: ByteArray,
+        legacy: LegacyImport = LegacyImport.NONE,
+    ): Int {
         var stagedInput: File? = null
         var workspace: File? = null
 
@@ -974,7 +1004,7 @@ class SafFileWorkflow(
             ) {
                 return LocalKeyManager.RESULT_STORAGE_ERROR
             }
-            keyManager.importEncryptedPrivateKey(stagedInput, password)
+            keyManager.importEncryptedPrivateKey(stagedInput, password, legacy)
         } catch (_: Exception) {
             LocalKeyManager.RESULT_STORAGE_ERROR
         } finally {
@@ -1481,5 +1511,8 @@ class SafFileWorkflow(
         const val WRITE_TRUNCATE_MODE = "wt"
         const val READ_WRITE_MODE = "rw"
         const val SHA256_ALGORITHM = "SHA-256"
+        // "NKPR" and the version byte.
+        const val NKPR_HEADER_PEEK = 5
+        val NKPR_MAGIC = byteArrayOf(0x4e, 0x4b, 0x50, 0x52)
     }
 }
