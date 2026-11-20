@@ -54,7 +54,8 @@ compose.desktop {
         jvmArgs += listOf("--enable-native-access=ALL-UNNAMED", "-Dfile.encoding=UTF-8")
         bridgeLibrary.orNull?.let { jvmArgs += "-Dnekokem.bridge=$it" }
         nativeDistributions {
-            targetFormats(TargetFormat.Msi, TargetFormat.Deb, TargetFormat.Rpm)
+            // Windows gets an MSI and an EXE installer that carries the same MSI.
+            targetFormats(TargetFormat.Msi, TargetFormat.Exe, TargetFormat.Deb, TargetFormat.Rpm)
             packageName = "NekoKEM"
             packageVersion = version.toString()
             description = "Post-quantum file encryption"

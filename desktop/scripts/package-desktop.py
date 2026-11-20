@@ -6,7 +6,7 @@ what CI installed and started.
 
   package-desktop.py resources --library LIB --openssl-license FILE --target DIR
   package-desktop.py linux --arch ARCH --app DIR --deb FILE --rpm FILE --appimage-runtime FILE --output DIR --source-sha SHA
-  package-desktop.py windows --app DIR --msi FILE --output DIR --source-sha SHA
+  package-desktop.py windows --app DIR --msi FILE --exe FILE --output DIR --source-sha SHA
   package-desktop.py macos --app NekoKEM.app --output DIR --source-sha SHA
 
 The version is the bridge's (desktop/bridge/Cargo.toml); the run id comes from
@@ -225,9 +225,15 @@ def windows(arguments):
     check_licenses(bundled)
     require((app / 'NekoKEM.exe').is_file(), 'The launcher is missing')
     require(os.environ.get('GITHUB_RUN_ID'), 'The Windows package records the run that built it')
+    # jpackage's EXE installer is a small program that carries the MSI and runs msiexec.
+    for installer in (arguments.msi, arguments.exe):
+        require(Path(installer).is_file() and Path(installer).stat().st_size > 0, f'{installer} is missing')
+    with open(arguments.exe, 'rb') as stream:
+        require(stream.read(2) == b'MZ', 'The EXE installer is not a Windows program')
 
     output = new_directory(arguments.output)
     shutil.copyfile(arguments.msi, output / 'NekoKEM-Windows-GUI.msi')
+    shutil.copyfile(arguments.exe, output / 'NekoKEM-Windows-GUI.exe')
     record = metadata('windows-x86_64', arguments.source_sha, {
         'bridge_sha256': sha256(library), 'exe_sha256': sha256(app / 'NekoKEM.exe'),
         'authenticode_signed': False, 'apk_signing_material_used': False})
@@ -237,7 +243,7 @@ def windows(arguments):
         for path in sorted(app.rglob('*')):
             if path.is_file():
                 archive.write(path, (Path('NekoKEM') / path.relative_to(app)).as_posix())
-    write_sums(output, ['NekoKEM-Windows-GUI.msi', 'NekoKEM-Windows-GUI.zip'])
+    write_sums(output, ['NekoKEM-Windows-GUI.msi', 'NekoKEM-Windows-GUI.exe', 'NekoKEM-Windows-GUI.zip'])
 
 
 def macos(arguments):
@@ -286,6 +292,7 @@ def main():
         command.add_argument('--output', required=True)
         command.add_argument('--source-sha', required=True)
     commands.choices['windows'].add_argument('--msi', required=True)
+    commands.choices['windows'].add_argument('--exe', required=True)
     arguments = parser.parse_args()
     try:
         {'resources': resources, 'linux': linux, 'windows': windows, 'macos': macos}[arguments.command](arguments)
