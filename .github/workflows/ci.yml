@@ -891,12 +891,12 @@ jobs:
             --library "target/${{ matrix.arch }}-unknown-linux-gnu/release/libnekokem_native.so" \
             --openssl-license "$NEKOKEM_OPENSSL_PREFIX/LICENSE.txt" \
             --target "$GITHUB_WORKSPACE/desktop-compose/native/${{ matrix.resources }}"
-      - name: Render every page of both styles with the real bridge
+      - name: Run the unit tests and render every page of both styles with the real bridge
         working-directory: desktop-compose
         run: |
           set -Eeuo pipefail
           # Named for this run only; the packaged launcher finds the library in its own resources.
-          ./gradlew --no-daemon screenshots "-Pnekokem.bridge=$PWD/native/${{ matrix.resources }}/libnekokem_native.so"
+          ./gradlew --no-daemon test screenshots "-Pnekokem.bridge=$PWD/native/${{ matrix.resources }}/libnekokem_native.so"
           test "$(find build/screenshots -name '*.png' -size +0 | wc -l)" -ge 40
       - name: Build, check and name the Debian, RPM, folder and AppImage packages
         working-directory: desktop-compose

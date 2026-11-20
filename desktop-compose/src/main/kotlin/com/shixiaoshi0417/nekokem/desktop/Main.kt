@@ -12,7 +12,7 @@ import androidx.compose.ui.window.rememberWindowState
 fun main() = application {
     var window: java.awt.Frame? = null
     val scope = rememberCoroutineScope()
-    val state = remember { AppState(scope, AwtFileChooser { window }, ::exitApplication) }
+    val state = remember { AppState(scope, if (PortalFileChooser.inFlatpak()) PortalFileChooser() else AwtFileChooser { window }, ::exitApplication) }
     Window(
         // A running operation is told to stop; the window closes once Core has cleaned up.
         onCloseRequest = state::requestClose,

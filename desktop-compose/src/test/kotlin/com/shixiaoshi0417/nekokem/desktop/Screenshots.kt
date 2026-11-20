@@ -40,9 +40,9 @@ fun main(args: Array<String>): Unit = runBlocking(Dispatchers.Main) {
         val saved = mutableListOf<String>()
         val outFolder = File(work, "${style.wire}-${theme.name}-out").apply { mkdirs() }
         val chooser = object : FileChooser {
-            override fun open() = null
-            override fun save(suggested: String, directory: String?) = File(directory ?: work.path, "${style.wire}-${theme.name}-$suggested").absolutePath.also(saved::add)
-            override fun folder(directory: String?) = outFolder.absolutePath
+            override suspend fun open() = null
+            override suspend fun save(suggested: String, directory: String?) = File(directory ?: work.path, "${style.wire}-${theme.name}-$suggested").absolutePath.also(saved::add)
+            override suspend fun folder(directory: String?) = outFolder.absolutePath
         }
         val state = AppState(this, chooser) {}
         state.start()
