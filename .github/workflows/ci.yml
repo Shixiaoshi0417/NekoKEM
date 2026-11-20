@@ -44,6 +44,11 @@ jobs:
           python3 scripts/check_versions.py
           python3 scripts/test_version_checks.py -v
 
+      - name: Check the Arch Linux package description
+        run: |
+          python3 scripts/update_arch_package.py --check
+          python3 scripts/test_update_arch_package.py -v
+
       - name: Test atomic performance report saving
         run: python3 scripts/test_profile_reports.py -v
 
@@ -977,6 +982,56 @@ jobs:
           path: |
             ${{ runner.temp }}/compose-linux
             ${{ runner.temp }}/linux-gui
+          retention-days: 14
+
+  arch-linux:
+    name: Arch Linux package build, install and window check
+    needs: [build-linux, compose-linux]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: NekoKEM-linux-x86_64
+          path: ${{ runner.temp }}/arch-cli
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: compose-linux-x86_64
+          path: ${{ runner.temp }}/arch-gui
+      - name: Point the PKGBUILD at this run's archives
+        run: |
+          set -Eeuo pipefail
+          version=$(python3 -c 'import tomllib; print(tomllib.load(open("desktop/bridge/Cargo.toml", "rb"))["package"]["version"])')
+          package="$RUNNER_TEMP/arch-package"
+          mkdir -p "$package"
+          cp linux/arch/PKGBUILD linux/arch/nekokem.desktop "$package/"
+          cli="$RUNNER_TEMP/arch-cli/NekoKEM-linux-x86_64.tar.gz"
+          gui=$(find "$RUNNER_TEMP/arch-gui" -name NekoKEM-linux-x86_64-GUI.tar.gz)
+          test -s "$cli" && test -s "$gui"
+          # Under the names makepkg would download them as, so it uses them instead.
+          cp "$cli" "$package/NekoKEM-linux-x86_64-$version.tar.gz"
+          cp "$gui" "$package/NekoKEM-linux-x86_64-GUI-$version.tar.gz"
+          {
+            echo "$(sha256sum < "$cli" | cut -d ' ' -f 1)  NekoKEM-linux-x86_64.tar.gz"
+            echo "$(sha256sum < "$gui" | cut -d ' ' -f 1)  NekoKEM-linux-x86_64-GUI.tar.gz"
+          } > "$RUNNER_TEMP/arch-sums.txt"
+          python3 scripts/update_arch_package.py "$version" --arch x86_64 \
+            --sums "$RUNNER_TEMP/arch-sums.txt" --dir "$package"
+      - name: Build with makepkg, install with pacman and open the GUI on Arch Linux
+        run: |
+          set -Eeuo pipefail
+          mkdir -p "$RUNNER_TEMP/arch-linux"
+          docker run --rm \
+            --volume "$RUNNER_TEMP/arch-package:/package:ro" \
+            --volume "$RUNNER_TEMP/arch-linux:/output" \
+            --volume "$GITHUB_WORKSPACE/.github/scripts/test_arch_package.sh:/test.sh:ro" \
+            archlinux:latest bash /test.sh /package /output
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: arch-linux-x86_64
+          path: ${{ runner.temp }}/arch-linux
           retention-days: 14
 
   compose-windows:
