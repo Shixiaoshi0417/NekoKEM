@@ -378,20 +378,24 @@ static void print_usage(FILE *output, const char *program)
             "  %s keygen\n"
             "  %s keygen hybrid\n"
             "  %s keygen --replace\n"
-            "  %s encrypt hybrid [--sign-key <private.key.enc>] [--unsigned] "
+            "  %s encrypt hybrid [--sign-key <private.key.enc>] "
+            "[--legacy-private-key] [--unsigned] "
             "<input_file> <output_file> <public.key> [<public.key> ...]\n"
             "  %s decrypt hybrid [--trust <public.key>]... "
             "[--require-signature] [--require-trusted] "
-            "[--save-signer <signer.key>] <input_file> <output_file> "
-            "<private.key|private.key.enc>\n"
+            "[--save-signer <signer.key>] [--legacy-private-key] "
+            "<input_file> <output_file> <private.key|private.key.enc>\n"
             "  %s upgrade-key [<public.key> <private.key.enc>]\n"
             "  %s export-legacy-public-key <public.key> <output.key>\n"
+            "  %s export-legacy-private-key <output.enc>\n"
             "  %s fingerprint <public.key>\n"
             "Encryption signs with keys/private.key.enc unless --sign-key or "
-            "--unsigned is given.\n"),
+            "--unsigned is given.\n"
+            "A private key in the NKPR v1 or v2 format opens only at "
+            "keys/private.key.enc or with --legacy-private-key.\n"),
             safe_program, safe_program, safe_program, safe_program,
             safe_program, safe_program, safe_program, safe_program,
-            safe_program, safe_program);
+            safe_program, safe_program, safe_program);
     fputs(file_message(
         "  --help                 Show this help\n"
         "  --lang LANGUAGE        Override language for this command\n"
@@ -604,6 +608,46 @@ int cli_run_hybrid_keygen(int replace)
     return generate_hybrid_keypair(0, replace);
 }
 
+/*
+ * keys/private.key.enc is the installation's own key. Any other private-key
+ * file may have been written by someone else, so an NKPR v1 or v2 file there
+ * is opened only with --legacy-private-key; see docs/key-commitment.md.
+ */
+static int private_key_is_own(const char *private_key_path)
+{
+    int same = 0;
+
+    return strcmp(private_key_path, PROTECTED_PRIVATE_KEY_PATH) == 0 ||
+           (file_paths_are_same_file(private_key_path,
+                                     PROTECTED_PRIVATE_KEY_PATH, &same) &&
+            same != 0);
+}
+
+/*
+ * Decides before the password prompt whether an older-format key may be
+ * unlocked: *accept is passed to Core, *legacy says it is NKPR v1 or v2.
+ */
+static int legacy_key_allowed(const char *private_key_path, int legacy_option,
+                              int *accept, int *legacy)
+{
+    *legacy = nekokem_private_key_is_legacy(private_key_path) == 1;
+    *accept = legacy_option != 0 || private_key_is_own(private_key_path);
+    if (*legacy && !*accept) {
+        fputs(file_message("This private key uses an older format that is accepted only as your own key\n"), stderr);
+        fputs(file_message("Pass --legacy-private-key only for a key you exported yourself from an older NekoKEM.\n"), stderr);
+        return 0;
+    }
+    return 1;
+}
+
+static void suggest_key_update(const char *private_key_path, int legacy)
+{
+    if (legacy && private_key_is_own(private_key_path)) {
+        fputs(file_message("Your private key uses an older format. Run upgrade-key to rewrite it as NKPR v3.\n"),
+              stderr);
+    }
+}
+
 static int read_existing_password(const char *private_key_path,
                                   PasswordBuffer *password)
 {
@@ -634,11 +678,14 @@ int cli_run_hybrid_encrypt(const char *input_path,
                            const char *const *public_key_paths,
                            size_t public_key_count,
                            const char *sign_key_path,
-                           int unsigned_output)
+                           int unsigned_output,
+                           int legacy_key)
 {
     PasswordBuffer password = {0};
     NekoKEMEncryptOptions options;
     NekoKEMEncryptResult result;
+    int accept_legacy = 0;
+    int legacy = 0;
     int success = 0;
 
     memset(&options, 0, sizeof(options));
@@ -663,8 +710,13 @@ int cli_run_hybrid_encrypt(const char *input_path,
                     file_display_safe_path(sign_key_path));
             goto cleanup;
         }
-        if (!read_existing_password(sign_key_path, &password)) {
+        if (!legacy_key_allowed(sign_key_path, legacy_key, &accept_legacy,
+                                &legacy) ||
+            !read_existing_password(sign_key_path, &password)) {
             goto cleanup;
+        }
+        if (accept_legacy) {
+            options.flags = NEKOKEM_ENCRYPT_LEGACY_SENDER_KEY;
         }
         options.sender_private_key_path = sign_key_path;
         options.password = password.data;
@@ -692,6 +744,9 @@ int cli_run_hybrid_encrypt(const char *input_path,
         }
         fputs(file_message("Warning: this file is not signed; recipients cannot confirm that it came from you.\n"),
               stderr);
+    }
+    if (unsigned_output == 0) {
+        suggest_key_update(sign_key_path, legacy);
     }
     success = 1;
 
@@ -723,10 +778,12 @@ int cli_run_hybrid_decrypt(const char *input_path,
                            const char *private_key_path,
                            const CliVerifyOptions *verify)
 {
-    static const CliVerifyOptions none = {NULL, 0U, 0, 0, NULL};
+    static const CliVerifyOptions none = {NULL, 0U, 0, 0, NULL, 0};
     PasswordBuffer password = {0};
     NekoKEMVerifyPolicy policy;
     NekoKEMVerifyResult result;
+    int accept_legacy = 0;
+    int legacy = 0;
     int status;
     int success = 0;
 
@@ -746,8 +803,13 @@ int cli_run_hybrid_decrypt(const char *input_path,
     policy.trusted_signer_paths = verify->trusted_paths;
     policy.trusted_signer_count = verify->trusted_count;
     policy.signer_public_key_output_path = verify->save_signer_path;
-    if (!read_existing_password(private_key_path, &password)) {
+    if (!legacy_key_allowed(private_key_path, verify->legacy_private_key,
+                            &accept_legacy, &legacy) ||
+        !read_existing_password(private_key_path, &password)) {
         goto cleanup;
+    }
+    if (accept_legacy) {
+        policy.flags |= NEKOKEM_VERIFY_LEGACY_PRIVATE_KEY;
     }
     status = nekokem_decrypt_file_verified_with_progress(
         input_path, output_path, private_key_path, password.data,
@@ -766,6 +828,7 @@ int cli_run_hybrid_decrypt(const char *input_path,
         printf(file_message("Saved the signer's public key: %s\n"),
                file_display_safe_path(verify->save_signer_path));
     }
+    suggest_key_update(private_key_path, legacy);
     success = 1;
 
 cleanup:
@@ -794,26 +857,42 @@ cleanup:
     return success;
 }
 
+/*
+ * Brings the user's own key pair up to date: an NKPR v1 key gains signing
+ * keys and an NKPR v2 key keeps its keys; both are rewritten as NKPR v3 with
+ * the same password. The paths name the user's own keys, so older formats
+ * are accepted here.
+ */
 int cli_run_upgrade_key(const char *public_key_path,
                         const char *private_key_path)
 {
     PasswordBuffer password = {0};
+    int identity;
     int success = 0;
 
     if (public_key_path == NULL) {
         public_key_path = PUBLIC_KEY_PATH;
         private_key_path = PROTECTED_PRIVATE_KEY_PATH;
     }
-    if (nekokem_public_key_can_verify(public_key_path) == 1) {
-        fputs(file_message("This key is already a signing identity key\n"), stderr);
+    identity = nekokem_public_key_can_verify(public_key_path) == 1;
+    if (identity && nekokem_private_key_exists(private_key_path) == 1 &&
+        nekokem_private_key_is_legacy(private_key_path) == 0) {
+        printf(file_message("The key pair is already in the current format\n"));
+        success = 1;
         goto cleanup;
     }
     if (!read_password_line(file_message("请输入私钥密码："), &password) ||
-        !nekokem_upgrade_to_identity_keys(public_key_path, private_key_path,
-                                          password.data, password.length)) {
+        !nekokem_update_private_key_format(public_key_path, private_key_path,
+                                           password.data, password.length)) {
         goto cleanup;
     }
     password_buffer_cleanup(&password);
+    if (identity) {
+        printf(file_message("Rewrote %s as NKPR v3; the keys and password are unchanged\n"),
+               file_display_safe_path(private_key_path));
+        success = 1;
+        goto cleanup;
+    }
     printf(file_message("Added Ed448 + ML-DSA-87 signing keys to %s and %s\n"),
            file_display_safe_path(public_key_path),
            file_display_safe_path(private_key_path));
@@ -838,6 +917,26 @@ int cli_run_export_legacy_public_key(const char *public_key_path,
     printf(file_message("Wrote the two-component public key for NekoKEM 4.x: %s\n"),
            file_display_safe_path(output_path));
     return 1;
+}
+
+int cli_run_export_legacy_private_key(const char *output_path)
+{
+    PasswordBuffer password = {0};
+    int success = 0;
+
+    if (!read_password_line(file_message("请输入私钥密码："), &password) ||
+        !nekokem_export_private_key_legacy(PROTECTED_PRIVATE_KEY_PATH,
+                                           password.data, password.length,
+                                           output_path)) {
+        goto cleanup;
+    }
+    printf(file_message("Wrote the private key for NekoKEM 5.2 and earlier: %s\n"),
+           file_display_safe_path(output_path));
+    success = 1;
+
+cleanup:
+    password_buffer_cleanup(&password);
+    return success;
 }
 
 int cli_run_fingerprint(const char *public_key_path)
@@ -1373,7 +1472,7 @@ static int interactive_encrypt(void)
 
         recipients[0] = key_path;
         success = cli_run_hybrid_encrypt(input_path, output_path, recipients,
-                                         1U, NULL, 0);
+                                         1U, NULL, 0, 0);
     }
 
 cleanup:

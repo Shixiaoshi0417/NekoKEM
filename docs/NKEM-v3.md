@@ -99,7 +99,7 @@ header.
 ## Compatibility
 
 - `nekokem_encrypt_file()` writes v3.
-- `nekokem_decrypt_file()` accepts v3 and [v4](NKEM-v4.md). Containers whose
+- `nekokem_decrypt_file()` accepts v3, [v4](NKEM-v4.md) and [v5](NKEM-v5.md). Containers whose
   version byte is `1`, `2` or any other value are rejected and no plaintext
   output is committed.
 - The v1/v2 encryption, decryption, parser, header, API, and CLI compatibility

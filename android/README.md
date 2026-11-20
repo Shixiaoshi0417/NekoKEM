@@ -7,7 +7,7 @@
 Android App 通过窄 JNI Bridge 调用可复用的 NekoKEM C17 Core。Kotlin 和
 JNI 不实现或解析 X448、ML-KEM-1024、HKDF、AES-GCM、NKEM 或 NKPR。
 Core 处理 NKEM v3 单接收方、NKEM v4 多接收方和带签名的 NKEM v5 文件容器；NKEM v1/v2 已不再支持。NKPR 是独立的
-私钥容器，由 Core 处理：新身份密钥为 NKPR v2，旧版 NKPR v1 仍可读取并可就地升级。
+私钥容器，由 Core 处理：新身份密钥为带密钥承诺的 NKPR v3，旧版 NKPR v1、v2 仍可读取，v1 可就地升级。
 
 当前正式 App 版本为 `5.2.0`，Core 版本为 `5.1`，Android application ID
 与 namespace 均为 `com.shixiaoshi0417.nekokem`。默认写入的协议容器为带签名的
@@ -21,7 +21,7 @@ README 图标仅使用专用圆角展示图，Android launcher 继续使用现�
 
 ## 工具链
 
-- Kotlin 2.4.21（AGP 内置 Kotlin）、Jetpack Compose 1.12、Material 3 Expressive（`material3` 1.5.0-beta01）
+- Kotlin 2.4.21（AGP 内置 Kotlin）、Jetpack Compose 1.12、Material 3 Expressive（`material3` 1.5.0-rc01）
 - MIUIX（`top.yukonga.miuix.kmp` 0.9.4：`miuix-ui`、`miuix-icons`、`miuix-preference`、`miuix-blur`）
 - Android Gradle Plugin 9.5.1、Gradle 9.9.0（Kotlin DSL）、JDK 17 编译目标；运行 JVM 单元测试需要 JDK 21（miuix 以 Java 21 字节码发布）
 - Android SDK Platform 37.0、Build Tools 36.0.0（`compileSdk 37`、`minSdk 26`、`targetSdk 36`）
@@ -112,13 +112,15 @@ Activity 重建和删除。NKEM v3、NKPR 及其密码算法与参数保持不�
 
 在“公钥通讯录”页面勾选“选为接收方”后，页面顶部显示已选人数，点击“加密给所选接收方”返回文件页；
 勾选本身不会改变当前加密公钥，需显式点击按钮才生效。“清除选择”可取消全部勾选。
-选择一位时仍写出 NKEM v3；选择 2 至 64 位时写出一个 [NKEM v4](../docs/NKEM-v4.md) 文件，
+默认 1 至 64 位接收方共用一个带签名的 [NKEM v5](../docs/NKEM-v5.md) 文件；开启「不签名加密」后，
+选择一位写出 NKEM v3，选择 2 至 64 位写出一个 [NKEM v4](../docs/NKEM-v4.md) 文件。
 每位所选接收方都能用自己的私钥解密，其他人无法解密。文件页列出全部接收方及其完整指纹。
 
 加密前按选择顺序为每位联系人创建并校验私有快照（与单人加密相同）；任何一位缺失、损坏或指纹不符时
 不加密任何内容，已创建的快照立即删除，错误对话框指出该联系人，所选接收方保持不变，需由用户显式处理。
-重复联系人或超过 64 位会被拒绝。JNI 新增 `nativeEncryptFileMultiWithProgress()`，只转换路径、
-进度和取消，由 Core 校验每个公钥并写出 v4；解密自动识别 v3 与 v4。NekoKEM v3.3.2 及更早版本无法打开 v4 文件。
+重复联系人或超过 64 位会被拒绝。JNI 的 `nativeEncryptFileSignedWithProgress()`（签名的 v5）和
+`nativeEncryptFileMultiWithProgress()`（不签名的 v3/v4）只转换路径、口令、进度和取消，由 Core 校验每个公钥并写出
+容器；解密自动识别 v3、v4 与 v5。NekoKEM v3.3.2 及更早版本无法打开 v4 文件，4.x 及更早版本无法打开 v5 文件。
 API 26/29/35/36 设备测试覆盖两位联系人共享一个 v4 文件、各自解密、未选择的默认密钥无法解密、
 联系人缺失时整体失败并清理快照、重复与超限拒绝，以及真实页面中的勾选、显式应用和清除选择。
 
@@ -165,7 +167,7 @@ SAF output URI
 解密时，Core 完成 GCM 认证并原子提交私有暂存输出后，App 才请求输出文档
 位置。密码错误、NKEM 认证失败或准备阶段取消不会创建明文目标；已选择输出位置后的失败或取消
 会尽量恢复原内容，但提供方可能保留空目标，需手动删除。明文输入上限为 8 GiB；容器输入上限另加最大容器开销
-（v3 为 1,716 字节，v4 为 156 + 1,672 × 接收方数，最多 64 位），因此能加密
+（v3 为 1,716 字节，v4 为 156 + 1,672 × 接收方数，记录原文件名的 v5 为 10,228 + 1,672 × 接收方数，最多 64 位；上限按其中最大的 v5 计算），因此能加密
 的文件一定能再导入解密。SAF provider 最终写入本身不具备跨 provider 的统一
 原子提交保证。
 
@@ -178,7 +180,7 @@ SAF output URI
 ## 进度与取消
 
 加解密在 `Dispatchers.IO` 后台协程运行。JNI 同步转发 Core 的
-`processedBytes`、`totalBytes` 回调；Core 默认 v3 数据以 64 KiB 分块处理。
+`processedBytes`、`totalBytes` 回调；Core 对 v3、v4、v5 的文件数据都以 64 KiB 分块处理。
 UI 每 150 ms 至多更新一次，速度使用最近两秒的滑动平均，并显示百分比、
 已处理/总大小、实时速度和预计剩余时间。
 
@@ -190,11 +192,16 @@ UI 每 150 ms 至多更新一次，速度使用最近两秒的滑动平均，并
 
 - `nativeGenerateKeypairWithPassword(publicPath, privatePath, password)`：已有密钥文件时失败，从不覆盖
 - `nativeReplaceKeypairWithPassword(publicPath, privatePath, password)`：仅在用户确认替换后使用
+- `nativeUpgradeToIdentityKeys(publicPath, privatePath, password)`：把 NekoKEM 4.x 密钥升级为身份密钥
 - `nativeCheckPassword(privatePath, password)`
+- `nativePrivateKeyFingerprint(privatePath, password)`
 - `nativeHasPrivateKey(privatePath)`
-- `nativeExportPublicKey(publicPath, outputPath)`
+- `nativeExportPublicKey(publicPath, outputPath)`、`nativeExportLegacyPublicKey(publicPath, outputPath)`
 - `nativeAcquirePairLock(keyPath)` / `nativeReleasePairLock(descriptor)`、`nativeDeletePrivateKeyUnderPairLock(privatePath)`：持有目录锁时删除私钥
-- `nativeGetFingerprint(publicPath)`
+- `nativeGetFingerprint(publicPath)`、`nativePublicKeyLegacyFingerprint(publicPath)`、`nativePublicKeyCanVerify(publicPath)`
+- `nativeEncryptFileSignedWithProgress(inputPath, outputPath, publicPaths, signKeyPath, password, originalName, callback)`：签名的 NKEM v5
+- `nativeEncryptFileMultiWithProgress(inputPath, outputPath, publicPaths, callback)`：不签名的 NKEM v3/v4
+- `nativeDecryptFileVerifiedWithProgress(...)`：解密 v3、v4、v5，由 Core 执行签名策略并返回签名状态、签名者指纹和原文件名
 - `nativeEncryptFileWithProgress(inputPath, outputPath, publicPath, callback)`
 - `nativeDecryptFileWithProgress(inputPath, outputPath, privatePath, password, callback)`
 - 原有 `nativeEncryptFile()`、`nativeDecryptFile()` 兼容入口
@@ -211,7 +218,7 @@ JNI 只做路径、字符串、字节数组、回调和返回值转换；不解�
 界面采用 Material 3 Expressive：表现力配色与弹簧动效、按下时圆角形变的按钮、
 加密与解密等成对操作的按钮组（标签放不下一行时改为整宽纵向排列）、
 删除操作使用错误色，进度对话框显示波浪进度条与加载指示器，切换页面时新页面淡入。
-`material3` 1.5.0-beta01 需要 `compileSdk 37` 与 AGP 9.1 以上。
+`material3` 1.5.0-rc01 需要 `compileSdk 37` 与 AGP 9.1 以上。
 
 新安装默认使用 MIUIX 界面，可在「设置 → 界面风格」随时切回 Material 3 Expressive，选择立即生效并保存在本机。
 MIUIX 界面每页使用可折叠的大标题，页面在悬浮的液态玻璃底栏下滚动：底栏对背后内容做模糊和透镜折射，

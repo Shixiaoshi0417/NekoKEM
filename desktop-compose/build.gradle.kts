@@ -29,7 +29,7 @@ dependencies {
     implementation("org.jetbrains.compose.material:material-icons-core:1.7.3")
     // The fingerprint QR code, the same encoder as the Android app.
     implementation("com.google.zxing:core:3.5.4")
-    implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.12.0")
+    implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.13.0")
     // Dispatchers.Main on the Swing event thread, where Compose runs.
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-swing:1.11.0")
     testImplementation(kotlin("test"))

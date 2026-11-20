@@ -367,13 +367,15 @@ int nekokem_encrypt_file_v5_with_progress(
     uint32_t header_flags = 0U;
     uint64_t plaintext_len = 0U;
     int aes_result;
+    int loaded;
     int result = NEKOKEM_OPERATION_ERROR;
 
     encrypt_result_set(encrypt_result, 0);
     if (options == NULL ||
         (options->struct_size != ENCRYPT_OPTIONS_V1_SIZE &&
          options->struct_size < sizeof(*options)) ||
-        (options->flags & ~(uint32_t)NEKOKEM_ENCRYPT_UNSIGNED) != 0U ||
+        (options->flags & ~(uint32_t)(NEKOKEM_ENCRYPT_UNSIGNED |
+                                      NEKOKEM_ENCRYPT_LEGACY_SENDER_KEY)) != 0U ||
         (encrypt_result != NULL &&
          encrypt_result->struct_size < sizeof(*encrypt_result))) {
         fprintf(stderr, file_message("Invalid NekoKEM encryption options\n"));
@@ -435,9 +437,14 @@ int nekokem_encrypt_file_v5_with_progress(
         !nkem_gcm_data_size_is_valid(plaintext_len)) {
         goto cleanup;
     }
-    if (!hybrid_load_decryption_keys(options->sender_private_key_path,
-                                     options->password,
-                                     options->password_len, &sender)) {
+    loaded = hybrid_load_decryption_keys(
+        options->sender_private_key_path, options->password,
+        options->password_len,
+        (options->flags & NEKOKEM_ENCRYPT_LEGACY_SENDER_KEY) != 0U, &sender);
+    if (loaded != 1) {
+        if (loaded == HYBRID_LEGACY_KEY_REFUSED) {
+            result = NEKOKEM_ERROR_LEGACY_PRIVATE_KEY;
+        }
         goto cleanup;
     }
     if (!hybrid_keys_have_identity(&sender)) {
@@ -564,7 +571,8 @@ int nekokem_v5_policy_is_valid(const NekoKEMVerifyPolicy *policy)
     }
     if (policy->struct_size < sizeof(*policy) ||
         (policy->flags & ~(uint32_t)(NEKOKEM_VERIFY_REQUIRE_SIGNATURE |
-                                     NEKOKEM_VERIFY_REQUIRE_TRUSTED)) != 0U ||
+                                     NEKOKEM_VERIFY_REQUIRE_TRUSTED |
+                                     NEKOKEM_VERIFY_LEGACY_PRIVATE_KEY)) != 0U ||
         policy->trusted_signer_count > NEKOKEM_MAX_TRUSTED_SIGNERS ||
         (policy->trusted_signer_count > 0U &&
          policy->trusted_signer_paths == NULL) ||
@@ -689,6 +697,7 @@ int nekokem_v5_decrypt_opened(
     int is_trusted = 0;
     int opened;
     int aes_result;
+    int loaded;
     int result = NEKOKEM_OPERATION_ERROR;
 
     if (!nekokem_v5_policy_is_valid(policy) ||
@@ -714,9 +723,16 @@ int nekokem_v5_decrypt_opened(
     }
     memcpy(metadata, raw_header, NKEM_V4_HEADER_SIZE);
     if (!file_read_exact(input, metadata + NKEM_V4_HEADER_SIZE,
-                         metadata_len - NKEM_V4_HEADER_SIZE) ||
-        !hybrid_load_decryption_keys(private_key_path, password,
-                                     password_len, &private_keys)) {
+                         metadata_len - NKEM_V4_HEADER_SIZE)) {
+        goto cleanup;
+    }
+    loaded = hybrid_load_decryption_keys(
+        private_key_path, password, password_len,
+        (flags & NEKOKEM_VERIFY_LEGACY_PRIVATE_KEY) != 0U, &private_keys);
+    if (loaded != 1) {
+        if (loaded == HYBRID_LEGACY_KEY_REFUSED) {
+            result = NEKOKEM_ERROR_LEGACY_PRIVATE_KEY;
+        }
         goto cleanup;
     }
     if (!nkem_multi_open_metadata(&v5_labels, &private_keys, metadata,

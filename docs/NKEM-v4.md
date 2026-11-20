@@ -197,6 +197,6 @@ progress reports, while a key with no entry stops at step 4.
 - `nekokem_encrypt_file_multi_with_progress()` writes v4 for two or more
   public keys and v3 for one.
 - `nekokem_encrypt_file*()` continues to write v3.
-- `nekokem_decrypt_file*()` accepts v3 and v4 and rejects v1, v2 and other
-  versions without committing output.
+- `nekokem_decrypt_file*()` accepts v3, v4 and [v5](NKEM-v5.md) and rejects v1,
+  v2 and other versions without committing output.
 - NekoKEM v3.3.2 and earlier cannot read v4 containers.

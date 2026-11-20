@@ -16,9 +16,8 @@
 #include "windows_io.h"
 #endif
 
-#define MANAGED_NKPR_MAX_SIZE \
-    (NKPR_HEADER_SIZE + NKPR_SALT_SIZE + NKPR_NONCE_SIZE + \
-     NKPR_MAX_PEM_SIZE + NKPR_TAG_SIZE)
+/* The same limit as the reader, so every readable NKPR version is found. */
+#define MANAGED_NKPR_MAX_SIZE NKPR_MAX_CONTAINER_SIZE
 
 static int managed_path_is_valid(const char *path)
 {
@@ -59,28 +58,43 @@ cleanup:
     return exists;
 }
 
+int nekokem_check_private_key_password_flags(
+    const char *private_key_path,
+    const unsigned char *password,
+    size_t password_len,
+    uint32_t flags)
+{
+    HybridKeys keys = {0};
+    int loaded;
+    int success = 0;
+
+    if (!managed_path_is_valid(private_key_path) ||
+        password == NULL || password_len == 0U ||
+        (flags & ~(uint32_t)NEKOKEM_PRIVATE_KEY_LEGACY) != 0U ||
+        !nekokem_private_key_exists(private_key_path)) {
+        goto cleanup;
+    }
+    loaded = hybrid_load_protected_private_keys(
+        private_key_path, password, password_len,
+        (flags & NEKOKEM_PRIVATE_KEY_LEGACY) != 0U, &keys);
+    if (loaded == HYBRID_LEGACY_KEY_REFUSED) {
+        success = NEKOKEM_ERROR_LEGACY_PRIVATE_KEY;
+    } else if (loaded == 1) {
+        success = 1;
+    }
+
+cleanup:
+    hybrid_keys_cleanup(&keys);
+    return success;
+}
+
 int nekokem_check_private_key_password(
     const char *private_key_path,
     const unsigned char *password,
     size_t password_len)
 {
-    HybridKeys keys = {0};
-    int success = 0;
-
-    if (!managed_path_is_valid(private_key_path) ||
-        password == NULL || password_len == 0U ||
-        !nekokem_private_key_exists(private_key_path)) {
-        goto cleanup;
-    }
-    if (!hybrid_load_protected_private_keys(
-            private_key_path, password, password_len, &keys)) {
-        goto cleanup;
-    }
-    success = 1;
-
-cleanup:
-    hybrid_keys_cleanup(&keys);
-    return success;
+    return nekokem_check_private_key_password_flags(
+               private_key_path, password, password_len, 0U) == 1;
 }
 
 static int export_public_key(const char *public_key_path,

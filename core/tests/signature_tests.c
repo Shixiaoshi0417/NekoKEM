@@ -542,7 +542,7 @@ static int test_identity_keys(void)
                        ? bytes[4]
                        : -1;
     OPENSSL_free(bytes);
-    CHECK(nkpr_version == (int)NKPR_VERSION_IDENTITY);
+    CHECK(nkpr_version == (int)NKPR_VERSION_COMMITTED);
     CHECK(nekokem_public_key_can_verify("a.pub") == 1);
     CHECK(fingerprint_of("a.pub", identity));
     CHECK(strlen(identity) == 95U);
@@ -1024,7 +1024,7 @@ static int test_upgrade(void)
     CHECK(read_all("d.key", &bytes, &length));
     nkpr_version = length > 4U ? bytes[4] : -1;
     OPENSSL_free(bytes);
-    CHECK(nkpr_version == (int)NKPR_VERSION_IDENTITY);
+    CHECK(nkpr_version == (int)NKPR_VERSION_COMMITTED);
     CHECK(nekokem_public_key_legacy_fingerprint("d.pub", after,
                                                 sizeof(after)));
     CHECK(strcmp(before, after) == 0);

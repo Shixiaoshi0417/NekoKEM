@@ -735,6 +735,7 @@ int nekokem_v4_decrypt_opened(
     const char *private_key_path,
     const unsigned char *password,
     size_t password_len,
+    int accept_legacy,
     NekoKEMProgressCallback progress_callback,
     void *progress_user_data)
 {
@@ -746,6 +747,7 @@ int nekokem_v4_decrypt_opened(
     size_t metadata_len = 0U;
     size_t mac_offset;
     int aes_result;
+    int loaded;
     int result = NEKOKEM_OPERATION_ERROR;
 
     if (!nkem_v4_header_decode(raw_header, &header) ||
@@ -762,9 +764,16 @@ int nekokem_v4_decrypt_opened(
     }
     memcpy(metadata, raw_header, NKEM_V4_HEADER_SIZE);
     if (!file_read_exact(input, metadata + NKEM_V4_HEADER_SIZE,
-                         metadata_len - NKEM_V4_HEADER_SIZE) ||
-        !hybrid_load_decryption_keys(private_key_path, password,
-                                     password_len, &private_keys)) {
+                         metadata_len - NKEM_V4_HEADER_SIZE)) {
+        goto cleanup;
+    }
+    loaded = hybrid_load_decryption_keys(private_key_path, password,
+                                         password_len, accept_legacy,
+                                         &private_keys);
+    if (loaded != 1) {
+        if (loaded == HYBRID_LEGACY_KEY_REFUSED) {
+            result = NEKOKEM_ERROR_LEGACY_PRIVATE_KEY;
+        }
         goto cleanup;
     }
     if (!nkem_multi_open_metadata(&nkem_v4_labels, &private_keys, metadata,

@@ -16,22 +16,22 @@ Core 使用 OpenSSL EVP、NKEM v3（单接收方）、NKEM v4（多接收方）�
 原有函数成功返回 `1`、失败返回 `0`。路径和输出缓冲区由调用者拥有；
 口令只在调用期间借用，Core 不会保存或释放调用者的口令缓冲区。
 
-- `nekokem_generate_keypair()`：生成四段式身份公钥和受口令保护的 NKPR v2 私钥
+- `nekokem_generate_keypair()`：生成四段式身份公钥和受口令保护的 NKPR v3 私钥
   （其中的 X448 + ML-KEM-1024 用于加解密，见下文 v5 部分）。
 - `nekokem_encrypt_file()`：写出不签名的 NKEM v3 Hybrid 文件；签名的 v5 见下文。
-- `nekokem_decrypt_file()`：接受 NKEM v3 与 v4，其他版本一律拒绝；v4 尝试全部接收方记录
-  （匹配后也不提前停止），验证头部 MAC 后才解密数据。Hybrid 路径同时兼容 NKPR
-  私钥和旧式明文 Hybrid PEM 私钥。
+- `nekokem_decrypt_file()`：接受 NKEM v3、v4 与 v5，其他版本一律拒绝；v4 和 v5 尝试全部接收方记录
+  （匹配后也不提前停止），验证头部 MAC 后才解密数据；v5 还要求两个签名都通过，但不应用签名策略。Hybrid 路径同时兼容 NKPR
+  私钥和旧式明文 Hybrid PEM 私钥；NKPR v1、v2 私钥会被拒绝，见下文「旧格式私钥」。
   加密 PKCS#8 PEM（包括 NKPR 内嵌的加密 PEM）会非交互地拒绝；Core
   不调用 OpenSSL 的默认终端密码输入回调。
-- `nekokem_encrypt_file_with_progress()`：与默认 v3 加密协议完全相同，
+- `nekokem_encrypt_file_with_progress()`：与 `nekokem_encrypt_file()` 的 v3 加密协议完全相同，
   额外报告 `processed_bytes` 和 `total_bytes`。
 - `nekokem_encrypt_file_multi_with_progress()`：为 2 至 `NEKOKEM_MAX_RECIPIENTS`（64）
   个公钥写出一个 NKEM v4 多接收方文件（见 [`docs/NKEM-v4.md`](../docs/NKEM-v4.md)），只有 1 个公钥时写出 v3。
   在创建输出前加载并校验全部公钥；空列表、超过上限、重复公钥或共用任一组件的公钥都会失败，
   不会跳过或替换任何接收方。
   进度、取消和原子提交与 v3 相同。
-- `nekokem_decrypt_file_with_progress()`：解密 v3、v4 时均按文件数据块报告进度。回调在调用线程同步执行，返回 `0` 请求取消。
+- `nekokem_decrypt_file_with_progress()`：解密 v3、v4、v5 时均按文件数据块报告进度。回调在调用线程同步执行，返回 `0` 请求取消。
 - `nekokem_public_key_fingerprint()`：返回大写、冒号分隔的 SHA-256
   公钥指纹。调用者至少提供 `NEKOKEM_FINGERPRINT_STRING_SIZE` 字节。
 - `nekokem_private_key_exists()`：只接受权限为 `0600`、结构有效的 NKPR
@@ -49,12 +49,12 @@ Core 使用 OpenSSL EVP、NKEM v3（单接收方）、NKEM v4（多接收方）�
   是否显示口令输入框。
 
 签名的 NKEM v5 与四段式身份密钥（X448、ML-KEM-1024、Ed448、ML-DSA-87，
-私钥为 NKPR v2）见 [`docs/NKEM-v5.md`](../docs/NKEM-v5.md)：
+私钥为 NKPR v3，旧密钥可能是 NKPR v2）见 [`docs/NKEM-v5.md`](../docs/NKEM-v5.md)：
 
 - `nekokem_generate_keypair()` 与 `nekokem_replace_keypair()` 写出身份密钥；
   `nekokem_replace_keypair()` 会覆盖已有密钥，只应在用户明确确认后调用。
 - `nekokem_upgrade_to_identity_keys()`：为 NKPR v1 密钥对补上 Ed448 与 ML-DSA-87，
-  保留原 X448/ML-KEM-1024 密钥和口令，原子替换两个文件。
+  保留原 X448/ML-KEM-1024 密钥和口令，原子替换两个文件，私钥写为 NKPR v3。
 - `nekokem_encrypt_file_v5_with_progress()`：默认为 1 至 64 位接收方写出签名的 v5；
   设置 `NEKOKEM_ENCRYPT_UNSIGNED` 时与 `nekokem_encrypt_file_multi_with_progress()`
   相同地写出 v3 或 v4。发送方密钥缺失或只有两段时报错，不会静默改为不签名。
@@ -65,7 +65,7 @@ Core 使用 OpenSSL EVP、NKEM v3（单接收方）、NKEM v4（多接收方）�
   旧版指纹，以及导出 NekoKEM 4.x 可读的两段式公钥。
 
 进度 API 使用 `NEKOKEM_OPERATION_SUCCESS`、`NEKOKEM_OPERATION_ERROR` 和
-`NEKOKEM_OPERATION_CANCELLED`。v3、v4 文件数据均以 64 KiB 流式处理；错误或取消
+`NEKOKEM_OPERATION_CANCELLED`。v3、v4、v5 文件数据均以 64 KiB 流式处理；错误或取消
 会中止并删除 Core 原子输出，不会提交部分密文或未认证明文。原有无回调 API
 继续保持 `1/0` 返回约定。
 
@@ -87,7 +87,33 @@ NKPR 解码将错误口令、损坏的认证数据、损坏或不支持的容器
 “私钥口令错误或 NKPR 数据损坏”，不附加 OpenSSL 的认证失败细节。
 Argon2id 参数和 NKPR 格式保持不变。AES-GCM 不具备密钥承诺性；成功解开
 一个容器不证明该容器只能由唯一口令或唯一保护密钥打开，也不保证不同
-保护密钥下的明文一致。该限制保留在 NKPR v1 中，以维持格式兼容性。
+保护密钥下的明文一致。该限制保留在 NKPR v1 和 v2 中，以维持格式兼容性。
+
+新密钥写为 NKPR v3（见 [`docs/key-commitment.md`](../docs/key-commitment.md)）：
+Argon2id 输出经 HKDF-SHA512 分出 AES 密钥和 32 字节密钥承诺，承诺放在 salt
+之后并进入 AAD。读取时先以常数时间比较承诺，不一致则不运行 AES-GCM，报告与
+错误口令相同。NKPR v3 总是保存四段式身份密钥。
+
+### 旧格式私钥
+
+NKPR v1、v2 不带密钥承诺，别人写的这种文件可以被构造成能用多个口令打开。
+所有解锁私钥的调用默认拒绝它们，并且在使用口令之前就拒绝；只有调用方声明
+文件是本机自己的私钥时才接受：
+
+- `NEKOKEM_VERIFY_LEGACY_PRIVATE_KEY`（解密策略）、`NEKOKEM_ENCRYPT_LEGACY_SENDER_KEY`
+  （签名加密的发送方私钥）、`nekokem_check_private_key_password_flags()` 的
+  `NEKOKEM_PRIVATE_KEY_LEGACY`。拒绝时返回 `NEKOKEM_ERROR_LEGACY_PRIVATE_KEY`。
+  不带标志的 `nekokem_decrypt_file*()` 和 `nekokem_check_private_key_password()`
+  一律拒绝旧格式。
+- `nekokem_private_key_is_legacy()`：只看文件头判断是否为 NKPR v1、v2，供前端在
+  询问口令之前解释规则。
+- `nekokem_update_private_key_format()`：把本机自己的密钥对重写为 NKPR v3，口令
+  不变；v2 保留原密钥，v1 先升级为身份密钥。已是 v3 时不做改动。
+- `nekokem_export_private_key_legacy()`：把本机自己的私钥以同一口令导出为
+  NekoKEM 5.2 及更早版本可读的 NKPR v2（两段式密钥为 v1）。
+
+`nekokem_upgrade_to_identity_keys()` 和 `nekokem_internal_private_key_fingerprint()`
+用于本机自己的私钥，接受旧格式。
 
 ## 密钥文件与中断恢复
 

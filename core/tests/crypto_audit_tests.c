@@ -244,10 +244,12 @@ static int test_degenerate_password_check(void)
                                        buffer->length, password,
                                        sizeof(password) - 1U));
     result = nekokem_private_key_exists("degenerate.nkpr") &&
-             !nekokem_check_private_key_password("degenerate.nkpr", password,
-                                                  sizeof(password) - 1U) &&
-             !hybrid_load_decryption_keys("degenerate.nkpr", password,
-                                           sizeof(password) - 1U, &loaded);
+             nekokem_check_private_key_password_flags(
+                 "degenerate.nkpr", password, sizeof(password) - 1U,
+                 NEKOKEM_PRIVATE_KEY_LEGACY) == 0 &&
+             hybrid_load_decryption_keys("degenerate.nkpr", password,
+                                          sizeof(password) - 1U, 1,
+                                          &loaded) == 0;
     secure_mem_clear(buffer->data, buffer->max);
     hybrid_keys_cleanup(&loaded);
     BIO_free(pem);

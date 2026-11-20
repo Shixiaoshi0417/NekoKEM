@@ -5,6 +5,7 @@
 #include <openssl/crypto.h>
 
 #include <stddef.h>
+#include <string.h>
 
 #define JNI_PASSWORD_MAX_SIZE 1024U
 
@@ -188,11 +189,21 @@ Java_com_shixiaoshi0417_nekokem_nativecore_NativeBridge_nativeDecryptFile(
     if (result != JNI_RESULT_SUCCESS) {
         goto cleanup;
     }
-    result = nekokem_decrypt_file(input.value, output.value,
-                                  private_path.value,
-                                  password, password_len) == 1
-                 ? JNI_RESULT_SUCCESS
-                 : JNI_RESULT_CORE_ERROR;
+    {
+        /* The app does not yet tell its own key from imported ones, so every
+     * key is accepted as in NekoKEM 5.2; see docs/key-commitment.md. */
+        NekoKEMVerifyPolicy own_key;
+
+        memset(&own_key, 0, sizeof(own_key));
+        own_key.struct_size = sizeof(own_key);
+        own_key.flags = NEKOKEM_VERIFY_LEGACY_PRIVATE_KEY;
+        result = nekokem_decrypt_file_verified_with_progress(
+                     input.value, output.value, private_path.value,
+                     password, password_len, &own_key, NULL, NULL,
+                     NULL) == NEKOKEM_OPERATION_SUCCESS
+                     ? JNI_RESULT_SUCCESS
+                     : JNI_RESULT_CORE_ERROR;
+    }
 
 cleanup:
     OPENSSL_clear_free(password, password_len);
