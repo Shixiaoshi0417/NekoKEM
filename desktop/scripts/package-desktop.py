@@ -5,12 +5,13 @@ CI and the Release workflow run the same commands, so what is published is
 what CI installed and started.
 
   package-desktop.py resources --library LIB --openssl-license FILE --target DIR
-  package-desktop.py linux --arch ARCH --app DIR --deb FILE --rpm FILE --output DIR --source-sha SHA
+  package-desktop.py linux --arch ARCH --app DIR --deb FILE --rpm FILE --appimage-runtime FILE --output DIR --source-sha SHA
   package-desktop.py windows --app DIR --msi FILE --output DIR --source-sha SHA
   package-desktop.py macos --app NekoKEM.app --output DIR --source-sha SHA
 
 The version is the bridge's (desktop/bridge/Cargo.toml); the run id comes from
-GITHUB_RUN_ID when a workflow runs this.
+GITHUB_RUN_ID when a workflow runs this. The AppImage runtime is the file
+desktop/scripts/fetch-appimage-runtime.sh fetched and checked.
 """
 import argparse
 import hashlib
@@ -20,13 +21,18 @@ from pathlib import Path
 import plistlib
 import re
 import shutil
+import struct
 import subprocess
 import tarfile
+import tempfile
 import tomllib
 import zipfile
 
 ROOT = Path(__file__).resolve().parents[2]
 LICENSES = ('LICENSE', 'OpenSSL-LICENSE.txt')
+APPIMAGE = ROOT / 'desktop/appimage'
+# ELF machine numbers of the two Linux architectures.
+ELF_MACHINES = {'x86_64': 62, 'aarch64': 183}
 
 
 class PackageError(Exception):
@@ -104,6 +110,70 @@ def check_elf(library):
     require(len(stack) == 1 and 'RWE' not in stack[0], 'The bridge has an executable stack')
 
 
+def runtime_size(runtime, arch):
+    """The AppImage runtime for this architecture, and where its SquashFS must start.
+
+    The runtime looks for the image right after its last section or section
+    header table, so the file must end exactly there.
+    """
+    data = runtime.read_bytes()
+    require(data[:4] == b'\x7fELF' and data[4] == 2 and data[5] == 1,
+            'The AppImage runtime is not a 64-bit little-endian ELF file')
+    require(data[8:11] == b'AI\x02', 'The AppImage runtime has no type 2 magic')
+    require(struct.unpack_from('<H', data, 18)[0] == ELF_MACHINES[arch],
+            f'The AppImage runtime is not for {arch}')
+    section_offset = struct.unpack_from('<Q', data, 0x28)[0]
+    entry_size, count = struct.unpack_from('<HH', data, 0x3A)
+    require(count > 0 and section_offset + entry_size * count <= len(data),
+            'The AppImage runtime has no section headers')
+    last = section_offset + entry_size * (count - 1)
+    last_offset, last_size = struct.unpack_from('<QQ', data, last + 0x18)
+    end = max(section_offset + entry_size * count, last_offset + last_size)
+    require(end == len(data), 'The AppImage runtime carries data after its ELF image')
+    return len(data)
+
+
+def appimage(app, arch, runtime, record, target):
+    """The application folder as one file that mounts itself, for any glibc 2.39+ system.
+
+    The AppDir is the application folder with the desktop entry, icon and
+    AppRun at its top; the file is the runtime followed by the AppDir as
+    SquashFS, which the runtime mounts with FUSE (or extracts with
+    --appimage-extract-and-run).
+    """
+    start = runtime_size(runtime, arch)
+    with tempfile.TemporaryDirectory(prefix='nekokem-appimage-') as temporary:
+        appdir = Path(temporary) / 'AppDir'
+        shutil.copytree(app, appdir, symlinks=True)
+        (appdir / 'AppRun').symlink_to('bin/NekoKEM')
+        shutil.copyfile(APPIMAGE / 'nekokem.desktop', appdir / 'nekokem.desktop')
+        shutil.copyfile(ROOT / 'windows/icons/128x128.png', appdir / 'nekokem.png')
+        (appdir / '.DirIcon').symlink_to('nekokem.png')
+        shutil.copyfile(APPIMAGE / 'type2-runtime-LICENSE.txt', appdir / 'AppImage-runtime-LICENSE.txt')
+        (appdir / 'build-metadata.json').write_text(record)
+        image = Path(temporary) / 'image.squashfs'
+        # The runtime reads zstd and zlib images; zstd is what appimagetool writes.
+        subprocess.run(['mksquashfs', str(appdir), str(image), '-noappend', '-all-root',
+                        '-no-xattrs', '-comp', 'zstd', '-quiet', '-no-progress'], check=True)
+        with open(target, 'wb') as output:
+            output.write(runtime.read_bytes())
+            with open(image, 'rb') as stream:
+                shutil.copyfileobj(stream, output)
+    target.chmod(0o755)
+
+    # Read the image back from where the runtime will look for it.
+    with open(target, 'rb') as stream:
+        stream.seek(start)
+        require(stream.read(4) == b'hsqs', 'The AppImage does not start its image after the runtime')
+    summary = output_of('unsquashfs', '-o', str(start), '-s', str(target))
+    require(re.search(r'(?m)^Compression zstd$', summary) is not None, 'The AppImage image is not zstd')
+    listing = set(output_of('unsquashfs', '-o', str(start), '-l', str(target)).split())
+    for name in ('AppRun', 'nekokem.desktop', 'nekokem.png', '.DirIcon', 'bin/NekoKEM',
+                 'lib/app/resources/libnekokem_native.so', 'build-metadata.json',
+                 'AppImage-runtime-LICENSE.txt', *(f'lib/app/resources/{name}' for name in LICENSES)):
+        require(f'squashfs-root/{name}' in listing, f'{name} is not in the AppImage')
+
+
 def linux(arguments):
     arch = arguments.arch
     require(arch in ('x86_64', 'aarch64'), 'Unsupported architecture')
@@ -114,6 +184,8 @@ def linux(arguments):
     check_elf(library)
     check_licenses(bundled)
     require((app / 'bin/NekoKEM').is_file(), 'The launcher is missing')
+    runtime = Path(arguments.appimage_runtime)
+    runtime_size(runtime, arch)
 
     current = version()
     deb_arch = {'x86_64': 'amd64', 'aarch64': 'arm64'}[arch]
@@ -134,13 +206,15 @@ def linux(arguments):
     base = f'NekoKEM-linux-{arch}-GUI'
     shutil.copyfile(arguments.deb, output / f'{base}.deb')
     shutil.copyfile(arguments.rpm, output / f'{base}.rpm')
-    record = metadata(f'linux-{arch}', arguments.source_sha, {'bridge_sha256': sha256(library)})
+    record = metadata(f'linux-{arch}', arguments.source_sha, {
+        'bridge_sha256': sha256(library), 'appimage_runtime_sha256': sha256(runtime)})
     (output / 'gui-build-metadata.json').write_text(record)
     # The application folder as it is installed, for systems without dpkg or rpm.
     with tarfile.open(output / f'{base}.tar.gz', 'w:gz') as archive:
         archive.add(app, arcname=base)
         archive.add(output / 'gui-build-metadata.json', arcname=f'{base}/build-metadata.json')
-    write_sums(output, [f'{base}.deb', f'{base}.rpm', f'{base}.tar.gz'])
+    appimage(app, arch, runtime, record, output / f'{base}.AppImage')
+    write_sums(output, [f'{base}.deb', f'{base}.rpm', f'{base}.tar.gz', f'{base}.AppImage'])
 
 
 def windows(arguments):
@@ -205,6 +279,7 @@ def main():
     command.add_argument('--arch', required=True)
     command.add_argument('--deb', required=True)
     command.add_argument('--rpm', required=True)
+    command.add_argument('--appimage-runtime', required=True)
     for name in ('linux', 'windows', 'macos'):
         command = commands.choices.get(name) or commands.add_parser(name)
         command.add_argument('--app', required=True)

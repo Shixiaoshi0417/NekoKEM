@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=NekoKEM
+Comment=Post-quantum file encryption
+Exec=NekoKEM
+Icon=nekokem
+Categories=Utility;
+Terminal=false
