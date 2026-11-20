@@ -16,7 +16,7 @@ GitHub Actions has four workflow definitions:
   `.deb`/`.rpm`/portable archives/AppImages. Regression suites run in CI. Source checksums, dependency
   versions, compiler hardening, binary imports/protections,
   icons, APK identity/signature and package checksums remain build requirements.
-  Its final job selects the 17 public packages and their `SHA256SUMS.txt` with
+  Its final job selects the 18 public packages and their `SHA256SUMS.txt` with
   `.github/scripts/release_assets.py` and attests each with GitHub build
   provenance (`actions/attest-build-provenance`), binding it to this run, this
   workflow and the built commit. Release never reads or writes an Actions
@@ -136,13 +136,13 @@ removed even when the job fails.
 Releases up to v5.0.0 contain 14 packages, with the earlier Tauri desktop app.
 From v5.1.0, the desktop packages are the Compose (Windows, Linux) and
 SwiftUI (macOS) apps, and the Windows installer joins them, for 15 packages up
-to v5.2.0. Later releases add an AppImage for each Linux architecture, for 17
-packages:
+to v5.2.0. Later releases add an AppImage for each Linux architecture and a
+Windows EXE installer, for 18 packages:
 
 | Platform | Public assets |
 |---|---|
 | Android ARM64 | `app-release.apk` |
-| Windows x64 | `NekoKEM-windows-x86_64.zip`, `NekoKEM-Windows-GUI.zip`, `NekoKEM-Windows-GUI.msi` |
+| Windows x64 | `NekoKEM-windows-x86_64.zip`, `NekoKEM-Windows-GUI.zip`, `NekoKEM-Windows-GUI.msi`, `NekoKEM-Windows-GUI.exe` |
 | macOS Apple Silicon | `NekoKEM-macos-arm64.tar.gz`, `NekoKEM-macos-arm64-GUI.zip`, `NekoKEM-macos-arm64-GUI.dmg` |
 | Linux x86_64 | `NekoKEM-linux-x86_64.tar.gz`, `NekoKEM-linux-x86_64-GUI.deb`, `NekoKEM-linux-x86_64-GUI.rpm`, `NekoKEM-linux-x86_64-GUI.tar.gz`, `NekoKEM-linux-x86_64-GUI.AppImage` |
 | Linux ARM64 | `NekoKEM-linux-aarch64.tar.gz`, `NekoKEM-linux-aarch64-GUI.deb`, `NekoKEM-linux-aarch64-GUI.rpm`, `NekoKEM-linux-aarch64-GUI.tar.gz`, `NekoKEM-linux-aarch64-GUI.AppImage` |
@@ -155,7 +155,7 @@ CI/Release run links, Android signer and public asset hashes, as in the
 build provenance attestations; v4.1.0 and earlier do not.
 A rotation's encrypted signing recovery envelope is never selected for
 publication; **do not attach it to the public GitHub Release**. Windows application EXEs and
-the installer are unsigned.
+the installers are unsigned.
 
 Android v5.2.0 uses versionCode `17`, keeps the v3.2.0/v3.3.0 signing identity and
 supports an in-place update. Only old-signer v3.1.x installations need backup
@@ -172,13 +172,15 @@ retired in favor of these two entry points.
 `desktop/scripts/package-desktop.py` checks each built desktop app and writes its
 packages, `gui-SHA256SUMS.txt` and build records (source commit, run, version). CI
 runs the same commands on every pull request, installs the DEB on Ubuntu 24.04 and
-the RPM on Fedora 44, and starts the packaged apps, the AppImage through FUSE;
-Release only builds and checks.
+the RPM on Fedora 44, installs the Windows app with the EXE installer, and starts
+the packaged apps, the AppImage through FUSE; Release only builds and checks.
 See the [desktop GUI documentation](../desktop/README.md).
 
 Windows x64 (Compose Multiplatform, `windows-2022`):
 
 - `NekoKEM-Windows-GUI.msi`: the installer, with a Start menu entry.
+- `NekoKEM-Windows-GUI.exe`: an installer program that carries the same MSI and
+  runs `msiexec` with its arguments, for those who expect a setup EXE.
 - `NekoKEM-Windows-GUI.zip`: the same application folder with `build-metadata.json`.
 
 The bridge is one DLL without MinGW or OpenSSL runtime DLLs. Nothing is

@@ -157,7 +157,7 @@ GitHub Actions 统一使用 [CI](.github/workflows/ci.yml) 和 [Release](.github
 
 v5.2.0 提供原生 Windows 10/11 x64 CLI 便携包 `nekokem.exe`，以及 GUI 的 MSI 安装包和 ZIP 便携包。CLI 与 Linux 共用完整参数解析和五项菜单；双击 EXE 或不带参数运行即可进入菜单。构建、使用和导入私钥权限说明见 [Windows CLI 文档](windows/README.md)，文件安全设计见 [Windows 文件层说明](windows/SECURITY-DESIGN.md)。CLI 运行不需要 MSYS2 或 OpenSSL DLL；构建使用 MSYS2 UCRT64 与固定 OpenSSL 4.1.0。
 
-GUI 是 Compose Multiplatform 应用，界面与 Android 一致，提供 MIUIX（默认）和 Material 3 Expressive 两种风格；通过桥接库调用同一 C17 Core，提供系统文件选择、进度和取消。应用自带 Java 运行时，不需要 WebView2 Runtime；详见 [桌面 GUI 文档](desktop/README.md)。CLI、GUI 和 MSI 安装包均未进行 Authenticode 签名。
+GUI 是 Compose Multiplatform 应用，界面与 Android 一致，提供 MIUIX（默认）和 Material 3 Expressive 两种风格；通过桥接库调用同一 C17 Core，提供系统文件选择、进度和取消。应用自带 Java 运行时，不需要 WebView2 Runtime；详见 [桌面 GUI 文档](desktop/README.md)。5.2.0 之后的版本另有 EXE 安装程序 `NekoKEM-Windows-GUI.exe`，双击即可安装，装的是与 MSI 相同的应用；CI 用它静默安装并启动装好的程序。CLI、GUI、MSI 和 EXE 安装程序均未进行 Authenticode 签名。
 
 Windows 仅支持本地固定 NTFS，检查所有者与 ACL，并拒绝网络、设备、替代数据流及重解析点路径。协议、密码参数及 64 KiB 流式分块不变；Windows 断电持久性不能当作 POSIX 目录 fsync 已验证。Windows 语言配置使用系统 LocalAppData/NekoKEM；无 Locale 环境覆盖时读取 Windows 显示语言。下文的 POSIX 配置路径适用于 Linux 和 macOS CLI。
 

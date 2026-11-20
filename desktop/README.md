@@ -6,7 +6,7 @@ and the update check.
 
 | System | App | Packages |
 |---|---|---|
-| Windows 10/11 x64 | Compose Multiplatform (`desktop-compose`) | `NekoKEM-Windows-GUI.msi` installer, `NekoKEM-Windows-GUI.zip` folder |
+| Windows 10/11 x64 | Compose Multiplatform (`desktop-compose`) | `NekoKEM-Windows-GUI.msi` and `.exe` installers, `NekoKEM-Windows-GUI.zip` folder |
 | Linux x86_64 and ARM64 | Compose Multiplatform (`desktop-compose`) | `NekoKEM-linux-<arch>-GUI.deb`, `.rpm`, `.tar.gz` folder, `.AppImage` |
 | macOS, Apple Silicon | SwiftUI (`macos/gui`) | `NekoKEM-macos-arm64-GUI.zip`, `.dmg` |
 
@@ -129,7 +129,10 @@ decrypts, refused duplicates and recipient limits, and failures that name the co
 ## Install / 安装
 
 Windows: run the MSI, then open **NekoKEM** from the Start menu. Or unpack the
-ZIP anywhere and open `NekoKEM\NekoKEM.exe`.
+ZIP anywhere and open `NekoKEM\NekoKEM.exe`. Releases after 5.2.0 also have
+`NekoKEM-Windows-GUI.exe`, an installer that carries the same MSI and installs the
+same app; it passes its arguments to `msiexec`, so `/quiet` installs silently.
+5.2.0 之后的版本另有 EXE 安装程序，双击安装，与 MSI 装的是同一个应用。
 
 Linux: use the package matching `uname -m` (`x86_64` is Debian `amd64`,
 `aarch64` is Debian `arm64`), then open **NekoKEM** from the application menu.
@@ -195,7 +198,7 @@ build OpenSSL and the CLI with `windows/scripts/build-windows-cli.sh`, build the
 bridge with `cargo build --locked --release --target x86_64-pc-windows-gnu`,
 copy `nekokem_native.dll` and the licences into `desktop-compose/native/windows-x64`
 with `package-desktop.py resources`, then run
-`gradlew.bat createDistributable packageMsi` in `desktop-compose`.
+`gradlew.bat createDistributable packageMsi packageExe` in `desktop-compose`.
 
 macOS, on an Apple Silicon Mac with the macOS 26 SDK and Rust:
 
