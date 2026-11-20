@@ -1373,6 +1373,13 @@
    "這是我自己從舊版 NekoKEM 匯出的私密金鑰",
    "古い NekoKEM から自分で書き出した自分の鍵です",
    "이전 NekoKEM에서 직접 내보낸 내 키입니다"
+  ],
+  "keyUpdated": [
+   "Your private key was rewritten in the current format (NKPR v3). The keys and the password are unchanged.",
+   "你的私钥已改写为当前格式（NKPR v3），密钥和密码均未改变。",
+   "你的私密金鑰已改寫為目前格式（NKPR v3），金鑰和密碼均未改變。",
+   "秘密鍵を現在の形式（NKPR v3）に書き換えました。鍵とパスワードは変わりません。",
+   "개인 키를 현재 형식(NKPR v3)으로 다시 썼습니다. 키와 암호는 바뀌지 않았습니다."
   ]
  }
 }

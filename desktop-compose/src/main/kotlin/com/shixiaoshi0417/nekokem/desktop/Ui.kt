@@ -439,6 +439,7 @@ private fun FormFeedback(state: AppState, first: Boolean = false) {
             if (FingerprintQr.isFingerprint(fingerprint)) { Spacer(Modifier.height(8.dp)); kit.SecondaryButton(state.t("showQr")) { state.showQr(fingerprint) } }
         }
         if (result.canVerify == false) Hint(state.t("legacyKeyHint"), danger = true)
+        if (result.keyUpdated) Hint(state.t("keyUpdated"))
     }
     val signature = result.signature ?: return
     val title = when (signature.status) { "trusted" -> "signatureTrusted"; "untrusted" -> "signatureUntrusted"; else -> "signatureNone" }

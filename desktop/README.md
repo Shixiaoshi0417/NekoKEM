@@ -6,8 +6,8 @@ and the update check.
 
 | System | App | Packages |
 |---|---|---|
-| Windows 10/11 x64 | Compose Multiplatform (`desktop-compose`) | `NekoKEM-Windows-GUI.msi` installer, `NekoKEM-Windows-GUI.zip` folder |
-| Linux x86_64 and ARM64 | Compose Multiplatform (`desktop-compose`) | `NekoKEM-linux-<arch>-GUI.deb`, `.rpm`, `.tar.gz` folder |
+| Windows 10/11 x64 | Compose Multiplatform (`desktop-compose`) | `NekoKEM-Windows-GUI.msi` and `.exe` installers, `NekoKEM-Windows-GUI.zip` folder |
+| Linux x86_64 and ARM64 | Compose Multiplatform (`desktop-compose`) | `NekoKEM-linux-<arch>-GUI.deb`, `.rpm`, `.tar.gz` folder, `.AppImage` |
 | macOS, Apple Silicon | SwiftUI (`macos/gui`) | `NekoKEM-macos-arm64-GUI.zip`, `.dmg` |
 
 The Windows and Linux app offers the Android app's two styles, MIUIX (the
@@ -130,12 +130,24 @@ decrypts, refused duplicates and recipient limits, and failures that name the co
 ## Install / 安装
 
 Windows: run the MSI, then open **NekoKEM** from the Start menu. Or unpack the
-ZIP anywhere and open `NekoKEM\NekoKEM.exe`.
+ZIP anywhere and open `NekoKEM\NekoKEM.exe`. Releases after 5.2.0 also have
+`NekoKEM-Windows-GUI.exe`, an installer that carries the same MSI and installs the
+same app; it passes its arguments to `msiexec`, so `/quiet` installs silently.
+5.2.0 之后的版本另有 EXE 安装程序，双击安装，与 MSI 装的是同一个应用。
 
 Linux: use the package matching `uname -m` (`x86_64` is Debian `amd64`,
 `aarch64` is Debian `arm64`), then open **NekoKEM** from the application menu.
 The app installs to `/opt/nekokem`. Ubuntu 24.04 (glibc 2.39) is the build and
-test baseline; CI also installs the RPM on Fedora 44.
+test baseline; CI also installs the RPM on Fedora 44 and builds and installs
+the Arch Linux package.
+
+Arch Linux: `linux/arch/PKGBUILD` (`nekokem-bin`) repackages the release's CLI and
+GUI folder archives for pacman, with `noto-fonts-cjk` and `curl` as dependencies.
+Arch Linux 用 `linux/arch` 里的 PKGBUILD：
+
+```sh
+cd linux/arch && makepkg -si                         # Arch Linux, Arch Linux ARM
+```
 
 ```sh
 sudo apt install ./NekoKEM-linux-x86_64-GUI.deb     # Debian, Ubuntu
@@ -143,8 +155,19 @@ sudo dnf install ./NekoKEM-linux-x86_64-GUI.rpm     # Fedora
 tar -xzf NekoKEM-linux-x86_64-GUI.tar.gz && NekoKEM-linux-x86_64-GUI/bin/NekoKEM
 ```
 
-The DEB and RPM depend on Noto Sans CJK and curl; with the folder archive,
-install a Chinese, Japanese and Korean font and curl yourself.
+The DEB and RPM depend on Noto Sans CJK and curl; with the folder archive or
+the AppImage, install a Chinese, Japanese and Korean font and curl yourself.
+
+Releases after 5.2.0 also have an AppImage, one file that runs without
+installing. It mounts itself through FUSE and needs `fusermount3` (the `fuse3`
+package on Debian and Ubuntu); without FUSE, add `--appimage-extract-and-run`.
+
+```sh
+chmod +x NekoKEM-linux-x86_64-GUI.AppImage && ./NekoKEM-linux-x86_64-GUI.AppImage
+```
+
+5.2.0 之后的版本另有 AppImage：单个文件，`chmod +x` 后直接运行，不需要安装；需要 FUSE
+（`fuse3` 包），没有 FUSE 时加 `--appimage-extract-and-run`。字体和 curl 需要系统自行安装。
 
 macOS: open the DMG or unpack the ZIP and move `NekoKEM.app` to Applications.
 The app is ad-hoc signed, so the first launch needs **Open** from the context
@@ -158,7 +181,8 @@ workflow run exactly these steps. CI also checks the bridge with
 `cargo fmt --check` and `cargo clippy --all-targets -- -D warnings`, so run
 `cargo fmt` in `desktop/bridge` before committing.
 
-Linux, on the native architecture, with Rust, JDK 25, `fakeroot` and `rpm`:
+Linux, on the native architecture, with Rust, JDK 25, `fakeroot`, `rpm`,
+`squashfs-tools` and GnuPG:
 
 ```sh
 architecture=$(uname -m)
@@ -171,6 +195,12 @@ python3 desktop/scripts/package-desktop.py resources \
   --openssl-license "$NEKOKEM_OPENSSL_PREFIX/LICENSE.txt" \
   --target "desktop-compose/native/$resources"
 (cd desktop-compose && ./gradlew createDistributable packageDeb packageRpm)
+bash desktop/scripts/fetch-appimage-runtime.sh "$architecture" appimage-runtime
+python3 desktop/scripts/package-desktop.py linux --arch "$architecture" \
+  --app desktop-compose/build/compose/binaries/main/app/NekoKEM \
+  --deb desktop-compose/build/compose/binaries/main/deb/*.deb \
+  --rpm desktop-compose/build/compose/binaries/main/rpm/*.rpm \
+  --appimage-runtime appimage-runtime --output linux-gui --source-sha "$(git rev-parse HEAD)"
 ```
 
 Windows, with MSYS2 UCRT64 GCC, Rust for `x86_64-pc-windows-gnu` and JDK 25:
@@ -178,7 +208,7 @@ build OpenSSL and the CLI with `windows/scripts/build-windows-cli.sh`, build the
 bridge with `cargo build --locked --release --target x86_64-pc-windows-gnu`,
 copy `nekokem_native.dll` and the licences into `desktop-compose/native/windows-x64`
 with `package-desktop.py resources`, then run
-`gradlew.bat createDistributable packageMsi` in `desktop-compose`.
+`gradlew.bat createDistributable packageMsi packageExe` in `desktop-compose`.
 
 macOS, on an Apple Silicon Mac with the macOS 26 SDK and Rust:
 
@@ -191,7 +221,13 @@ bash macos/gui/scripts/build-app.sh /absolute/path/to/output
 `desktop/scripts/package-desktop.py linux|windows|macos` then checks the built
 app (the bridge's hardening and licences, versions, package dependencies, the
 macOS signature) and writes the public packages with `gui-SHA256SUMS.txt` and
-their build records.
+their build records. On Linux it also writes the AppImage: the application
+folder with a desktop entry, icon and `AppRun` as a zstd SquashFS image
+(`mksquashfs`), after the AppImage runtime. `fetch-appimage-runtime.sh` takes
+that runtime from a pinned release of AppImage's
+[type2-runtime](https://github.com/AppImage/type2-runtime) and accepts it only
+with a valid signature from the release key kept in `desktop/appimage` and the
+pinned SHA-256; the runtime's licence goes into the image.
 
 While developing the Compose app, `./gradlew run -Pnekokem.bridge=<library>`
 starts it and `./gradlew screenshots -Pnekokem.bridge=<library>` renders every
@@ -226,7 +262,7 @@ NKPR v1/v2 key only when it is the private key set as yours in Settings (key gen
 and upgrading set it); any other v1/v2 key is refused before a password is tried
 (“This private key uses the format of NekoKEM 5.2 and earlier…”). After your own NKPR v2
 key opens, it is rewritten as NKPR v3 with the same keys and password, when **My public
-key** in Settings is its identity public key. **Upgrade key** rewrites your own key
+key** in Settings is its identity public key; the result says so. **Upgrade key** rewrites your own key
 directly. For any other older-format key it first shows a warning, and only after three
 seconds can you confirm that the key is your own, exported from an older NekoKEM; the
 bridge refuses an earlier confirmation, and the password is not used before it. **For
@@ -236,7 +272,7 @@ your own key.
 NekoKEM 5.2 及更早版本的私钥（NKPR v1/v2）没有密钥承诺：这种文件可以被构造成能用多个口令打开，
 在别人的文件上输入口令可能让对方得知你的口令是否在其中。因此应用只在 NKPR v1/v2 私钥正是设置里的
 “我的私钥”时才打开它（生成和升级密钥会设置它）；其他 v1/v2 私钥在尝试口令之前就被拒绝。你自己的
-NKPR v2 私钥打开后，如果设置里的“我的公钥”是它的身份公钥，就会以相同的密钥和口令改写为 NKPR v3。
+NKPR v2 私钥打开后，如果设置里的“我的公钥”是它的身份公钥，就会以相同的密钥和口令改写为 NKPR v3，结果中会说明。
 “升级密钥”对“我的私钥”直接改写；其他旧格式私钥会先显示警告，3 秒后才能确认这是你自己从旧版导出的私钥，
 桥接层拒绝提前的确认，确认之前不会使用口令。“给旧版本 → 给 5.2 的私钥”以相同口令写出 NekoKEM 5.2 能读取的
 格式，用于把私钥搬回旧版本；旧格式的输入必须是“我的私钥”。

@@ -402,6 +402,7 @@ private struct FormFeedback: View {
                     if FingerprintQr.isFingerprint(fingerprint) { Button(state.t("showQr")) { state.qrFingerprint = fingerprint } }
                 }
                 if result.canVerify == false { Text(state.t("legacyKeyHint")).font(.callout).foregroundStyle(danger) }
+                if result.keyUpdated { Text(state.t("keyUpdated")).font(.callout) }
             }
             if let signature = result.signature {
                 let title = signature.status == "trusted" ? "signatureTrusted" : (signature.status == "untrusted" ? "signatureUntrusted" : "signatureNone")

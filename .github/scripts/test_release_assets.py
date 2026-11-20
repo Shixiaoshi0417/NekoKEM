@@ -67,7 +67,7 @@ def build_release(root, version=VERSION, app_version=VERSION, windows_run=RUN, r
         gui = root / f'NekoKEM-linux-{arch}-gui'
         gui.mkdir()
         packages = []
-        for suffix in ('deb', 'rpm', 'tar.gz'):
+        for suffix in ('deb', 'rpm', 'tar.gz', 'AppImage'):
             package = gui / f'NekoKEM-linux-{arch}-GUI.{suffix}'
             package.write_bytes(f'{arch} {suffix}'.encode())
             packages.append(package)
@@ -98,8 +98,10 @@ def build_release(root, version=VERSION, app_version=VERSION, windows_run=RUN, r
     windows_gui.mkdir()
     write_zip(windows_gui / 'NekoKEM-Windows-GUI.zip', {'build-metadata.json': windows_metadata})
     (windows_gui / 'NekoKEM-Windows-GUI.msi').write_bytes(b'installer')
+    (windows_gui / 'NekoKEM-Windows-GUI.exe').write_bytes(b'MZ installer')
     write_sums(windows_gui / 'gui-SHA256SUMS.txt',
-               [windows_gui / 'NekoKEM-Windows-GUI.zip', windows_gui / 'NekoKEM-Windows-GUI.msi'])
+               [windows_gui / 'NekoKEM-Windows-GUI.zip', windows_gui / 'NekoKEM-Windows-GUI.msi',
+                windows_gui / 'NekoKEM-Windows-GUI.exe'])
 
 
 class ReleaseAssetTests(unittest.TestCase):

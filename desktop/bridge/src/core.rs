@@ -138,6 +138,10 @@ pub struct Outcome {
     // Decryption: the file name a signed file recorded, made safe for this system.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub original_name: Option<String>,
+    // The user's own private key was NKPR v2 and has been rewritten as NKPR v3
+    // after it opened; the keys and the password are unchanged.
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub key_updated: bool,
 }
 // Core decides the status and matches the signer; the GUI only reports it.
 #[derive(Serialize, Debug)]
@@ -749,12 +753,13 @@ fn own_private_key(private: &CStr) -> Option<Option<CString>> {
 // After the user's own NKPR v2 key opened, it is rewritten as NKPR v3 with
 // the same keys and password, as on Android. Best effort: the operation
 // already succeeded, and the next one tries again.
-fn update_own_key(private: &CStr, public: Option<&CString>, password: &[u8]) {
-    let Some(public) = public else { return };
+// True when the key was rewritten, so the app can say so once.
+fn update_own_key(private: &CStr, public: Option<&CString>, password: &[u8]) -> bool {
+    let Some(public) = public else { return false };
     if !private_key_is_legacy(private) || !can_verify(public) {
-        return;
+        return false;
     }
-    unsafe {
+    let updated = unsafe {
         nekokem_update_private_key_format(
             public.as_ptr(),
             private.as_ptr(),
@@ -763,6 +768,7 @@ fn update_own_key(private: &CStr, public: Option<&CString>, password: &[u8]) {
             PRIVATE_KEY_LEGACY,
         )
     };
+    updated == 1
 }
 pub fn language() -> String {
     unsafe {
@@ -1338,9 +1344,12 @@ pub fn execute<F: Fn(u64, u64)>(
             -13 => return Err(Failure::new("legacy-private-key")),
             _ => return Err(Failure::new("core-error")),
         }
-        if let (Some(private), Some(public)) = (&opened, &own) {
-            update_own_key(private, public.as_ref(), request.password.as_bytes());
-        }
+        let key_updated = match (&opened, &own) {
+            (Some(private), Some(public)) => {
+                update_own_key(private, public.as_ref(), request.password.as_bytes())
+            }
+            _ => false,
+        };
         let fingerprint = if recipients.len() == 1 && keys.len() == 1 {
             recipients.first().cloned()
         } else {
@@ -1350,6 +1359,7 @@ pub fn execute<F: Fn(u64, u64)>(
             output: (!request.stage).then(|| request.output.clone()),
             fingerprint,
             recipients: recipients.clone(),
+            key_updated,
             ..Outcome::default()
         };
         match request.kind {
@@ -2821,8 +2831,14 @@ mod tests {
         let mut r = request(Kind::Decrypt);
         decrypt(&mut r);
         let opened = run(&backend, r);
+        let mut r = request(Kind::Decrypt);
+        decrypt(&mut r);
+        r.output = dir.file("plain.again");
+        let again = run(&backend, r);
         OWN_KEYS.with(|keys| *keys.borrow_mut() = None);
-        opened.unwrap();
+        // The rewrite is reported once, by the operation that did it.
+        assert!(opened.unwrap().key_updated);
+        assert!(!again.unwrap().key_updated);
         assert_eq!(
             fs::read(dir.file("plain.out")).unwrap(),
             b"public test input"
