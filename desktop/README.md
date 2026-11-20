@@ -7,7 +7,7 @@ and the update check.
 | System | App | Packages |
 |---|---|---|
 | Windows 10/11 x64 | Compose Multiplatform (`desktop-compose`) | `NekoKEM-Windows-GUI.msi` and `.exe` installers, `NekoKEM-Windows-GUI.zip` folder |
-| Linux x86_64 and ARM64 | Compose Multiplatform (`desktop-compose`) | `NekoKEM-linux-<arch>-GUI.deb`, `.rpm`, `.tar.gz` folder, `.AppImage` |
+| Linux x86_64 and ARM64 | Compose Multiplatform (`desktop-compose`) | `NekoKEM-linux-<arch>-GUI.deb`, `.rpm`, `.tar.gz` folder, `.AppImage`, `.flatpak` |
 | macOS, Apple Silicon | SwiftUI (`macos/gui`) | `NekoKEM-macos-arm64-GUI.zip`, `.dmg` |
 
 The Windows and Linux app offers the Android app's two styles, MIUIX (the
@@ -167,6 +167,16 @@ chmod +x NekoKEM-linux-x86_64-GUI.AppImage && ./NekoKEM-linux-x86_64-GUI.AppImag
 
 5.2.0 之后的版本另有 AppImage：单个文件，`chmod +x` 后直接运行，不需要安装；需要 FUSE
 （`fuse3` 包），没有 FUSE 时加 `--appimage-extract-and-run`。字体和 curl 需要系统自行安装。
+
+They also have a Flatpak bundle, `io.github.shixiaoshi0417.NekoKEM`, which takes
+its runtime from Flathub and includes the `nekokem` CLI; see
+[linux/flatpak](../linux/flatpak/README.md).
+
+```sh
+flatpak install --user ./NekoKEM-linux-x86_64-GUI.flatpak
+```
+
+另有 Flatpak 单文件包，运行时从 Flathub 安装，包含 `nekokem` 命令行，详见 [linux/flatpak](../linux/flatpak/README.md)。
 
 macOS: open the DMG or unpack the ZIP and move `NekoKEM.app` to Applications.
 The app is ad-hoc signed, so the first launch needs **Open** from the context
