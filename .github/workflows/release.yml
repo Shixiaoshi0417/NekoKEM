@@ -380,7 +380,7 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install --yes --no-install-recommends \
-            build-essential ca-certificates curl perl binutils fakeroot rpm
+            build-essential ca-certificates curl perl binutils fakeroot rpm squashfs-tools
       - name: Check the native architecture and set the OpenSSL prefix
         run: |
           set -Eeuo pipefail
@@ -397,14 +397,16 @@ jobs:
             --library "target/${{ matrix.arch }}-unknown-linux-gnu/release/libnekokem_native.so" \
             --openssl-license "$NEKOKEM_OPENSSL_PREFIX/LICENSE.txt" \
             --target "$GITHUB_WORKSPACE/desktop-compose/native/${{ matrix.resources }}"
-      - name: Build, check and name the Debian, RPM and folder packages
+      - name: Build, check and name the Debian, RPM, folder and AppImage packages
         working-directory: desktop-compose
         run: |
           set -Eeuo pipefail
           ./gradlew --no-daemon createDistributable packageDeb packageRpm
+          bash ../desktop/scripts/fetch-appimage-runtime.sh '${{ matrix.arch }}' "$RUNNER_TEMP/appimage-runtime"
           python3 ../desktop/scripts/package-desktop.py linux --arch '${{ matrix.arch }}' \
             --app build/compose/binaries/main/app/NekoKEM \
             --deb build/compose/binaries/main/deb/*.deb --rpm build/compose/binaries/main/rpm/*.rpm \
+            --appimage-runtime "$RUNNER_TEMP/appimage-runtime" \
             --output "$RUNNER_TEMP/linux-gui" --source-sha "$GITHUB_SHA"
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
@@ -413,6 +415,7 @@ jobs:
             ${{ runner.temp }}/linux-gui/NekoKEM-linux-${{ matrix.arch }}-GUI.tar.gz
             ${{ runner.temp }}/linux-gui/NekoKEM-linux-${{ matrix.arch }}-GUI.deb
             ${{ runner.temp }}/linux-gui/NekoKEM-linux-${{ matrix.arch }}-GUI.rpm
+            ${{ runner.temp }}/linux-gui/NekoKEM-linux-${{ matrix.arch }}-GUI.AppImage
             ${{ runner.temp }}/linux-gui/gui-SHA256SUMS.txt
             ${{ runner.temp }}/linux-gui/gui-build-metadata.json
           compression-level: 0
@@ -437,7 +440,7 @@ jobs:
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           path: ${{ runner.temp }}/release-artifacts
-      # The same selection the Publish workflow uploads: the 15 packages and
+      # The same selection the Publish workflow uploads: the 17 packages and
       # their SHA256SUMS.txt, never the encrypted signing recovery envelope.
       - name: Select exactly the public packages
         run: python3 .github/scripts/release_assets.py collect "$RUNNER_TEMP/release-artifacts" "$RUNNER_TEMP/public"

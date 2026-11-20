@@ -67,7 +67,7 @@ def build_release(root, version=VERSION, app_version=VERSION, windows_run=RUN, r
         gui = root / f'NekoKEM-linux-{arch}-gui'
         gui.mkdir()
         packages = []
-        for suffix in ('deb', 'rpm', 'tar.gz'):
+        for suffix in ('deb', 'rpm', 'tar.gz', 'AppImage'):
             package = gui / f'NekoKEM-linux-{arch}-GUI.{suffix}'
             package.write_bytes(f'{arch} {suffix}'.encode())
             packages.append(package)

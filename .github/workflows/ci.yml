@@ -848,8 +848,8 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install --yes --no-install-recommends \
-            build-essential ca-certificates curl perl binutils fakeroot rpm \
-            xvfb xauth xdotool libgl1 libegl1 libxrender1 libxtst6 libxi6
+            build-essential ca-certificates curl perl binutils fakeroot rpm squashfs-tools \
+            xvfb xauth xdotool libgl1 libegl1 libxrender1 libxtst6 libxi6 fuse3
       - name: Identify native compiler and libc
         id: compiler
         run: |
@@ -888,15 +888,17 @@ jobs:
           # Named for this run only; the packaged launcher finds the library in its own resources.
           ./gradlew --no-daemon screenshots "-Pnekokem.bridge=$PWD/native/${{ matrix.resources }}/libnekokem_native.so"
           test "$(find build/screenshots -name '*.png' -size +0 | wc -l)" -ge 40
-      - name: Build, check and name the Debian, RPM and folder packages
+      - name: Build, check and name the Debian, RPM, folder and AppImage packages
         working-directory: desktop-compose
         run: |
           set -Eeuo pipefail
           ./gradlew --no-daemon createDistributable packageDeb packageRpm
+          bash ../desktop/scripts/fetch-appimage-runtime.sh '${{ matrix.arch }}' "$RUNNER_TEMP/appimage-runtime"
           # The same command the Release workflow runs: hardening, licences, versions and font dependencies.
           python3 ../desktop/scripts/package-desktop.py linux --arch '${{ matrix.arch }}' \
             --app build/compose/binaries/main/app/NekoKEM \
             --deb build/compose/binaries/main/deb/*.deb --rpm build/compose/binaries/main/rpm/*.rpm \
+            --appimage-runtime "$RUNNER_TEMP/appimage-runtime" \
             --output "$RUNNER_TEMP/linux-gui" --source-sha "$GITHUB_SHA"
           mkdir -p "$RUNNER_TEMP/compose-linux"
           cp -r build/screenshots "$RUNNER_TEMP/compose-linux/screens"
@@ -937,6 +939,37 @@ jobs:
             test -s /opt/nekokem/lib/app/resources/libnekokem_native.so
             rpm -qa | grep -i "noto-sans-cjk"
           '
+      - name: Start the AppImage through FUSE and verify its window opens
+        run: |
+          set -Eeuo pipefail
+          appimage="$RUNNER_TEMP/linux-gui/NekoKEM-linux-${{ matrix.arch }}-GUI.AppImage"
+          test -x "$appimage"
+          # The image carries the same bridge library as the application folder.
+          contents="$RUNNER_TEMP/compose-linux/appimage-contents"
+          mkdir -p "$contents"
+          (cd "$contents" && "$appimage" --appimage-extract > /dev/null)
+          cmp "$contents/squashfs-root/lib/app/resources/libnekokem_native.so" \
+            desktop-compose/build/compose/binaries/main/app/NekoKEM/lib/app/resources/libnekokem_native.so
+          rm -rf "$contents"
+          export XDG_CONFIG_HOME="$RUNNER_TEMP/compose-linux/appimage-config"
+          mkdir -p "$XDG_CONFIG_HOME"
+          xvfb-run -a -s '-screen 0 1280x1024x24' bash -c '
+            "$0" > "$RUNNER_TEMP/compose-linux/appimage.log" 2>&1 &
+            pid=$!
+            for attempt in $(seq 1 60); do
+              if xdotool search --name "^NekoKEM$" > /dev/null 2>&1; then break; fi
+              kill -0 "$pid" || { cat "$RUNNER_TEMP/compose-linux/appimage.log"; exit 1; }
+              sleep 1
+            done
+            xdotool search --name "^NekoKEM$" > /dev/null
+            # Started from the image mounted through FUSE, not from an extracted copy.
+            grep -Eq "/\.mount_NekoKE[^ ]* fuse\.squashfuse " /proc/mounts
+            sleep 3
+            kill -0 "$pid"
+            kill -TERM "$pid"
+            wait "$pid" || true
+          ' "$appimage"
+          cat "$RUNNER_TEMP/compose-linux/appimage.log"
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: always()
         with:
