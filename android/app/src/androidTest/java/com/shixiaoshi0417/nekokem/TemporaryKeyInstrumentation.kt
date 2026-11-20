@@ -105,6 +105,7 @@ class TemporaryKeyInstrumentation : Instrumentation() {
             testInvalidKeys(manager, workflow, context.cacheDir)
             testKeyPairMatching(manager, workflow, context.cacheDir)
             testOlderPrivateKeyFormats(manager, workflow, context)
+            testLegacyV1Import(baseContext, root)
             testCancellationCleanup(workflow, context.cacheDir, plaintext)
             runPublicKeyContactsTests(context, manager, workflow, plaintext, DEFAULT_PASSWORD)
             testKeyDeletion(manager, context)
@@ -769,6 +770,78 @@ class TemporaryKeyInstrumentation : Instrumentation() {
         deleteTree(directory)
     }
 
+    /**
+     * A NekoKEM 4.x key pair (NKPR v1 private key, two-component public key,
+     * password DEFAULT_PASSWORD) imported on a device of its own: refused
+     * without the user's answer, imported but not upgraded while its public
+     * key is missing, kept as it is, and upgraded to an identity key that
+     * keeps its encryption keys and password. The pair is a test asset made
+     * with Core, since the app itself never writes NKPR v1.
+     */
+    private fun testLegacyV1Import(baseContext: Context, root: File) {
+        val directory = File(root, LEGACY_V1_DIRECTORY)
+        check(directory.mkdir())
+        Os.chmod(directory.absolutePath, PRIVATE_DIRECTORY_MODE)
+        val context = IsolatedStorageContext(baseContext, directory)
+        val manager = LocalKeyManager(context)
+        val workflow = SafFileWorkflow(context, manager)
+        val ownPrivate = File(File(context.filesDir, "keys"), "private.nkpr.enc")
+        val publicFile = File(context.cacheDir, "legacy-v1-public.key")
+        val privateFile = File(context.cacheDir, "legacy-v1-private.nkpr")
+        copyTestAsset(LEGACY_V1_PUBLIC_ASSET, publicFile)
+        copyTestAsset(LEGACY_V1_PRIVATE_ASSET, privateFile)
+        val privateUri = Uri.fromFile(privateFile)
+        check(workflow.privateKeyImportVersion(privateUri) == 1)
+        check(manager.privateKeyIsLegacy(privateFile))
+
+        // Without the user's answer nothing is opened or imported.
+        check(workflow.importEncryptedPrivateKey(privateUri, password(DEFAULT_PASSWORD)) ==
+            LocalKeyManager.RESULT_LEGACY_IMPORT_UNCONFIRMED)
+        check(!manager.readState().privateKeyExists)
+
+        // Upgrading needs the public key: the import stands, the upgrade is reported.
+        check(workflow.importEncryptedPrivateKey(
+            privateUri,
+            password(DEFAULT_PASSWORD),
+            LegacyImport.UPGRADE,
+        ) == LocalKeyManager.RESULT_IMPORTED_NOT_UPGRADED)
+        check(manager.readState().privateKeyExists)
+        check(ownPrivate.readBytes()[4] == 1.toByte())
+
+        // With its public key, keeping it leaves the 4.x key as it is.
+        check(workflow.importPublicKey(Uri.fromFile(publicFile), password(DEFAULT_PASSWORD)) ==
+            NativeBridge.RESULT_SUCCESS)
+        val legacy = manager.readState()
+        check(!legacy.canSign && legacy.fingerprint != null)
+        check(workflow.importEncryptedPrivateKey(
+            privateUri,
+            password(DEFAULT_PASSWORD),
+            LegacyImport.KEEP,
+        ) == NativeBridge.RESULT_SUCCESS)
+        check(ownPrivate.readBytes()[4] == 1.toByte())
+        check(!manager.readState().canSign)
+
+        // Upgraded on import: an identity key with the same encryption keys
+        // (its 4.x fingerprint stays) and the same password, as NKPR v3.
+        check(workflow.importEncryptedPrivateKey(
+            privateUri,
+            password(DEFAULT_PASSWORD),
+            LegacyImport.UPGRADE,
+        ) == NativeBridge.RESULT_SUCCESS)
+        val upgraded = manager.readState()
+        check(upgraded.canSign)
+        check(upgraded.legacyFingerprint == legacy.fingerprint)
+        check(ownPrivate.readBytes()[4] == 3.toByte())
+        check(manager.checkPassword(password(DEFAULT_PASSWORD)) == NativeBridge.RESULT_SUCCESS)
+        deleteTree(directory)
+    }
+
+    /** Copies an asset of the test APK to a private (0600) file. */
+    private fun copyTestAsset(name: String, target: File) {
+        context.assets.open(name).use { input -> target.outputStream().use { input.copyTo(it) } }
+        Os.chmod(target.absolutePath, PRIVATE_FILE_MODE)
+    }
+
     private fun testCancellationCleanup(
         workflow: SafFileWorkflow,
         cache: File,
@@ -967,6 +1040,9 @@ class TemporaryKeyInstrumentation : Instrumentation() {
         const val OTHER_PAIR_DIRECTORY = "other-pair"
         const val OWN_PRIVATE_EXPORT_NAME = "own-private.nkpr"
         const val LEGACY_PAIR_DIRECTORY = "legacy-pair"
+        const val LEGACY_V1_DIRECTORY = "legacy-v1-pair"
+        const val LEGACY_V1_PUBLIC_ASSET = "legacy-v1/public.key"
+        const val LEGACY_V1_PRIVATE_ASSET = "legacy-v1/private.nkpr"
         const val LEGACY_PRIVATE_NAME = "private-5.2.nkpr"
         const val TEMPORARY_PUBLIC_NAME = "public.key"
         const val TEMPORARY_PRIVATE_NAME = "private.nkpr"
