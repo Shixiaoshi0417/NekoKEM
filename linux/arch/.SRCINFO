@@ -1,5 +1,5 @@
 pkgbase = nekokem-bin
-	pkgdesc = Post-quantum file encryption (ML-KEM-1024 + X25519 hybrid), CLI and desktop GUI
+	pkgdesc = Post-quantum file encryption (X448 + ML-KEM-1024 hybrid), CLI and desktop GUI
 	pkgver = 5.2.0
 	pkgrel = 1
 	url = https://github.com/Shixiaoshi0417/NekoKEM
