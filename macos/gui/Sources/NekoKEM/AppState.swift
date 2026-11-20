@@ -59,7 +59,7 @@ final class AppState: ObservableObject {
     @Published var output = "" { didSet { if output != oldValue { withdrawOverwrite() }; edited("output") } }
     @Published var keyPath = "" { didSet { edited("keyPath") } }
     @Published var publicPath = "" { didSet { if publicPath != oldValue { withdrawReplace() }; edited("publicPath") } }
-    @Published var privatePath = "" { didSet { if privatePath != oldValue { withdrawReplace() }; edited("privatePath") } }
+    @Published var privatePath = "" { didSet { if privatePath != oldValue { withdrawReplace(); withdrawLegacy() }; edited("privatePath") } }
     @Published var password = "" { didSet { edited("password") } }
     @Published var confirmation = "" { didSet { edited("confirmation") } }
     // Ticked to hand the password to the login keychain once the operation accepts it.
@@ -125,6 +125,16 @@ final class AppState: ObservableObject {
     // chosen paths, must be ticked for each run and is withdrawn when they change.
     @Published private(set) var replaceOffered = false
     @Published private(set) var overwriteOffered = false
+    // Upgrading an older-format private key that is not the user's saved own
+    // key: the bridge warns first, and the box can be ticked only after the
+    // warning was up for legacyConfirmSeconds (the bridge checks that too).
+    // Withdrawn when the private key path, the mode or the page changes.
+    @Published private(set) var legacyOffered = false
+    @Published var legacyConfirmed = false
+    @Published private(set) var legacyWait = 0
+    private var legacyTimer: Task<Void, Never>?
+    // Same as the bridge's LEGACY_CONFIRM_DELAY.
+    static let legacyConfirmSeconds = 3
     @Published private(set) var invalidField: String?
     @Published private(set) var choosing = false
     @Published var contacts: [Contact] = []
@@ -309,6 +319,18 @@ final class AppState: ObservableObject {
     func ignoreRelease() { update.ignored = availableVersion; availableVersion = ""; storeUpdate() }
 
     private func withdrawReplace() { replaceOffered = false; replace = false }
+    private func withdrawLegacy() { legacyTimer?.cancel(); legacyTimer = nil; legacyOffered = false; legacyConfirmed = false; legacyWait = 0 }
+    private func offerLegacy() {
+        withdrawLegacy()
+        legacyOffered = true; legacyWait = Self.legacyConfirmSeconds
+        legacyTimer = Task { @MainActor [weak self] in
+            for _ in 0..<AppState.legacyConfirmSeconds {
+                try? await Task.sleep(nanoseconds: 1_000_000_000)
+                guard let self, !Task.isCancelled else { return }
+                self.legacyWait -= 1
+            }
+        }
+    }
     private func withdrawOverwrite() { overwriteOffered = false; overwrite = false }
 
     func path(_ field: PathField) -> String {
@@ -366,7 +388,7 @@ final class AppState: ObservableObject {
         output = ""
         resetFeedback()
         editing = nil; confirmingDelete = nil; highlighted = nil
-        withdrawReplace(); withdrawOverwrite()
+        withdrawReplace(); withdrawOverwrite(); withdrawLegacy()
         confirmingUnsigned = false; closeRecipientsNow(); discardStaged()
         pasteKey = false
         screen = value
@@ -381,7 +403,7 @@ final class AppState: ObservableObject {
         password = ""; confirmation = ""
         output = ""
         keyMode = mode
-        withdrawReplace(); withdrawOverwrite(); resetFeedback()
+        withdrawReplace(); withdrawOverwrite(); withdrawLegacy(); resetFeedback()
         if mode == .export && exportPrivate && privatePath.isEmpty { privatePath = signKeyPath }
     }
     /// Export mode's choice; the private key starts as the user's own.
@@ -512,7 +534,8 @@ final class AppState: ObservableObject {
         request.paste = pasting
         request.replace = kind == .keygen && replaceOffered && replace
         request.overwrite = exporting && overwriteOffered && overwrite
-        withdrawReplace(); withdrawOverwrite()
+        request.legacyConfirmed = kind == .upgrade && legacyOffered && legacyConfirmed && legacyWait == 0
+        withdrawReplace(); withdrawOverwrite(); withdrawLegacy()
         let remember = (keys || kind == .exportLegacyPrivate) && saveToKeychain
         // The native layer keeps its own copy until it finishes; the fields are cleared now.
         clearSecrets()
@@ -543,6 +566,7 @@ final class AppState: ObservableObject {
                 failure = message
                 if kind == .keygen && message == "key-exists" { replaceOffered = true }
                 if exporting && message == "output-exists" { overwriteOffered = true }
+                if kind == .upgrade && message == "legacy-unconfirmed" { offerLegacy() }
             }
             busy = false; cancelling = false
             closeIfRequested()

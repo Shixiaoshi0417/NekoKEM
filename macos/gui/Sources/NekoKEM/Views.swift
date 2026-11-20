@@ -329,6 +329,10 @@ private struct KeysPage: View {
                     Toggle(state.t("replaceKeys"), isOn: $state.replace).disabled(!state.editable)
                     Text(state.t("replaceKeysHint")).font(.callout).foregroundStyle(danger)
                 }
+                if upgrade && state.legacyOffered {
+                    Toggle(state.t("legacyConfirm") + (state.legacyWait > 0 ? " (\(state.legacyWait))" : ""), isOn: $state.legacyConfirmed)
+                        .disabled(!state.editable || state.legacyWait > 0)
+                }
             }
             OperationFooter(state: state)
         }

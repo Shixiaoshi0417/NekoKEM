@@ -222,6 +222,11 @@ private fun KeyFields(state: AppState) {
             CheckRow(state.replace, state.t("replaceKeys"), state.editable) { state.replace = !state.replace }
             Hint(state.t("replaceKeysHint"), danger = true)
         }
+        if (upgrade && state.legacyOffered) {
+            Spacer(Modifier.height(8.dp))
+            val label = state.t("legacyConfirm") + if (state.legacyWait > 0) " (${state.legacyWait})" else ""
+            CheckRow(state.legacyConfirmed, label, state.editable && state.legacyWait == 0) { state.legacyConfirmed = !state.legacyConfirmed }
+        }
     }
 }
 

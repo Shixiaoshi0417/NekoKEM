@@ -9,6 +9,8 @@ import androidx.compose.runtime.setValue
 import java.util.UUID
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
@@ -115,6 +117,14 @@ class AppState(private val scope: CoroutineScope, private val files: FileChooser
     // chosen paths, must be ticked for each run and is withdrawn when they change.
     var replaceOffered by mutableStateOf(false); private set
     var overwriteOffered by mutableStateOf(false); private set
+    // Upgrading an older-format private key that is not the user's saved own
+    // key: the bridge warns first, and the box can be ticked only after the
+    // warning was up for LEGACY_CONFIRM_SECONDS (the bridge checks that too).
+    // Withdrawn when the private key path, the mode or the page changes.
+    var legacyOffered by mutableStateOf(false); private set
+    var legacyConfirmed by mutableStateOf(false)
+    var legacyWait by mutableStateOf(0); private set
+    private var legacyTimer: Job? = null
     var invalidField by mutableStateOf<String?>(null); private set
     var choosing by mutableStateOf<PathField?>(null); private set
     var contacts by mutableStateOf<List<Contact>>(emptyList()); private set
@@ -222,6 +232,12 @@ class AppState(private val scope: CoroutineScope, private val files: FileChooser
     fun closeQr() { qrFingerprint = "" }
 
     private fun withdrawReplace() { replaceOffered = false; replace = false }
+    private fun withdrawLegacy() { legacyTimer?.cancel(); legacyTimer = null; legacyOffered = false; legacyConfirmed = false; legacyWait = 0 }
+    private fun offerLegacy() {
+        withdrawLegacy()
+        legacyOffered = true; legacyWait = LEGACY_CONFIRM_SECONDS
+        legacyTimer = scope.launch { while (legacyWait > 0) { delay(1000); legacyWait -= 1 } }
+    }
     private fun withdrawOverwrite() { overwriteOffered = false; overwrite = false }
 
     fun path(field: PathField) = when (field) {
@@ -239,7 +255,7 @@ class AppState(private val scope: CoroutineScope, private val files: FileChooser
             PathField.Output -> { if (value != output) withdrawOverwrite(); output = value }
             PathField.KeyPath -> keyPath = value
             PathField.PublicPath -> { if (value != publicPath) withdrawReplace(); publicPath = value }
-            PathField.PrivatePath -> { if (value != privatePath) withdrawReplace(); privatePath = value }
+            PathField.PrivatePath -> { if (value != privatePath) { withdrawReplace(); withdrawLegacy() }; privatePath = value }
             PathField.ContactKeyPath -> contactKeyPath = value
             PathField.SignKeyPath -> { signKeyPath = value; if (view == View.Settings) storePreferences() }
             PathField.OwnPublicKey -> { ownPublicKey = value; storePreferences() }
@@ -270,7 +286,7 @@ class AppState(private val scope: CoroutineScope, private val files: FileChooser
         setPath(PathField.Output, "")
         resetFeedback()
         editing = null; confirmingDelete = null; highlighted = null
-        withdrawReplace(); withdrawOverwrite()
+        withdrawReplace(); withdrawOverwrite(); withdrawLegacy()
         confirmingUnsigned = false; closeRecipientsNow(); discardStaged()
         view = value
         if (value == View.Files || value == View.Contacts) scope.launch { refreshContacts() }
@@ -285,7 +301,7 @@ class AppState(private val scope: CoroutineScope, private val files: FileChooser
         clear(password); clear(confirmation)
         setPath(PathField.Output, "")
         keyMode = mode
-        withdrawReplace(); withdrawOverwrite(); resetFeedback()
+        withdrawReplace(); withdrawOverwrite(); withdrawLegacy(); resetFeedback()
         if (mode == KeyMode.Export && exportPrivate && privatePath.isEmpty()) privatePath = signKeyPath
     }
     /** Export mode's choice; the private key starts as the user's own. */
@@ -408,8 +424,9 @@ class AppState(private val scope: CoroutineScope, private val files: FileChooser
             keyText = if (pasted) keyText.text else "", paste = pasted,
             replace = kind == Kind.Keygen && replaceOffered && replace,
             overwrite = exporting && overwriteOffered && overwrite,
+            legacyConfirmed = kind == Kind.Upgrade && legacyOffered && legacyConfirmed && legacyWait == 0,
         )
-        withdrawReplace(); withdrawOverwrite()
+        withdrawReplace(); withdrawOverwrite(); withdrawLegacy()
         scope.launch {
             try {
                 // The request is written on the worker thread, then the fields are cleared.
@@ -422,6 +439,7 @@ class AppState(private val scope: CoroutineScope, private val files: FileChooser
                 failure = message
                 if (kind == Kind.Keygen && message == "key-exists") replaceOffered = true
                 if (exporting && message == "output-exists") overwriteOffered = true
+                if (kind == Kind.Upgrade && message == "legacy-unconfirmed") offerLegacy()
             } finally {
                 // The native layer zeroized its copy; the fields are cleared here.
                 clearSecrets()
