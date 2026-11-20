@@ -13,10 +13,10 @@ GitHub Actions has four workflow definitions:
 - `release.yml` (`Release`) builds artifacts only when run by hand. It
   produces Linux x86_64/aarch64 archives, a signed Android arm64 APK, and Windows
   CLI/GUI packages, macOS arm64 CLI/GUI packages and Linux x86_64/ARM64 GUI
-  `.deb`/`.rpm`/portable archives. Regression suites run in CI. Source checksums, dependency
+  `.deb`/`.rpm`/portable archives/AppImages. Regression suites run in CI. Source checksums, dependency
   versions, compiler hardening, binary imports/protections,
   icons, APK identity/signature and package checksums remain build requirements.
-  Its final job selects the 15 public packages and their `SHA256SUMS.txt` with
+  Its final job selects the 17 public packages and their `SHA256SUMS.txt` with
   `.github/scripts/release_assets.py` and attests each with GitHub build
   provenance (`actions/attest-build-provenance`), binding it to this run, this
   workflow and the built commit. Release never reads or writes an Actions
@@ -135,15 +135,17 @@ removed even when the job fails.
 
 Releases up to v5.0.0 contain 14 packages, with the earlier Tauri desktop app.
 From v5.1.0, the desktop packages are the Compose (Windows, Linux) and
-SwiftUI (macOS) apps, and the Windows installer joins them, for 15 packages:
+SwiftUI (macOS) apps, and the Windows installer joins them, for 15 packages up
+to v5.2.0. Later releases add an AppImage for each Linux architecture, for 17
+packages:
 
 | Platform | Public assets |
 |---|---|
 | Android ARM64 | `app-release.apk` |
 | Windows x64 | `NekoKEM-windows-x86_64.zip`, `NekoKEM-Windows-GUI.zip`, `NekoKEM-Windows-GUI.msi` |
 | macOS Apple Silicon | `NekoKEM-macos-arm64.tar.gz`, `NekoKEM-macos-arm64-GUI.zip`, `NekoKEM-macos-arm64-GUI.dmg` |
-| Linux x86_64 | `NekoKEM-linux-x86_64.tar.gz`, `NekoKEM-linux-x86_64-GUI.deb`, `NekoKEM-linux-x86_64-GUI.rpm`, `NekoKEM-linux-x86_64-GUI.tar.gz` |
-| Linux ARM64 | `NekoKEM-linux-aarch64.tar.gz`, `NekoKEM-linux-aarch64-GUI.deb`, `NekoKEM-linux-aarch64-GUI.rpm`, `NekoKEM-linux-aarch64-GUI.tar.gz` |
+| Linux x86_64 | `NekoKEM-linux-x86_64.tar.gz`, `NekoKEM-linux-x86_64-GUI.deb`, `NekoKEM-linux-x86_64-GUI.rpm`, `NekoKEM-linux-x86_64-GUI.tar.gz`, `NekoKEM-linux-x86_64-GUI.AppImage` |
+| Linux ARM64 | `NekoKEM-linux-aarch64.tar.gz`, `NekoKEM-linux-aarch64-GUI.deb`, `NekoKEM-linux-aarch64-GUI.rpm`, `NekoKEM-linux-aarch64-GUI.tar.gz`, `NekoKEM-linux-aarch64-GUI.AppImage` |
 
 Publish only packages from the successful Release run for the exact CI-validated
 source; the Publish workflow enforces this. One more asset, top-level
@@ -170,7 +172,8 @@ retired in favor of these two entry points.
 `desktop/scripts/package-desktop.py` checks each built desktop app and writes its
 packages, `gui-SHA256SUMS.txt` and build records (source commit, run, version). CI
 runs the same commands on every pull request, installs the DEB on Ubuntu 24.04 and
-the RPM on Fedora 44, and starts the packaged apps; Release only builds and checks.
+the RPM on Fedora 44, and starts the packaged apps, the AppImage through FUSE;
+Release only builds and checks.
 See the [desktop GUI documentation](../desktop/README.md).
 
 Windows x64 (Compose Multiplatform, `windows-2022`):
@@ -203,6 +206,11 @@ each architecture:
   RPM names the font package of Fedora and of openSUSE. Neither is developer signed.
 - `NekoKEM-linux-<architecture>-GUI.tar.gz`: the same application folder with
   `build-metadata.json`, started with `bin/NekoKEM`.
+- `NekoKEM-linux-<architecture>-GUI.AppImage`: the same folder, with a desktop
+  entry, icon and `build-metadata.json`, as a zstd SquashFS image after the
+  AppImage type 2 runtime. The runtime is a pinned release of AppImage's
+  type2-runtime, accepted only with its release signature and pinned SHA-256;
+  its SHA-256 is recorded in `gui-build-metadata.json`. Not developer signed.
 
 The app carries its Java runtime. The bridge links the pinned static PIC OpenSSL
 4.1.0 with hidden symbols; the packaging script requires that it needs no system

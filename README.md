@@ -173,6 +173,8 @@ macOS 文件层保留严格的所有者、权限、符号链接和硬链接检�
 
 Linux GUI 支持 `x86_64` 与 `aarch64`（ARM64），与 Windows 使用同一个 Compose Multiplatform 应用：MIUIX 与 Material 3 Expressive 两种风格、五语言自动检测、系统文件选择、进度和取消。每种架构提供 `NekoKEM-linux-<架构>-GUI.deb`、`NekoKEM-linux-<架构>-GUI.rpm` 和 `NekoKEM-linux-<架构>-GUI.tar.gz`。Ubuntu 使用 `sudo apt install ./NekoKEM-linux-x86_64-GUI.deb`；Fedora 使用 `sudo dnf install ./NekoKEM-linux-x86_64-GUI.rpm`，ARM64 将文件名中的架构换为 `aarch64`。安装后可从系统应用菜单打开。图标直接使用现有透明外部白色区域的方形 PNG，README 仍用圆角展示图。
 
+5.2.0 之后的版本每种架构还提供 `NekoKEM-linux-<架构>-GUI.AppImage`：单个文件，不需要安装或 root 权限，`chmod +x` 后直接运行。它通过 FUSE 挂载自身，系统需要 `fusermount3`（Debian/Ubuntu 的 `fuse3` 包）；没有 FUSE 时加 `--appimage-extract-and-run` 运行。与便携包一样，AppImage 不会带来中日韩字体和 `curl`，需要系统自行安装。文件开头的 AppImage 运行时取自 AppImage 项目 [type2-runtime](https://github.com/AppImage/type2-runtime) 的固定版本，构建时核对其发布签名和 SHA-256；CI 通过 FUSE 启动 AppImage 并确认窗口打开。v5.2.0 及更早的发布不含 AppImage。
+
 构建与原生 CI 基线为 Ubuntu 24.04，CI 另在同架构 Fedora 44 容器中安装并启动 RPM。应用自带 Java 运行时；运行需要 glibc 2.39 或更新版本，DEB/RPM 依赖 Noto Sans CJK 字体和 `curl`（检查更新）。OpenSSL 4.1.0 静态链接进桥接库并隐藏符号，保留完整 RELRO、立即绑定和不可执行栈。Linux 文件权限、认证后提交及取消清理沿用 CLI/Core；NKEM、NKPR、KDF 参数与 64 KiB 流式处理不变。详见 [桌面 GUI 文档](desktop/README.md)。
 
 v5.2.0 Release 包含上述两种架构的全部 Linux GUI 安装包和便携包，现有静态 Linux CLI 包继续保留。原生窗口测试使用 X11 会话，不代表已验证所有 Linux 发行版或 Wayland 实机。
