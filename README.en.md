@@ -197,8 +197,8 @@ The Flatpak, application ID `io.github.shixiaoshi0417.NekoKEM`, holds the GUI an
 ```sh
 flatpak remote-add --user --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo
 flatpak install --user ./NekoKEM-linux-x86_64-GUI.flatpak
-flatpak run io.github.shixiaoshi0417.NekoKEM                      # the GUI, also in the application menu
-flatpak run --command=nekokem io.github.shixiaoshi0417.NekoKEM --help   # the CLI
+flatpak run io.github.shixiaoshi0417.NekoKEM
+flatpak run --command=nekokem io.github.shixiaoshi0417.NekoKEM --help
 ```
 
 Until a release carries the bundle, the [`linux/flatpak`](linux/flatpak/README.md) manifest builds one from the published v5.2.0 archives. The sandbox can read and write the home folder and removable media under `/media` and `/run/media`, has network access (used only for the update check), and draws through X11 (XWayland on Wayland). Settings, contacts and the language live in `~/.var/app/io.github.shixiaoshi0417.NekoKEM/config/nekokem`, apart from the DEB/RPM app's `~/.config/nekokem`. Chinese, Japanese and Korean text uses the fonts installed on the system. The manifest also points at one published release, and `scripts/update_flatpak_manifest.py <version>` updates it after each release. CI builds and installs the bundle from this build's archives on both architectures and starts the GUI in English and Chinese to check that its window opens. Publishing on Flathub is a step the maintainer takes; see [linux/flatpak/README.md](linux/flatpak/README.md).

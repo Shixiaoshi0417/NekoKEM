@@ -189,8 +189,8 @@ Flatpak 应用 ID 为 `io.github.shixiaoshi0417.NekoKEM`，GUI 与 `nekokem` 命
 ```sh
 flatpak remote-add --user --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo
 flatpak install --user ./NekoKEM-linux-x86_64-GUI.flatpak
-flatpak run io.github.shixiaoshi0417.NekoKEM                      # GUI，也可从应用菜单打开
-flatpak run --command=nekokem io.github.shixiaoshi0417.NekoKEM --help   # CLI
+flatpak run io.github.shixiaoshi0417.NekoKEM
+flatpak run --command=nekokem io.github.shixiaoshi0417.NekoKEM --help
 ```
 
 在发布单文件包之前，也可以用仓库中的 [`linux/flatpak`](linux/flatpak/README.md) 清单从已发布的 v5.2.0 归档自行构建。沙盒可读写主目录和 `/media`、`/run/media` 下的移动存储，可联网（仅用于检查更新），图形走 X11（Wayland 下经 XWayland）。设置、通讯录和语言保存在 `~/.var/app/io.github.shixiaoshi0417.NekoKEM/config/nekokem`，与 DEB/RPM 版的 `~/.config/nekokem` 分开。中日韩字体沿用系统已安装的字体。清单同样固定指向已发布版本，发布后由 `scripts/update_flatpak_manifest.py <版本>` 更新；CI 在两种架构上用本次构建的归档打包、安装，以中英文启动 GUI 确认窗口打开。上架 Flathub 需要维护者本人提交，步骤见 [linux/flatpak/README.md](linux/flatpak/README.md)。
