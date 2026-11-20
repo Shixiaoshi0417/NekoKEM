@@ -225,15 +225,21 @@ else's file could tell them whether yours is one of them. The apps therefore ope
 NKPR v1/v2 key only when it is the private key set as yours in Settings (key generation
 and upgrading set it); any other v1/v2 key is refused before a password is tried
 (“This private key uses the format of NekoKEM 5.2 and earlier…”). After your own NKPR v2
-key opens, it is rewritten as NKPR v3 with the same keys and password. **Upgrade key**
-does the same for a 5.2 key chosen there, and **For older versions → Private key for
-5.2** writes your key in the format NekoKEM 5.2 reads, with the same password, for
-moving it back to an older version.
+key opens, it is rewritten as NKPR v3 with the same keys and password, when **My public
+key** in Settings is its identity public key. **Upgrade key** rewrites your own key
+directly. For any other older-format key it first shows a warning, and only after three
+seconds can you confirm that the key is your own, exported from an older NekoKEM; the
+bridge refuses an earlier confirmation, and the password is not used before it. **For
+older versions → Private key for 5.2** writes a key in the format NekoKEM 5.2 reads, with
+the same password, for moving it back to an older version; an older-format input must be
+your own key.
 NekoKEM 5.2 及更早版本的私钥（NKPR v1/v2）没有密钥承诺：这种文件可以被构造成能用多个口令打开，
 在别人的文件上输入口令可能让对方得知你的口令是否在其中。因此应用只在 NKPR v1/v2 私钥正是设置里的
 “我的私钥”时才打开它（生成和升级密钥会设置它）；其他 v1/v2 私钥在尝试口令之前就被拒绝。你自己的
-NKPR v2 私钥打开后会以相同的密钥和口令改写为 NKPR v3。“升级密钥”对在那里选择的 5.2 私钥做同样的改写；
-“给旧版本 → 给 5.2 的私钥”以相同口令写出 NekoKEM 5.2 能读取的格式，用于把私钥搬回旧版本。
+NKPR v2 私钥打开后，如果设置里的“我的公钥”是它的身份公钥，就会以相同的密钥和口令改写为 NKPR v3。
+“升级密钥”对“我的私钥”直接改写；其他旧格式私钥会先显示警告，3 秒后才能确认这是你自己从旧版导出的私钥，
+桥接层拒绝提前的确认，确认之前不会使用口令。“给旧版本 → 给 5.2 的私钥”以相同口令写出 NekoKEM 5.2 能读取的
+格式，用于把私钥搬回旧版本；旧格式的输入必须是“我的私钥”。
 
 The file page works as on Android: choose a file, press **Encrypt** or **Decrypt**,
 answer the recipient and password questions, and choose where to save in the system

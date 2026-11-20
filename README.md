@@ -330,7 +330,7 @@ encrypted/test.jpg.nkem -> plaintext/test.jpg
 
 私钥文件内容是 NKPR 时，Hybrid decrypt 会自动提示一次密码；判断依据是文件头，不看扩展名。为兼容已有部署，命令仍接受包含 X448、ML-KEM-1024 两个 PEM 块的旧式明文 `private.key`。
 
-NKPR v1、v2 格式的私钥（NekoKEM 5.2 及更早版本生成）不带密钥承诺，别人写的这种文件可以被构造成能用多个口令打开，借你输入口令来一次试多个候选。因此 CLI 只在 `keys/private.key.enc` 打开它们；其他路径上的旧格式私钥会在询问口令之前被拒绝，只有加上 `--legacy-private-key`（解密时用于私钥，加密时用于 `--sign-key`，`upgrade-key <公钥> <私钥>` 时用于给出的私钥）才会打开。`keys/private.key.enc` 按当前工作目录解析，所以只在你自己的密钥目录里运行 CLI；在别人给的目录里，其中的 `keys/private.key.enc` 也会被当成你自己的私钥。这个选项只用于你自己从旧版导出的私钥。用旧格式的 `keys/private.key.enc` 时会提示运行 `upgrade-key`，它会把私钥重写为 NKPR v3，密钥和密码都不变。需要把私钥交给 NekoKEM 5.2 及更早版本时，用 `export-legacy-private-key` 导出 NKPR v2 副本：
+NKPR v1、v2 格式的私钥（NekoKEM 5.2 及更早版本生成）不带密钥承诺，别人写的这种文件可以被构造成能用多个口令打开，借你输入口令来一次试多个候选。因此 CLI 只在 `keys/private.key.enc` 打开它们；其他路径上的旧格式私钥会在询问口令之前被拒绝，只有加上 `--legacy-private-key`（解密时用于私钥，加密时用于 `--sign-key`，`upgrade-key <公钥> <私钥>` 时用于给出的私钥）才会打开。`keys/private.key.enc` 按当前工作目录解析，所以只在你自己的密钥目录里运行 CLI；在别人给的目录里，其中的 `keys/private.key.enc` 也会被当成你自己的私钥。这个选项只用于你自己从旧版导出的私钥。用旧格式的 `keys/private.key.enc` 时会提示运行 `upgrade-key`，它会把私钥重写为 NKPR v3，密码不变：NKPR v2 私钥的密钥也不变，4.x 的 NKPR v1 私钥会同时添加签名密钥，公钥随之改变。需要把私钥交给 NekoKEM 5.2 及更早版本时，用 `export-legacy-private-key` 导出 NKPR v2 副本：
 
 ```sh
 ./nekokem decrypt hybrid --legacy-private-key encrypted/old.nkem old.txt backup/private.key.enc
