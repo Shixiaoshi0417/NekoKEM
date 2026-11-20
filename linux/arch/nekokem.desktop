@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=NekoKEM
+Comment=Post-quantum file encryption
+Exec=nekokem-gui
+Icon=nekokem
+Categories=Utility;
+Terminal=false
+StartupWMClass=com-shixiaoshi0417-nekokem-desktop-MainKt

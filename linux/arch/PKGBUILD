@@ -1,0 +1,61 @@
+# Maintainer: Shixiaoshi0417 <142963842+Shixiaoshi0417@users.noreply.github.com>
+#
+# Repackages the published Linux release archives: the static CLI and the
+# Compose desktop GUI with its bundled Java runtime. Nothing is compiled.
+# scripts/update_arch_package.py sets pkgver and the checksums from a
+# release's SHA256SUMS.txt and writes .SRCINFO; edit this file, not those values.
+
+pkgname=nekokem-bin
+pkgver=5.2.0
+pkgrel=1
+pkgdesc='Post-quantum file encryption (ML-KEM-1024 + X25519 hybrid), CLI and desktop GUI'
+arch=('x86_64' 'aarch64')
+url='https://github.com/Shixiaoshi0417/NekoKEM'
+license=('Apache-2.0')
+# The GUI's Java runtime opens these through AWT and Skia; the CLI is a static PIE.
+# CJK text comes from system fonts, and the update check runs /usr/bin/curl.
+depends=('glibc' 'libgcc' 'libstdc++' 'libx11' 'libxext' 'libxi' 'libxrender' 'libxtst'
+         'libglvnd' 'fontconfig' 'alsa-lib' 'hicolor-icon-theme'
+         'noto-fonts-cjk' 'curl')
+provides=('nekokem')
+conflicts=('nekokem')
+options=('!strip' '!debug')
+_release="${url}/releases/download/v${pkgver}"
+source=('nekokem.desktop')
+source_x86_64=("NekoKEM-linux-x86_64-${pkgver}.tar.gz::${_release}/NekoKEM-linux-x86_64.tar.gz"
+               "NekoKEM-linux-x86_64-GUI-${pkgver}.tar.gz::${_release}/NekoKEM-linux-x86_64-GUI.tar.gz")
+source_aarch64=("NekoKEM-linux-aarch64-${pkgver}.tar.gz::${_release}/NekoKEM-linux-aarch64.tar.gz"
+                "NekoKEM-linux-aarch64-GUI-${pkgver}.tar.gz::${_release}/NekoKEM-linux-aarch64-GUI.tar.gz")
+sha256sums=('ad020d9bceb25dbf2cc8688336ccafac6891ad7b422ca499c6c2f349a38f7c7a')
+sha256sums_x86_64=('36f66e5e7672f3d2e48ea48e454984ac53ef3791f0e7c382034dbefa9c48f82d'
+                   '8fcbf38bac687fbe7ed68936b7e010ae6ef024fc80314f7ef4b1f9cdf30bdc15')
+sha256sums_aarch64=('c1fc59bebb63b11d95949881da5a50bc3bd0ec97ceb679e94dac292ffc71150c'
+                    '9274a5dce4ac5d9c5f6608faabb8ffc32bff7d63e6956c53ae150a606ac45f2b')
+
+check() {
+  cd "NekoKEM-linux-${CARCH}"
+  sha256sum --check --quiet SHA256SUMS
+  test "$(./nekokem --version)" = "NekoKEM ${pkgver}"
+}
+
+package() {
+  local cli="NekoKEM-linux-${CARCH}"
+  local gui="NekoKEM-linux-${CARCH}-GUI"
+
+  # The CLI.
+  install -Dm755 "${cli}/nekokem" "${pkgdir}/usr/bin/nekokem"
+  install -Dm644 "${cli}/README" "${pkgdir}/usr/share/doc/${pkgname}/README"
+
+  # The GUI keeps the layout of the DEB and RPM packages, /opt/nekokem.
+  install -d "${pkgdir}/opt"
+  cp -a --no-preserve=ownership "${gui}" "${pkgdir}/opt/nekokem"
+  install -d "${pkgdir}/usr/bin"
+  ln -s /opt/nekokem/bin/NekoKEM "${pkgdir}/usr/bin/nekokem-gui"
+  install -Dm644 nekokem.desktop "${pkgdir}/usr/share/applications/nekokem.desktop"
+  install -Dm644 "${gui}/lib/NekoKEM.png" "${pkgdir}/usr/share/icons/hicolor/128x128/apps/nekokem.png"
+
+  # NekoKEM itself, and OpenSSL, which both the CLI and the GUI's bridge link statically.
+  install -Dm644 "${cli}/LICENSE" "${pkgdir}/usr/share/licenses/${pkgname}/LICENSE"
+  install -Dm644 "${gui}/lib/app/resources/OpenSSL-LICENSE.txt" \
+    "${pkgdir}/usr/share/licenses/${pkgname}/OpenSSL-LICENSE.txt"
+}
