@@ -333,10 +333,10 @@ Java_com_shixiaoshi0417_nekokem_nativecore_NativeBridge_nativeUpdatePrivateKeyFo
                                      &password, &password_len);
     }
     if (result == PASSWORD_JNI_SUCCESS) {
-        result = nekokem_update_private_key_format(public_path.value,
-                                                   private_path.value,
-                                                   password,
-                                                   password_len) == 1
+        /* Only the app's own key pair is passed here. */
+        result = nekokem_update_private_key_format(
+                     public_path.value, private_path.value, password,
+                     password_len, NEKOKEM_PRIVATE_KEY_LEGACY) == 1
                      ? PASSWORD_JNI_SUCCESS
                      : PASSWORD_JNI_CORE_ERROR;
     }
@@ -374,9 +374,9 @@ Java_com_shixiaoshi0417_nekokem_nativecore_NativeBridge_nativeExportPrivateKeyLe
                                      &password, &password_len);
     }
     if (result == PASSWORD_JNI_SUCCESS) {
-        result = nekokem_export_private_key_legacy(private_path.value,
-                                                   password, password_len,
-                                                   output.value) == 1
+        result = nekokem_export_private_key_legacy(
+                     private_path.value, password, password_len,
+                     output.value, NEKOKEM_PRIVATE_KEY_LEGACY) == 1
                      ? PASSWORD_JNI_SUCCESS
                      : PASSWORD_JNI_CORE_ERROR;
     }

@@ -299,6 +299,15 @@ static int crafted_two_password_v2(void)
         CHECK(nekokem_internal_private_key_fingerprint(
                   "crafted-v2.enc", bytes, strlen(password), 0U, fingerprint,
                   sizeof(fingerprint)) == NEKOKEM_ERROR_LEGACY_PRIVATE_KEY);
+        /* Upgrading or exporting a key that is not the own one, too. */
+        CHECK(nekokem_update_private_key_format(
+                  "crafted.pub", "crafted-v2.enc", bytes, strlen(password),
+                  0U) == NEKOKEM_ERROR_LEGACY_PRIVATE_KEY);
+        CHECK(nekokem_export_private_key_legacy(
+                  "crafted-v2.enc", bytes, strlen(password),
+                  "crafted-export.enc", 0U) ==
+              NEKOKEM_ERROR_LEGACY_PRIVATE_KEY);
+        CHECK(access("crafted-export.enc", F_OK) != 0);
         /* Accepted as an own key, the tag verifies but no key comes out. */
         CHECK(nekokem_check_private_key_password_flags(
                   "crafted-v2.enc", bytes, strlen(password),
@@ -451,39 +460,80 @@ static int identity_key_as_v3(void)
               &own_key, &verified, NULL, NULL) == NEKOKEM_OPERATION_SUCCESS &&
           files_equal("plain.txt", "restored.txt"));
 
-    /* Exported for an older installation: NKPR v2 with the same password. */
+    /* Exported for an older installation: NKPR v2 with the same password.
+     * An NKPR v3 input needs no flag. */
     CHECK(nekokem_export_private_key_legacy("v3.enc", bytes, password_len,
-                                            "exported.enc") == 1);
+                                            "exported.enc", 0U) == 1);
     CHECK(nkpr_version_of("exported.enc") == (int)NKPR_VERSION_IDENTITY);
     CHECK(nekokem_check_private_key_password_flags(
               "exported.enc", bytes, password_len,
               NEKOKEM_PRIVATE_KEY_LEGACY) == 1);
     CHECK(nekokem_export_private_key_legacy("v3.enc", bytes, password_len,
-                                            "v3.enc") == 0);
+                                            "v3.enc", 0U) == 0);
     CHECK(nekokem_export_private_key_legacy("v3.enc", wrong, 14U,
-                                            "wrong.enc") == 0);
+                                            "wrong.enc", 0U) == 0);
     CHECK(access("wrong.enc", F_OK) != 0);
+    CHECK(nekokem_export_private_key_legacy("v3.enc", bytes, password_len,
+                                            "flags.enc", 0x2U) == 0);
+    CHECK(access("flags.enc", F_OK) != 0);
+    /* An NKPR v2 input opens only as the own key. */
+    CHECK(nekokem_export_private_key_legacy("exported.enc", bytes,
+                                            password_len, "again.enc", 0U) ==
+          NEKOKEM_ERROR_LEGACY_PRIVATE_KEY);
+    CHECK(access("again.enc", F_OK) != 0);
+    CHECK(nekokem_export_private_key_legacy("exported.enc", bytes,
+                                            password_len, "again.enc",
+                                            NEKOKEM_PRIVATE_KEY_LEGACY) == 1);
+    CHECK(nkpr_version_of("again.enc") == (int)NKPR_VERSION_IDENTITY);
 
-    /* Rewriting the own v2 key keeps its keys; a v3 key is left alone. */
+    /* An NKPR v2 key is rewritten only as the own key, keeping its keys. */
     CHECK(nekokem_update_private_key_format("public.key", "v2.enc", bytes,
-                                            password_len) == 1);
+                                            password_len, 0U) ==
+          NEKOKEM_ERROR_LEGACY_PRIVATE_KEY);
+    CHECK(nkpr_version_of("v2.enc") == (int)NKPR_VERSION_IDENTITY);
+    CHECK(nekokem_update_private_key_format("public.key", "v2.enc", bytes,
+                                            password_len, 0x2U) == 0);
+    CHECK(nkpr_version_of("v2.enc") == (int)NKPR_VERSION_IDENTITY);
+    CHECK(nekokem_update_private_key_format("public.key", "v2.enc", bytes,
+                                            password_len,
+                                            NEKOKEM_PRIVATE_KEY_LEGACY) == 1);
     CHECK(nkpr_version_of("v2.enc") == (int)NKPR_VERSION_COMMITTED);
     CHECK(fingerprint_of("public.key", v2_fingerprint) &&
           strcmp(v2_fingerprint, v3_fingerprint) == 0);
     CHECK(nekokem_check_private_key_password("v2.enc", bytes, password_len) == 1);
+    /* An NKPR v3 key is not written again: its bytes stay the same. */
+    {
+        FILE *source = fopen("v3.enc", "rb");
+        FILE *copy = fopen("v3-before.enc", "wb");
+        int byte;
+        int copied = source != NULL && copy != NULL;
+
+        while (copied && (byte = fgetc(source)) != EOF) {
+            copied = fputc(byte, copy) != EOF;
+        }
+        if (source != NULL) {
+            fclose(source);
+        }
+        if (copy != NULL && fclose(copy) != 0) {
+            copied = 0;
+        }
+        CHECK(copied);
+    }
     CHECK(nekokem_update_private_key_format("public.key", "v3.enc", bytes,
-                                            password_len) == 1);
-    CHECK(nkpr_version_of("v3.enc") == (int)NKPR_VERSION_COMMITTED);
+                                            password_len, 0U) == 1);
+    CHECK(files_equal("v3.enc", "v3-before.enc"));
     /* Success on an NKPR v3 key still means the password and the pair are
      * right: a wrong password or another public key fails. */
     CHECK(nekokem_update_private_key_format("public.key", "v3.enc", wrong,
-                                            14U) == 0);
+                                            14U, 0U) == 0);
     CHECK(nekokem_generate_keypair("other.pub", "other.enc", bytes,
                                    password_len));
     CHECK(nekokem_update_private_key_format("other.pub", "v3.enc", bytes,
-                                            password_len) == 0);
+                                            password_len, 0U) == 0);
+    CHECK(files_equal("v3.enc", "v3-before.enc"));
     CHECK(nekokem_update_private_key_format("public.key", "exported.enc",
-                                            wrong, 14U) == 0);
+                                            wrong, 14U,
+                                            NEKOKEM_PRIVATE_KEY_LEGACY) == 0);
     CHECK(nkpr_version_of("exported.enc") == (int)NKPR_VERSION_IDENTITY);
 
     /* NKPR v3 always holds four keys: two-component PEM in v3 is refused,
@@ -521,8 +571,15 @@ static int identity_key_as_v3(void)
         fprintf(stderr, "NKPR v3 accepted a two-component key\n");
         goto cleanup;
     }
+    /* A 4.x key at another path is refused; as the own key it is upgraded. */
     CHECK(nekokem_update_private_key_format("legacy.pub", "legacy-v1.enc",
-                                            bytes, password_len) == 1);
+                                            bytes, password_len, 0U) ==
+          NEKOKEM_ERROR_LEGACY_PRIVATE_KEY);
+    CHECK(nkpr_version_of("legacy-v1.enc") == (int)NKPR_VERSION);
+    CHECK(nekokem_public_key_can_verify("legacy.pub") == 0);
+    CHECK(nekokem_update_private_key_format("legacy.pub", "legacy-v1.enc",
+                                            bytes, password_len,
+                                            NEKOKEM_PRIVATE_KEY_LEGACY) == 1);
     CHECK(nkpr_version_of("legacy-v1.enc") == (int)NKPR_VERSION_COMMITTED);
     CHECK(nekokem_public_key_can_verify("legacy.pub") == 1);
     CHECK(nekokem_public_key_legacy_fingerprint("legacy.pub", legacy_after,

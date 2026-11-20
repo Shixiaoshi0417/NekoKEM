@@ -322,29 +322,37 @@ NEKOKEM_API int nekokem_check_private_key_password_flags(
 NEKOKEM_API int nekokem_private_key_is_legacy(const char *private_key_path);
 
 /*
- * Rewrites the installation's own key pair as NKPR v3 with the same
- * password: an NKPR v2 key keeps its keys, an NKPR v1 key is upgraded to an
- * identity key first, as nekokem_upgrade_to_identity_keys() does. Both files
- * are replaced atomically under the pair lock. An NKPR v3 key is not
- * rewritten; its password and pair are still checked, so 1 always means the
- * password is right and the public file belongs to the private key.
+ * Rewrites a key pair as NKPR v3 with the same password: an NKPR v2 key
+ * keeps its keys, an NKPR v1 key is upgraded to an identity key first, as
+ * nekokem_upgrade_to_identity_keys() does. Both files are replaced
+ * atomically under the pair lock. An NKPR v3 key is not rewritten; its
+ * password and pair are still checked, so 1 always means the password is
+ * right and the public file belongs to the private key.
+ * NKPR v1 and v2 are opened only with NEKOKEM_PRIVATE_KEY_LEGACY (the
+ * installation's own key, or one the user confirmed as their own); without
+ * it they are refused before the password is used. The check runs on the
+ * bytes that are decrypted. Returns 1, 0 or NEKOKEM_ERROR_LEGACY_PRIVATE_KEY.
  */
 NEKOKEM_API int nekokem_update_private_key_format(
     const char *public_key_path,
     const char *private_key_path,
     const unsigned char *password,
-    size_t password_len);
+    size_t password_len,
+    uint32_t flags);
 
 /*
- * Writes the installation's own private key to output_path in the format
- * NekoKEM 5.2 and earlier read (NKPR v2, or v1 for a two-component key),
- * protected by the same password, for moving it to an older installation.
+ * Writes a private key to output_path in the format NekoKEM 5.2 and earlier
+ * read (NKPR v2, or v1 for a two-component key), protected by the same
+ * password, for moving it to an older installation. An NKPR v1 or v2 input
+ * is opened only with NEKOKEM_PRIVATE_KEY_LEGACY, as above. Returns 1, 0 or
+ * NEKOKEM_ERROR_LEGACY_PRIVATE_KEY.
  */
 NEKOKEM_API int nekokem_export_private_key_legacy(
     const char *private_key_path,
     const unsigned char *password,
     size_t password_len,
-    const char *output_path);
+    const char *output_path,
+    uint32_t flags);
 
 NEKOKEM_API int nekokem_export_public_key(
     const char *public_key_path,

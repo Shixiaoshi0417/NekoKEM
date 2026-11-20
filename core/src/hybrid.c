@@ -258,14 +258,19 @@ cleanup:
 int hybrid_upgrade_to_identity(const char *public_path,
                                const char *private_path,
                                const unsigned char *password,
-                               size_t password_len)
+                               size_t password_len,
+                               int accept_legacy)
 {
     HybridKeys keys = {0};
     HybridKeys public_keys = {0};
     int success = 0;
+    int loaded;
 
-    if (hybrid_load_protected_private_keys(private_path, password,
-                                           password_len, 1, &keys) != 1) {
+    loaded = hybrid_load_protected_private_keys(private_path, password,
+                                                password_len, accept_legacy,
+                                                &keys);
+    if (loaded != 1) {
+        success = loaded == HYBRID_LEGACY_KEY_REFUSED ? loaded : 0;
         goto cleanup;
     }
     if (hybrid_keys_have_identity(&keys)) {
@@ -299,14 +304,19 @@ int hybrid_rewrite_identity_keys(const char *public_path,
                                  const char *private_path,
                                  const unsigned char *password,
                                  size_t password_len,
-                                 int rewrite)
+                                 int rewrite,
+                                 int accept_legacy)
 {
     HybridKeys keys = {0};
     HybridKeys public_keys = {0};
     int success = 0;
+    int loaded;
 
-    if (hybrid_load_protected_private_keys(private_path, password,
-                                           password_len, 1, &keys) != 1) {
+    loaded = hybrid_load_protected_private_keys(private_path, password,
+                                                password_len, accept_legacy,
+                                                &keys);
+    if (loaded != 1) {
+        success = loaded == HYBRID_LEGACY_KEY_REFUSED ? loaded : 0;
         goto cleanup;
     }
     /* The rewritten pair must be this key's own pair, as for an upgrade. */
@@ -333,18 +343,25 @@ cleanup:
 int hybrid_export_private_key_legacy(const char *private_path,
                                      const unsigned char *password,
                                      size_t password_len,
-                                     const char *output_path)
+                                     const char *output_path,
+                                     int accept_legacy)
 {
     HybridKeys keys = {0};
     BIO *private_bio = NULL;
     BUF_MEM *private_buffer = NULL;
     const char *key_paths[1];
     int success = 0;
+    int loaded;
 
     key_paths[0] = private_path;
-    if (!file_output_spares_keys(output_path, key_paths, 1U) ||
-        hybrid_load_protected_private_keys(private_path, password,
-                                           password_len, 1, &keys) != 1) {
+    if (!file_output_spares_keys(output_path, key_paths, 1U)) {
+        goto cleanup;
+    }
+    loaded = hybrid_load_protected_private_keys(private_path, password,
+                                                password_len, accept_legacy,
+                                                &keys);
+    if (loaded != 1) {
+        success = loaded == HYBRID_LEGACY_KEY_REFUSED ? loaded : 0;
         goto cleanup;
     }
     private_bio = BIO_new(BIO_s_mem());

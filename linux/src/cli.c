@@ -889,9 +889,13 @@ int cli_run_upgrade_key(const char *public_key_path,
         success = 1;
         goto cleanup;
     }
+    /* Core checks the older format again on the bytes it decrypts, so a
+     * file replaced during the prompt is refused as well. */
     if (!read_password_line(file_message("请输入私钥密码："), &password) ||
-        !nekokem_update_private_key_format(public_key_path, private_key_path,
-                                           password.data, password.length)) {
+        nekokem_update_private_key_format(
+            public_key_path, private_key_path, password.data,
+            password.length,
+            accept_legacy ? NEKOKEM_PRIVATE_KEY_LEGACY : 0U) != 1) {
         goto cleanup;
     }
     password_buffer_cleanup(&password);
@@ -933,9 +937,10 @@ int cli_run_export_legacy_private_key(const char *output_path)
     int success = 0;
 
     if (!read_password_line(file_message("请输入私钥密码："), &password) ||
-        !nekokem_export_private_key_legacy(PROTECTED_PRIVATE_KEY_PATH,
-                                           password.data, password.length,
-                                           output_path)) {
+        nekokem_export_private_key_legacy(PROTECTED_PRIVATE_KEY_PATH,
+                                          password.data, password.length,
+                                          output_path,
+                                          NEKOKEM_PRIVATE_KEY_LEGACY) != 1) {
         goto cleanup;
     }
     printf(file_message("Wrote the private key for NekoKEM 5.2 and earlier: %s\n"),
