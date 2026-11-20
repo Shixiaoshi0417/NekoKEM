@@ -49,6 +49,8 @@ for language in en_US zh_CN; do
     mkdir -p "$XDG_CONFIG_HOME"
     command=$(sed -n 's/^Exec=//p' /usr/share/applications/nekokem.desktop)
     xvfb-run -a -s '-screen 0 1280x1024x24' bash -c '
+        set -Eeuo pipefail
+        trap '\''echo "GUI check failed at: $BASH_COMMAND" >&2; cat "$1/gui-$2.log" >&2'\'' ERR
         "$0" > "$1/gui-$2.log" 2>&1 &
         pid=$!
         for attempt in $(seq 1 60); do
@@ -56,10 +58,17 @@ for language in en_US zh_CN; do
             kill -0 "$pid" || { cat "$1/gui-$2.log"; exit 1; }
             sleep 1
         done
-        window=$(xdotool search --name "^NekoKEM$" | head -n 1)
+        windows=$(xdotool search --name "^NekoKEM$") || true
+        [[ -n "$windows" ]] || { echo "No NekoKEM window" >&2; cat "$1/gui-$2.log"; exit 1; }
         # The window belongs to the menu entry, so desktops group it under its icon.
-        xprop -id "$window" WM_CLASS | grep -q "\"$3\""
-        sleep 5
+        # The title can appear a moment before WM_CLASS is set.
+        for attempt in $(seq 1 20); do
+            classes=$(for window in $(xdotool search --name "^NekoKEM$"); do xprop -id "$window" WM_CLASS || true; done)
+            if [[ "$classes" == *"\"$3\""* ]]; then break; fi
+            sleep 1
+        done
+        [[ "$classes" == *"\"$3\""* ]] || { echo "WM_CLASS is $classes, not $3" >&2; exit 1; }
+        sleep 3
         import -window root "$1/arch-$2.png"
         kill -0 "$pid"
         kill -TERM "$pid"
