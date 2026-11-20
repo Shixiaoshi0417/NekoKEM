@@ -1361,11 +1361,11 @@
    "비밀번호를 키체인에 저장하지 못했습니다."
   ],
   "legacy-unconfirmed": [
-   "This private key uses the format of NekoKEM 5.2 and earlier and is not the private key set as yours in Settings. Someone could build such a file to open under several passwords and learn from your attempt whether yours is one of them, so your password has not been used yet. Upgrade it only if it is your own key, exported from an older NekoKEM: tick the box below when it can be ticked, enter the password again and press Upgrade key. Afterwards NekoKEM 5.2 and earlier cannot open it; For older versions can write a copy for them.",
-   "这个私钥使用 NekoKEM 5.2 及更早版本的格式，而且不是设置里的「我的私钥」。别人可以把这种文件构造成能被多个密码打开，借你输入一次密码判断你的密码是否在其中，所以还没有使用你的密码。只有当它是你自己从旧版导出的私钥时才升级：等下面的勾选框可以勾选后勾选，再输入一次密码并点「升级密钥」。升级后 NekoKEM 5.2 及更早版本无法再打开它，需要时可在「给旧版本」里导出副本。",
-   "這個私密金鑰使用 NekoKEM 5.2 及更早版本的格式，而且不是設定裡的「我的私密金鑰」。別人可以把這種檔案構造成能被多個密碼開啟，藉你輸入一次密碼判斷你的密碼是否在其中，所以還沒有使用你的密碼。只有當它是你自己從舊版匯出的私密金鑰時才升級：等下面的勾選框可以勾選後勾選，再輸入一次密碼並點「升級金鑰」。升級後 NekoKEM 5.2 及更早版本無法再開啟它，需要時可在「給舊版本」裡匯出副本。",
-   "この秘密鍵は NekoKEM 5.2 以前の形式で、設定で自分の鍵として選んだ秘密鍵でもありません。この形式のファイルは複数のパスワードで開けるように作れるため、1 回の入力からあなたのパスワードがその中にあるかを知られるおそれがあります。そのため、まだパスワードは使っていません。古い NekoKEM から自分で書き出した鍵の場合だけアップグレードしてください。下のチェックボックスが選べるようになったらチェックし、もう一度パスワードを入力して「鍵をアップグレード」を押します。アップグレード後は NekoKEM 5.2 以前では開けません。必要なら「旧バージョン向け」でコピーを書き出せます。",
-   "이 개인 키는 NekoKEM 5.2 이하의 형식이며 설정에서 내 키로 고른 개인 키도 아닙니다. 이 형식의 파일은 여러 암호로 열리도록 만들 수 있어, 한 번의 입력으로 내 암호가 그중에 있는지 알려질 수 있으므로 아직 암호를 사용하지 않았습니다. 이전 NekoKEM에서 직접 내보낸 내 키일 때만 업그레이드하세요. 아래 확인란을 선택할 수 있게 되면 선택하고, 암호를 다시 입력한 뒤 「키 업그레이드」를 누르세요. 업그레이드 후에는 NekoKEM 5.2 이하에서 열 수 없으며, 필요하면 「이전 버전용」에서 사본을 내보낼 수 있습니다."
+   "This private key uses the format of NekoKEM 5.2 and earlier and is not the private key set as yours in Settings. Someone could build such a file to open under several passwords and learn from your attempt whether yours is one of them, so your password has not been used yet. Upgrade it only if it is your own key, exported from an older NekoKEM: once it can be ticked, tick “This is my own key, exported from an older NekoKEM” and press Upgrade key again. Afterwards NekoKEM 5.2 and earlier cannot open it; if you need a copy for them, export one under For older versions.",
+   "这个私钥使用 NekoKEM 5.2 及更早版本的格式，而且不是设置里的「我的私钥」。别人可以把这种文件构造成能被多个密码打开，借你输入一次密码判断你的密码是否在其中，所以还没有使用你的密码。只有当它是你自己从旧版导出的私钥时才升级：等「这是我自己从旧版 NekoKEM 导出的私钥」可以勾选后勾选，再点一次「升级密钥」。升级后 NekoKEM 5.2 及更早版本无法再打开它，需要时可在「给旧版本」里导出副本。",
+   "這個私密金鑰使用 NekoKEM 5.2 及更早版本的格式，而且不是設定裡的「我的私密金鑰」。別人可以把這種檔案構造成能被多個密碼開啟，藉你輸入一次密碼判斷你的密碼是否在其中，所以還沒有使用你的密碼。只有當它是你自己從舊版匯出的私密金鑰時才升級：等「這是我自己從舊版 NekoKEM 匯出的私密金鑰」可以勾選後勾選，再點一次「升級金鑰」。升級後 NekoKEM 5.2 及更早版本無法再開啟它，需要時可在「給舊版本」裡匯出副本。",
+   "この秘密鍵は NekoKEM 5.2 以前の形式で、設定で自分の鍵として選んだ秘密鍵でもありません。この形式のファイルは複数のパスワードで開けるように作れるため、1 回の入力からあなたのパスワードがその中にあるかを知られるおそれがあります。そのため、まだパスワードは使っていません。古い NekoKEM から自分で書き出した鍵の場合だけアップグレードしてください。「古い NekoKEM から自分で書き出した自分の鍵です」をチェックできるようになったらチェックし、もう一度「鍵をアップグレード」を押します。アップグレード後は NekoKEM 5.2 以前では開けません。必要なら「旧バージョン向け」でコピーを書き出せます。",
+   "이 개인 키는 NekoKEM 5.2 이하의 형식이며 설정에서 내 키로 고른 개인 키도 아닙니다. 이 형식의 파일은 여러 암호로 열리도록 만들 수 있어, 한 번의 입력으로 내 암호가 그중에 있는지 알려질 수 있으므로 아직 암호를 사용하지 않았습니다. 이전 NekoKEM에서 직접 내보낸 내 키일 때만 업그레이드하세요. 「이전 NekoKEM에서 직접 내보낸 내 키입니다」를 선택할 수 있게 되면 선택하고 「키 업그레이드」를 다시 누르세요. 업그레이드 후에는 NekoKEM 5.2 이하에서 열 수 없으며, 필요하면 「이전 버전용」에서 사본을 내보낼 수 있습니다."
   ],
   "legacyConfirm": [
    "This is my own key, exported from an older NekoKEM",

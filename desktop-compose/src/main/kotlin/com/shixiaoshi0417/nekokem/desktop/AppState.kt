@@ -255,7 +255,14 @@ class AppState(private val scope: CoroutineScope, private val files: FileChooser
             PathField.Output -> { if (value != output) withdrawOverwrite(); output = value }
             PathField.KeyPath -> keyPath = value
             PathField.PublicPath -> { if (value != publicPath) withdrawReplace(); publicPath = value }
-            PathField.PrivatePath -> { if (value != privatePath) { withdrawReplace(); withdrawLegacy() }; privatePath = value }
+            PathField.PrivatePath -> {
+                if (value != privatePath) {
+                    withdrawReplace(); withdrawLegacy()
+                    // The older-format warning belonged to the previous key.
+                    if (failure == "legacy-unconfirmed") failure = null
+                }
+                privatePath = value
+            }
             PathField.ContactKeyPath -> contactKeyPath = value
             PathField.SignKeyPath -> { signKeyPath = value; if (view == View.Settings) storePreferences() }
             PathField.OwnPublicKey -> { ownPublicKey = value; storePreferences() }
@@ -442,7 +449,9 @@ class AppState(private val scope: CoroutineScope, private val files: FileChooser
                 if (kind == Kind.Upgrade && message == "legacy-unconfirmed") offerLegacy()
             } finally {
                 // The native layer zeroized its copy; the fields are cleared here.
-                clearSecrets()
+                // Core did not use the password before the older-format warning,
+                // so it stays for the confirmation instead of being typed again.
+                if (legacyOffered) { clear(confirmation); clear(keyText); clear(contactKeyText) } else clearSecrets()
                 busy = false; cancelling = false
             }
             closeIfRequested()

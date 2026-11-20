@@ -603,7 +603,8 @@ int main(void)
         "public.key", "v2.enc", "v3.enc", "plain.txt", "file.nkem",
         "legacy.nkem", "restored.txt", "exported.enc", "wrong.enc",
         "legacy-v1.enc", "legacy-v3.enc", "legacy.pub", "other.pub",
-        "other.enc", "crafted-v2.enc", ".nekokem-pair.lock",
+        "other.enc", "crafted-v2.enc", "crafted-export.enc", "flags.enc",
+        "again.enc", "v3-before.enc", ".nekokem-pair.lock",
     };
     char directory[] = "/tmp/nekokem-nkpr-v3.XXXXXX";
     size_t index;

@@ -2667,7 +2667,21 @@ mod tests {
                 .code,
             "invalid-request"
         );
+        // The warning's time is simulated by backdating the recorded offer.
+        let waited = || {
+            let mut slot = backend.offer.lock().unwrap();
+            let offer = slot.as_mut().unwrap();
+            offer.at -= LEGACY_CONFIRM_DELAY;
+            offer.wall -= LEGACY_CONFIRM_DELAY;
+        };
+        // Even with a matching, waited offer, only Upgrade takes the confirmation.
+        assert_eq!(
+            run(&backend, upgrade("wrong")).err().unwrap().code,
+            "legacy-unconfirmed"
+        );
+        waited();
         let mut r = request(Kind::Decrypt);
+        r.private_path = private.clone();
         r.legacy_confirmed = true;
         assert_eq!(run(&backend, r).err().unwrap().code, "invalid-request");
         assert_eq!(fs::read(&private).unwrap()[4], 1);
@@ -2683,7 +2697,7 @@ mod tests {
                 .code,
             "legacy-unconfirmed"
         );
-        std::thread::sleep(LEGACY_CONFIRM_DELAY);
+        waited();
         let outcome = run(&backend, confirmed("public test password")).unwrap();
         assert_eq!(
             (

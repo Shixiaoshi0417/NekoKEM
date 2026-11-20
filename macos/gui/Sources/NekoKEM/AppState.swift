@@ -59,7 +59,16 @@ final class AppState: ObservableObject {
     @Published var output = "" { didSet { if output != oldValue { withdrawOverwrite() }; edited("output") } }
     @Published var keyPath = "" { didSet { edited("keyPath") } }
     @Published var publicPath = "" { didSet { if publicPath != oldValue { withdrawReplace() }; edited("publicPath") } }
-    @Published var privatePath = "" { didSet { if privatePath != oldValue { withdrawReplace(); withdrawLegacy() }; edited("privatePath") } }
+    @Published var privatePath = "" {
+        didSet {
+            if privatePath != oldValue {
+                withdrawReplace(); withdrawLegacy()
+                // The older-format warning belonged to the previous key.
+                if failure == "legacy-unconfirmed" { failure = nil }
+            }
+            edited("privatePath")
+        }
+    }
     @Published var password = "" { didSet { edited("password") } }
     @Published var confirmation = "" { didSet { edited("confirmation") } }
     // Ticked to hand the password to the login keychain once the operation accepts it.
@@ -566,7 +575,13 @@ final class AppState: ObservableObject {
                 failure = message
                 if kind == .keygen && message == "key-exists" { replaceOffered = true }
                 if exporting && message == "output-exists" { overwriteOffered = true }
-                if kind == .upgrade && message == "legacy-unconfirmed" { offerLegacy() }
+                if kind == .upgrade && message == "legacy-unconfirmed" {
+                    offerLegacy()
+                    // Core did not use the password before the warning, so it
+                    // stays for the confirmation instead of being typed again.
+                    password = request.password
+                    saveToKeychain = remember
+                }
             }
             busy = false; cancelling = false
             closeIfRequested()
