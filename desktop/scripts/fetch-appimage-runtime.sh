@@ -13,8 +13,8 @@ if [[ $# != 2 ]]; then
 fi
 architecture=$1
 case "$architecture" in
-    x86_64) runtime_sha256=0000000000000000000000000000000000000000000000000000000000000000 ;;
-    aarch64) runtime_sha256=0000000000000000000000000000000000000000000000000000000000000000 ;;
+    x86_64) runtime_sha256=2fca8b443c92510f1483a883f60061ad09b46b978b2631c807cd873a47ec260d ;;
+    aarch64) runtime_sha256=00cbdfcf917cc6c0ff6d3347d59e0ca1f7f45a6df1a428a0d6d8a78664d87444 ;;
     *) echo 'Unsupported Linux desktop architecture' >&2; exit 2 ;;
 esac
 for tool in curl gpg gpgv sha256sum; do
