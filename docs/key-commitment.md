@@ -120,8 +120,8 @@ user said it is their own key; temporary private keys refuse NKPR v1 and v2. The
 Their Upgrade key page rewrites that key directly, and any other older-format
 key only after a warning that stays up for three seconds and the user's
 confirmation that it is their own exported key. Both rewrite their own NKPR v2
-key as NKPR v3 after it unlocks, and both export the NKPR v2 copy of their own
-key only.
+key as NKPR v3 after it unlocks, and both export an NKPR v2 copy; an
+older-format input to that export must be their own key.
 
 ### Format
 
@@ -210,9 +210,13 @@ says the file is the installation's own managed key:
   three-second warning), the desktop Upgrade key page after its warning (the
   bridge refuses a confirmation given before the three seconds have passed),
   and the CLI's `--legacy-private-key`. Android decides on its private copy of
-  the file, so a file that changed after the dialog is refused unopened. The
-  key is then written as NKPR v3: an NKPR v2 key keeps its keys, and an NKPR
-  v1 key is upgraded to an identity key, unless the user kept it as it is.
+  the file: a file that became NKPR v1 or v2 after the header check, so that no
+  dialog was shown, is refused unopened; an answer to the dialog applies to the
+  chosen file. Android's import and the desktop page then write the key as
+  NKPR v3: an NKPR v2 key keeps its keys, and an NKPR v1 key is upgraded to an
+  identity key, unless the user kept it as it is. In the CLI,
+  `--legacy-private-key` with `decrypt` or `encrypt` only opens the key;
+  `upgrade-key` rewrites it.
 
 The explicit action leaves a narrow social-engineering path, in which the
 attacker persuades the user that their file is the user's own old key. It
