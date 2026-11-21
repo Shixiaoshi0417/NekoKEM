@@ -250,6 +250,7 @@
   "New output at %s: %s\n": "%s 處的新輸出：%s\n",
   "New private-key passwords must be valid UTF-8\n": "新私鑰密碼必須是有效的 UTF-8\n",
   "Non-canonical X448 public key\n": "X448 公鑰編碼不規範\n",
+  "Small-order X448 public key\n": "X448 公鑰為小階點\n",
   "Only a protected NKPR private key can be upgraded\n": "只有受密碼保護的 NKPR 私鑰才能升級\n",
   "OpenSSL returned an invalid ML-KEM secret length\n": "OpenSSL 傳回的 ML-KEM 秘密長度無效\n",
   "OpenSSL returned an invalid X448 secret size\n": "OpenSSL 傳回的 X448 秘密長度無效\n",

@@ -250,6 +250,7 @@
   "New output at %s: %s\n": "%s の新しい出力: %s\n",
   "New private-key passwords must be valid UTF-8\n": "新しい秘密鍵パスワードは有効な UTF-8 である必要があります\n",
   "Non-canonical X448 public key\n": "X448 公開鍵のエンコードが非正規です\n",
+  "Small-order X448 public key\n": "X448 公開鍵が小位数の点です\n",
   "Only a protected NKPR private key can be upgraded\n": "アップグレードできるのはパスワード保護された NKPR 秘密鍵のみです\n",
   "OpenSSL returned an invalid ML-KEM secret length\n": "OpenSSL が無効な ML-KEM 秘密の長さを返しました\n",
   "OpenSSL returned an invalid X448 secret size\n": "OpenSSL が無効な X448 秘密のサイズを返しました\n",

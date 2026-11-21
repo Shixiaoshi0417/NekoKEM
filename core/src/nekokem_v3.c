@@ -427,9 +427,14 @@ int nekokem_decrypt_file_verified_with_progress(
                 input, container_size, raw_header, output_path,
                 private_key_path, password, password_len, policy,
                 verify_result, progress_callback, progress_user_data);
-        } else if ((flags & (NEKOKEM_VERIFY_REQUIRE_SIGNATURE |
+        } else if (is_nkem &&
+                   (raw_header[4] == NKEM_V3_VERSION ||
+                    raw_header[4] == NKEM_V4_VERSION) &&
+                   (flags & (NEKOKEM_VERIFY_REQUIRE_SIGNATURE |
                              NEKOKEM_VERIFY_REQUIRE_TRUSTED)) != 0U) {
-            /* Rejected before any key is unlocked or output created. */
+            /* An unsigned v3/v4 file is rejected before any key is unlocked
+             * or output created; anything else is not a readable NKEM file
+             * and the v3 path names that instead. */
             fprintf(stderr, file_message("This file is not signed, and only signed files are accepted\n"));
             result = NEKOKEM_ERROR_SIGNATURE_REQUIRED;
         } else {
