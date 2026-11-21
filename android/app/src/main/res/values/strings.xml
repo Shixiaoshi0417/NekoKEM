@@ -227,6 +227,8 @@
     <string name="action_turn_off_signing">Turn off signing</string>
     <string name="settings_record_name_title">Record original file name</string>
     <string name="settings_require_signature_title">Accept only signed files</string>
+    <string name="settings_privacy_title">Privacy</string>
+    <string name="settings_secure_screen_title">Block screenshots and screen recording</string>
     <string name="sign_password_title">Sign the file</string>
     <string name="sign_password_message">Enter your private key password. The file is signed with your identity key, so the recipient can confirm it came from you.</string>
     <string name="completion_format">Format</string>

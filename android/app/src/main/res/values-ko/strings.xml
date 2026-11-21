@@ -212,6 +212,8 @@
     <string name="action_turn_off_signing">서명 끄기</string>
     <string name="settings_record_name_title">원래 파일 이름 기록</string>
     <string name="settings_require_signature_title">서명된 파일만 받기</string>
+    <string name="settings_privacy_title">개인정보 보호</string>
+    <string name="settings_secure_screen_title">스크린샷 및 화면 녹화 차단</string>
     <string name="sign_password_title">파일 서명</string>
     <string name="sign_password_message">개인 키 암호를 입력하세요. 파일은 내 신원 키로 서명되어 수신자가 나에게서 온 것임을 확인할 수 있습니다.</string>
     <string name="completion_format">형식</string>

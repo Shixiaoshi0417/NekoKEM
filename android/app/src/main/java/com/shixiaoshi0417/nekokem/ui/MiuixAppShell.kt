@@ -735,6 +735,14 @@ private fun MiuixSettingsPage(
                 enabled = !state.running,
             )
         }
+        section(R.string.settings_privacy_title, key = "privacy") {
+            SwitchPreference(
+                checked = state.secureScreen,
+                onCheckedChange = actions.onSecureScreenChange,
+                title = stringResource(R.string.settings_secure_screen_title),
+                enabled = !state.running,
+            )
+        }
         section(R.string.settings_decrypt_title, key = "decrypt") {
             SwitchPreference(
                 checked = state.decryptFolderSet,

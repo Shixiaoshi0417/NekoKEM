@@ -107,6 +107,7 @@ internal fun runLanguageDeviceTests(
     }
     if (phase == "system") {
         check(AppLanguages.selection(context).isEmpty())
+        allowScreenshots(instrumentation.targetContext)
         var following = instrumentation.startActivitySync(
             Intent(context, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
         )
@@ -142,6 +143,7 @@ internal fun runLanguageDeviceTests(
     }
     if (phase == "restart") {
         check(AppLanguages.selection(context) == "ja") { "Language lost across process restart" }
+        allowScreenshots(instrumentation.targetContext)
         val restarted = instrumentation.startActivitySync(
             Intent(context, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
         )
@@ -151,6 +153,7 @@ internal fun runLanguageDeviceTests(
         return
     }
     instrumentation.runOnMainSync { AppLanguages.setSelection(context, "") }
+    allowScreenshots(instrumentation.targetContext)
     var activity = instrumentation.startActivitySync(
         Intent(context, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
     )

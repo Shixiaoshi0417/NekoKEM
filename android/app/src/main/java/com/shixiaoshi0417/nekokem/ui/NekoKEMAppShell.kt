@@ -126,6 +126,8 @@ data class NekoKEMUiState(
     /** This device's key is an identity key: files are signed with it. */
     val canSign: Boolean = false,
     val signatureSettings: SignatureSettings = SignatureSettings(),
+    /** The whole app is kept out of screenshots and the recent-apps preview. */
+    val secureScreen: Boolean = true,
     val autoUpdateCheck: Boolean = true,
     val updateChecking: Boolean = false,
     /** Decrypted files go to a set folder instead of the save dialog. */
@@ -173,6 +175,7 @@ data class NekoKEMActions(
     val onUnsignedEncryptionChange: (Boolean) -> Unit = {},
     val onRequireSignatureChange: (Boolean) -> Unit = {},
     val onRecordOriginalNameChange: (Boolean) -> Unit = {},
+    val onSecureScreenChange: (Boolean) -> Unit = {},
     /** Turning it on picks the folder first. */
     val onDecryptFolderChange: (Boolean) -> Unit = {},
     val onChooseDecryptFolder: () -> Unit = {},
@@ -816,6 +819,19 @@ private fun SettingsPage(state: NekoKEMUiState, actions: NekoKEMActions, onOpenA
                 checked = state.signatureSettings.requireSignature,
                 running = running,
                 onCheckedChange = actions.onRequireSignatureChange,
+            )
+        }
+        Text(
+            modifier = Modifier.padding(top = 24.dp),
+            text = stringResource(R.string.settings_privacy_title),
+            style = MaterialTheme.typography.titleLargeEmphasized,
+        )
+        SectionCard(modifier = Modifier.padding(top = 16.dp)) {
+            SwitchSetting(
+                title = stringResource(R.string.settings_secure_screen_title),
+                checked = state.secureScreen,
+                running = running,
+                onCheckedChange = actions.onSecureScreenChange,
             )
         }
         Text(

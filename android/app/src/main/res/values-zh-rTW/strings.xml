@@ -212,6 +212,8 @@
     <string name="action_turn_off_signing">關閉簽章</string>
     <string name="settings_record_name_title">記錄原始檔名</string>
     <string name="settings_require_signature_title">只接受已簽章檔案</string>
+    <string name="settings_privacy_title">隱私</string>
+    <string name="settings_secure_screen_title">禁止截圖和錄影</string>
     <string name="sign_password_title">簽章檔案</string>
     <string name="sign_password_message">請輸入私密金鑰密碼。檔案將以你的身分金鑰簽章，接收者可確認檔案來自你。</string>
     <string name="completion_format">格式</string>

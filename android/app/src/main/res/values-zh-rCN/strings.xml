@@ -226,6 +226,8 @@
     <string name="action_turn_off_signing">关闭签名</string>
     <string name="settings_record_name_title">记录原文件名</string>
     <string name="settings_require_signature_title">只接受已签名文件</string>
+    <string name="settings_privacy_title">隐私</string>
+    <string name="settings_secure_screen_title">禁止截屏和录屏</string>
     <string name="sign_password_title">签名文件</string>
     <string name="sign_password_message">请输入私钥密码。文件将用你的身份密钥签名，接收方可确认文件来自你。</string>
     <string name="completion_format">格式</string>

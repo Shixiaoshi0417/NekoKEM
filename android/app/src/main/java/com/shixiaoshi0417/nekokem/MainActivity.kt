@@ -52,6 +52,7 @@ import com.shixiaoshi0417.nekokem.files.legacyPublicKeyExportRequest
 import com.shixiaoshi0417.nekokem.files.legacyPrivateKeyExportRequest
 import com.shixiaoshi0417.nekokem.keys.SignatureReport
 import com.shixiaoshi0417.nekokem.ui.SignatureSettings
+import com.shixiaoshi0417.nekokem.ui.ScreenSecurityStore
 import com.shixiaoshi0417.nekokem.ui.SignatureSettingsStore
 import com.shixiaoshi0417.nekokem.ui.UnsignedEncryptionWarningDialog
 import com.shixiaoshi0417.nekokem.ui.UpdateAvailableDialog
@@ -116,6 +117,8 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        // Before anything is drawn, so no unprotected frame reaches the recent-apps preview.
+        ScreenSecurityStore.apply(window, ScreenSecurityStore.read(this))
         // A recreated page may start while the old page's Core call still runs;
         // each page stages files only in its own cache directory.
         val page = PageCache.open(cacheDir)
@@ -327,6 +330,7 @@ private fun NekoKEMRoute(
     var recoveryWarningDismissed by rememberSaveable { mutableStateOf(false) }
     // Signing is on unless the user turned it off behind the red warning.
     var signatureSettings by remember { mutableStateOf(SignatureSettingsStore.read(context)) }
+    var secureScreen by remember { mutableStateOf(ScreenSecurityStore.read(context)) }
     var confirmUnsignedEncryption by remember { mutableStateOf(false) }
     // Update checks: automatic once a day unless turned off; the dialog only links to the release page.
     var updateSettings by remember { mutableStateOf(UpdateSettingsStore.read(context)) }
@@ -2067,6 +2071,15 @@ private fun NekoKEMRoute(
         )
     }
 
+    fun updateSecureScreen(secure: Boolean) {
+        if (ScreenSecurityStore.write(context, secure)) {
+            secureScreen = secure
+            context.findActivity()?.window?.let { ScreenSecurityStore.apply(it, secure) }
+        } else {
+            showSnackbar(R.string.error_settings_save)
+        }
+    }
+
     fun updateSignatureSettings(updated: SignatureSettings) {
         if (SignatureSettingsStore.write(context, updated)) {
             signatureSettings = updated
@@ -2212,6 +2225,7 @@ private fun NekoKEMRoute(
             uiStyle = uiStyle,
             canSign = keyState.canSign,
             signatureSettings = signatureSettings,
+            secureScreen = secureScreen,
             autoUpdateCheck = updateSettings.autoCheck,
             updateChecking = updateChecking,
             decryptFolderSet = decryptFolder != null,
@@ -2412,6 +2426,7 @@ private fun NekoKEMRoute(
             onRequireSignatureChange = { required ->
                 updateSignatureSettings(signatureSettings.copy(requireSignature = required))
             },
+            onSecureScreenChange = ::updateSecureScreen,
             onDecryptFolderChange = { enabled ->
                 // Turning it on picks the folder first; cancelling the picker leaves it off.
                 if (enabled) chooseDecryptFolderLauncher.launch(null) else storeDecryptFolder(null)
