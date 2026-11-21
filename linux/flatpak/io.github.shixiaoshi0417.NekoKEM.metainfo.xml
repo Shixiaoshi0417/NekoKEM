@@ -1,0 +1,82 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- scripts/update_flatpak_manifest.py adds a release here for each published version. -->
+<component type="desktop-application">
+  <id>io.github.shixiaoshi0417.NekoKEM</id>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>Apache-2.0 AND OFL-1.1 AND LicenseRef-MiSans</project_license>
+  <name>NekoKEM</name>
+  <summary>Post-quantum file encryption</summary>
+  <summary xml:lang="zh-CN">后量子文件加密</summary>
+  <summary xml:lang="zh-TW">後量子檔案加密</summary>
+  <summary xml:lang="ja">耐量子ファイル暗号化</summary>
+  <summary xml:lang="ko">양자 내성 파일 암호화</summary>
+  <developer id="io.github.shixiaoshi0417">
+    <name>Shixiaoshi0417</name>
+  </developer>
+  <description>
+    <p>
+      NekoKEM encrypts files for one or more recipients with a hybrid of X448 and
+      ML-KEM-1024, so a file stays protected if either algorithm is broken.
+      Files are processed in streamed, authenticated chunks and can be signed
+      by the sender.
+    </p>
+    <p xml:lang="zh-CN">
+      NekoKEM 使用 X448 与 ML-KEM-1024 混合加密，为一个或多个收件人加密文件：
+      任一算法被攻破，文件仍受保护。文件以经过认证的分块流式处理，发送方可以签名。
+    </p>
+    <ul>
+      <li>Generate key pairs and keep a public-key contact list with fingerprint verification</li>
+      <li xml:lang="zh-CN">生成密钥对，维护带指纹核验的公钥通讯录</li>
+      <li>Encrypt, sign, decrypt and verify files of any size</li>
+      <li xml:lang="zh-CN">加密、签名、解密和验证任意大小的文件</li>
+      <li>MIUIX and Material 3 Expressive styles, in five languages</li>
+      <li xml:lang="zh-CN">MIUIX 与 Material 3 Expressive 两种风格，支持五种语言</li>
+      <li>Includes the nekokem command-line tool</li>
+      <li xml:lang="zh-CN">附带 nekokem 命令行工具</li>
+    </ul>
+    <p>
+      NekoKEM is an experimental project and has not received an independent
+      security audit.
+    </p>
+    <p xml:lang="zh-CN">NekoKEM 是实验性项目，尚未经过独立的安全审计。</p>
+  </description>
+  <launchable type="desktop-id">io.github.shixiaoshi0417.NekoKEM.desktop</launchable>
+  <provides>
+    <binary>nekokem</binary>
+    <binary>nekokem-gui</binary>
+  </provides>
+  <url type="homepage">https://github.com/Shixiaoshi0417/NekoKEM</url>
+  <url type="bugtracker">https://github.com/Shixiaoshi0417/NekoKEM/issues</url>
+  <url type="vcs-browser">https://github.com/Shixiaoshi0417/NekoKEM</url>
+  <screenshots>
+    <screenshot type="default">
+      <caption>Choosing a file to encrypt or decrypt</caption>
+      <image>https://raw.githubusercontent.com/Shixiaoshi0417/NekoKEM/main/linux/flatpak/screenshots/files.png</image>
+    </screenshot>
+    <screenshot>
+      <caption>Generating a key pair</caption>
+      <image>https://raw.githubusercontent.com/Shixiaoshi0417/NekoKEM/main/linux/flatpak/screenshots/keys.png</image>
+    </screenshot>
+    <screenshot>
+      <caption>Settings</caption>
+      <image>https://raw.githubusercontent.com/Shixiaoshi0417/NekoKEM/main/linux/flatpak/screenshots/settings.png</image>
+    </screenshot>
+  </screenshots>
+  <branding>
+    <color type="primary" scheme_preference="light">#f2f2f2</color>
+    <color type="primary" scheme_preference="dark">#1f1f1f</color>
+  </branding>
+  <content_rating type="oars-1.1"/>
+  <supports>
+    <control>pointing</control>
+    <control>keyboard</control>
+  </supports>
+  <requires>
+    <display_length compare="ge">768</display_length>
+  </requires>
+  <releases>
+    <release version="5.2.0" date="2026-11-15">
+      <url type="details">https://github.com/Shixiaoshi0417/NekoKEM/releases/tag/v5.2.0</url>
+    </release>
+  </releases>
+</component>

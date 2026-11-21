@@ -13,10 +13,10 @@ GitHub Actions has four workflow definitions:
 - `release.yml` (`Release`) builds artifacts only when run by hand. It
   produces Linux x86_64/aarch64 archives, a signed Android arm64 APK, and Windows
   CLI/GUI packages, macOS arm64 CLI/GUI packages and Linux x86_64/ARM64 GUI
-  `.deb`/`.rpm`/portable archives/AppImages. Regression suites run in CI. Source checksums, dependency
+  `.deb`/`.rpm`/portable archives/AppImages/Flatpak bundles. Regression suites run in CI. Source checksums, dependency
   versions, compiler hardening, binary imports/protections,
   icons, APK identity/signature and package checksums remain build requirements.
-  Its final job selects the 18 public packages and their `SHA256SUMS.txt` with
+  Its final job selects the 20 public packages and their `SHA256SUMS.txt` with
   `.github/scripts/release_assets.py` and attests each with GitHub build
   provenance (`actions/attest-build-provenance`), binding it to this run, this
   workflow and the built commit. Release never reads or writes an Actions
@@ -48,6 +48,12 @@ uploads artifacts to Actions. Publishing is a separate maintainer step:
    `SHA256SUMS.txt` and rewrites `linux/arch/PKGBUILD` and `linux/arch/.SRCINFO`;
    commit the result. To publish on the AUR, copy `PKGBUILD`, `.SRCINFO` and
    `nekokem.desktop` into the `nekokem-bin` AUR repository and push.
+5. Point the Flatpak manifest at the same release:
+   `python3 scripts/update_flatpak_manifest.py 5.2.0` rewrites the archive URLs
+   and checksums in `linux/flatpak/io.github.shixiaoshi0417.NekoKEM.json` and
+   adds the release to the AppStream metadata; commit the result. A Flathub
+   repository, once it exists, takes the same manifest (see
+   [linux/flatpak/README.md](../linux/flatpak/README.md)).
 
 Publish checks that both runs succeeded on the same `main` commit, that the CI
 run came from a push to `main` or a manual run and the Release run from a manual
@@ -141,16 +147,16 @@ removed even when the job fails.
 Releases up to v5.0.0 contain 14 packages, with the earlier Tauri desktop app.
 From v5.1.0, the desktop packages are the Compose (Windows, Linux) and
 SwiftUI (macOS) apps, and the Windows installer joins them, for 15 packages up
-to v5.2.0. Later releases add an AppImage for each Linux architecture and a
-Windows EXE installer, for 18 packages:
+to v5.2.0. Later releases add an AppImage and a Flatpak bundle for each Linux
+architecture and a Windows EXE installer, for 20 packages:
 
 | Platform | Public assets |
 |---|---|
 | Android ARM64 | `app-release.apk` |
 | Windows x64 | `NekoKEM-windows-x86_64.zip`, `NekoKEM-Windows-GUI.zip`, `NekoKEM-Windows-GUI.msi`, `NekoKEM-Windows-GUI.exe` |
 | macOS Apple Silicon | `NekoKEM-macos-arm64.tar.gz`, `NekoKEM-macos-arm64-GUI.zip`, `NekoKEM-macos-arm64-GUI.dmg` |
-| Linux x86_64 | `NekoKEM-linux-x86_64.tar.gz`, `NekoKEM-linux-x86_64-GUI.deb`, `NekoKEM-linux-x86_64-GUI.rpm`, `NekoKEM-linux-x86_64-GUI.tar.gz`, `NekoKEM-linux-x86_64-GUI.AppImage` |
-| Linux ARM64 | `NekoKEM-linux-aarch64.tar.gz`, `NekoKEM-linux-aarch64-GUI.deb`, `NekoKEM-linux-aarch64-GUI.rpm`, `NekoKEM-linux-aarch64-GUI.tar.gz`, `NekoKEM-linux-aarch64-GUI.AppImage` |
+| Linux x86_64 | `NekoKEM-linux-x86_64.tar.gz`, `NekoKEM-linux-x86_64-GUI.deb`, `NekoKEM-linux-x86_64-GUI.rpm`, `NekoKEM-linux-x86_64-GUI.tar.gz`, `NekoKEM-linux-x86_64-GUI.AppImage`, `NekoKEM-linux-x86_64-GUI.flatpak` |
+| Linux ARM64 | `NekoKEM-linux-aarch64.tar.gz`, `NekoKEM-linux-aarch64-GUI.deb`, `NekoKEM-linux-aarch64-GUI.rpm`, `NekoKEM-linux-aarch64-GUI.tar.gz`, `NekoKEM-linux-aarch64-GUI.AppImage`, `NekoKEM-linux-aarch64-GUI.flatpak` |
 
 Publish only packages from the successful Release run for the exact CI-validated
 source; the Publish workflow enforces this. One more asset, top-level
@@ -218,6 +224,12 @@ each architecture:
   AppImage type 2 runtime. The runtime is a pinned release of AppImage's
   type2-runtime, accepted only with its release signature and pinned SHA-256;
   its SHA-256 is recorded in `gui-build-metadata.json`. Not developer signed.
+- `NekoKEM-linux-<architecture>-GUI.flatpak`: a single-file Flatpak bundle
+  (`io.github.shixiaoshi0417.NekoKEM`) built by `linux/flatpak/build-flatpak.sh`
+  from this run's GUI folder archive and static CLI archive, on the Freedesktop
+  26.08 runtime from Flathub. It names Flathub as the runtime's source, so
+  `flatpak install` fetches the runtime from there. Its checksum is appended to
+  the architecture's `gui-SHA256SUMS.txt`. Not GPG signed.
 
 The app carries its Java runtime. The bridge links the pinned static PIC OpenSSL
 4.1.0 with hidden symbols; the packaging script requires that it needs no system

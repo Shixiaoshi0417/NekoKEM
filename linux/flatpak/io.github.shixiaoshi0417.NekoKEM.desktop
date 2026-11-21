@@ -1,0 +1,14 @@
+[Desktop Entry]
+Type=Application
+Name=NekoKEM
+Comment=Post-quantum file encryption
+Comment[zh_CN]=后量子文件加密
+Comment[zh_TW]=後量子檔案加密
+Comment[ja]=耐量子ファイル暗号化
+Comment[ko]=양자 내성 파일 암호화
+Exec=nekokem-gui
+Icon=io.github.shixiaoshi0417.NekoKEM
+Categories=Utility;
+Keywords=encryption;post-quantum;ML-KEM;X448;
+Terminal=false
+StartupWMClass=com-shixiaoshi0417-nekokem-desktop-MainKt

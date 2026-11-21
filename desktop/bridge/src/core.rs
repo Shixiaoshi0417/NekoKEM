@@ -464,6 +464,12 @@ fn move_file_new(source: &std::path::Path, destination: &std::path::Path) -> std
         Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => return Err(error),
         Err(_) => {}
     }
+    copy_new(source, destination)?;
+    let _ = std::fs::remove_file(source);
+    Ok(())
+}
+// Copies source into a new file with its permissions; a failed copy is removed.
+fn copy_new(source: &std::path::Path, destination: &std::path::Path) -> std::io::Result<()> {
     let mut from = std::fs::File::open(source)?;
     let mut options = std::fs::OpenOptions::new();
     options.write(true).create_new(true);
@@ -475,12 +481,171 @@ fn move_file_new(source: &std::path::Path, destination: &std::path::Path) -> std
     let mut to = options.open(destination)?;
     let result = std::io::copy(&mut from, &mut to).and_then(|_| to.sync_all());
     drop(to);
-    if result.is_ok() {
-        let _ = std::fs::remove_file(source);
-    } else {
+    if result.is_err() {
         let _ = std::fs::remove_file(destination);
     }
     result
+}
+// A file the xdg document portal exported into a sandbox (/run/user/UID/doc/ID/).
+// Its FUSE file system has no flock, so Core cannot lock a key pair there.
+fn on_document_portal(value: &str) -> bool {
+    cfg!(target_os = "linux")
+        && value
+            .strip_prefix("/run/user/")
+            .and_then(|rest| rest.split_once('/'))
+            .is_some_and(|(uid, rest)| {
+                !uid.is_empty()
+                    && uid.bytes().all(|byte| byte.is_ascii_digit())
+                    && rest.starts_with("doc/")
+            })
+}
+// Placing a pair on the portal is serialized across instances of the app:
+// otherwise two replacements could interleave and leave one's private key
+// beside the other's public key. Flatpak shares $XDG_RUNTIME_DIR/app/<id>
+// between the app's instances, on a file system that supports flock.
+#[cfg(unix)]
+fn lock_portal_pairs() -> Result<std::fs::File, Failure> {
+    use std::os::unix::{fs::OpenOptionsExt, io::AsRawFd};
+    let shared = std::env::var_os("XDG_RUNTIME_DIR")
+        .zip(std::env::var_os("FLATPAK_ID"))
+        .map(|(runtime, id)| std::path::PathBuf::from(runtime).join("app").join(id))
+        .filter(|folder| folder.is_dir())
+        .unwrap_or_else(std::env::temp_dir);
+    let file = std::fs::OpenOptions::new()
+        .read(true)
+        .write(true)
+        .create(true)
+        .truncate(false)
+        .mode(0o600)
+        .custom_flags(libc::O_NOFOLLOW)
+        .open(shared.join(".nekokem-portal-pairs.lock"))
+        .map_err(|_| Failure::new("core-error"))?;
+    loop {
+        if unsafe { libc::flock(file.as_raw_fd(), libc::LOCK_EX) } == 0 {
+            return Ok(file);
+        }
+        if std::io::Error::last_os_error().kind() != std::io::ErrorKind::Interrupted {
+            return Err(Failure::new("core-error"));
+        }
+    }
+}
+#[cfg(not(unix))]
+fn lock_portal_pairs() -> Result<(), Failure> {
+    Ok(())
+}
+// A new private folder for a key pair that Core writes where it can lock it;
+// removed with everything in it when dropped.
+struct PairStage(std::path::PathBuf);
+impl PairStage {
+    fn new() -> Result<Self, Failure> {
+        let stamp = SystemTime::now()
+            .duration_since(SystemTime::UNIX_EPOCH)
+            .map_or(0, |elapsed| elapsed.as_nanos());
+        let folder =
+            std::env::temp_dir().join(format!("nekokem-keys-{}-{stamp:x}", std::process::id()));
+        let mut builder = std::fs::DirBuilder::new();
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::DirBuilderExt;
+            builder.mode(0o700);
+        }
+        builder
+            .create(&folder)
+            .map_err(|_| Failure::new("core-error"))?;
+        Ok(Self(folder))
+    }
+    fn public(&self) -> std::path::PathBuf {
+        self.0.join("public.pem")
+    }
+    fn private(&self) -> std::path::PathBuf {
+        self.0.join("private.pem")
+    }
+    fn c_path(path: &std::path::Path) -> Result<CString, Failure> {
+        self::path(path.to_str().ok_or_else(|| Failure::new("internal"))?)
+    }
+}
+impl Drop for PairStage {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_dir_all(&self.0);
+    }
+}
+// Puts a staged key pair at its two chosen paths. A new pair claims both names
+// and gives the first back when the second is taken. A replacement only
+// replaces regular files: it keeps a copy of each original in the stage,
+// copies both new files beside their destinations, then renames them, and puts
+// the original private key back when the public key cannot follow it.
+fn place_pair(
+    stage: &PairStage,
+    public: &std::path::Path,
+    private: &std::path::Path,
+    replace: bool,
+) -> std::io::Result<()> {
+    if !replace {
+        move_file_new(&stage.private(), private)?;
+        if let Err(error) = move_file_new(&stage.public(), public) {
+            let _ = std::fs::remove_file(private);
+            return Err(error);
+        }
+        return Ok(());
+    }
+    let original_private = keep_original(private, &stage.0.join("original-private.pem"))?;
+    keep_original(public, &stage.0.join("original-public.pem"))?;
+    let stamp = SystemTime::now()
+        .duration_since(SystemTime::UNIX_EPOCH)
+        .map_or(0, |elapsed| elapsed.as_nanos());
+    let part = |destination: &std::path::Path, which: &str| {
+        destination.with_file_name(format!(
+            ".nekokem-{}-{stamp:x}-{which}.part",
+            std::process::id()
+        ))
+    };
+    let (private_part, public_part) = (part(private, "private"), part(public, "public"));
+    copy_new(&stage.private(), &private_part)?;
+    if let Err(error) = copy_new(&stage.public(), &public_part) {
+        let _ = std::fs::remove_file(&private_part);
+        return Err(error);
+    }
+    if let Err(error) = std::fs::rename(&private_part, private) {
+        let _ = std::fs::remove_file(&private_part);
+        let _ = std::fs::remove_file(&public_part);
+        return Err(error);
+    }
+    if let Err(error) = std::fs::rename(&public_part, public) {
+        let _ = std::fs::remove_file(&public_part);
+        // The old public key is still in place: the old private key goes back.
+        let restored = match &original_private {
+            Some(original) => {
+                let back = part(private, "restore");
+                copy_new(original, &back).and_then(|()| {
+                    std::fs::rename(&back, private).inspect_err(|_| {
+                        let _ = std::fs::remove_file(&back);
+                    })
+                })
+            }
+            None => std::fs::remove_file(private),
+        };
+        return Err(restored.err().unwrap_or(error));
+    }
+    Ok(())
+}
+// A copy of the file a replacement would overwrite; None when there is none.
+// Anything other than a regular file is refused before anything changes.
+fn keep_original(
+    destination: &std::path::Path,
+    copy: &std::path::Path,
+) -> std::io::Result<Option<std::path::PathBuf>> {
+    match std::fs::symlink_metadata(destination) {
+        Ok(metadata) if metadata.is_file() => {
+            copy_new(destination, copy)?;
+            Ok(Some(copy.to_path_buf()))
+        }
+        Ok(_) => Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            "a key path is not a regular file",
+        )),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(None),
+        Err(error) => Err(error),
+    }
 }
 const MAX_NAME_NUMBER: u32 = 9999;
 const MAX_NAME_BYTES: usize = 255;
@@ -978,6 +1143,45 @@ pub fn execute<F: Fn(u64, u64)>(
             ))?;
             return Err(Failure::new("key-exists"));
         }
+        if on_document_portal(&request.public_path) || on_document_portal(&request.private_path) {
+            if request.public_path == request.private_path
+                || same_file(&public, &private) == Some(true)
+            {
+                return Err(Failure::new("core-error"));
+            }
+            let _lock = lock_portal_pairs()?;
+            let stage = PairStage::new()?;
+            let (staged_public, staged_private) = (
+                PairStage::c_path(&stage.public())?,
+                PairStage::c_path(&stage.private())?,
+            );
+            if unsafe {
+                nekokem_generate_keypair(
+                    staged_public.as_ptr(),
+                    staged_private.as_ptr(),
+                    request.password.as_ptr(),
+                    request.password.len(),
+                )
+            } != 1
+            {
+                return Err(Failure::new("core-error"));
+            }
+            return match place_pair(
+                &stage,
+                std::path::Path::new(&request.public_path),
+                std::path::Path::new(&request.private_path),
+                request.replace,
+            ) {
+                Ok(()) => Ok(Outcome {
+                    output: Some(request.private_path),
+                    ..Outcome::default()
+                }),
+                Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {
+                    Err(Failure::new("key-exists"))
+                }
+                Err(_) => Err(Failure::new("core-error")),
+            };
+        }
         let commit = if request.replace {
             nekokem_replace_keypair
         } else {
@@ -1018,7 +1222,7 @@ pub fn execute<F: Fn(u64, u64)>(
         // it): a file from someone else could be built to test the password.
         // Core decides on the bytes it decrypts, before the password is used.
         let accept = request.legacy_confirmed || own_private_key(&private).is_some();
-        let status = unsafe {
+        let update = |public: &CStr, private: &CStr| unsafe {
             nekokem_update_private_key_format(
                 public.as_ptr(),
                 private.as_ptr(),
@@ -1026,6 +1230,33 @@ pub fn execute<F: Fn(u64, u64)>(
                 request.password.len(),
                 if accept { PRIVATE_KEY_LEGACY } else { 0 },
             )
+        };
+        let status = if on_document_portal(&request.public_path)
+            || on_document_portal(&request.private_path)
+        {
+            // Upgraded in a private folder and copied back over both files.
+            let _lock = lock_portal_pairs()?;
+            let stage = PairStage::new()?;
+            let (staged_public, staged_private) = (
+                PairStage::c_path(&stage.public())?,
+                PairStage::c_path(&stage.private())?,
+            );
+            let (public_file, private_file) = (
+                std::path::Path::new(&request.public_path),
+                std::path::Path::new(&request.private_path),
+            );
+            if copy_new(public_file, &stage.public()).is_err()
+                || copy_new(private_file, &stage.private()).is_err()
+            {
+                return Err(Failure::new("core-error"));
+            }
+            let status = update(&staged_public, &staged_private);
+            if status == 1 && place_pair(&stage, public_file, private_file, true).is_err() {
+                return Err(Failure::new("core-error"));
+            }
+            status
+        } else {
+            update(&public, &private)
         };
         if status == -13 {
             backend.offer(Confirmation::Legacy(request.private_path.clone()))?;
@@ -3127,5 +3358,72 @@ mod tests {
         fs::remove_file(hard_link).unwrap();
         fs::remove_file(file).unwrap();
         fs::remove_dir(directory).unwrap();
+    }
+    #[test]
+    fn document_portal_paths_are_recognised() {
+        let linux = cfg!(target_os = "linux");
+        assert_eq!(on_document_portal("/run/user/1000/doc/ab12/key.pem"), linux);
+        assert_eq!(on_document_portal("/run/user/0/doc/x"), linux);
+        assert!(!on_document_portal("/run/user/1000/key.pem"));
+        assert!(!on_document_portal("/run/user//doc/x"));
+        assert!(!on_document_portal("/run/user/a1/doc/x"));
+        assert!(!on_document_portal("/home/user/doc/x"));
+    }
+    #[cfg(unix)]
+    #[test]
+    fn portal_pair_lock_excludes_other_holders() {
+        use std::os::unix::io::AsRawFd;
+        let held = lock_portal_pairs().unwrap();
+        let other = fs::OpenOptions::new()
+            .write(true)
+            .open(std::env::temp_dir().join(".nekokem-portal-pairs.lock"))
+            .unwrap();
+        let busy = unsafe { libc::flock(other.as_raw_fd(), libc::LOCK_EX | libc::LOCK_NB) };
+        assert_eq!(busy, -1);
+        drop(held);
+        assert_eq!(
+            unsafe { libc::flock(other.as_raw_fd(), libc::LOCK_EX | libc::LOCK_NB) },
+            0
+        );
+    }
+    #[test]
+    fn staged_pairs_are_placed_whole() {
+        let stage = PairStage::new().unwrap();
+        let folder = stage.0.join("out");
+        fs::create_dir(&folder).unwrap();
+        let (public, private) = (folder.join("p.pem"), folder.join("k.pem"));
+        let fill = |text: &str| {
+            fs::write(stage.public(), format!("{text} public")).unwrap();
+            fs::write(stage.private(), format!("{text} private")).unwrap();
+        };
+        fill("new");
+        place_pair(&stage, &public, &private, false).unwrap();
+        assert_eq!(fs::read_to_string(&public).unwrap(), "new public");
+        assert_eq!(fs::read_to_string(&private).unwrap(), "new private");
+        // A new pair never replaces, and gives back the half it placed.
+        fs::remove_file(&private).unwrap();
+        fill("second");
+        let error = place_pair(&stage, &public, &private, false).unwrap_err();
+        assert_eq!(error.kind(), std::io::ErrorKind::AlreadyExists);
+        assert!(!private.exists());
+        assert_eq!(fs::read_to_string(&public).unwrap(), "new public");
+        // A replacement replaces both and leaves no part files.
+        fill("second");
+        place_pair(&stage, &public, &private, true).unwrap();
+        assert_eq!(fs::read_to_string(&public).unwrap(), "second public");
+        assert_eq!(fs::read_to_string(&private).unwrap(), "second private");
+        assert_eq!(fs::read_dir(&folder).unwrap().count(), 2);
+        // A destination that is not a regular file changes nothing.
+        let directory = folder.join("dir.pem");
+        fs::create_dir(&directory).unwrap();
+        fill("third");
+        let error = place_pair(&stage, &directory, &private, true).unwrap_err();
+        assert_eq!(error.kind(), std::io::ErrorKind::InvalidInput);
+        assert_eq!(fs::read_to_string(&private).unwrap(), "second private");
+        fs::remove_dir(&directory).unwrap();
+        assert_eq!(fs::read_dir(&folder).unwrap().count(), 2);
+        let staged = stage.0.clone();
+        drop(stage);
+        assert!(!staged.exists());
     }
 }

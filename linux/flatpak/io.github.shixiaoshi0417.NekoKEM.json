@@ -1,0 +1,106 @@
+{
+  "id": "io.github.shixiaoshi0417.NekoKEM",
+  "runtime": "org.freedesktop.Platform",
+  "runtime-version": "26.08",
+  "sdk": "org.freedesktop.Sdk",
+  "command": "nekokem-gui",
+  "finish-args": [
+    "--share=ipc",
+    "--socket=x11",
+    "--device=dri",
+    "--share=network"
+  ],
+  "modules": [
+    {
+      "name": "nekokem",
+      "buildsystem": "simple",
+      "build-options": {
+        "no-debuginfo": true,
+        "strip": false
+      },
+      "build-commands": [
+        "cd cli && sha256sum --check --quiet SHA256SUMS",
+        "install -Dm755 cli/nekokem /app/bin/nekokem",
+        "mkdir -p /app/lib",
+        "cp -a --no-preserve=ownership gui /app/lib/nekokem",
+        "ln -s ../lib/nekokem/bin/NekoKEM /app/bin/nekokem-gui",
+        "install -Dm644 ${FLATPAK_ID}.desktop -t /app/share/applications",
+        "install -Dm644 ${FLATPAK_ID}.metainfo.xml -t /app/share/metainfo",
+        "install -Dm644 gui/lib/NekoKEM.png /app/share/icons/hicolor/128x128/apps/${FLATPAK_ID}.png",
+        "install -Dm644 cli/LICENSE -t /app/share/licenses/${FLATPAK_ID}",
+        "install -Dm644 gui/lib/app/resources/OpenSSL-LICENSE.txt -t /app/share/licenses/${FLATPAK_ID}"
+      ],
+      "sources": [
+        {
+          "type": "archive",
+          "only-arches": [
+            "x86_64"
+          ],
+          "url": "https://github.com/Shixiaoshi0417/NekoKEM/releases/download/v5.2.0/NekoKEM-linux-x86_64.tar.gz",
+          "sha256": "36f66e5e7672f3d2e48ea48e454984ac53ef3791f0e7c382034dbefa9c48f82d",
+          "dest": "cli",
+          "x-checker-data": {
+            "type": "json",
+            "url": "https://api.github.com/repos/Shixiaoshi0417/NekoKEM/releases/latest",
+            "version-query": ".tag_name | sub(\"^v\"; \"\")",
+            "url-query": ".assets[] | select(.name == \"NekoKEM-linux-x86_64.tar.gz\") | .browser_download_url"
+          }
+        },
+        {
+          "type": "archive",
+          "only-arches": [
+            "x86_64"
+          ],
+          "url": "https://github.com/Shixiaoshi0417/NekoKEM/releases/download/v5.2.0/NekoKEM-linux-x86_64-GUI.tar.gz",
+          "sha256": "8fcbf38bac687fbe7ed68936b7e010ae6ef024fc80314f7ef4b1f9cdf30bdc15",
+          "dest": "gui",
+          "x-checker-data": {
+            "type": "json",
+            "url": "https://api.github.com/repos/Shixiaoshi0417/NekoKEM/releases/latest",
+            "version-query": ".tag_name | sub(\"^v\"; \"\")",
+            "url-query": ".assets[] | select(.name == \"NekoKEM-linux-x86_64-GUI.tar.gz\") | .browser_download_url",
+            "is-main-source": true
+          }
+        },
+        {
+          "type": "archive",
+          "only-arches": [
+            "aarch64"
+          ],
+          "url": "https://github.com/Shixiaoshi0417/NekoKEM/releases/download/v5.2.0/NekoKEM-linux-aarch64.tar.gz",
+          "sha256": "c1fc59bebb63b11d95949881da5a50bc3bd0ec97ceb679e94dac292ffc71150c",
+          "dest": "cli",
+          "x-checker-data": {
+            "type": "json",
+            "url": "https://api.github.com/repos/Shixiaoshi0417/NekoKEM/releases/latest",
+            "version-query": ".tag_name | sub(\"^v\"; \"\")",
+            "url-query": ".assets[] | select(.name == \"NekoKEM-linux-aarch64.tar.gz\") | .browser_download_url"
+          }
+        },
+        {
+          "type": "archive",
+          "only-arches": [
+            "aarch64"
+          ],
+          "url": "https://github.com/Shixiaoshi0417/NekoKEM/releases/download/v5.2.0/NekoKEM-linux-aarch64-GUI.tar.gz",
+          "sha256": "9274a5dce4ac5d9c5f6608faabb8ffc32bff7d63e6956c53ae150a606ac45f2b",
+          "dest": "gui",
+          "x-checker-data": {
+            "type": "json",
+            "url": "https://api.github.com/repos/Shixiaoshi0417/NekoKEM/releases/latest",
+            "version-query": ".tag_name | sub(\"^v\"; \"\")",
+            "url-query": ".assets[] | select(.name == \"NekoKEM-linux-aarch64-GUI.tar.gz\") | .browser_download_url"
+          }
+        },
+        {
+          "type": "file",
+          "path": "io.github.shixiaoshi0417.NekoKEM.desktop"
+        },
+        {
+          "type": "file",
+          "path": "io.github.shixiaoshi0417.NekoKEM.metainfo.xml"
+        }
+      ]
+    }
+  ]
+}

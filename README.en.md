@@ -192,6 +192,17 @@ cd NekoKEM/linux/arch && makepkg -si
 
 The PKGBUILD points at one published release and checks its SHA-256 digests. After each release, `scripts/update_arch_package.py <version>` updates its version, checksums and `.SRCINFO` (the directory can also serve as the AUR package). CI runs `makepkg` on this build's archives in an archlinux container, installs the result with `pacman -U`, and starts the GUI in English and Chinese to check that its window opens.
 
+The Flatpak, application ID `io.github.shixiaoshi0417.NekoKEM`, holds the GUI and the `nekokem` command line and runs on Flathub's Freedesktop 26.08 runtime, on x86_64 and aarch64. Releases after 5.2.0 provide a single-file bundle, `NekoKEM-linux-<arch>-GUI.flatpak`, for each architecture; installing it fetches the runtime from Flathub:
+
+```sh
+flatpak remote-add --user --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo
+flatpak install --user ./NekoKEM-linux-x86_64-GUI.flatpak
+flatpak run io.github.shixiaoshi0417.NekoKEM
+flatpak run --command=nekokem io.github.shixiaoshi0417.NekoKEM --help
+```
+
+The [`linux/flatpak`](linux/flatpak/README.md) manifest builds from published archives; the file chooser needs a release after 5.2.0, so the manifest can be built and published directly once the next release is out. The sandbox has no file system permission: the files to work on, key files and the decryption folder are chosen in the desktop's file chooser (xdg-desktop-portal), and the app can open only what was chosen. New and upgraded key pairs are written in a private folder inside the sandbox first and then copied to the chosen paths. The `nekokem` command line inside the sandbox sees only its own data folder; for other files grant a folder for that run (for example `--filesystem=xdg-documents`) or use the static CLI archive. The sandbox has network access (used only for the update check) and draws through X11 (XWayland on Wayland). Settings, contacts and the language live in `~/.var/app/io.github.shixiaoshi0417.NekoKEM/config/nekokem`, apart from the DEB/RPM app's `~/.config/nekokem`. Chinese, Japanese and Korean text uses the fonts installed on the system. The manifest also points at one published release, and `scripts/update_flatpak_manifest.py <version>` updates it after each release. CI builds and installs the bundle from this build's archives on both architectures and starts the GUI in English and Chinese to check that its window opens. Publishing on Flathub is a step the maintainer takes; see [linux/flatpak/README.md](linux/flatpak/README.md).
+
 Builds and native CI use Ubuntu 24.04, and CI also installs and starts the RPM in Fedora 44 containers of the same architecture. The app carries its own Java runtime; it requires glibc 2.39 or newer, and the DEB/RPM depend on Noto Sans CJK fonts and `curl` (for the update check). OpenSSL 4.1.0 is linked statically into the bridge library with hidden symbols, full RELRO, immediate binding and a non-executable stack. Linux file permissions, authenticated commit and cancellation cleanup follow the CLI/Core; NKEM, NKPR, KDF parameters and 64 KiB streaming are unchanged. See the [desktop GUI documentation](desktop/README.md).
 
 The v5.2.0 Release includes every Linux GUI installation and portable package for both architectures, alongside the existing static CLI packages. Native window tests use X11 and do not establish testing on every Linux distribution or a physical Wayland session.
