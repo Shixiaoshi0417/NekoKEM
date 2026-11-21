@@ -250,6 +250,7 @@
   "New output at %s: %s\n": "%s의 새 출력: %s\n",
   "New private-key passwords must be valid UTF-8\n": "새 개인 키 비밀번호는 유효한 UTF-8이어야 합니다\n",
   "Non-canonical X448 public key\n": "X448 공개 키 인코딩이 정규 형식이 아닙니다\n",
+  "Small-order X448 public key\n": "X448 공개 키가 소위수 점입니다\n",
   "Only a protected NKPR private key can be upgraded\n": "암호로 보호된 NKPR 개인 키만 업그레이드할 수 있습니다\n",
   "OpenSSL returned an invalid ML-KEM secret length\n": "OpenSSL이 잘못된 ML-KEM 비밀 길이를 반환했습니다\n",
   "OpenSSL returned an invalid X448 secret size\n": "OpenSSL이 잘못된 X448 비밀 크기를 반환했습니다\n",

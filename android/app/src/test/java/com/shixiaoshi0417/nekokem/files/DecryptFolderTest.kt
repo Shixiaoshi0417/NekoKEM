@@ -44,6 +44,15 @@ class DecryptFolderTest {
         assertTrue(free.endsWith(".txt"))
     }
 
+    @Test fun anOverlongExtensionIsShortenedLikeAStem() {
+        val name = "a." + "é".repeat(130) // extension of 261 UTF-8 bytes
+        for (taken in listOf(emptyArray(), arrayOf(name))) {
+            val result = unique(name, *taken)
+            assertTrue(result.toByteArray(Charsets.UTF_8).size <= 255)
+            assertTrue(result.startsWith("a."))
+        }
+    }
+
     @Test fun folderChoiceSurvivesAndClears() {
         assertNull(DecryptFolderStore.read(context))
         val folder = Uri.parse("content://com.android.externalstorage.documents/tree/primary%3ADownload")

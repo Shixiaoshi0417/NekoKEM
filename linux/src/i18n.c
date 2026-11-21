@@ -278,6 +278,9 @@ failure:
 
 int cli_language_init(int *argc, char **argv)
 {
+    /* argv[0] is required: with argc == 0 the compaction below would write
+     * argv[1], past the end of the array. */
+    if (argc == NULL || argv == NULL || *argc <= 0 || argv[0] == NULL) return 0;
     (void)setlocale(LC_CTYPE, "");
     saved_language_tag = "system";
     selected_language = match_language(system_language());

@@ -212,6 +212,8 @@
     <string name="action_turn_off_signing">서명 끄기</string>
     <string name="settings_record_name_title">원래 파일 이름 기록</string>
     <string name="settings_require_signature_title">서명된 파일만 받기</string>
+    <string name="settings_privacy_title">개인정보 보호</string>
+    <string name="settings_secure_screen_title">스크린샷 및 화면 녹화 차단</string>
     <string name="sign_password_title">파일 서명</string>
     <string name="sign_password_message">개인 키 암호를 입력하세요. 파일은 내 신원 키로 서명되어 수신자가 나에게서 온 것임을 확인할 수 있습니다.</string>
     <string name="completion_format">형식</string>
@@ -221,6 +223,7 @@
     <string name="signature_signed">내 신원 키로 서명함</string>
     <string name="signature_unsigned">서명 없음</string>
     <string name="signature_trusted_contact">유효 · 저장된 연락처 %1$s의 서명</string>
+    <string name="signature_trusted_contact_unnamed">유효 · 저장된 연락처의 서명</string>
     <string name="signature_trusted_self">유효 · 이 기기의 신원 키로 서명함</string>
     <string name="signature_untrusted">서명은 유효하지만 서명자가 연락처에 없습니다. 신뢰하기 전에 이 지문을 신뢰할 수 있는 방법으로 보낸 사람과 확인하세요.</string>
     <string name="signature_none">서명 없음 · 이 NKEM v3/v4 파일은 보낸 사람을 확인할 수 없습니다</string>

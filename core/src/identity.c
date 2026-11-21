@@ -5,6 +5,7 @@
 #include "secure_mem.h"
 #include "x448_encoding.h"
 
+#include <openssl/bn.h>
 #include <openssl/core_names.h>
 #include <openssl/crypto.h>
 #include <openssl/err.h>
@@ -63,6 +64,54 @@ static EVP_PKEY **component_slot(HybridKeys *keys, size_t index)
     }
 }
 
+/*
+ * RFC 8032 section 5.2.3: y decodes to a point only when
+ * x^2 = (y^2 - 1) / (d y^2 - 1) mod p has a square root, d = -39081.
+ * OpenSSL imports any 57-byte string and only rejects such a key when it
+ * verifies, so Core checks it here. Public data: no constant time needed.
+ */
+static int ed448_y_is_on_curve(const unsigned char encoded[IDENTITY_ED448_PUBLIC_SIZE])
+{
+    BN_CTX *context = BN_CTX_new();
+    BIGNUM *p, *y, *u, *v, *exponent, *value;
+    int result = 0;
+
+    if (context == NULL) {
+        return 0;
+    }
+    BN_CTX_start(context);
+    p = BN_CTX_get(context);
+    y = BN_CTX_get(context);
+    u = BN_CTX_get(context);
+    v = BN_CTX_get(context);
+    exponent = BN_CTX_get(context);
+    value = BN_CTX_get(context);
+    if (value == NULL ||
+        /* p = 2^448 - 2^224 - 1 */
+        !BN_set_bit(p, 448) || !BN_set_word(exponent, 0U) ||
+        !BN_set_bit(exponent, 224) || !BN_sub(p, p, exponent) ||
+        !BN_sub_word(p, 1U) ||
+        BN_lebin2bn(encoded, (int)(IDENTITY_ED448_PUBLIC_SIZE - 1U), y) == NULL ||
+        /* u = y^2 - 1, v = d y^2 - 1 = -(39081 y^2 + 1) */
+        !BN_mod_sqr(value, y, p, context) ||
+        !BN_mod_sub(u, value, BN_value_one(), p, context) ||
+        !BN_mul_word(value, 39081U) || !BN_add_word(value, 1U) ||
+        !BN_nnmod(value, value, p, context) ||
+        !BN_mod_sub(v, p, value, p, context) || BN_is_zero(v) ||
+        /* x^2 = u / v; a square when (u / v)^((p - 1) / 2) is 0 or 1. */
+        BN_mod_inverse(value, v, p, context) == NULL ||
+        !BN_mod_mul(value, u, value, p, context) ||
+        !BN_sub(exponent, p, BN_value_one()) || !BN_rshift1(exponent, exponent) ||
+        !BN_mod_exp(value, value, exponent, p, context)) {
+        goto cleanup;
+    }
+    result = BN_is_zero(value) || BN_is_one(value);
+cleanup:
+    BN_CTX_end(context);
+    BN_CTX_free(context);
+    return result;
+}
+
 int identity_ed448_public_is_valid(
     const unsigned char encoded[IDENTITY_ED448_PUBLIC_SIZE])
 {
@@ -74,7 +123,8 @@ int identity_ed448_public_is_valid(
      */
     return encoded != NULL && (encoded[56] & 0x7fU) == 0U &&
            x448_public_is_canonical(encoded) &&
-           !x448_public_has_small_order(encoded);
+           !x448_public_has_small_order(encoded) &&
+           ed448_y_is_on_curve(encoded);
 }
 
 int identity_ed448_key_is_valid(EVP_PKEY *key)

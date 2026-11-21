@@ -141,13 +141,18 @@ class DecryptFolderAccess(context: Context) {
  */
 internal fun uniqueChildName(name: String, isTaken: (String) -> Boolean): String {
     if (!isTaken(name) && utf8Length(name) <= MAX_NAME_BYTES) return name
+    // An "extension" too long to keep whole is part of the stem, so the stem
+    // is shortened instead and the name never starts with its dot.
     val dot = name.lastIndexOf('.')
+        .takeIf { it > 0 && utf8Length(name.substring(it)) <= MAX_EXTENSION_BYTES } ?: -1
     val stem = if (dot > 0) name.substring(0, dot) else name
     val extension = if (dot > 0) name.substring(dot) else ""
     val first = if (isTaken(name)) 1 else 0
     for (number in first..MAX_NUMBER) {
         val suffix = (if (number == 0) "" else " ($number)") + extension
-        val candidate = fitStem(stem, MAX_NAME_BYTES - utf8Length(suffix)) + suffix
+        val fitted = fitStem(stem, MAX_NAME_BYTES - utf8Length(suffix))
+        if (fitted.isEmpty()) continue
+        val candidate = fitted + suffix
         if (!isTaken(candidate)) return candidate
     }
     throw IllegalStateException("no free name")
@@ -165,4 +170,5 @@ private fun fitStem(stem: String, maxBytes: Int): String {
 private fun utf8Length(text: String): Int = text.toByteArray(Charsets.UTF_8).size
 
 private const val MAX_NAME_BYTES = 255
+private const val MAX_EXTENSION_BYTES = 32
 private const val MAX_NUMBER = 9999

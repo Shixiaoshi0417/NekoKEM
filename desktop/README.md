@@ -61,7 +61,7 @@ characters, then save. Notes can be edited and entries deleted after an inline
 confirmation. On **Encrypt file**, choose **Saved contact** and explicitly select a
 recipient; a contact's **Use for encryption** action opens that page with it selected.
 Lists and the selection show the full SHA-256 fingerprint, the list also shows the source
-file name; the multi-select list also shows every full fingerprint and wraps it without truncating it. Source names drop control characters, Unicode line/paragraph separators and every Unicode format character (bidirectional and zero-width controls among them); a zero-width joiner or non-joiner stays only between two visible non-ASCII characters, as emoji and some scripts need. A completed encryption names the recipient and its fingerprint. Notes are labels only: verify fingerprints with recipients through a
+file name; the multi-select list shows the first 23 characters (8 bytes) of each fingerprint; the contact list and the completed encryption show it in full. Source names drop control characters, Unicode line/paragraph separators and every Unicode format character (bidirectional and zero-width controls among them); a zero-width joiner or non-joiner stays only between two visible non-ASCII characters, as emoji and some scripts need. A completed encryption names the recipient and its fingerprint. Notes are labels only: verify fingerprints with recipients through a
 trusted channel. Decryption and fingerprints keep their file/paste key sources.
 
 Contacts live beside the shared language preference, in `LocalAppData/NekoKEM/contacts`

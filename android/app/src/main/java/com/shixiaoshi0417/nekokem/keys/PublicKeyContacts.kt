@@ -40,7 +40,12 @@ data class PublicKeyContactsState(
 data class PublicKeyContactResult(val code: Int, val contact: PublicKeyContact? = null)
 
 /** Verified identity-key snapshots of saved contacts, trusted as signers. */
-class ContactSigners internal constructor(val ids: List<String>, val keys: List<TemporaryPublicKey>)
+/** [labels] are the contacts' labels when they were staged, beside [ids]. */
+class ContactSigners internal constructor(
+    val ids: List<String>,
+    val labels: List<String>,
+    val keys: List<TemporaryPublicKey>,
+)
 
 /** Snapshots for one encryption, or the code and id of the contact that failed. */
 class ContactRecipientsResult internal constructor(
@@ -68,16 +73,26 @@ class PublicKeyContacts(
             if (!directory.exists()) return@synchronized PublicKeyContactsState()
             requirePrivateDirectory(directory)
             val entries = checkNotNull(directory.listFiles()).filter { it.name.endsWith(".json") }
-            check(entries.size <= MAX_CONTACTS)
+            // One more than the limit is an upgrade that stopped between
+            // writing the identity contact and removing the legacy one.
+            check(entries.size <= MAX_CONTACTS + 1)
             var unreadable = 0
-            val contacts = entries.mapNotNull { file ->
+            val read = entries.mapNotNull { file ->
                 try {
                     readRecord(file.name.removeSuffix(".json")).contact
                 } catch (_: Exception) {
                     unreadable++
                     null
                 }
+            }
+            // A legacy contact whose identity contact exists is finished off.
+            val superseded = read.mapNotNull { contact -> contact.legacyFingerprint?.let { identity(it) } }.toSet()
+            val contacts = read.filter { contact ->
+                if (contact.id !in superseded) return@filter true
+                if (recordFile(contact.id).delete()) syncDirectory(directory)
+                false
             }.sortedWith(compareBy({ !it.pinned }, { it.label.lowercase(Locale.ROOT) }, { it.id }))
+            check(contacts.size + unreadable <= MAX_CONTACTS)
             PublicKeyContactsState(contacts, unreadable)
         } catch (_: Exception) {
             PublicKeyContactsState(storageError = true)
@@ -250,17 +265,19 @@ class PublicKeyContacts(
      */
     fun stageSigners(): ContactSigners {
         val ids = mutableListOf<String>()
+        val labels = mutableListOf<String>()
         val keys = mutableListOf<TemporaryPublicKey>()
         readState().contacts.filter { it.canVerify }.forEach { contact ->
             val key = stageForEncryption(contact.id).key ?: return@forEach
             if (keyManager.publicKeyCanVerify(key.file)) {
                 ids += contact.id
+                labels += contact.label
                 keys += key
             } else {
                 key.file.delete()
             }
         }
-        return ContactSigners(ids, keys)
+        return ContactSigners(ids, labels, keys)
     }
 
     private fun readable(id: String): Record? = try {

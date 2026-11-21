@@ -701,13 +701,19 @@ final class AppState: ObservableObject {
         }
     }
 
+    /// The chosen place failed or holds a key the operation read: the staged
+    /// output stays, so another place can be chosen.
+    private static let keptOnFailure: Set<String> = ["save-failed", "output-is-key"]
+
     /// Asks where the finished file goes, as Android does. Closing the panel gives the result up.
     private func save() async {
         guard let item = staged, !closeRequested else { return }
         choosing = true
         defer { choosing = false }
         let name = item.source.isEmpty ? "file" : fileName(item.source)
-        let plain = name.hasSuffix(".nkem") && name.count > 5 ? String(name.dropLast(5)) : name
+        var plain = name.hasSuffix(".nkem") && name.count > 5 ? String(name.dropLast(5)) : name
+        // "..nkem" would leave "." and "...nkem" "..", which are no file names.
+        if plain == "." || plain == ".." || plain.trimmingCharacters(in: .whitespaces).isEmpty { plain = "file" }
         // A signed file restores the name it recorded, even after a rename.
         let suggested = item.kind == .encrypt ? name + ".nkem"
             : item.outcome.originalName ?? (plain != name ? plain : "decrypted-" + name)
@@ -721,7 +727,11 @@ final class AppState: ObservableObject {
                 decryptFolderFailed = false
             } catch {
                 let message = code(error)
-                if message != "save-failed" { failure = message; staged = nil; unsaved = false; return }
+                if !Self.keptOnFailure.contains(message) {
+                    failure = message; staged = nil; unsaved = false
+                    _ = try? await native { try Backend.discardOutput() }
+                    return
+                }
                 decryptFolderFailed = true
             }
         }
@@ -742,8 +752,12 @@ final class AppState: ObservableObject {
         } catch {
             let message = code(error)
             failure = message
-            // The staged file is still there when only the chosen place failed.
-            if message == "save-failed" { unsaved = true } else { staged = nil; unsaved = false }
+            // The staged file is still there when only the chosen place failed;
+            // any other failure gives the output up, and its plaintext is deleted.
+            if Self.keptOnFailure.contains(message) { unsaved = true } else {
+                staged = nil; unsaved = false
+                _ = try? await native { try Backend.discardOutput() }
+            }
         }
     }
     func saveAgain() {
@@ -942,7 +956,8 @@ final class AppState: ObservableObject {
     // An output that was never saved is deleted before the app goes.
     private func leave() {
         clearSecrets()
-        if staged != nil { staged = nil; _ = try? Backend.discardOutput() }
+        // Unconditional: the bridge may still hold an output the page gave up.
+        staged = nil; _ = try? Backend.discardOutput()
     }
 
     // MARK: Fixed states for the screenshots

@@ -212,6 +212,8 @@
     <string name="action_turn_off_signing">署名をオフにする</string>
     <string name="settings_record_name_title">元のファイル名を記録</string>
     <string name="settings_require_signature_title">署名済みファイルのみ受け入れる</string>
+    <string name="settings_privacy_title">プライバシー</string>
+    <string name="settings_secure_screen_title">スクリーンショットと画面録画を禁止</string>
     <string name="sign_password_title">ファイルに署名</string>
     <string name="sign_password_message">秘密鍵のパスワードを入力してください。ファイルはあなたの ID 鍵で署名され、受信者はあなたからのものだと確認できます。</string>
     <string name="completion_format">形式</string>
@@ -221,6 +223,7 @@
     <string name="signature_signed">あなたの ID 鍵で署名しました</string>
     <string name="signature_unsigned">未署名</string>
     <string name="signature_trusted_contact">有効 · 保存済みの連絡先 %1$s による署名</string>
+    <string name="signature_trusted_contact_unnamed">有効 · 保存済みの連絡先による署名</string>
     <string name="signature_trusted_self">有効 · この端末の ID 鍵による署名</string>
     <string name="signature_untrusted">署名は有効ですが、署名者は連絡先にいません。信頼する前に、この指紋を信頼できる方法で送信者と照合してください。</string>
     <string name="signature_none">署名なし · この NKEM v3/v4 ファイルでは送信者を確認できません</string>

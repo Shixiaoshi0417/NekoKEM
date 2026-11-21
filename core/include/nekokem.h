@@ -133,7 +133,7 @@ NEKOKEM_API int nekokem_public_key_fingerprint(
  * Signed NKEM v5 containers and identity keys; see docs/NKEM-v5.md.
  *
  * Key generation writes four-component identity keys (X448, ML-KEM-1024,
- * Ed448, ML-DSA-87) with an NKPR v2 private key. Two-component keys stay
+ * Ed448, ML-DSA-87) with an NKPR v3 private key. Two-component keys stay
  * valid recipients and decryption keys, but cannot sign or be trusted
  * signers. nekokem_public_key_fingerprint() returns the identity
  * fingerprint for a four-component key and the legacy fingerprint for a

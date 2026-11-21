@@ -15,6 +15,7 @@ import com.shixiaoshi0417.nekokem.i18n.AppLanguages
 import com.shixiaoshi0417.nekokem.keys.LocalKeyManager
 import com.shixiaoshi0417.nekokem.keys.PublicKeyContacts
 import com.shixiaoshi0417.nekokem.nativecore.NativeBridge
+import com.shixiaoshi0417.nekokem.ui.ScreenSecurityStore
 import com.shixiaoshi0417.nekokem.ui.SignatureSettingsStore
 import com.shixiaoshi0417.nekokem.update.Releases
 import com.shixiaoshi0417.nekokem.update.UpdateSettingsStore
@@ -54,6 +55,9 @@ internal fun runMiuixUiTests(
     // Automatic update checks are on after installation; a local stub announces a newer release.
     check(context.getSharedPreferences("update_settings", Context.MODE_PRIVATE).edit().clear().commit())
     check(UpdateSettingsStore.read(context).autoCheck) { "Automatic update checks are off by default" }
+    // The screen is kept out of screenshots after installation.
+    check(context.getSharedPreferences("screen_security", Context.MODE_PRIVATE).edit().clear().commit())
+    check(ScreenSecurityStore.read(context)) { "Screen security is off by default" }
     Releases.source = releaseStub("99.0.0")
     instrumentation.runOnMainSync { check(AppLanguages.setSelection(context, language)) }
     var activity: Activity? = null
@@ -259,6 +263,7 @@ internal fun runMiuixUiTests(
                 if (note == "Carol") check(contacts.setArchived(contact.id, true).code == NativeBridge.RESULT_SUCCESS)
             }
         } finally { keyDir.deleteRecursively() }
+        allowScreenshots(instrumentation.targetContext)
         activity = instrumentation.startActivitySync(
             Intent(context, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
         )
