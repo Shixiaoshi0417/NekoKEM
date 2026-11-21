@@ -4,19 +4,21 @@
 # heap and system_server later dies with OutOfMemoryError ("System has
 # crashed") partway through the device tests. Detect that order in the boot
 # log and restart the framework, so the zygote reads the final heap size.
+# Newer images pass the heap size as a boot property (androidboot.*), which is
+# set before the zygote starts; they have no qemu-props line and need nothing.
 set -Eeuo pipefail
 
-boot_log=$(adb logcat -d -b main -s AndroidRuntime:D qemu-props:I)
+boot_log=$(adb logcat -d -b all -s AndroidRuntime:D qemu-props:I)
 zygote_line=$(grep -n 'START com.android.internal.os.ZygoteInit' <<<"$boot_log" | head -n 1 | cut -d: -f1 || true)
 heap_line=$(grep -n 'qemu-props: received: dalvik.vm.heapsize=' <<<"$boot_log" | head -n 1 | cut -d: -f1 || true)
 heap_size=$(adb shell getprop dalvik.vm.heapsize | tr -d '\r')
 echo "dalvik.vm.heapsize=$heap_size, zygote start line ${zygote_line:-none}, qemu-props heap line ${heap_line:-none}"
 
-if [[ -z "$zygote_line" ]]; then
-    echo 'Zygote start is not in the boot log; cannot tell the start order' >&2
-    exit 1
+if [[ -z "$heap_line" ]]; then
+    echo 'qemu-props did not set dalvik.vm.heapsize; no start-order race'
+    exit 0
 fi
-if [[ -n "$heap_line" && "$heap_line" -lt "$zygote_line" ]]; then
+if [[ -n "$zygote_line" && "$heap_line" -lt "$zygote_line" ]]; then
     echo 'The zygote started after dalvik.vm.heapsize was set'
     exit 0
 fi
@@ -25,7 +27,8 @@ if [[ -z "$heap_size" ]]; then
     exit 1
 fi
 
-echo 'The zygote started before dalvik.vm.heapsize was set; restarting the framework'
+# A zygote start missing from the log is treated like an early start.
+echo 'The zygote may have started before dalvik.vm.heapsize was set; restarting the framework'
 old_pid=$(adb shell pidof system_server | tr -d '\r')
 timeout 30s adb root || true
 timeout 60s adb wait-for-device
@@ -46,7 +49,7 @@ for attempt in $(seq 1 120); do
     fi
     sleep 2
 done
-adb logcat -d -b main -s AndroidRuntime:D | grep -q 'START com.android.internal.os.ZygoteInit' || {
+adb logcat -d -b all -s AndroidRuntime:D | grep -q 'START com.android.internal.os.ZygoteInit' || {
     echo 'The zygote did not restart' >&2
     exit 1
 }
