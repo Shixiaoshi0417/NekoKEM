@@ -59,9 +59,11 @@ class FlatpakManifest(unittest.TestCase):
             flatpak.update(self.dir, 'v9.8', sums('1234'), '2030-01-02')
 
     def test_check_refuses_mixed_releases_and_a_stale_appstream_release(self):
+        current = f"/v{flatpak.releases(flatpak.files(self.dir)[1].read_text())[0][0]}/"
         manifest = self.manifest()
+        self.assertIn(current, manifest['modules'][0]['sources'][0]['url'])
         manifest['modules'][0]['sources'][0]['url'] = manifest['modules'][0]['sources'][0]['url'].replace(
-            '/v5.2.0/', '/v5.1.0/')
+            current, '/v5.1.0/')
         flatpak.write_manifest(flatpak.files(self.dir)[0], manifest)
         with self.assertRaises(flatpak.ManifestError):
             flatpak.check(self.dir)
@@ -70,7 +72,7 @@ class FlatpakManifest(unittest.TestCase):
         manifest = self.manifest()
         for source in manifest['modules'][0]['sources']:
             if 'url' in source:
-                source['url'] = source['url'].replace('/v5.2.0/', '/v9.9.9/')
+                source['url'] = source['url'].replace(current, '/v9.9.9/')
         flatpak.write_manifest(flatpak.files(self.dir)[0], manifest)
         with self.assertRaises(flatpak.ManifestError):
             flatpak.check(self.dir)
