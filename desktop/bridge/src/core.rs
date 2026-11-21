@@ -470,6 +470,40 @@ fn on_document_portal(value: &str) -> bool {
                     && rest.starts_with("doc/")
             })
 }
+// Placing a pair on the portal is serialized across instances of the app:
+// otherwise two replacements could interleave and leave one's private key
+// beside the other's public key. Flatpak shares $XDG_RUNTIME_DIR/app/<id>
+// between the app's instances, on a file system that supports flock.
+#[cfg(unix)]
+fn lock_portal_pairs() -> Result<std::fs::File, Failure> {
+    use std::os::unix::{fs::OpenOptionsExt, io::AsRawFd};
+    let shared = std::env::var_os("XDG_RUNTIME_DIR")
+        .zip(std::env::var_os("FLATPAK_ID"))
+        .map(|(runtime, id)| std::path::PathBuf::from(runtime).join("app").join(id))
+        .filter(|folder| folder.is_dir())
+        .unwrap_or_else(std::env::temp_dir);
+    let file = std::fs::OpenOptions::new()
+        .read(true)
+        .write(true)
+        .create(true)
+        .truncate(false)
+        .mode(0o600)
+        .custom_flags(libc::O_NOFOLLOW)
+        .open(shared.join(".nekokem-portal-pairs.lock"))
+        .map_err(|_| Failure::new("core-error"))?;
+    loop {
+        if unsafe { libc::flock(file.as_raw_fd(), libc::LOCK_EX) } == 0 {
+            return Ok(file);
+        }
+        if std::io::Error::last_os_error().kind() != std::io::ErrorKind::Interrupted {
+            return Err(Failure::new("core-error"));
+        }
+    }
+}
+#[cfg(not(unix))]
+fn lock_portal_pairs() -> Result<(), Failure> {
+    Ok(())
+}
 // A new private folder for a key pair that Core writes where it can lock it;
 // removed with everything in it when dropped.
 struct PairStage(std::path::PathBuf);
@@ -1023,6 +1057,7 @@ pub fn execute<F: Fn(u64, u64)>(
             {
                 return Err(Failure::new("core-error"));
             }
+            let _lock = lock_portal_pairs()?;
             let stage = PairStage::new()?;
             let (staged_public, staged_private) = (
                 PairStage::c_path(&stage.public())?,
@@ -1089,6 +1124,7 @@ pub fn execute<F: Fn(u64, u64)>(
         }
         if on_document_portal(&request.public_path) || on_document_portal(&request.private_path) {
             // Upgraded in a private folder and copied back over both files.
+            let _lock = lock_portal_pairs()?;
             let stage = PairStage::new()?;
             let (staged_public, staged_private) = (
                 PairStage::c_path(&stage.public())?,
@@ -2967,6 +3003,23 @@ mod tests {
         assert!(!on_document_portal("/run/user//doc/x"));
         assert!(!on_document_portal("/run/user/a1/doc/x"));
         assert!(!on_document_portal("/home/user/doc/x"));
+    }
+    #[cfg(unix)]
+    #[test]
+    fn portal_pair_lock_excludes_other_holders() {
+        use std::os::unix::io::AsRawFd;
+        let held = lock_portal_pairs().unwrap();
+        let other = fs::OpenOptions::new()
+            .write(true)
+            .open(std::env::temp_dir().join(".nekokem-portal-pairs.lock"))
+            .unwrap();
+        let busy = unsafe { libc::flock(other.as_raw_fd(), libc::LOCK_EX | libc::LOCK_NB) };
+        assert_eq!(busy, -1);
+        drop(held);
+        assert_eq!(
+            unsafe { libc::flock(other.as_raw_fd(), libc::LOCK_EX | libc::LOCK_NB) },
+            0
+        );
     }
     #[test]
     fn staged_pairs_are_placed_whole() {
