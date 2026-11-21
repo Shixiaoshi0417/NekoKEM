@@ -34,7 +34,16 @@ class UpgradePrompt(val keyPath: String, val keyText: TextFieldState?, val note:
  * save once the work is done. Secrets live only in [TextFieldState]s, which
  * are cleared (with their undo history) as soon as a request is written.
  */
-class AppState(private val scope: CoroutineScope, private val files: FileChooser, private val exit: () -> Unit) {
+/**
+ * [updateChecks] is false in the Flatpak: its sandbox has no network, and
+ * Flatpak itself keeps the app up to date.
+ */
+class AppState(
+    private val scope: CoroutineScope,
+    private val files: FileChooser,
+    val updateChecks: Boolean = true,
+    private val exit: () -> Unit,
+) {
     var view by mutableStateOf(View.Files); private set
     var language by mutableStateOf("en"); private set
     var selectedLanguage by mutableStateOf("system"); private set
@@ -182,7 +191,7 @@ class AppState(private val scope: CoroutineScope, private val files: FileChooser
         } catch (error: Throwable) { failure = code(error); return@launch }
         runCatching { native { Backend.updatePreferences() } }.getOrNull()?.let { update = it; autoUpdate = it.auto }
         val now = System.currentTimeMillis()
-        if (update.auto && (now - update.lastCheck >= DAY || now < update.lastCheck)) checkForUpdate(false)
+        if (updateChecks && update.auto && (now - update.lastCheck >= DAY || now < update.lastCheck)) checkForUpdate(false)
         refreshContacts()
     }
 
@@ -213,7 +222,7 @@ class AppState(private val scope: CoroutineScope, private val files: FileChooser
     fun confirmUnsigned(enable: Boolean) { unsigned = enable; confirmingUnsigned = false }
 
     fun checkForUpdate(manual: Boolean) {
-        if (checkingUpdate) return
+        if (!updateChecks || checkingUpdate) return
         checkingUpdate = true
         if (manual) updateNotice = null
         scope.launch {

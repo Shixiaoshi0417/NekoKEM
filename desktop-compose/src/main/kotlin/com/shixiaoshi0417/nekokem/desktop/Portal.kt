@@ -69,7 +69,9 @@ class PortalFileChooser(private val bus: () -> DBus = { DBus.session() }) : File
 
     companion object {
         /** True inside a Flatpak sandbox, where the file chooser portal is the way to the user's files. */
-        fun inFlatpak(): Boolean = File("/.flatpak-info").isFile && System.getenv("DBUS_SESSION_BUS_ADDRESS") != null
+        fun inFlatpak(): Boolean = sandboxed() && System.getenv("DBUS_SESSION_BUS_ADDRESS") != null
+        /** True inside any Flatpak sandbox. */
+        fun sandboxed(): Boolean = File("/.flatpak-info").isFile
 
         fun isDocument(path: String) = Regex("^/run/user/[0-9]+/doc/").containsMatchIn(path)
 
