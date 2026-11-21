@@ -149,7 +149,11 @@ expected_archive_sha=$(awk -v archive="$archive_name" '
 ) || fail "release archive SHA-256 verification failed; the release was not installed"
 
 if [ "$verify_attestation" = "1" ]; then
-    gh attestation verify "$archive_path" --repo "$readonly_repository" ||
+    # The same policy as the README and Publish: built by release.yml from
+    # main on a GitHub-hosted runner.
+    gh attestation verify "$archive_path" --repo "$readonly_repository" \
+        --signer-workflow "$readonly_repository/.github/workflows/release.yml" \
+        --source-ref refs/heads/main --deny-self-hosted-runners ||
         fail "release archive provenance verification failed; the release was not installed"
 fi
 
