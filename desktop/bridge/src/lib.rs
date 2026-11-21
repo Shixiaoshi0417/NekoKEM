@@ -129,6 +129,15 @@ fn contact_job<T>(work: impl FnOnce(&Store) -> Result<T, Failure>) -> Result<T, 
     work(&Store::open()?)
 }
 
+// Saving a staged output holds the operation slot, so closing the window
+// waits for it (nekokem_desktop_defer_close) instead of blocking on Core.
+fn output_job<T>(work: impl FnOnce() -> Result<T, Failure>) -> Result<T, Failure> {
+    let backend = backend().clone();
+    let job = backend.reserve_output()?;
+    let _hold = Reservation { backend, job };
+    locked(work)
+}
+
 fn locked<T>(work: impl FnOnce() -> Result<T, Failure>) -> Result<T, Failure> {
     let _core = CORE_LOCK.lock().map_err(|_| Failure::new("internal"))?;
     work()
@@ -168,20 +177,18 @@ fn run(call: Call, progress: Option<ProgressCallback>) -> Result<Value, Failure>
             drop(hold);
             json(result)
         }
-        Call::SaveOutput { destination } => idle()
-            .and_then(|_| locked(|| backend().save_output(&destination)))
-            .map(|_| Value::Null),
-        Call::SaveOutputIn { folder, name } => {
-            json(idle().and_then(|_| locked(|| backend().save_output_in(&folder, &name))))
+        Call::SaveOutput { destination } => {
+            output_job(|| backend().save_output(&destination)).map(|_| Value::Null)
         }
-        Call::DiscardOutput => idle().and_then(|_| {
-            locked(|| {
-                if backend().discard_output() {
-                    Ok(Value::Null)
-                } else {
-                    Err(Failure::new("cleanup-error"))
-                }
-            })
+        Call::SaveOutputIn { folder, name } => {
+            json(output_job(|| backend().save_output_in(&folder, &name)))
+        }
+        Call::DiscardOutput => output_job(|| {
+            if backend().discard_output() {
+                Ok(Value::Null)
+            } else {
+                Err(Failure::new("cleanup-error"))
+            }
         }),
         Call::ListContacts => json(locked(|| Store::open()?.list())),
         Call::SaveContact { contact } => json(contact_job(move |store| {
@@ -432,6 +439,17 @@ mod tests {
             ))["error"]["code"],
             "save-failed"
         );
+        // Never over a file the operation read: the input and its keys.
+        for file in [&input, &public, &private] {
+            assert_eq!(
+                reply(&format!(
+                    r#"{{"save_output":{{"destination":{}}}}}"#,
+                    path(file)
+                ))["error"]["code"],
+                "output-is-key"
+            );
+        }
+        assert_eq!(std::fs::read(&input).unwrap(), vec![9u8; 100_000]);
         // The save dialog asked before replacing, so an existing file is replaced.
         let encrypted = directory.file("plain.txt.nkem");
         std::fs::write(&encrypted, b"old").unwrap();
