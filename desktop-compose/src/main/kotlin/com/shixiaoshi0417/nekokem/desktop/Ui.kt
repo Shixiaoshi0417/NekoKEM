@@ -39,9 +39,13 @@ import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material3.Icon
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Settings
 import top.yukonga.miuix.kmp.icon.MiuixIcons
@@ -624,11 +628,49 @@ private fun QrDialog(state: AppState) {
     }
 }
 
+/**
+ * The release notes, folded until asked for; opened, they scroll inside a box
+ * of at most 280 dp, so the dialog never grows past the window.
+ */
+@Composable
+private fun ReleaseNotes(state: AppState) {
+    val kit = LocalKit.current
+    val colors = kit.colors()
+    Column(Modifier.fillMaxWidth().padding(bottom = 16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row(
+            Modifier.fillMaxWidth().clip(RoundedCornerShape(6.dp)).clickable(role = Role.Button, onClick = state::toggleNotes).padding(vertical = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            kit.Text(state.t(if (state.notesOpen) "updateNotesHide" else "updateNotesShow"), TextRole.Label, Modifier.weight(1f), color = colors.text)
+            Icon(if (state.notesOpen) Icons.Filled.KeyboardArrowUp else Icons.Filled.KeyboardArrowDown, contentDescription = null, tint = colors.summary, modifier = Modifier.size(20.dp))
+        }
+        if (state.notesOpen) {
+            Column(
+                Modifier.fillMaxWidth().heightIn(max = 280.dp).background(colors.notice, RoundedCornerShape(10.dp))
+                    .verticalScroll(rememberScrollState()).padding(12.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                state.availableNotes.forEachIndexed { index, line ->
+                    when (line.kind) {
+                        "heading" -> kit.Text(line.text, TextRole.Label, if (index > 0) Modifier.padding(top = 8.dp) else Modifier, color = colors.text)
+                        "item" -> Row {
+                            kit.Text("•", TextRole.Small, Modifier.width(12.dp), color = colors.summary)
+                            kit.Text(line.text, TextRole.Small, Modifier.weight(1f), color = colors.summary)
+                        }
+                        else -> kit.Text(line.text, TextRole.Small, Modifier.fillMaxWidth(), color = colors.summary)
+                    }
+                }
+            }
+        }
+    }
+}
+
 @Composable
 private fun UpdateDialog(state: AppState) {
     val kit = LocalKit.current
     val version = state.availableVersion
     kit.Dialog(version.isNotEmpty(), state.t("updateAvailableTitle").replace("{version}", version), state.t("updateAvailableText").replace("{current}", state.version), state::dismissUpdate) {
+        if (state.availableNotes.isNotEmpty()) ReleaseNotes(state)
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End, verticalAlignment = Alignment.CenterVertically) {
             kit.LinkButton(state.t("ignoreVersion"), onClick = state::ignoreRelease)
             Spacer(Modifier.weight(1f))

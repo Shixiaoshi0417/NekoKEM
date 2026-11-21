@@ -288,6 +288,8 @@
     <string name="update_available_message">현재 버전은 %1$s입니다. GitHub 릴리스 페이지에서 새 버전을 내려받고 릴리스 노트에 따라 확인한 후 설치하세요.</string>
     <string name="action_open_release">다운로드하러 가기</string>
     <string name="action_later">나중에</string>
+    <string name="update_notes_show">릴리스 노트 보기</string>
+    <string name="update_notes_hide">릴리스 노트 접기</string>
     <string name="action_ignore_version">이 버전 건너뛰기</string>
     <string name="error_open_release">릴리스 페이지를 열 앱이 없습니다</string>
     <string name="action_show_fingerprint_qr">지문 QR 코드 표시</string>

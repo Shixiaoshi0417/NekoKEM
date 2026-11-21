@@ -303,6 +303,8 @@
     <string name="update_available_message">You have %1$s. Download the new version from the GitHub release page and verify it as the release notes describe before installing.</string>
     <string name="action_open_release">Go to download</string>
     <string name="action_later">Later</string>
+    <string name="update_notes_show">Show release notes</string>
+    <string name="update_notes_hide">Hide release notes</string>
     <string name="action_ignore_version">Skip this version</string>
     <string name="error_open_release">No app can open the release page</string>
     <string name="action_show_fingerprint_qr">Show fingerprint QR code</string>

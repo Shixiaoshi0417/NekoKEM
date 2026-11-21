@@ -111,6 +111,9 @@ class AppState(private val scope: CoroutineScope, private val files: FileChooser
     var checkingUpdate by mutableStateOf(false); private set
     var updateNotice by mutableStateOf<String?>(null); private set
     var availableVersion by mutableStateOf(""); private set
+    var availableNotes by mutableStateOf<List<NoteLine>>(emptyList()); private set
+    // The release notes start folded each time a release is announced.
+    var notesOpen by mutableStateOf(false); private set
     var qrFingerprint by mutableStateOf(""); private set
     var signerSaved by mutableStateOf(false); private set
     // Replacing keys is offered only after Core reported existing keys at the
@@ -217,10 +220,16 @@ class AppState(private val scope: CoroutineScope, private val files: FileChooser
             val status = runCatching { native { Backend.checkUpdate() } }.getOrDefault(UpdateStatus.Failed)
             checkingUpdate = false
             if (status != UpdateStatus.Failed) { update = update.copy(lastCheck = System.currentTimeMillis()); storeUpdate() }
-            if (status is UpdateStatus.Available && (manual || status.version != update.ignored)) availableVersion = status.version
+            if (status is UpdateStatus.Available && (manual || status.version != update.ignored)) announce(status)
             else if (manual) updateNotice = if (status == UpdateStatus.Current) "upToDate" else "updateFailed"
         }
     }
+    fun announce(release: UpdateStatus.Available) {
+        availableNotes = release.notes
+        notesOpen = false
+        availableVersion = release.version
+    }
+    fun toggleNotes() { notesOpen = !notesOpen }
     fun openRelease() {
         val target = availableVersion
         availableVersion = ""

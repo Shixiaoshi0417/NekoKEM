@@ -288,6 +288,8 @@
     <string name="update_available_message">現在のバージョンは %1$s です。GitHub のリリースページから新しいバージョンをダウンロードし、リリースノートの手順で検証してからインストールしてください。</string>
     <string name="action_open_release">ダウンロードページへ</string>
     <string name="action_later">後で</string>
+    <string name="update_notes_show">リリースノートを表示</string>
+    <string name="update_notes_hide">リリースノートを閉じる</string>
     <string name="action_ignore_version">このバージョンをスキップ</string>
     <string name="error_open_release">リリースページを開けるアプリがありません</string>
     <string name="action_show_fingerprint_qr">フィンガープリントの QR コードを表示</string>

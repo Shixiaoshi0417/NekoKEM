@@ -140,9 +140,30 @@ fun main(args: Array<String>): Unit = runBlocking(Dispatchers.Main) {
         // Cleared again, so the next style starts with the save dialog.
         state.changeDecryptFolder(false)
         shot("settings")
+
+        // A newer release with its notes, folded and then opened.
+        state.announce(UpdateStatus.Available("5.3.0", demoNotes))
+        shot("update")
+        state.toggleNotes()
+        shot("update-notes")
+        state.dismissUpdate()
         scene.close()
     }
     work.deleteRecursively()
     println("Screenshots: ${out.absolutePath}")
     Unit
 }
+
+private val demoNotes = listOf(
+    NoteLine("heading", "What's new"),
+    NoteLine("text", "This release adds release notes to the update prompt."),
+    NoteLine("item", "Release notes: folded until opened, then they scroll inside a box of limited height."),
+    NoteLine("item", "Check for updates: the notes come in the App's language, Chinese or English."),
+    NoteLine("heading", "Compatibility and upgrading"),
+    NoteLine("item", "Files and keys are unchanged; NekoKEM 5.2 opens everything this release writes."),
+    NoteLine("item", "Download the new version from the release page and verify it before installing."),
+    NoteLine("heading", "Platform and validation boundaries"),
+    NoteLine("item", "Windows 10/11 x64: CLI, GUI and MSI installer, without Authenticode signatures."),
+    NoteLine("item", "Linux GUI: built on Ubuntu 24.04, needs glibc 2.39 or later."),
+    NoteLine("item", "macOS Apple Silicon arm64: GUI minimum macOS 13, ad-hoc signed."),
+)

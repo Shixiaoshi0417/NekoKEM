@@ -87,7 +87,10 @@ struct Contact: Identifiable, Equatable {
     }
 }
 
-enum UpdateStatus: Equatable { case available(String), current, failed }
+/// One line of release notes, already plain text; see the bridge's notes.rs.
+struct NoteLine: Equatable { var kind: String; var text: String }
+/// The notes are empty when only the release page's redirect answered.
+enum UpdateStatus: Equatable { case available(String, [NoteLine]), current, failed }
 struct UpdatePreferences { var auto = true; var lastCheck: Int64 = 0; var ignored = "" }
 /// Kept in desktop.json beside the contacts. Unsigned output is never saved.
 struct DesktopPreferences { var requireSignature = false; var signKeyPath = ""; var publicKeyPath = ""; var sidebarOpen = true; var style = "miuix"; var recordName = true; var decryptFolder = "" }
@@ -130,7 +133,13 @@ enum Backend {
     static func checkUpdate() -> UpdateStatus {
         guard let fields = try? Bridge.call("check_update") as? [String: Any] else { return .failed }
         switch fields["status"] as? String {
-        case "available": return (fields["version"] as? String).map(UpdateStatus.available) ?? .failed
+        case "available":
+            guard let version = fields["version"] as? String else { return .failed }
+            let notes = (fields["notes"] as? [[String: Any]] ?? []).compactMap { line -> NoteLine? in
+                guard let kind = line["kind"] as? String, let text = line["text"] as? String else { return nil }
+                return NoteLine(kind: kind, text: text)
+            }
+            return .available(version, notes)
         case "current": return .current
         default: return .failed
         }

@@ -128,6 +128,9 @@ final class AppState: ObservableObject {
     @Published private(set) var checkingUpdate = false
     @Published private(set) var updateNotice: String?
     @Published var availableVersion = ""
+    @Published var availableNotes: [NoteLine] = []
+    // The release notes start folded each time a release is announced.
+    @Published var notesOpen = false
     @Published var qrFingerprint = ""
     @Published private(set) var signerSaved = false
     // Replacing keys is offered only after Core reported existing keys at the
@@ -316,7 +319,7 @@ final class AppState: ObservableObject {
             let status = (try? await native { Backend.checkUpdate() }) ?? .failed
             checkingUpdate = false
             if status != .failed { update.lastCheck = now; storeUpdate() }
-            if case .available(let found) = status, manual || found != update.ignored { availableVersion = found }
+            if case .available(let found, let notes) = status, manual || found != update.ignored { availableNotes = notes; notesOpen = false; availableVersion = found }
             else if manual { updateNotice = status == .current ? "upToDate" : "updateFailed" }
         }
     }
@@ -961,6 +964,7 @@ final class AppState: ObservableObject {
         ownSelected = false; selected = []; otherKeys = []; unverifiedWarned = false
         input = ""; output = ""; password = ""; otherPrivateKey = ""; saveToKeychain = false
         decryptFolder = name == "settings-decrypt-folder" ? "/Users/shawn/Downloads/Decrypted" : ""
+        availableVersion = ""; availableNotes = []; notesOpen = false
         resetFeedback()
         switch name {
         case "files-empty": screen = .files
@@ -984,6 +988,22 @@ final class AppState: ObservableObject {
             result = Outcome(fingerprint: contacts[1].fingerprint); result?.canVerify = true
         case "contacts": screen = .contacts
         case "contacts-selected": screen = .contacts; selected = ["alice", "bob"]
+        case "update", "update-notes":
+            screen = .settings
+            availableNotes = [
+                NoteLine(kind: "heading", text: "What's new"),
+                NoteLine(kind: "text", text: "This release adds release notes to the update prompt."),
+                NoteLine(kind: "item", text: "Release notes: folded until opened, then they scroll inside a box of limited height."),
+                NoteLine(kind: "item", text: "Check for updates: the notes come in the App's language, Chinese or English."),
+                NoteLine(kind: "heading", text: "Compatibility and upgrading"),
+                NoteLine(kind: "item", text: "Files and keys are unchanged; NekoKEM 5.2 opens everything this release writes."),
+                NoteLine(kind: "item", text: "Download the new version from the release page and verify it before installing."),
+                NoteLine(kind: "heading", text: "Platform and validation boundaries"),
+                NoteLine(kind: "item", text: "macOS Apple Silicon arm64, GUI minimum macOS 13, ad-hoc signed."),
+                NoteLine(kind: "item", text: "Windows 10/11 x64 and Linux x86_64 and aarch64."),
+            ]
+            notesOpen = name == "update-notes"
+            availableVersion = "5.3.0"
         default: screen = .settings
         }
     }
