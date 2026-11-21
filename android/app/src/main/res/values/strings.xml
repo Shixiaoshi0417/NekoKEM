@@ -236,6 +236,7 @@
     <string name="signature_signed">Signed with your identity key</string>
     <string name="signature_unsigned">Unsigned</string>
     <string name="signature_trusted_contact">Valid · signed by the saved contact %1$s</string>
+    <string name="signature_trusted_contact_unnamed">Valid · signed by a saved contact</string>
     <string name="signature_trusted_self">Valid · signed with this device’s identity key</string>
     <string name="signature_untrusted">Valid, but the signer is not in your contacts. Compare this fingerprint with the sender through a trusted channel before relying on it.</string>
     <string name="signature_none">Not signed · this NKEM v3/v4 file cannot show who sent it</string>

@@ -221,6 +221,7 @@
     <string name="signature_signed">已以你的身分金鑰簽章</string>
     <string name="signature_unsigned">未簽章</string>
     <string name="signature_trusted_contact">有效 · 來自已儲存的聯絡人 %1$s</string>
+    <string name="signature_trusted_contact_unnamed">有效 · 來自已儲存的聯絡人</string>
     <string name="signature_trusted_self">有效 · 來自本機的身分金鑰</string>
     <string name="signature_untrusted">簽章有效，但簽章者不在通訊錄中。請先透過可信管道與傳送者核對此指紋，再信任該檔案。</string>
     <string name="signature_none">未簽章 · 此 NKEM v3/v4 檔案無法確認傳送者</string>

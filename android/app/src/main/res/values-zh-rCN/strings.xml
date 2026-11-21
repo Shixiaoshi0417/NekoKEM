@@ -235,6 +235,7 @@
     <string name="signature_signed">已用你的身份密钥签名</string>
     <string name="signature_unsigned">未签名</string>
     <string name="signature_trusted_contact">有效 · 来自已保存的联系人 %1$s</string>
+    <string name="signature_trusted_contact_unnamed">有效 · 来自已保存的联系人</string>
     <string name="signature_trusted_self">有效 · 来自本机的身份密钥</string>
     <string name="signature_untrusted">签名有效，但签名者不在通讯录中。请先通过可信渠道与发送方核对此指纹，再信任该文件。</string>
     <string name="signature_none">未签名 · 此 NKEM v3/v4 文件无法确认发送者</string>

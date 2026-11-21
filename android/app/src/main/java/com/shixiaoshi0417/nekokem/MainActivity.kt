@@ -1179,7 +1179,9 @@ private fun NekoKEMRoute(
         scope.launch {
             var saveRequest: SaveDocumentRequest? = null
             try {
-                var signerIds = emptyList<String>()
+                // The labels Core's signer list was staged with: the contacts
+                // shown on the page may have changed during the decryption.
+                var signerLabels = emptyList<String>()
                 val outcome = pageWork {
                     // Saved identity contacts are the trusted signers; Core decides.
                     val signers = try {
@@ -1187,7 +1189,7 @@ private fun NekoKEMRoute(
                     } catch (_: Exception) {
                         null
                     }
-                    signerIds = signers?.ids.orEmpty()
+                    signerLabels = signers?.labels.orEmpty()
                     fileWorkflow.prepareDecryption(
                         source.uri,
                         password,
@@ -1206,8 +1208,7 @@ private fun NekoKEMRoute(
                 ) {
                     outcome.prepared.signature = outcome.signature
                     outcome.prepared.signerLabel = outcome.signature?.trustedContact
-                        ?.let { signerIds.getOrNull(it) }
-                        ?.let { id -> contactsState.contacts.firstOrNull { it.id == id }?.label }
+                        ?.let { signerLabels.getOrNull(it) }
                     preparedDecryption = outcome.prepared
                     decryptionPreparationProgress = finalProgress
                     saveRequest = decryptedDocumentRequest(
@@ -2530,7 +2531,8 @@ private fun signatureDetails(
             when {
                 signature.signedBySelf -> context.getString(R.string.signature_trusted_self)
                 signerLabel != null -> context.getString(R.string.signature_trusted_contact, signerLabel)
-                else -> context.getString(R.string.signature_trusted_self)
+                // Trusted but not by this device's key: never claim it was.
+                else -> context.getString(R.string.signature_trusted_contact_unnamed)
             },
         )
         NativeBridge.SIGNATURE_VALID_UNTRUSTED -> OperationResultDetail(
