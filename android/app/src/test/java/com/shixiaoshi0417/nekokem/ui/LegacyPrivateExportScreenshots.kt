@@ -48,7 +48,7 @@ class LegacyPrivateExportScreenshots {
     private fun keys(style: UiStyle, dark: Boolean) {
         val state = NekoKEMUiState(
             nativeConnected = true,
-            nativeVersion = "5.2.0",
+            nativeVersion = "6.0.0",
             privateKeyExists = true,
             fingerprint = "0123 4567 89AB CDEF",
             selectedFileName = null,

@@ -42,7 +42,7 @@ final class AppState: ObservableObject {
     @Published private(set) var screen = Screen.files
     @Published private(set) var language = "en"
     @Published private(set) var selectedLanguage = "system"
-    @Published private(set) var version = "5.2.0"
+    @Published private(set) var version = "6.0.0"
     @Published private(set) var loaded = false
     @Published private(set) var busy = false
     @Published private(set) var cancelling = false
