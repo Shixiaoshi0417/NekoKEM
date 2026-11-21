@@ -25,6 +25,7 @@ Android 和各平台 CLI/GUI 统一为 `6.0.0`，Core 为 `6.0`，NKEM 文件格
 - 各端可以「导出给 5.2 及更早版本的私钥」，用同一口令写出 NKPR v2 副本。
 - 新增 Windows EXE 安装程序、Linux AppImage 和 Flatpak 包（沙盒只通过文件选择框访问文件），仓库附带 Arch Linux 的 `nekokem-bin` PKGBUILD。
 - 更新提示附上折叠的发布说明，展开后限高滚动；各端去掉页面上常驻的说明小字，警告保留。
+- Android 设置新增「禁止截屏和录屏」，默认开启；另修复外部审查发现的问题，包括 Ed448 公钥校验曲线点、X448 公钥拒绝小阶点，以及桌面端保存失败时删除暂存明文。
 
 **5.2.0 及更早版本打不开 NKPR v3 私钥**：要把私钥交给旧版本，请先用「导出给 5.2 及更早版本的私钥」（CLI 为 `export-legacy-private-key`）导出副本。升级后第一次解锁会把本机私钥改写为 NKPR v3，回退到 5.2.0 前也要先这样导出。NKEM 文件不受影响，6.0.0 与 5.2.0 可以互相解密对方的文件。**4.x 及更早版本无法读取 NKEM v5、NKPR v2/v3 和四段式公钥**，给旧版接收方发送文件时请开启不签名加密并使用旧版公钥。完整双语说明见 [v6.0.0](release/v6.0.0.md) 和 [GitHub Release](https://github.com/Shixiaoshi0417/NekoKEM/releases/tag/v6.0.0)。
 
@@ -193,7 +194,7 @@ flatpak run io.github.shixiaoshi0417.NekoKEM
 flatpak run --command=nekokem io.github.shixiaoshi0417.NekoKEM --help
 ```
 
-仓库中的 [`linux/flatpak`](linux/flatpak/README.md) 清单从已发布的归档构建，文件选择框需要 6.0.0 或更新版本，清单指向 6.0.0 后即可直接构建和上架。沙盒不开放任何文件系统权限：要处理的文件、密钥文件和解密目录都在桌面的文件选择框（xdg-desktop-portal）中选择，应用只能访问选中的文件和目录；新生成和升级的密钥先在沙盒内的私有目录里写好，再复制到选定位置。沙盒内的 `nekokem` 命令行只能访问自己的数据目录，处理其他文件时需临时授权目录（如 `--filesystem=xdg-documents`）或改用静态命令行归档。沙盒可联网（仅用于检查更新），图形走 X11（Wayland 下经 XWayland）。设置、通讯录和语言保存在 `~/.var/app/io.github.shixiaoshi0417.NekoKEM/config/nekokem`，与 DEB/RPM 版的 `~/.config/nekokem` 分开。中日韩字体沿用系统已安装的字体。清单同样固定指向已发布版本，发布后由 `scripts/update_flatpak_manifest.py <版本>` 更新；CI 在两种架构上用本次构建的归档打包、安装，以中英文启动 GUI 确认窗口打开。上架 Flathub 需要维护者本人提交，步骤见 [linux/flatpak/README.md](linux/flatpak/README.md)。
+仓库中的 [`linux/flatpak`](linux/flatpak/README.md) 清单从已发布的归档构建，文件选择框需要 6.0.0 或更新版本，清单指向 6.0.0 后即可直接构建和上架。沙盒不开放任何文件系统权限：要处理的文件、密钥文件和解密目录都在桌面的文件选择框（xdg-desktop-portal）中选择，应用只能访问选中的文件和目录；新生成和升级的密钥先在沙盒内的私有目录里写好，再复制到选定位置。沙盒内的 `nekokem` 命令行只能访问自己的数据目录，处理其他文件时需临时授权目录（如 `--filesystem=xdg-documents`）或改用静态命令行归档。沙盒不联网，Flatpak 版不检查更新，由 Flatpak 负责更新；图形走 X11（Wayland 下经 XWayland）。设置、通讯录和语言保存在 `~/.var/app/io.github.shixiaoshi0417.NekoKEM/config/nekokem`，与 DEB/RPM 版的 `~/.config/nekokem` 分开。中日韩字体沿用系统已安装的字体。清单同样固定指向已发布版本，发布后由 `scripts/update_flatpak_manifest.py <版本>` 更新；CI 在两种架构上用本次构建的归档打包、安装，以中英文启动 GUI 确认窗口打开。上架 Flathub 需要维护者本人提交，步骤见 [linux/flatpak/README.md](linux/flatpak/README.md)。
 
 构建与原生 CI 基线为 Ubuntu 24.04，CI 另在同架构 Fedora 44 容器中安装并启动 RPM。应用自带 Java 运行时；运行需要 glibc 2.39 或更新版本，DEB/RPM 依赖 Noto Sans CJK 字体和 `curl`（检查更新）。OpenSSL 4.1.0 静态链接进桥接库并隐藏符号，保留完整 RELRO、立即绑定和不可执行栈。Linux 文件权限、认证后提交及取消清理沿用 CLI/Core；NKEM、NKPR、KDF 参数与 64 KiB 流式处理不变。详见 [桌面 GUI 文档](desktop/README.md)。
 
