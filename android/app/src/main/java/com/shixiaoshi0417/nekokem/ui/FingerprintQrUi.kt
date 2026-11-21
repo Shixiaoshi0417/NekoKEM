@@ -110,7 +110,6 @@ fun FingerprintQrDialog(fingerprint: String, onDismiss: () -> Unit) {
                     }
                 }
                 Text(fingerprint, style = MaterialTheme.typography.bodySmall)
-                Text(stringResource(R.string.fingerprint_qr_hint), style = MaterialTheme.typography.bodySmall)
             }
         },
         confirmButton = { DialogButton(stringResource(R.string.action_close), onClick = onDismiss) },

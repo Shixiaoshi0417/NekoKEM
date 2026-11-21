@@ -599,11 +599,6 @@ private fun KeyManagementPage(
                 onClick = actions.onExportLegacyPublicKey,
                 emphasis = ActionEmphasis.TONAL,
             )
-            Text(
-                text = stringResource(R.string.legacy_export_hint),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
         }
         Spacer(modifier = Modifier.height(12.dp))
         ActionButtonGroup(
@@ -644,11 +639,6 @@ private fun KeyManagementPage(
                 enabled = canRun,
                 onClick = actions.onExportLegacyPrivateKey,
                 emphasis = ActionEmphasis.TONAL,
-            )
-            Text(
-                text = stringResource(R.string.legacy_private_export_hint),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
         Spacer(modifier = Modifier.height(12.dp))
@@ -808,7 +798,6 @@ private fun SettingsPage(state: NekoKEMUiState, actions: NekoKEMActions, onOpenA
             val unsigned = state.signatureSettings.unsignedEncryption
             SwitchSetting(
                 title = stringResource(R.string.settings_unsigned_title),
-                summary = stringResource(R.string.settings_unsigned_summary),
                 checked = unsigned,
                 running = running,
                 onCheckedChange = actions.onUnsignedEncryptionChange,
@@ -818,14 +807,12 @@ private fun SettingsPage(state: NekoKEMUiState, actions: NekoKEMActions, onOpenA
             // Unsigned files never record a name, so the switch waits for signing.
             SwitchSetting(
                 title = stringResource(R.string.settings_record_name_title),
-                summary = stringResource(R.string.settings_record_name_summary),
                 checked = state.signatureSettings.recordOriginalName,
                 running = running || unsigned,
                 onCheckedChange = actions.onRecordOriginalNameChange,
             )
             SwitchSetting(
                 title = stringResource(R.string.settings_require_signature_title),
-                summary = stringResource(R.string.settings_require_signature_summary),
                 checked = state.signatureSettings.requireSignature,
                 running = running,
                 onCheckedChange = actions.onRequireSignatureChange,
@@ -839,7 +826,6 @@ private fun SettingsPage(state: NekoKEMUiState, actions: NekoKEMActions, onOpenA
         SectionCard(modifier = Modifier.padding(top = 16.dp)) {
             SwitchSetting(
                 title = stringResource(R.string.settings_decrypt_folder_title),
-                summary = stringResource(R.string.settings_decrypt_folder_summary),
                 checked = state.decryptFolderSet,
                 running = running,
                 onCheckedChange = actions.onDecryptFolderChange,
@@ -862,7 +848,6 @@ private fun SettingsPage(state: NekoKEMUiState, actions: NekoKEMActions, onOpenA
         SectionCard(modifier = Modifier.padding(top = 16.dp)) {
             SwitchSetting(
                 title = stringResource(R.string.settings_auto_update_title),
-                summary = stringResource(R.string.settings_auto_update_summary),
                 checked = state.autoUpdateCheck,
                 running = false,
                 onCheckedChange = actions.onAutoUpdateChange,
@@ -889,7 +874,6 @@ private fun SettingsPage(state: NekoKEMUiState, actions: NekoKEMActions, onOpenA
 @Composable
 private fun SwitchSetting(
     title: String,
-    summary: String,
     checked: Boolean,
     running: Boolean,
     onCheckedChange: (Boolean) -> Unit,
@@ -912,12 +896,6 @@ private fun SwitchSetting(
                 title,
                 style = MaterialTheme.typography.titleMedium,
                 color = if (warning) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface,
-            )
-            Text(
-                modifier = Modifier.padding(top = 4.dp),
-                text = summary,
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
         Switch(checked = checked, onCheckedChange = null, enabled = !running)
@@ -971,11 +949,6 @@ private fun AboutPage(state: NekoKEMUiState, actions: NekoKEMActions) {
             modifier = Modifier.padding(top = 20.dp),
             text = stringResource(R.string.app_version),
             style = MaterialTheme.typography.headlineMediumEmphasized,
-        )
-        Text(
-            modifier = Modifier.padding(top = 12.dp),
-            text = stringResource(R.string.about_description),
-            style = MaterialTheme.typography.bodyLarge,
         )
         SectionCard(modifier = Modifier.padding(top = 24.dp)) {
             Text(

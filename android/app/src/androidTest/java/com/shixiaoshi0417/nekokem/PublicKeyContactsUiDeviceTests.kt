@@ -321,7 +321,7 @@ internal fun runPublicKeyContactsUiTests(instrumentation: Instrumentation) {
         openContacts()
         click("${checkNotNull(activity).getString(R.string.contact_select_recipient)} · $editedNote")
         awaitText(checkNotNull(activity).getString(R.string.contact_selection_count, 1))
-        awaitText(checkNotNull(activity).getString(R.string.contact_recipients_hint))
+        awaitText(checkNotNull(activity).getString(R.string.action_encrypt_for_selected))
         capture("contacts-multi-select")
         click(checkNotNull(activity).getString(R.string.action_encrypt_for_selected))
         awaitText(checkNotNull(activity).getString(R.string.action_select_file))
@@ -341,7 +341,7 @@ internal fun runPublicKeyContactsUiTests(instrumentation: Instrumentation) {
         // keep reporting a closed dialog as the active window, hiding the page behind it.
         clickNavigationTab(instrumentation, checkNotNull(activity).getString(R.string.tab_keys))
         openDialog(checkNotNull(activity).getString(R.string.action_show_fingerprint_qr))
-        awaitText(checkNotNull(activity).getString(R.string.fingerprint_qr_hint))
+        awaitText(checkNotNull(activity).getString(R.string.fingerprint_qr_title))
         SystemClock.sleep(500)
         capture("keys-fingerprint-qr")
         click(checkNotNull(activity).getString(R.string.action_close))

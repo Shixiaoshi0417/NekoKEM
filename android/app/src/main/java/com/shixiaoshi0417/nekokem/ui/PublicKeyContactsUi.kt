@@ -110,9 +110,6 @@ fun PublicKeyContactsPage(
             contentPadding = PaddingValues(start = 20.dp, top = 20.dp, end = 20.dp, bottom = if (floatingAdd) 104.dp else 20.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            item {
-                Text(stringResource(R.string.contact_description), style = MaterialTheme.typography.bodyMedium)
-            }
             if (!floatingAdd) {
                 item {
                     ExpressiveButton(
@@ -147,7 +144,6 @@ fun PublicKeyContactsPage(
                                     style = MaterialTheme.typography.bodySmall,
                                 )
                             }
-                            Text(stringResource(R.string.contact_recipients_hint), style = MaterialTheme.typography.bodySmall)
                             ExpressiveButton(
                                 text = stringResource(R.string.action_encrypt_for_selected),
                                 onClick = onEncryptSelected,

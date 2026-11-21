@@ -435,7 +435,6 @@ private fun LazyListScope.keysPage(state: NekoKEMUiState, actions: NekoKEMAction
         if (state.canSign) {
             ArrowPreference(
                 title = stringResource(R.string.action_export_legacy_public_key),
-                summary = stringResource(R.string.legacy_export_hint),
                 enabled = canRun,
                 onClick = actions.onExportLegacyPublicKey,
             )
@@ -445,7 +444,6 @@ private fun LazyListScope.keysPage(state: NekoKEMUiState, actions: NekoKEMAction
         if (state.privateKeyExists) {
             ArrowPreference(
                 title = stringResource(R.string.action_export_legacy_private_key),
-                summary = stringResource(R.string.legacy_private_export_hint),
                 enabled = canRun,
                 onClick = actions.onExportLegacyPrivateKey,
             )
@@ -474,7 +472,6 @@ private fun LazyListScope.contactsPage(
     val selected = state.contactSelection
     val atLimit = selected.size >= NativeBridge.MAX_RECIPIENTS
     section(key = "intro") {
-        BasicComponent(summary = stringResource(R.string.contact_description))
         if (state.contactsState.contacts.isEmpty()) {
             Action(R.string.action_import_contact, state.nativeConnected && !state.running, actions.onImportContact)
         }
@@ -482,13 +479,9 @@ private fun LazyListScope.contactsPage(
     }
     if (selected.isNotEmpty()) {
         section(key = "selection") {
-            val summary = buildList {
-                if (atLimit) add(stringResource(R.string.contact_selection_limit, NativeBridge.MAX_RECIPIENTS))
-                add(stringResource(R.string.contact_recipients_hint))
-            }.joinToString("\n")
             BasicComponent(
                 title = stringResource(R.string.contact_selection_count, selected.size),
-                summary = summary,
+                summary = if (atLimit) stringResource(R.string.contact_selection_limit, NativeBridge.MAX_RECIPIENTS) else null,
             )
             ButtonPair(
                 first = stringResource(R.string.action_encrypt_for_selected),
@@ -685,12 +678,10 @@ private fun MiuixSettingsPage(
         if (tag.isEmpty()) stringResource(R.string.settings_language_system) else AppLanguages.names(context)[index]
     }
     val styleNames = UiStyle.entries.map { stringResource(it.labelResource) }
-    val unsupported = stringResource(R.string.settings_liquid_glass_unsupported)
     MiuixPage(title, bottomPadding) {
         section(R.string.settings_appearance_title, key = "appearance") {
             OverlayDropdownPreference(
                 title = stringResource(R.string.settings_ui_style_title),
-                summary = if (liquidGlassSupported) null else unsupported,
                 items = styleNames,
                 selectedIndex = state.uiStyle.ordinal,
                 enabled = !state.running,
@@ -726,11 +717,7 @@ private fun MiuixSettingsPage(
                 onCheckedChange = actions.onUnsignedEncryptionChange,
                 title = stringResource(R.string.settings_unsigned_title),
                 titleColor = if (unsigned) BasicComponentDefaults.titleColor(color = red) else BasicComponentDefaults.titleColor(),
-                summary = if (unsigned) {
-                    stringResource(R.string.unsigned_warning)
-                } else {
-                    stringResource(R.string.settings_unsigned_summary)
-                },
+                summary = if (unsigned) stringResource(R.string.unsigned_warning) else null,
                 summaryColor = if (unsigned) BasicComponentDefaults.summaryColor(color = red) else BasicComponentDefaults.summaryColor(),
                 enabled = !state.running,
             )
@@ -739,14 +726,12 @@ private fun MiuixSettingsPage(
                 checked = state.signatureSettings.recordOriginalName,
                 onCheckedChange = actions.onRecordOriginalNameChange,
                 title = stringResource(R.string.settings_record_name_title),
-                summary = stringResource(R.string.settings_record_name_summary),
                 enabled = !state.running && !unsigned,
             )
             SwitchPreference(
                 checked = state.signatureSettings.requireSignature,
                 onCheckedChange = actions.onRequireSignatureChange,
                 title = stringResource(R.string.settings_require_signature_title),
-                summary = stringResource(R.string.settings_require_signature_summary),
                 enabled = !state.running,
             )
         }
@@ -755,7 +740,6 @@ private fun MiuixSettingsPage(
                 checked = state.decryptFolderSet,
                 onCheckedChange = actions.onDecryptFolderChange,
                 title = stringResource(R.string.settings_decrypt_folder_title),
-                summary = stringResource(R.string.settings_decrypt_folder_summary),
                 enabled = !state.running,
             )
             if (state.decryptFolderSet) {
@@ -779,7 +763,6 @@ private fun MiuixSettingsPage(
                 checked = state.autoUpdateCheck,
                 onCheckedChange = actions.onAutoUpdateChange,
                 title = stringResource(R.string.settings_auto_update_title),
-                summary = stringResource(R.string.settings_auto_update_summary),
             )
         }
         section(key = "version") {
@@ -816,9 +799,6 @@ private fun LazyListScope.aboutPage(state: NekoKEMUiState, actions: NekoKEMActio
                 fontWeight = FontWeight.SemiBold,
             )
         }
-    }
-    section(key = "description") {
-        BasicComponent(summary = stringResource(R.string.about_description))
     }
     section(key = "native") {
         BasicComponent(
