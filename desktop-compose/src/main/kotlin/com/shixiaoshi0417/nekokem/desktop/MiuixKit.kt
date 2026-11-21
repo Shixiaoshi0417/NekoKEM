@@ -171,7 +171,7 @@ object MiuixKit : Kit {
     @Composable override fun SwitchRow(title: String, summary: String, checked: Boolean, danger: Boolean, enabled: Boolean, onChange: (Boolean) -> Unit) {
         val red = MiuixTheme.colorScheme.error
         SwitchPreference(
-            checked = checked, onCheckedChange = onChange, title = title, summary = summary, enabled = enabled,
+            checked = checked, onCheckedChange = onChange, title = title, summary = summary.ifEmpty { null }, enabled = enabled,
             titleColor = if (danger) BasicComponentDefaults.titleColor(color = red) else BasicComponentDefaults.titleColor(),
             summaryColor = if (danger) BasicComponentDefaults.summaryColor(color = red) else BasicComponentDefaults.summaryColor(),
         )
@@ -202,7 +202,7 @@ object MiuixKit : Kit {
     }
 
     @Composable override fun Dialog(show: Boolean, title: String, summary: String, onDismiss: () -> Unit, content: @Composable ColumnScope.() -> Unit) {
-        OverlayDialog(show = show, title = title, summary = summary, onDismissRequest = onDismiss) {
+        OverlayDialog(show = show, title = title, summary = summary.ifEmpty { null }, onDismissRequest = onDismiss) {
             Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally, content = content)
         }
     }

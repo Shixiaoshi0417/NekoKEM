@@ -210,7 +210,6 @@ private fun KeyFields(state: AppState) {
     if (state.keyMode == KeyMode.Export) {
         LocalKit.current.Segments(listOf(state.t("exportPublicOption"), state.t("exportPrivateOption")), if (state.exportPrivate) 1 else 0, state.editable) { state.changeExportPrivate(it == 1) }
         if (state.exportPrivate) {
-            Hint(state.t("legacyPrivateHint"))
             PathInput(state, PathField.PrivatePath, state.t("privateKey"), "privatePath")
             PathInput(state, PathField.Output, state.t("legacyPrivateOutput"), "output")
         } else {
@@ -239,7 +238,7 @@ private fun ContactFields(state: AppState) {
     val kit = LocalKit.current
     kit.Segments(listOf(state.t("path"), state.t("paste")), if (state.contactPaste) 1 else 0, state.editable) { state.changeContactSource(it == 1) }
     if (!state.contactPaste) PathInput(state, PathField.ContactKeyPath, state.t("publicKey"), "contactKeyPath")
-    else Secret(state, state.contactKeyText, state.t("paste"), "contactKeyText", masked = false, lines = 4, placeholder = state.t("pastePublicHint"))
+    else Secret(state, state.contactKeyText, state.t("paste"), "contactKeyText", masked = false, lines = 4)
     FieldLabel(state.t("note"), state.invalidField == "note")
     kit.TextInput(state.note, { state.note = it; state.edited("note") }, state.t("note"), state.editable, state.invalidField == "note", Modifier.fillMaxWidth())
 }
@@ -251,7 +250,7 @@ private fun FileFields(state: AppState) {
         View.Fingerprint -> {
             val sources = listOf(KeySource.Path, KeySource.Paste)
             kit.Segments(sources.map { state.t(if (it == KeySource.Path) "path" else "paste") }, sources.indexOf(state.source).coerceAtLeast(0), state.editable) { state.changeSource(sources[it]) }
-            if (state.source == KeySource.Paste) Secret(state, state.keyText, state.t("paste"), "keyText", masked = false, lines = 4, placeholder = state.t("pasteHint"))
+            if (state.source == KeySource.Paste) Secret(state, state.keyText, state.t("paste"), "keyText", masked = false, lines = 4)
             else PathInput(state, PathField.KeyPath, state.t("key"), "keyPath")
         }
         else -> {}
@@ -304,7 +303,7 @@ private fun FilesPage(state: AppState) {
 @Composable
 private fun PasswordDialog(state: AppState) {
     val kit = LocalKit.current
-    kit.Dialog(state.askingPassword, state.t("password"), if (state.fileAction == Kind.Encrypt) state.t("signPasswordHint") else "", state::cancelPassword) {
+    kit.Dialog(state.askingPassword, state.t("password"), "", state::cancelPassword) {
         if (!state.askingPassword) return@Dialog
         kit.SecretInput(state.password, state.t("password"), state.editable, state.invalidField == "password", masked = true, lines = 1, placeholder = "")
         if (state.invalidField == "password") state.failure?.let { Hint(state.t(it), danger = true, modifier = Modifier.fillMaxWidth()) }
@@ -585,13 +584,13 @@ private fun SettingsPage(state: AppState) {
             }
         }
         // Unsigned files never record a name, so the switch waits for signing.
-        kit.SwitchRow(state.t("recordName"), state.t("recordNameSummary"), state.recordName, enabled = !state.unsigned, onChange = state::changeRecordName)
+        kit.SwitchRow(state.t("recordName"), "", state.recordName, enabled = !state.unsigned, onChange = state::changeRecordName)
         kit.SwitchRow(state.t("requireSignature"), "", state.requireSignature, onChange = state::changeRequireSignature)
     }
     kit.SectionTitle(state.t("settingsDecrypt"))
     kit.Section(padded = false) {
         val on = state.decryptFolder.isNotEmpty()
-        kit.SwitchRow(state.t("decryptFolder"), state.t("decryptFolderHint"), on, enabled = state.editable, onChange = state::changeDecryptFolder)
+        kit.SwitchRow(state.t("decryptFolder"), "", on, enabled = state.editable, onChange = state::changeDecryptFolder)
         if (on) {
             kit.ActionRow(state.t("decryptFolderPath"), if (state.decryptFolderFailed) state.t("decryptFolderFailed") else state.decryptFolder, state.editable) {
                 state.browse(PathField.DecryptFolder)

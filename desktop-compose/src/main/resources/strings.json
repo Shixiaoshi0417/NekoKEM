@@ -121,13 +121,6 @@
    "鍵の内容を貼り付け",
    "키 내용 붙여넣기"
   ],
-  "pasteHint": [
-   "Paste every PEM block: two for a legacy key, four for an identity key. Up to 1 MiB.",
-   "请粘贴全部 PEM 区块：旧版密钥两个，身份密钥四个，最多 1 MiB。",
-   "請貼上全部 PEM 區塊：舊版金鑰兩個，身分金鑰四個，最多 1 MiB。",
-   "すべての PEM ブロックを貼り付けます（旧形式の鍵は 2 つ、ID 鍵は 4 つ）。最大 1 MiB。",
-   "모든 PEM 블록을 붙여넣으세요(이전 형식 키 2개, 신원 키 4개). 최대 1 MiB."
-  ],
   "password": [
    "Private key password",
    "私钥密码",
@@ -359,13 +352,6 @@
    "指定したフォルダに保存",
    "지정한 폴더에 저장"
   ],
-  "decryptFolderHint": [
-   "Decrypted files go straight to the chosen folder; a taken name gets a number. When off, you choose where to save each time.",
-   "开启后解密文件直接存到所选文件夹，重名时自动加编号；关闭时每次选择保存位置。",
-   "開啟後解密檔案直接存到所選資料夾，重名時自動加編號；關閉時每次選擇儲存位置。",
-   "オンにすると復号したファイルを選んだフォルダに直接保存し、同じ名前があれば番号を付けます。オフのときは毎回保存先を選びます。",
-   "켜면 복호화한 파일을 선택한 폴더에 바로 저장하고, 같은 이름이 있으면 번호를 붙입니다. 끄면 매번 저장 위치를 선택합니다."
-  ],
   "decryptFolderPath": [
    "Folder",
    "文件夹",
@@ -575,13 +561,6 @@
    "公開金鑰檔案",
    "公開鍵ファイル",
    "공개 키 파일"
-  ],
-  "pastePublicHint": [
-   "Paste every PUBLIC KEY block: two for a legacy key, four for an identity key. Up to 1 MiB.",
-   "请粘贴全部 PUBLIC KEY 区块：旧版密钥两个，身份密钥四个，最多 1 MiB。",
-   "請貼上全部 PUBLIC KEY 區塊：舊版金鑰兩個，身分金鑰四個，最多 1 MiB。",
-   "すべての PUBLIC KEY ブロックを貼り付けます（旧形式の鍵は 2 つ、ID 鍵は 4 つ）。最大 1 MiB。",
-   "모든 PUBLIC KEY 블록을 붙여넣으세요(이전 형식 키 2개, 신원 키 4개). 최대 1 MiB."
   ],
   "note": [
    "Note (optional)",
@@ -814,13 +793,6 @@
    "暗号化秘密鍵",
    "암호화된 개인 키"
   ],
-  "signPasswordHint": [
-   "The password opens your private key to sign this file. It is not stored.",
-   "密码用于打开你的私钥为文件签名，不会被保存。",
-   "密碼用於開啟你的私密金鑰為檔案簽章，不會被儲存。",
-   "パスワードは秘密鍵を開いて署名するためだけに使い、保存しません。",
-   "암호는 개인 키를 열어 서명하는 데만 쓰며 저장하지 않습니다."
-  ],
   "unsignedSetting": [
    "Encrypt without signing (legacy compatible)",
    "不签名加密（兼容旧版）",
@@ -897,13 +869,6 @@
    "記錄原始檔名",
    "元のファイル名を記録",
    "원래 파일 이름 기록"
-  ],
-  "recordNameSummary": [
-   "Turn off for recipients using NekoKEM 5.1",
-   "接收方使用 NekoKEM 5.1 时请关闭",
-   "接收者使用 NekoKEM 5.1 時請關閉",
-   "受信者が NekoKEM 5.1 を使う場合はオフ",
-   "수신자가 NekoKEM 5.1을 쓰면 끄세요"
   ],
   "requireSignature": [
    "Accept only signed files",
@@ -1079,13 +1044,6 @@
    "給 5.2 的私密金鑰儲存位置",
    "5.2 向け秘密鍵の保存先",
    "5.2용 개인 키 저장 위치"
-  ],
-  "legacyPrivateHint": [
-   "NekoKEM 5.2 and earlier cannot open your private key. This copy uses the older format with the same password; use it only to move your key to an older version.",
-   "NekoKEM 5.2 及更早版本打不开你的私钥。这份副本使用旧格式，密码不变，只用于把私钥搬到旧版本。",
-   "NekoKEM 5.2 及更早版本打不開你的私密金鑰。這份副本使用舊格式，密碼不變，只用於把私密金鑰搬到舊版本。",
-   "NekoKEM 5.2 以前はあなたの秘密鍵を開けません。このコピーは旧形式で、パスワードは同じです。鍵を旧バージョンへ移すときだけ使ってください。",
-   "NekoKEM 5.2 이하는 내 개인 키를 열 수 없습니다. 이 사본은 이전 형식이고 암호는 같습니다. 키를 이전 버전으로 옮길 때만 쓰세요."
   ],
   "legacyPrivateExported": [
    "Private key for 5.2 exported",

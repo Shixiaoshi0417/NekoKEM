@@ -264,7 +264,9 @@ object MaterialKit : Kit {
         val tint = if (danger) MaterialTheme.colorScheme.error else null
         ListItem(
             headlineContent = { MaterialText(title, color = tint ?: MaterialTheme.colorScheme.onSurface, fontSize = 15.sp, fontWeight = FontWeight.SemiBold) },
-            supportingContent = { MaterialText(summary, color = tint ?: MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 13.sp) },
+            supportingContent = if (summary.isEmpty()) null else {
+                { MaterialText(summary, color = tint ?: MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 13.sp) }
+            },
             trailingContent = { Switch(checked = checked, onCheckedChange = onChange, enabled = enabled) },
             colors = ListItemDefaults.colors(containerColor = Color.Transparent),
         )
@@ -329,8 +331,10 @@ object MaterialKit : Kit {
             title = { MaterialText(title) },
             text = {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    MaterialText(summary, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.fillMaxWidth())
-                    Spacer(Modifier.height(16.dp))
+                    if (summary.isNotEmpty()) {
+                        MaterialText(summary, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.fillMaxWidth())
+                        Spacer(Modifier.height(16.dp))
+                    }
                     content()
                 }
             },
