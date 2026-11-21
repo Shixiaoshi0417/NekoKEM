@@ -226,6 +226,8 @@
     <string name="action_turn_off_signing">关闭签名</string>
     <string name="settings_record_name_title">记录原文件名</string>
     <string name="settings_require_signature_title">只接受已签名文件</string>
+    <string name="settings_privacy_title">隐私</string>
+    <string name="settings_secure_screen_title">禁止截屏和录屏</string>
     <string name="sign_password_title">签名文件</string>
     <string name="sign_password_message">请输入私钥密码。文件将用你的身份密钥签名，接收方可确认文件来自你。</string>
     <string name="completion_format">格式</string>
@@ -235,6 +237,7 @@
     <string name="signature_signed">已用你的身份密钥签名</string>
     <string name="signature_unsigned">未签名</string>
     <string name="signature_trusted_contact">有效 · 来自已保存的联系人 %1$s</string>
+    <string name="signature_trusted_contact_unnamed">有效 · 来自已保存的联系人</string>
     <string name="signature_trusted_self">有效 · 来自本机的身份密钥</string>
     <string name="signature_untrusted">签名有效，但签名者不在通讯录中。请先通过可信渠道与发送方核对此指纹，再信任该文件。</string>
     <string name="signature_none">未签名 · 此 NKEM v3/v4 文件无法确认发送者</string>

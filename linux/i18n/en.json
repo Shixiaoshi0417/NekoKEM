@@ -250,6 +250,7 @@
   "New output at %s: %s\n": "New output at %s: %s\n",
   "New private-key passwords must be valid UTF-8\n": "New private-key passwords must be valid UTF-8\n",
   "Non-canonical X448 public key\n": "Non-canonical X448 public key\n",
+  "Small-order X448 public key\n": "Small-order X448 public key\n",
   "Only a protected NKPR private key can be upgraded\n": "Only a protected NKPR private key can be upgraded\n",
   "OpenSSL returned an invalid ML-KEM secret length\n": "OpenSSL returned an invalid ML-KEM secret length\n",
   "OpenSSL returned an invalid X448 secret size\n": "OpenSSL returned an invalid X448 secret size\n",

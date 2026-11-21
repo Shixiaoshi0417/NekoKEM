@@ -428,7 +428,11 @@ class AuditTests(unittest.TestCase):
         passed = subprocess.run(['sh', str(INSTALLER)], cwd=self.root, env=environment,
                                 capture_output=True, timeout=10)
         self.assertEqual(passed.returncode, 0, passed.stderr)
-        self.assertIn('attestation verify ', (fixtures / 'gh-args').read_text())
+        arguments = (fixtures / 'gh-args').read_text()
+        self.assertIn('attestation verify ', arguments)
+        for flag in ('--signer-workflow Shixiaoshi0417/NekoKEM/.github/workflows/release.yml',
+                     '--source-ref refs/heads/main', '--deny-self-hosted-runners'):
+            self.assertIn(flag, arguments)
         self.assertIn('--repo Shixiaoshi0417/NekoKEM', (fixtures / 'gh-args').read_text())
         # "latest" is resolved once; every download then names that release.
         urls = (fixtures / 'urls').read_text().splitlines()

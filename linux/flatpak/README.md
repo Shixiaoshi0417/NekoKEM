@@ -42,8 +42,7 @@ flatpak-builder --user --install --install-deps-from=flathub --force-clean \
   and upgraded key pairs are written in a private folder inside the sandbox and
   then copied to the chosen paths, because the portal's file system cannot lock
   a key pair's folder.
-- `--share=network`: only the update check (one HTTPS request to GitHub through
-  the runtime's `curl`). The release page opens through the desktop portal.
+- No network. The Flatpak build has no update check; Flatpak updates the app.
 - `--socket=x11`, `--share=ipc`, `--device=dri`: the Java/Compose window draws
   through X11 (XWayland on a Wayland desktop) with OpenGL when available.
 

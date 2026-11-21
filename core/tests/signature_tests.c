@@ -1108,6 +1108,14 @@ static int test_identity_decode(void)
     CHECK(!identity_decode(bad, &decoded));
     bad[ID_ED448_RAW] = 0xffU;
     CHECK(!identity_decode(bad, &decoded));
+    /* y = 2 is below p but no point has it: (y^2 - 1) / (d y^2 - 1) is
+     * not a square mod p. OpenSSL imports it anyway. */
+    memset(bad + ID_ED448_RAW, 0, IDENTITY_ED448_PUBLIC_SIZE);
+    bad[ID_ED448_RAW] = 2U;
+    CHECK(!identity_decode(bad, &decoded));
+    /* y = 3 is a point of large order and still decodes. */
+    bad[ID_ED448_RAW] = 3U;
+    CHECK(identity_ed448_public_is_valid(bad + ID_ED448_RAW));
     /* X448 u = 0 has small order. */
     memcpy(bad, valid, sizeof(bad));
     memset(bad + ID_X448_RAW, 0, X448_PUBLIC_KEY_SIZE);

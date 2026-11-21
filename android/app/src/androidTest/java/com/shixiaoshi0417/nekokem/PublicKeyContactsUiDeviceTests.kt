@@ -231,6 +231,7 @@ internal fun runPublicKeyContactsUiTests(instrumentation: Instrumentation) {
             generatedDeviceKey = true
         }
         instrumentation.runOnMainSync { AppLanguages.setSelection(context, "en") }
+        allowScreenshots(instrumentation.targetContext)
         activity = instrumentation.startActivitySync(Intent(context, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
         instrumentation.waitForIdleSync()
         openContacts()

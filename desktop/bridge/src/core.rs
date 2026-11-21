@@ -201,7 +201,28 @@ pub struct Backend {
     pub close_after: AtomicBool,
     offer: Mutex<Option<Offer>>,
     // The finished output of a staged operation, until it is saved or discarded.
-    pending: Mutex<Option<Staged>>,
+    pending: Mutex<Option<Pending>>,
+}
+// A staged output and the files its operation read: the input and every key it
+// used, and the user's own key pair. Saving never puts the output over one of
+// them, as Core refuses for an output it writes directly.
+struct Pending {
+    staged: Staged,
+    protected: Vec<String>,
+}
+impl Pending {
+    fn source(&self) -> Result<String, Failure> {
+        self.staged
+            .path()
+            .and_then(|path| path.to_str().ok())
+            .map(str::to_owned)
+            .ok_or_else(|| Failure::new("invalid-request"))
+    }
+    fn protects(&self, target: &CStr) -> bool {
+        self.protected
+            .iter()
+            .any(|file| path(file).is_ok_and(|file| same_file(target, &file) == Some(true)))
+    }
 }
 impl Default for Backend {
     fn default() -> Self {
@@ -228,6 +249,11 @@ impl Backend {
             request.id.clone(),
             matches!(request.kind, Kind::Encrypt | Kind::Decrypt),
         )
+    }
+    // Saving or discarding a staged output holds the slot too, so a window
+    // closed meanwhile waits for the copy to finish.
+    pub fn reserve_output(&self) -> Result<Arc<Job>, Failure> {
+        self.claim("output".into(), false)
     }
     // Contact-store changes share the same exclusive slot as Core operations.
     pub fn reserve_internal(&self) -> Result<Arc<Job>, Failure> {
@@ -317,18 +343,19 @@ impl Backend {
             return Err(Failure::new("save-failed"));
         }
         let mut pending = self.pending.lock().map_err(|_| Failure::new("internal"))?;
-        let source = pending
+        let item = pending
             .as_ref()
-            .and_then(Staged::path)
-            .and_then(|path| path.to_str().ok())
-            .ok_or_else(|| Failure::new("invalid-request"))?
-            .to_owned();
+            .ok_or_else(|| Failure::new("invalid-request"))?;
+        if item.protects(&target) {
+            return Err(Failure::new("output-is-key"));
+        }
+        let source = item.source()?;
         move_file(
             std::path::Path::new(&source),
             std::path::Path::new(destination),
         )
         .map_err(|_| Failure::new("save-failed"))?;
-        if pending.take().is_some_and(|mut staged| staged.close()) {
+        if pending.take().is_some_and(|mut item| item.staged.close()) {
             Ok(())
         } else {
             Err(Failure::new("cleanup-error"))
@@ -351,12 +378,10 @@ impl Backend {
             return Err(Failure::new("save-failed"));
         }
         let mut pending = self.pending.lock().map_err(|_| Failure::new("internal"))?;
-        let source = pending
+        let item = pending
             .as_ref()
-            .and_then(Staged::path)
-            .and_then(|path| path.to_str().ok())
-            .ok_or_else(|| Failure::new("invalid-request"))?
-            .to_owned();
+            .ok_or_else(|| Failure::new("invalid-request"))?;
+        let source = item.source()?;
         let mut saved = None;
         for number in 0..=MAX_NAME_NUMBER {
             let Some(candidate) = numbered_name(name, number) else {
@@ -366,7 +391,11 @@ impl Backend {
             let Some(text) = target.to_str() else {
                 return Err(Failure::new("save-failed"));
             };
-            match exists(&path(text)?) {
+            let candidate = path(text)?;
+            if item.protects(&candidate) {
+                return Err(Failure::new("output-is-key"));
+            }
+            match exists(&candidate) {
                 Some(true) => continue,
                 Some(false) => {}
                 None => return Err(Failure::new("save-failed")),
@@ -381,7 +410,7 @@ impl Backend {
             }
         }
         let saved = saved.ok_or_else(|| Failure::new("save-failed"))?;
-        if pending.take().is_some_and(|mut staged| staged.close()) {
+        if pending.take().is_some_and(|mut item| item.staged.close()) {
             Ok(saved)
         } else {
             Err(Failure::new("cleanup-error"))
@@ -392,13 +421,8 @@ impl Backend {
         let Ok(mut pending) = self.pending.lock() else {
             return false;
         };
-        let Some(mut staged) = pending.take() else {
-            return true;
-        };
-        if let Some(path) = staged.path().and_then(|path| path.to_str().ok()) {
-            let _ = std::fs::remove_file(path);
-        }
-        staged.close()
+        // Core checks the staged file before it removes it.
+        pending.take().is_none_or(|mut item| item.staged.close())
     }
     // Return true while native shutdown must wait for Core/secret cleanup.
     pub fn defer_close(&self) -> bool {
@@ -421,6 +445,7 @@ impl Backend {
 fn move_file(source: &std::path::Path, destination: &std::path::Path) -> std::io::Result<()> {
     #[cfg(not(windows))]
     if std::fs::rename(source, destination).is_ok() {
+        sync_parent(destination);
         return Ok(());
     }
     let stamp = SystemTime::now()
@@ -429,7 +454,7 @@ fn move_file(source: &std::path::Path, destination: &std::path::Path) -> std::io
     let part =
         destination.with_file_name(format!(".nekokem-{}-{stamp:x}.part", std::process::id()));
     let result = (|| {
-        let mut from = std::fs::File::open(source)?;
+        let mut from = open_regular(source)?;
         let mut options = std::fs::OpenOptions::new();
         options.write(true).create_new(true);
         #[cfg(unix)]
@@ -441,7 +466,9 @@ fn move_file(source: &std::path::Path, destination: &std::path::Path) -> std::io
         std::io::copy(&mut from, &mut to)?;
         to.sync_all()?;
         drop(to);
-        std::fs::rename(&part, destination)
+        std::fs::rename(&part, destination)?;
+        sync_parent(destination);
+        Ok(())
     })();
     if result.is_ok() {
         let _ = std::fs::remove_file(source);
@@ -459,18 +486,55 @@ fn move_file_new(source: &std::path::Path, destination: &std::path::Path) -> std
     match std::fs::hard_link(source, destination) {
         Ok(()) => {
             let _ = std::fs::remove_file(source);
+            sync_parent(destination);
             return Ok(());
         }
         Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => return Err(error),
         Err(_) => {}
     }
     copy_new(source, destination)?;
+    sync_parent(destination);
     let _ = std::fs::remove_file(source);
     Ok(())
 }
+// Opens a regular file for copying: a symbolic link is not followed, and a
+// FIFO or device is refused instead of blocking.
+fn open_regular(source: &std::path::Path) -> std::io::Result<std::fs::File> {
+    let mut options = std::fs::OpenOptions::new();
+    options.read(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        options.custom_flags(libc::O_NOFOLLOW | libc::O_NONBLOCK);
+    }
+    let file = options.open(source)?;
+    if !file.metadata()?.is_file() {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            "not a regular file",
+        ));
+    }
+    Ok(file)
+}
+// Makes a rename or new name in [file]'s folder last across a power loss.
+fn sync_parent(file: &std::path::Path) {
+    #[cfg(unix)]
+    if let Some(folder) = file.parent() {
+        let folder = if folder.as_os_str().is_empty() {
+            std::path::Path::new(".")
+        } else {
+            folder
+        };
+        if let Ok(folder) = std::fs::File::open(folder) {
+            let _ = folder.sync_all();
+        }
+    }
+    #[cfg(not(unix))]
+    let _ = file;
+}
 // Copies source into a new file with its permissions; a failed copy is removed.
 fn copy_new(source: &std::path::Path, destination: &std::path::Path) -> std::io::Result<()> {
-    let mut from = std::fs::File::open(source)?;
+    let mut from = open_regular(source)?;
     let mut options = std::fs::OpenOptions::new();
     options.write(true).create_new(true);
     #[cfg(unix)]
@@ -503,14 +567,25 @@ fn on_document_portal(value: &str) -> bool {
 // otherwise two replacements could interleave and leave one's private key
 // beside the other's public key. Flatpak shares $XDG_RUNTIME_DIR/app/<id>
 // between the app's instances, on a file system that supports flock.
+// Outside Flatpak the user's own $XDG_RUNTIME_DIR serves, never the shared
+// /tmp, where another user could hold the lock. Waiting for another instance
+// ends after PORTAL_LOCK_WAIT.
+#[cfg(unix)]
+const PORTAL_LOCK_WAIT: Duration = Duration::from_secs(10);
 #[cfg(unix)]
 fn lock_portal_pairs() -> Result<std::fs::File, Failure> {
     use std::os::unix::{fs::OpenOptionsExt, io::AsRawFd};
-    let shared = std::env::var_os("XDG_RUNTIME_DIR")
-        .zip(std::env::var_os("FLATPAK_ID"))
-        .map(|(runtime, id)| std::path::PathBuf::from(runtime).join("app").join(id))
-        .filter(|folder| folder.is_dir())
-        .unwrap_or_else(std::env::temp_dir);
+    let runtime = private_runtime_directory()
+        .or_else(|| {
+            crate::update::config_directory()
+                .map(std::path::PathBuf::from)
+                .filter(|folder| private_folder(folder))
+        })
+        .ok_or_else(|| Failure::new("core-error"))?;
+    let shared = std::env::var_os("FLATPAK_ID")
+        .map(|id| runtime.join("app").join(id))
+        .filter(|folder| private_folder(folder))
+        .unwrap_or(runtime);
     let file = std::fs::OpenOptions::new()
         .read(true)
         .write(true)
@@ -520,14 +595,43 @@ fn lock_portal_pairs() -> Result<std::fs::File, Failure> {
         .custom_flags(libc::O_NOFOLLOW)
         .open(shared.join(".nekokem-portal-pairs.lock"))
         .map_err(|_| Failure::new("core-error"))?;
+    let metadata = file.metadata().map_err(|_| Failure::new("core-error"))?;
+    if !owned_by_user(&metadata) || !metadata.is_file() {
+        return Err(Failure::new("core-error"));
+    }
+    let deadline = Instant::now() + PORTAL_LOCK_WAIT;
     loop {
-        if unsafe { libc::flock(file.as_raw_fd(), libc::LOCK_EX) } == 0 {
+        if unsafe { libc::flock(file.as_raw_fd(), libc::LOCK_EX | libc::LOCK_NB) } == 0 {
             return Ok(file);
         }
-        if std::io::Error::last_os_error().kind() != std::io::ErrorKind::Interrupted {
+        let error = std::io::Error::last_os_error();
+        if error.kind() == std::io::ErrorKind::Interrupted {
+            continue;
+        }
+        if error.raw_os_error() != Some(libc::EWOULDBLOCK) || Instant::now() >= deadline {
             return Err(Failure::new("core-error"));
         }
+        std::thread::sleep(Duration::from_millis(50));
     }
+}
+#[cfg(unix)]
+fn owned_by_user(metadata: &std::fs::Metadata) -> bool {
+    use std::os::unix::fs::MetadataExt;
+    metadata.uid() == unsafe { libc::geteuid() }
+}
+// A directory of this user that nobody else can enter.
+#[cfg(unix)]
+fn private_folder(folder: &std::path::Path) -> bool {
+    use std::os::unix::fs::PermissionsExt;
+    std::fs::symlink_metadata(folder).is_ok_and(|metadata| {
+        metadata.is_dir() && owned_by_user(&metadata) && metadata.permissions().mode() & 0o077 == 0
+    })
+}
+// $XDG_RUNTIME_DIR, when it is this user's private directory.
+#[cfg(unix)]
+fn private_runtime_directory() -> Option<std::path::PathBuf> {
+    let folder = std::path::PathBuf::from(std::env::var_os("XDG_RUNTIME_DIR")?);
+    (folder.is_absolute() && private_folder(&folder)).then_some(folder)
 }
 #[cfg(not(unix))]
 fn lock_portal_pairs() -> Result<(), Failure> {
@@ -541,8 +645,14 @@ impl PairStage {
         let stamp = SystemTime::now()
             .duration_since(SystemTime::UNIX_EPOCH)
             .map_or(0, |elapsed| elapsed.as_nanos());
-        let folder =
-            std::env::temp_dir().join(format!("nekokem-keys-{}-{stamp:x}", std::process::id()));
+        // The user's private runtime directory when there is one. In a shared
+        // /tmp the folder is still created new with mode 0700, so a name taken
+        // by someone else fails instead of being used.
+        #[cfg(unix)]
+        let base = private_runtime_directory().unwrap_or_else(std::env::temp_dir);
+        #[cfg(not(unix))]
+        let base = std::env::temp_dir();
+        let folder = base.join(format!("nekokem-keys-{}-{stamp:x}", std::process::id()));
         let mut builder = std::fs::DirBuilder::new();
         #[cfg(unix)]
         {
@@ -1176,7 +1286,12 @@ pub fn execute<F: Fn(u64, u64)>(
                     output: Some(request.private_path),
                     ..Outcome::default()
                 }),
+                // Another instance took a name meanwhile: ask as above.
                 Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {
+                    backend.offer(Confirmation::Keypair(
+                        request.public_path.clone(),
+                        request.private_path.clone(),
+                    ))?;
                     Err(Failure::new("key-exists"))
                 }
                 Err(_) => Err(Failure::new("core-error")),
@@ -1644,10 +1759,23 @@ pub fn execute<F: Fn(u64, u64)>(
     }
     if result.is_ok() {
         if let Some(stage) = staged_output.take() {
+            let mut protected = vec![
+                request.input.clone(),
+                request.key_path.clone(),
+                request.sign_key_path.clone(),
+            ];
+            protected.extend(request.key_paths.iter().cloned());
+            if let Some((private, public)) = own_keys() {
+                protected.extend([private, public]);
+            }
+            protected.retain(|file| !file.is_empty());
             *backend
                 .pending
                 .lock()
-                .map_err(|_| Failure::new("internal"))? = Some(stage);
+                .map_err(|_| Failure::new("internal"))? = Some(Pending {
+                staged: stage,
+                protected,
+            });
         }
     }
     result
@@ -3372,11 +3500,22 @@ mod tests {
     #[cfg(unix)]
     #[test]
     fn portal_pair_lock_excludes_other_holders() {
-        use std::os::unix::io::AsRawFd;
+        use std::os::unix::{fs::PermissionsExt, io::AsRawFd};
+        let _serial = STAGING_TESTS
+            .lock()
+            .unwrap_or_else(|error| error.into_inner());
+        let _core = CORE_LOCK.lock().unwrap_or_else(|error| error.into_inner());
+        let saved = std::env::var_os("XDG_RUNTIME_DIR");
+        let home = Directory::new();
+        let runtime = home.0.join("runtime");
+        fs::create_dir(&runtime).unwrap();
+        fs::set_permissions(&runtime, fs::Permissions::from_mode(0o700)).unwrap();
+        std::env::set_var("XDG_RUNTIME_DIR", &runtime);
+        std::env::remove_var("FLATPAK_ID");
         let held = lock_portal_pairs().unwrap();
         let other = fs::OpenOptions::new()
             .write(true)
-            .open(std::env::temp_dir().join(".nekokem-portal-pairs.lock"))
+            .open(runtime.join(".nekokem-portal-pairs.lock"))
             .unwrap();
         let busy = unsafe { libc::flock(other.as_raw_fd(), libc::LOCK_EX | libc::LOCK_NB) };
         assert_eq!(busy, -1);
@@ -3385,6 +3524,13 @@ mod tests {
             unsafe { libc::flock(other.as_raw_fd(), libc::LOCK_EX | libc::LOCK_NB) },
             0
         );
+        // A runtime directory others can enter is not used.
+        fs::set_permissions(&runtime, fs::Permissions::from_mode(0o755)).unwrap();
+        assert!(private_runtime_directory().is_none());
+        match saved {
+            Some(value) => std::env::set_var("XDG_RUNTIME_DIR", value),
+            None => std::env::remove_var("XDG_RUNTIME_DIR"),
+        }
     }
     #[test]
     fn staged_pairs_are_placed_whole() {

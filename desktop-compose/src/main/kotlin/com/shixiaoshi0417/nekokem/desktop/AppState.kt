@@ -34,7 +34,16 @@ class UpgradePrompt(val keyPath: String, val keyText: TextFieldState?, val note:
  * save once the work is done. Secrets live only in [TextFieldState]s, which
  * are cleared (with their undo history) as soon as a request is written.
  */
-class AppState(private val scope: CoroutineScope, private val files: FileChooser, private val exit: () -> Unit) {
+/**
+ * [updateChecks] is false in the Flatpak: its sandbox has no network, and
+ * Flatpak itself keeps the app up to date.
+ */
+class AppState(
+    private val scope: CoroutineScope,
+    private val files: FileChooser,
+    val updateChecks: Boolean = true,
+    private val exit: () -> Unit,
+) {
     var view by mutableStateOf(View.Files); private set
     var language by mutableStateOf("en"); private set
     var selectedLanguage by mutableStateOf("system"); private set
@@ -182,7 +191,7 @@ class AppState(private val scope: CoroutineScope, private val files: FileChooser
         } catch (error: Throwable) { failure = code(error); return@launch }
         runCatching { native { Backend.updatePreferences() } }.getOrNull()?.let { update = it; autoUpdate = it.auto }
         val now = System.currentTimeMillis()
-        if (update.auto && (now - update.lastCheck >= DAY || now < update.lastCheck)) checkForUpdate(false)
+        if (updateChecks && update.auto && (now - update.lastCheck >= DAY || now < update.lastCheck)) checkForUpdate(false)
         refreshContacts()
     }
 
@@ -213,7 +222,7 @@ class AppState(private val scope: CoroutineScope, private val files: FileChooser
     fun confirmUnsigned(enable: Boolean) { unsigned = enable; confirmingUnsigned = false }
 
     fun checkForUpdate(manual: Boolean) {
-        if (checkingUpdate) return
+        if (!updateChecks || checkingUpdate) return
         checkingUpdate = true
         if (manual) updateNotice = null
         scope.launch {
@@ -574,7 +583,8 @@ class AppState(private val scope: CoroutineScope, private val files: FileChooser
         choosing = PathField.Output
         try {
             val name = fileName(item.source).ifEmpty { "file" }
-            val plain = name.removeSuffix(".nkem").ifEmpty { "file" }
+            // "..nkem" would leave "." and "...nkem" "..", which are no file names.
+            val plain = name.removeSuffix(".nkem").takeUnless { it.isBlank() || it == "." || it == ".." } ?: "file"
             // A signed file restores the name it recorded, even after a rename.
             val suggested = if (item.kind == Kind.Encrypt) "$name.nkem"
                 else item.outcome.originalName ?: if (plain != name) plain else "decrypted-$name"
@@ -585,7 +595,7 @@ class AppState(private val scope: CoroutineScope, private val files: FileChooser
                 try {
                     native { Backend.saveOutputIn(folder, suggested) }.also { decryptFolderFailed = false }
                 } catch (error: BridgeFailure) {
-                    if (error.code != "save-failed") throw error
+                    if (error.code !in KEPT_ON_FAILURE) throw error
                     decryptFolderFailed = true
                     null
                 }
@@ -608,8 +618,12 @@ class AppState(private val scope: CoroutineScope, private val files: FileChooser
             }
         } catch (error: Throwable) {
             failure = code(error)
-            // The staged file is still there when only the chosen place failed.
-            if (failure == "save-failed") unsaved = true else { staged = null; unsaved = false }
+            // The staged file is still there when only the chosen place failed;
+            // any other failure gives the output up, and its plaintext is deleted.
+            if (failure in KEPT_ON_FAILURE) unsaved = true else {
+                staged = null; unsaved = false
+                runCatching { native { Backend.discardOutput() } }
+            }
         } finally { choosing = null }
     }
     fun saveAgain() {
@@ -862,11 +876,15 @@ class AppState(private val scope: CoroutineScope, private val files: FileChooser
     // An output that was never saved is deleted before the window goes.
     private fun leave() {
         clearSecrets()
-        if (staged != null) runCatching { Backend.discardOutput() }
+        // Unconditional: the bridge may still hold an output the page gave up.
+        runCatching { Backend.discardOutput() }
         exit()
     }
 
     companion object {
+        // The chosen place failed or holds a key the operation read: the
+        // staged output stays, so another place can be chosen.
+        private val KEPT_ON_FAILURE = setOf("save-failed", "output-is-key")
         private const val DAY = 24L * 60 * 60 * 1000
         private val CONTACT_FAILURES = listOf("contact-missing", "contact-invalid", "contact-mismatch", "contact-storage")
     }

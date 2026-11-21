@@ -6,7 +6,10 @@ import Security
 /// it to be saved there. NekoKEM keeps no copy of its own: the item is a
 /// generic password that Keychain Access lists under the service name below,
 /// one per private key file. Reading it back first asks for Touch ID or the
-/// login password.
+/// login password. That check is NekoKEM's own: the item is in the login
+/// keychain, which any process of the user can ask for, and macOS shows its
+/// own access prompt for programs other than NekoKEM. The app is signed
+/// ad hoc, so after an update macOS may ask again before NekoKEM reads it.
 enum PrivateKeyKeychain {
     static let service = "NekoKEM private key password"
 
@@ -24,12 +27,15 @@ enum PrivateKeyKeychain {
     /// allows more. If an item comes back between the delete and the add, the
     /// save fails rather than write into it.
     static func save(_ path: String, _ password: String) -> Bool {
-        let data = Data(password.utf8)
+        var data = Data(password.utf8)
+        defer { data.resetBytes(in: 0..<data.count) }
         let removed = SecItemDelete(query(path) as CFDictionary)
         if removed != errSecSuccess && removed != errSecItemNotFound { return false }
         var item = query(path)
         item[kSecValueData as String] = data
         item[kSecAttrLabel as String] = "NekoKEM (\((path as NSString).lastPathComponent))"
+        // Never synced to iCloud Keychain.
+        item[kSecAttrSynchronizable as String] = kCFBooleanFalse
         return SecItemAdd(item as CFDictionary, nil) == errSecSuccess
     }
 
@@ -42,16 +48,18 @@ enum PrivateKeyKeychain {
         var found: CFTypeRef?
         let status = SecItemCopyMatching(item as CFDictionary, &found)
         if status == errSecItemNotFound { return .missing }
-        guard status == errSecSuccess, let data = found as? Data, let password = String(data: data, encoding: .utf8) else { return .failed }
+        guard status == errSecSuccess, var data = found as? Data else { return .failed }
+        defer { data.resetBytes(in: 0..<data.count) }
+        guard let password = String(data: data, encoding: .utf8) else { return .failed }
         return .password(password)
     }
 
-    /// Touch ID, Apple Watch or the login password. A Mac that can check none
-    /// of them is left to the keychain's own protection.
+    /// Touch ID, Apple Watch or the login password. When none can be checked
+    /// the password is not filled in, and the user types it.
     static func authenticate(_ reason: String) async -> Bool {
         let context = LAContext()
         var unavailable: NSError?
-        guard context.canEvaluatePolicy(.deviceOwnerAuthentication, error: &unavailable) else { return true }
+        guard context.canEvaluatePolicy(.deviceOwnerAuthentication, error: &unavailable) else { return false }
         return (try? await context.evaluatePolicy(.deviceOwnerAuthentication, localizedReason: reason)) ?? false
     }
 }

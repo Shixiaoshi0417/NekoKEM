@@ -65,8 +65,13 @@ cat > "$app/Contents/Info.plist" <<PLIST
 </plist>
 PLIST
 plutil -lint "$app/Contents/Info.plist"
-codesign --force --sign - --timestamp=none "$app"
+# The hardened runtime, as for the CLI: no injected libraries or debugger.
+codesign --force --sign - --timestamp=none --options runtime "$app"
 codesign --verify --strict "$app"
+if ! codesign --display --verbose=2 "$app" 2>&1 | grep -Eq '^CodeDirectory .*flags=0x[0-9a-f]+\([^)]*runtime'; then
+    echo 'NekoKEM.app is not signed with the hardened runtime' >&2
+    exit 1
+fi
 # libcrypto is linked in: the app must not load an OpenSSL from the system.
 if otool -L "$app/Contents/MacOS/NekoKEM" | grep -Eq 'libcrypto|libssl'; then
     echo 'NekoKEM.app links a dynamic OpenSSL' >&2

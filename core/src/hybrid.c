@@ -69,6 +69,11 @@ static int validate_x448_public_encoding(EVP_PKEY *key)
         fprintf(stderr, file_message("Non-canonical X448 public key\n"));
         return 0;
     }
+    /* Encryption would fail on it later; refuse it where it is read. */
+    if (x448_public_has_small_order(encoded)) {
+        fprintf(stderr, file_message("Small-order X448 public key\n"));
+        return 0;
+    }
     return 1;
 }
 
