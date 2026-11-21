@@ -36,25 +36,25 @@ fn bounded(text: &str) -> &str {
     &text[..end]
 }
 
-/// The lines of the part for the language, the English part otherwise, or all lines without parts.
+/// The lines of the part for the language, the English part otherwise, or all lines without language parts.
 fn section<'a>(lines: &'a [&'a str], chinese: bool) -> &'a [&'a str] {
     let starts: Vec<usize> = (0..lines.len())
         .filter(|&i| lines[i].starts_with("## "))
         .collect();
-    let Some(&first) = starts.first() else {
-        return lines;
-    };
     let find = |matches: &dyn Fn(&str) -> bool| {
         starts
             .iter()
             .copied()
             .find(|&i| matches(lines[i][3..].trim()))
     };
-    let start = chinese
+    // Without a language part, "## " lines are ordinary headings.
+    let Some(start) = chinese
         .then(|| find(&|title| title.contains("中文")))
         .flatten()
         .or_else(|| find(&|title| title.eq_ignore_ascii_case("english")))
-        .unwrap_or(first);
+    else {
+        return lines;
+    };
     let end = starts
         .iter()
         .copied()
@@ -233,6 +233,19 @@ mod tests {
             vec![line(Kind::Heading, "Changes"), line(Kind::Item, "One")]
         );
         assert!(lines("", false).is_empty());
+        assert_eq!(
+            lines(
+                "Intro\n## Changes\n- Feature\n## Compatibility\n- Migrate",
+                false
+            ),
+            vec![
+                line(Kind::Text, "Intro"),
+                line(Kind::Heading, "Changes"),
+                line(Kind::Item, "Feature"),
+                line(Kind::Heading, "Compatibility"),
+                line(Kind::Item, "Migrate"),
+            ]
+        );
         assert_eq!(
             lines("## Deutsch\n- Eins\n## English\n- One", true),
             vec![line(Kind::Item, "One")]

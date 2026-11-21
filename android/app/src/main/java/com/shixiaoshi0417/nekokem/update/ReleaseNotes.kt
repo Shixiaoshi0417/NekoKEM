@@ -55,14 +55,14 @@ object ReleaseNotes {
         return result
     }
 
-    /** The lines of the part for the language, the English part otherwise, or all lines without parts. */
+    /** The lines of the part for the language, the English part otherwise, or all lines without language parts. */
     private fun section(lines: List<String>, chinese: Boolean): List<String> {
         val starts = lines.indices.filter { lines[it].startsWith("## ") }
-        if (starts.isEmpty()) return lines
         fun find(match: (String) -> Boolean) = starts.firstOrNull { match(lines[it].removePrefix("## ").trim()) }
+        // Without a language part, "## " lines are ordinary headings.
         val start = (if (chinese) find { "中文" in it } else null)
             ?: find { it.equals("English", ignoreCase = true) }
-            ?: starts.first()
+            ?: return lines
         val end = starts.firstOrNull { it > start } ?: lines.size
         return lines.subList(start + 1, end)
     }

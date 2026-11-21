@@ -67,6 +67,16 @@ class ReleaseNotesTest {
             ReleaseNotes.lines("### Changes\r\n\r\n* One\r\n", chinese = true),
         )
         assertTrue(ReleaseNotes.lines("", chinese = false).isEmpty())
+        assertEquals(
+            listOf(
+                NoteLine(Kind.TEXT, "Intro"),
+                NoteLine(Kind.HEADING, "Changes"),
+                NoteLine(Kind.ITEM, "Feature"),
+                NoteLine(Kind.HEADING, "Compatibility"),
+                NoteLine(Kind.ITEM, "Migrate"),
+            ),
+            ReleaseNotes.lines("Intro\n## Changes\n- Feature\n## Compatibility\n- Migrate", chinese = false),
+        )
     }
 
     @Test fun aMissingLanguageFallsBackToEnglish() {
