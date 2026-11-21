@@ -574,7 +574,8 @@ class AppState(private val scope: CoroutineScope, private val files: FileChooser
         choosing = PathField.Output
         try {
             val name = fileName(item.source).ifEmpty { "file" }
-            val plain = name.removeSuffix(".nkem").ifEmpty { "file" }
+            // "..nkem" would leave "." and "...nkem" "..", which are no file names.
+            val plain = name.removeSuffix(".nkem").takeUnless { it.isBlank() || it == "." || it == ".." } ?: "file"
             // A signed file restores the name it recorded, even after a rename.
             val suggested = if (item.kind == Kind.Encrypt) "$name.nkem"
                 else item.outcome.originalName ?: if (plain != name) plain else "decrypted-$name"
@@ -585,7 +586,7 @@ class AppState(private val scope: CoroutineScope, private val files: FileChooser
                 try {
                     native { Backend.saveOutputIn(folder, suggested) }.also { decryptFolderFailed = false }
                 } catch (error: BridgeFailure) {
-                    if (error.code != "save-failed") throw error
+                    if (error.code !in KEPT_ON_FAILURE) throw error
                     decryptFolderFailed = true
                     null
                 }
@@ -608,8 +609,12 @@ class AppState(private val scope: CoroutineScope, private val files: FileChooser
             }
         } catch (error: Throwable) {
             failure = code(error)
-            // The staged file is still there when only the chosen place failed.
-            if (failure == "save-failed") unsaved = true else { staged = null; unsaved = false }
+            // The staged file is still there when only the chosen place failed;
+            // any other failure gives the output up, and its plaintext is deleted.
+            if (failure in KEPT_ON_FAILURE) unsaved = true else {
+                staged = null; unsaved = false
+                runCatching { native { Backend.discardOutput() } }
+            }
         } finally { choosing = null }
     }
     fun saveAgain() {
@@ -862,11 +867,15 @@ class AppState(private val scope: CoroutineScope, private val files: FileChooser
     // An output that was never saved is deleted before the window goes.
     private fun leave() {
         clearSecrets()
-        if (staged != null) runCatching { Backend.discardOutput() }
+        // Unconditional: the bridge may still hold an output the page gave up.
+        runCatching { Backend.discardOutput() }
         exit()
     }
 
     companion object {
+        // The chosen place failed or holds a key the operation read: the
+        // staged output stays, so another place can be chosen.
+        private val KEPT_ON_FAILURE = setOf("save-failed", "output-is-key")
         private const val DAY = 24L * 60 * 60 * 1000
         private val CONTACT_FAILURES = listOf("contact-missing", "contact-invalid", "contact-mismatch", "contact-storage")
     }
