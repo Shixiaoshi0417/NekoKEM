@@ -1095,9 +1095,17 @@ class TemporaryKeyInstrumentation : Instrumentation() {
     }
 }
 
-/** A release document naming [version], as GitHub's API returns it. */
+/** A release document naming [version], with short notes, as GitHub's API returns it. */
 internal fun releaseStub(version: String) = ReleaseSource {
-    """{"tag_name":"v$version","draft":false,"prerelease":false}"""
+    """{"tag_name":"v$version","draft":false,"prerelease":false,"body":"$STUB_NOTES"}"""
+}
+
+/** Release notes in both parts, JSON-escaped, longer than the notes box. */
+private val STUB_NOTES = buildString {
+    append("# NekoKEM\\n\\n## 简体中文\\n\\n### 本版更新\\n\\n")
+    repeat(12) { append("- **第 ${it + 1} 项**：更新说明在检查到新版本后折叠显示，展开后在限定高度内滚动。\\n") }
+    append("\\n## English\\n\\n### What's new\\n\\n")
+    repeat(12) { append("- **Item ${it + 1}**: the release notes start folded and scroll inside a box of limited height.\\n") }
 }
 
 internal fun quietUpdateChecks(context: Context) {

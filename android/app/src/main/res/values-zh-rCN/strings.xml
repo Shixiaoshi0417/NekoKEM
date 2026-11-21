@@ -302,6 +302,8 @@
     <string name="update_available_message">当前版本为 %1$s。请从 GitHub Release 页面下载新版本，并按发布说明校验后再安装。</string>
     <string name="action_open_release">前往下载</string>
     <string name="action_later">稍后</string>
+    <string name="update_notes_show">查看发布说明</string>
+    <string name="update_notes_hide">收起发布说明</string>
     <string name="action_ignore_version">忽略此版本</string>
     <string name="error_open_release">没有可打开发布页面的应用</string>
     <string name="action_show_fingerprint_qr">显示指纹二维码</string>
