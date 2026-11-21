@@ -12,7 +12,6 @@
     <string name="native_core_unavailable">Native core unavailable</string>
     <string name="openssl_version">OpenSSL version: %1$s</string>
     <string name="not_available">Not available</string>
-    <string name="about_description">Experimental post-quantum hybrid file encryption powered by the reusable NekoKEM C17 Core and OpenSSL EVP.</string>
 
     <string name="private_key_exists">Private key: Exists</string>
     <string name="private_key_not_found">Private key: Not found</string>
@@ -180,7 +179,6 @@
     <string name="action_save_contact">Save</string>
     <string name="action_use_contact">Use for Encryption</string>
     <string name="contact_empty">No saved public keys</string>
-    <string name="contact_description">Save recipient public keys and choose them by note. Verify fingerprints with the recipient; notes do not prove identity.</string>
     <string name="contact_note_label">Note (optional)</string>
     <string name="contact_note_hint">Recipient name or other reminder</string>
     <string name="contact_note_limit">Maximum %1$d characters</string>
@@ -207,7 +205,6 @@
     <string name="contact_selection_count">Selected recipients: %1$d</string>
     <string name="action_encrypt_for_selected">Encrypt for Selected Recipients</string>
     <string name="contact_selection_limit">Choose at most %1$d recipients</string>
-    <string name="contact_recipients_hint">Each selected recipient can decrypt the file with their own private key, and no one else can. Files for several recipients use NKEM v4, which NekoKEM v3.3.2 and earlier cannot open.</string>
     <string name="contact_recipients_selected">Recipients selected</string>
     <string name="contact_failed_recipient">Unavailable recipient: %1$s</string>
     <string name="recovery_backups_title">Recovery backups retained</string>
@@ -220,20 +217,16 @@
     <string name="settings_ui_style_title">Interface style</string>
     <string name="settings_ui_style_miuix">MIUIX</string>
     <string name="settings_ui_style_material">Material 3 Expressive</string>
-    <string name="settings_liquid_glass_unsupported">Liquid glass needs Android 13 or newer; older versions show a solid bar.</string>
     <string name="miuix_keys_transfer_title">Import and export</string>
     <string name="miuix_keys_delete_title">Delete keys</string>
     <string name="settings_signing_title">Signing</string>
     <string name="settings_unsigned_title">Encrypt without signing (legacy compatible)</string>
-    <string name="settings_unsigned_summary">Off: every file is signed with your identity key (NKEM v5). Turn on only for recipients using NekoKEM 4.x or earlier.</string>
     <string name="unsigned_warning">Recipients cannot confirm the file came from you.</string>
     <string name="unsigned_confirm_title">Turn off signing?</string>
     <string name="unsigned_confirm_message">Files will be NKEM v3/v4 without a signature. Recipients cannot confirm the file came from you, and anyone with their public key could send a file that looks the same.</string>
     <string name="action_turn_off_signing">Turn off signing</string>
     <string name="settings_record_name_title">Record original file name</string>
-    <string name="settings_record_name_summary">On: signed files keep the original file name, and decryption restores it. Turn off for recipients using NekoKEM 5.1, which cannot open files that record a name.</string>
     <string name="settings_require_signature_title">Accept only signed files</string>
-    <string name="settings_require_signature_summary">Decryption refuses NKEM v3/v4 files without a signature. No output is written for them.</string>
     <string name="sign_password_title">Sign the file</string>
     <string name="sign_password_message">Enter your private key password. The file is signed with your identity key, so the recipient can confirm it came from you.</string>
     <string name="completion_format">Format</string>
@@ -253,17 +246,15 @@
     <string name="error_reason_signer_not_trusted">The signer is not one of your trusted keys. Nothing was written.</string>
     <string name="error_reason_already_identity">This key can already sign; there is nothing to upgrade.</string>
     <string name="error_reason_upgrade">The key could not be upgraded: the password is incorrect or the key files do not match. They were left unchanged.</string>
-    <string name="key_legacy_status">Legacy key · cannot sign. Upgrade it to sign your files.</string>
+    <string name="key_legacy_status">Legacy key · cannot sign</string>
     <string name="action_upgrade_key">Upgrade key</string>
     <string name="action_export_legacy_public_key">Export legacy public key</string>
     <string name="operation_upgrade_key">Upgrade key</string>
     <string name="operation_export_legacy_public_key">Export legacy public key</string>
     <string name="upgrade_password_title">Upgrade to an identity key</string>
     <string name="upgrade_password_message">Adds signing keys to this NekoKEM 4.x key pair. Its encryption keys, password and old files stay unchanged. Enter the private key password. Export a backup of both keys first.</string>
-    <string name="legacy_export_hint">For recipients on NekoKEM 4.x and earlier. It cannot verify signatures.</string>
     <string name="action_export_legacy_private_key">Export private key for 5.2 and earlier</string>
     <string name="operation_export_legacy_private_key">Export private key for 5.2 and earlier</string>
-    <string name="legacy_private_export_hint">NekoKEM 5.2 and earlier cannot open this device’s private key. This copy uses the older format with the same password; use it only to move your key to an older version.</string>
     <string name="export_legacy_private_password_title">Export for older versions</string>
     <string name="export_legacy_private_password_message">Enter the private key password. The copy for NekoKEM 5.2 and earlier is protected by the same password.</string>
     <string name="error_reason_legacy_private_key">This private key uses the format of NekoKEM 5.2 and earlier. Someone could build such a file to open under several passwords and learn from your attempt whether yours is one of them, so it is not opened as a temporary key. If it is your own key, import it with Import Encrypted Private Key.</string>
@@ -287,14 +278,12 @@
     <string name="error_settings_save">The setting could not be saved. The previous setting is still in effect.</string>
     <string name="settings_decrypt_title">Decryption</string>
     <string name="settings_decrypt_folder_title">Save to a set folder</string>
-    <string name="settings_decrypt_folder_summary">Decrypted files go straight to the chosen folder; a taken name gets a number. When off, you choose where to save each time.</string>
     <string name="settings_decrypt_folder_location">Folder</string>
     <string name="settings_decrypt_folder_unavailable">Cannot access this folder. Choose it again.</string>
     <string name="snackbar_decrypt_folder_unavailable">The set folder cannot be written. Choose where to save.</string>
     <string name="completion_folder">Folder</string>
     <string name="settings_updates_title">Updates</string>
     <string name="settings_auto_update_title">Check for updates automatically</string>
-    <string name="settings_auto_update_summary">At most once a day. Only asks GitHub for the latest version number; no keys or file details are sent.</string>
     <string name="action_check_update">Check for updates</string>
     <string name="update_checking">Checking for updates…</string>
     <string name="update_up_to_date">NekoKEM is up to date</string>
@@ -310,7 +299,6 @@
     <string name="action_show_fingerprint_qr">Show fingerprint QR code</string>
     <string name="fingerprint_qr_title">Fingerprint QR code</string>
     <string name="fingerprint_qr_description">QR code of this device’s public-key fingerprint</string>
-    <string name="fingerprint_qr_hint">A contact who saved your public key can scan this code in NekoKEM to check that it is yours. The code holds only the fingerprint, not the key.</string>
     <string name="action_scan_fingerprint">Scan to verify</string>
     <string name="fingerprint_scan_title">Scan fingerprint</string>
     <string name="fingerprint_scan_hint">Scan the fingerprint QR code that “%1$s” shows under Keys in NekoKEM.</string>

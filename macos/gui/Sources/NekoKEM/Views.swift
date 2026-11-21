@@ -314,7 +314,6 @@ private struct KeysPage: View {
                 }
                 .pickerStyle(.segmented).labelsHidden().fixedSize().disabled(!state.editable)
                 if state.exportPrivate {
-                    Text(state.t("legacyPrivateHint")).font(.callout).foregroundStyle(.secondary)
                     PathInput(state: state, field: .privatePath, label: state.t("privateKey"))
                     PathInput(state: state, field: .output, label: state.t("legacyPrivateOutput"))
                 } else {
@@ -579,7 +578,7 @@ private struct SettingsPage: View {
             }
             Divider()
             // Unsigned files never record a name, so the switch waits for signing.
-            SettingRow(title: state.t("recordName"), detail: state.t("recordNameSummary")) {
+            SettingRow(title: state.t("recordName")) {
                 Toggle("", isOn: Binding(get: { state.recordName }, set: { state.changeRecordName($0) })).toggleStyle(.switch).labelsHidden()
                     .accessibilityLabel(state.t("recordName"))
             }
@@ -596,7 +595,7 @@ private struct SettingsPage: View {
         } message: { Text(state.t("unsignedConfirmText")) }
         Text(state.t("settingsDecrypt")).font(.headline)
         Card {
-            SettingRow(title: state.t("decryptFolder"), detail: state.t("decryptFolderHint")) {
+            SettingRow(title: state.t("decryptFolder")) {
                 Toggle("", isOn: Binding(get: { !state.decryptFolder.isEmpty }, set: { state.changeDecryptFolder($0) })).toggleStyle(.switch).labelsHidden()
                     .accessibilityLabel(state.t("decryptFolder")).disabled(!state.editable)
             }
@@ -705,7 +704,6 @@ private struct PasswordSheet: View {
         let encrypting = state.fileAction == .encrypt
         VStack(alignment: .leading, spacing: 12) {
             Text(state.t("password")).font(.headline)
-            if encrypting { Text(state.t("signPasswordHint")).font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true) }
             SecureField("", text: $state.password).textFieldStyle(.roundedBorder).accessibilityLabel(state.t("password"))
             if state.invalidField == "password", let failure = state.failure { Text(state.t(failure)).font(.callout).foregroundStyle(danger) }
             KeychainOptions(state: state)
