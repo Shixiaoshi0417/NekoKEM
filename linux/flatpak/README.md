@@ -16,8 +16,8 @@ own Java runtime) of one release.
 
 ## 安装 / Install
 
-5.2.0 之后的发布每种架构附带 `NekoKEM-linux-<架构>-GUI.flatpak`。
-Releases after 5.2.0 carry `NekoKEM-linux-<arch>-GUI.flatpak`:
+6.0.0 起每次发布每种架构附带 `NekoKEM-linux-<架构>-GUI.flatpak`。
+Since 6.0.0 releases carry `NekoKEM-linux-<arch>-GUI.flatpak`:
 
 ```sh
 flatpak remote-add --user --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo
@@ -52,7 +52,7 @@ it on other files, grant a folder for that run, for example
 `flatpak run --filesystem=xdg-documents --command=nekokem io.github.shixiaoshi0417.NekoKEM …`,
 or use the static CLI archive.
 
-The portal file chooser needs a release after 5.2.0: the 5.2.0 GUI uses Java's
+The portal file chooser needs 6.0.0 or later: the 5.2.0 GUI uses Java's
 own dialogs, which see only the sandbox. Build the manifest, and submit it to
 Flathub, once it points at a later release.
 
@@ -80,7 +80,7 @@ Chinese.
 
 Flathub publishes only what its own maintainer submits; nothing in this
 repository does it. Once the screenshots are on `main` and the manifest points
-at a release after 5.2.0:
+at 6.0.0 or later:
 
 1. Fork [flathub/flathub](https://github.com/flathub/flathub) and branch from
    its `new-pr` branch.

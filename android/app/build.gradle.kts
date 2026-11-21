@@ -52,8 +52,8 @@ android {
         applicationId = "com.shixiaoshi0417.nekokem"
         minSdk = 26
         targetSdk = 36
-        versionCode = 17
-        versionName = "5.2.0"
+        versionCode = 18
+        versionName = "6.0.0"
         testInstrumentationRunner =
             "com.shixiaoshi0417.nekokem.TemporaryKeyInstrumentation"
 

@@ -6,7 +6,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-#define NEKOKEM_CLI_VERSION "5.2.0"
+#define NEKOKEM_CLI_VERSION "6.0.0"
 
 /*
  * Options come right after "encrypt hybrid" or "decrypt hybrid". The first

@@ -16,29 +16,29 @@ NekoKEM 是一个用于学习 OpenSSL EVP API 的实验性后量子文件加密�
 
 本项目不自行实现任何密码算法，也不依赖 liboqs。**它没有经过安全审计，不应被视为生产级软件，也不应用来保护重要或敏感数据。**
 
-## 发布版本 v5.2.0
+## 发布版本 v6.0.0
 
-Android 和各平台 CLI/GUI 统一为 `5.2.0`，Core 为 `5.1`，密码参数不变：
+Android 和各平台 CLI/GUI 统一为 `6.0.0`，Core 为 `6.0`，NKEM 文件格式与密码参数不变：
 
-- 记录原文件名：签名文件（NKEM v5）在加密的签名块里记录原文件名，解密时自动还原，文件被改名后也能恢复原来的格式。设置里的「记录原文件名」可以关闭。
-- 解密可以直接保存到设定的文件夹：开启后不再弹出保存对话框，同名文件自动编号，从不覆盖。
-- 私钥密码可以保存到系统密码管理器：Android 14+ 使用系统凭据管理器，macOS 使用钥匙串（填入前需要验证身份）。
-- Android「核对指纹」卡片按 Signal 安全码的样式重做；各平台只显示一种指纹，不再显示旧版公钥指纹。
-- 检查更新在 GitHub API 限流时改从发布页读取最新版本，不再一直失败。
+- 私钥改用带密钥承诺的 NKPR v3，一个私钥文件只能被一个口令打开。新生成和升级的私钥写为 NKPR v3，自己的 NKPR v2 私钥解锁后原地改写，密钥、口令和指纹不变。
+- 旧格式私钥（NKPR v1、v2）只作为本机自己的私钥打开；导入旧版导出的私钥前先说明风险并要求确认，临时私钥拒绝旧格式。CLI 新增 `--legacy-private-key` 和 `export-legacy-private-key`。
+- 各端可以「导出给 5.2 及更早版本的私钥」，用同一口令写出 NKPR v2 副本。
+- 新增 Windows EXE 安装程序、Linux AppImage 和 Flatpak 包（沙盒只通过文件选择框访问文件），仓库附带 Arch Linux 的 `nekokem-bin` PKGBUILD。
+- 更新提示附上折叠的发布说明，展开后限高滚动；各端去掉页面上常驻的说明小字，警告保留。
 
-**5.1.0 及更早版本打不开记录了原文件名的文件**，会报告 NKEM v5 头部无效；给使用 5.1 的人发文件前，请在设置里关闭「记录原文件名」。关闭后的签名文件与 5.1 格式相同。5.2.0 可以读取 5.1.0 和 5.0.0 的全部文件和密钥。**4.x 及更早版本无法读取 NKEM v5、NKPR v2 和四段式公钥**，给旧版接收方发送文件时请开启不签名加密并使用旧版公钥。完整双语说明见 [v5.2.0](release/v5.2.0.md) 和 [GitHub Release](https://github.com/Shixiaoshi0417/NekoKEM/releases/tag/v5.2.0)。
+**5.2.0 及更早版本打不开 NKPR v3 私钥**：要把私钥交给旧版本，请先用「导出给 5.2 及更早版本的私钥」（CLI 为 `export-legacy-private-key`）导出副本。升级后第一次解锁会把本机私钥改写为 NKPR v3，回退到 5.2.0 前也要先这样导出。NKEM 文件不受影响，6.0.0 与 5.2.0 可以互相解密对方的文件。**4.x 及更早版本无法读取 NKEM v5、NKPR v2/v3 和四段式公钥**，给旧版接收方发送文件时请开启不签名加密并使用旧版公钥。完整双语说明见 [v6.0.0](release/v6.0.0.md) 和 [GitHub Release](https://github.com/Shixiaoshi0417/NekoKEM/releases/tag/v6.0.0)。
 
-Android v5.2.0 沿用 v3.2.0/v3.3.0 签名，可直接覆盖升级；建议先备份公钥、加密 NKPR 私钥和私钥密码，升级密钥前尤其需要备份。仅使用旧签名的 v3.1.x 用户需要在验证备份后卸载重装；卸载会删除应用内部密钥。NKEM v1/v2 不再支持。
+Android v6.0.0 沿用 v3.2.0/v3.3.0 签名，可直接覆盖升级；建议先备份公钥、加密 NKPR 私钥和私钥密码，升级密钥前尤其需要备份。仅使用旧签名的 v3.1.x 用户需要在验证备份后卸载重装；卸载会删除应用内部密钥。NKEM v1/v2 不再支持。
 
 | 平台与架构 | CLI / Android | GUI |
 |---|---|---|
-| Android 8.0+ ARM64 | [APK](https://github.com/Shixiaoshi0417/NekoKEM/releases/download/v5.2.0/app-release.apk) | APK 内置界面 |
-| Windows 10/11 x64 | [CLI ZIP](https://github.com/Shixiaoshi0417/NekoKEM/releases/download/v5.2.0/NekoKEM-windows-x86_64.zip) | [MSI](https://github.com/Shixiaoshi0417/NekoKEM/releases/download/v5.2.0/NekoKEM-Windows-GUI.msi) · [ZIP](https://github.com/Shixiaoshi0417/NekoKEM/releases/download/v5.2.0/NekoKEM-Windows-GUI.zip) |
-| macOS Apple Silicon arm64 | [CLI TAR.GZ](https://github.com/Shixiaoshi0417/NekoKEM/releases/download/v5.2.0/NekoKEM-macos-arm64.tar.gz) | [GUI ZIP](https://github.com/Shixiaoshi0417/NekoKEM/releases/download/v5.2.0/NekoKEM-macos-arm64-GUI.zip) · [DMG](https://github.com/Shixiaoshi0417/NekoKEM/releases/download/v5.2.0/NekoKEM-macos-arm64-GUI.dmg) |
-| Linux x86_64 | [静态 CLI](https://github.com/Shixiaoshi0417/NekoKEM/releases/download/v5.2.0/NekoKEM-linux-x86_64.tar.gz) | [DEB](https://github.com/Shixiaoshi0417/NekoKEM/releases/download/v5.2.0/NekoKEM-linux-x86_64-GUI.deb) · [RPM](https://github.com/Shixiaoshi0417/NekoKEM/releases/download/v5.2.0/NekoKEM-linux-x86_64-GUI.rpm) · [便携包](https://github.com/Shixiaoshi0417/NekoKEM/releases/download/v5.2.0/NekoKEM-linux-x86_64-GUI.tar.gz) |
-| Linux ARM64 / aarch64 | [静态 CLI](https://github.com/Shixiaoshi0417/NekoKEM/releases/download/v5.2.0/NekoKEM-linux-aarch64.tar.gz) | [DEB](https://github.com/Shixiaoshi0417/NekoKEM/releases/download/v5.2.0/NekoKEM-linux-aarch64-GUI.deb) · [RPM](https://github.com/Shixiaoshi0417/NekoKEM/releases/download/v5.2.0/NekoKEM-linux-aarch64-GUI.rpm) · [便携包](https://github.com/Shixiaoshi0417/NekoKEM/releases/download/v5.2.0/NekoKEM-linux-aarch64-GUI.tar.gz) |
+| Android 8.0+ ARM64 | [APK](https://github.com/Shixiaoshi0417/NekoKEM/releases/download/v6.0.0/app-release.apk) | APK 内置界面 |
+| Windows 10/11 x64 | [CLI ZIP](https://github.com/Shixiaoshi0417/NekoKEM/releases/download/v6.0.0/NekoKEM-windows-x86_64.zip) | [MSI](https://github.com/Shixiaoshi0417/NekoKEM/releases/download/v6.0.0/NekoKEM-Windows-GUI.msi) · [EXE](https://github.com/Shixiaoshi0417/NekoKEM/releases/download/v6.0.0/NekoKEM-Windows-GUI.exe) · [ZIP](https://github.com/Shixiaoshi0417/NekoKEM/releases/download/v6.0.0/NekoKEM-Windows-GUI.zip) |
+| macOS Apple Silicon arm64 | [CLI TAR.GZ](https://github.com/Shixiaoshi0417/NekoKEM/releases/download/v6.0.0/NekoKEM-macos-arm64.tar.gz) | [GUI ZIP](https://github.com/Shixiaoshi0417/NekoKEM/releases/download/v6.0.0/NekoKEM-macos-arm64-GUI.zip) · [DMG](https://github.com/Shixiaoshi0417/NekoKEM/releases/download/v6.0.0/NekoKEM-macos-arm64-GUI.dmg) |
+| Linux x86_64 | [静态 CLI](https://github.com/Shixiaoshi0417/NekoKEM/releases/download/v6.0.0/NekoKEM-linux-x86_64.tar.gz) | [DEB](https://github.com/Shixiaoshi0417/NekoKEM/releases/download/v6.0.0/NekoKEM-linux-x86_64-GUI.deb) · [RPM](https://github.com/Shixiaoshi0417/NekoKEM/releases/download/v6.0.0/NekoKEM-linux-x86_64-GUI.rpm) · [便携包](https://github.com/Shixiaoshi0417/NekoKEM/releases/download/v6.0.0/NekoKEM-linux-x86_64-GUI.tar.gz) · [AppImage](https://github.com/Shixiaoshi0417/NekoKEM/releases/download/v6.0.0/NekoKEM-linux-x86_64-GUI.AppImage) · [Flatpak](https://github.com/Shixiaoshi0417/NekoKEM/releases/download/v6.0.0/NekoKEM-linux-x86_64-GUI.flatpak) |
+| Linux ARM64 / aarch64 | [静态 CLI](https://github.com/Shixiaoshi0417/NekoKEM/releases/download/v6.0.0/NekoKEM-linux-aarch64.tar.gz) | [DEB](https://github.com/Shixiaoshi0417/NekoKEM/releases/download/v6.0.0/NekoKEM-linux-aarch64-GUI.deb) · [RPM](https://github.com/Shixiaoshi0417/NekoKEM/releases/download/v6.0.0/NekoKEM-linux-aarch64-GUI.rpm) · [便携包](https://github.com/Shixiaoshi0417/NekoKEM/releases/download/v6.0.0/NekoKEM-linux-aarch64-GUI.tar.gz) · [AppImage](https://github.com/Shixiaoshi0417/NekoKEM/releases/download/v6.0.0/NekoKEM-linux-aarch64-GUI.AppImage) · [Flatpak](https://github.com/Shixiaoshi0417/NekoKEM/releases/download/v6.0.0/NekoKEM-linux-aarch64-GUI.flatpak) |
 
-下载后先用 [SHA256SUMS.txt](https://github.com/Shixiaoshi0417/NekoKEM/releases/download/v5.2.0/SHA256SUMS.txt) 校验对应归档，再校验包内文件。Linux GUI 需要 glibc 2.39+，DEB/RPM 依赖 Noto Sans CJK 字体和 `curl`；macOS GUI 需要 macOS 13 或更新版本，CLI 的部署目标为 11.0。安装步骤与签名限制见下文各平台说明。
+下载后先用 [SHA256SUMS.txt](https://github.com/Shixiaoshi0417/NekoKEM/releases/download/v6.0.0/SHA256SUMS.txt) 校验对应归档，再校验包内文件。Linux GUI 需要 glibc 2.39+，DEB/RPM 依赖 Noto Sans CJK 字体和 `curl`；macOS GUI 需要 macOS 13 或更新版本，CLI 的部署目标为 11.0。安装步骤与签名限制见下文各平台说明。
 
 v4.1.0 之后发布的版本，每个附件还带有 GitHub 构建来源证明，可用 GitHub CLI 确认文件由本仓库 `main` 分支上的 Release 工作流构建（把文件名换成实际下载的附件）：
 
@@ -97,7 +97,7 @@ Windows、macOS 与 Linux 的桌面 GUI 提供“公钥通讯录”页面：
 
 Linux x86_64/aarch64 CLI 发行包没有运行时共享库依赖。安装脚本下载最新已发布
 Release 中与本机架构匹配的包（只解析一次，所有下载都来自同一发布；
-`NEKOKEM_RELEASE_TAG=v5.2.0 sh install.sh` 安装指定版本，安装的程序必须报告该版本），先使用 Release 顶层 `SHA256SUMS.txt` 验证
+`NEKOKEM_RELEASE_TAG=v6.0.0 sh install.sh` 安装指定版本，安装的程序必须报告该版本），先使用 Release 顶层 `SHA256SUMS.txt` 验证
 归档，再验证包内文件的 SHA-256：
 
 ```sh
@@ -155,25 +155,25 @@ GitHub Actions 统一使用 [CI](.github/workflows/ci.yml) 和 [Release](.github
 
 ## Windows CLI 与 GUI
 
-v5.2.0 提供原生 Windows 10/11 x64 CLI 便携包 `nekokem.exe`，以及 GUI 的 MSI 安装包和 ZIP 便携包。CLI 与 Linux 共用完整参数解析和五项菜单；双击 EXE 或不带参数运行即可进入菜单。构建、使用和导入私钥权限说明见 [Windows CLI 文档](windows/README.md)，文件安全设计见 [Windows 文件层说明](windows/SECURITY-DESIGN.md)。CLI 运行不需要 MSYS2 或 OpenSSL DLL；构建使用 MSYS2 UCRT64 与固定 OpenSSL 4.1.0。
+v6.0.0 提供原生 Windows 10/11 x64 CLI 便携包 `nekokem.exe`，以及 GUI 的 MSI 安装包、EXE 安装程序和 ZIP 便携包。CLI 与 Linux 共用完整参数解析和五项菜单；双击 EXE 或不带参数运行即可进入菜单。构建、使用和导入私钥权限说明见 [Windows CLI 文档](windows/README.md)，文件安全设计见 [Windows 文件层说明](windows/SECURITY-DESIGN.md)。CLI 运行不需要 MSYS2 或 OpenSSL DLL；构建使用 MSYS2 UCRT64 与固定 OpenSSL 4.1.0。
 
-GUI 是 Compose Multiplatform 应用，界面与 Android 一致，提供 MIUIX（默认）和 Material 3 Expressive 两种风格；通过桥接库调用同一 C17 Core，提供系统文件选择、进度和取消。应用自带 Java 运行时，不需要 WebView2 Runtime；详见 [桌面 GUI 文档](desktop/README.md)。5.2.0 之后的版本另有 EXE 安装程序 `NekoKEM-Windows-GUI.exe`，双击即可安装，装的是与 MSI 相同的应用；CI 用它静默安装并启动装好的程序。CLI、GUI、MSI 和 EXE 安装程序均未进行 Authenticode 签名。
+GUI 是 Compose Multiplatform 应用，界面与 Android 一致，提供 MIUIX（默认）和 Material 3 Expressive 两种风格；通过桥接库调用同一 C17 Core，提供系统文件选择、进度和取消。应用自带 Java 运行时，不需要 WebView2 Runtime；详见 [桌面 GUI 文档](desktop/README.md)。6.0.0 起另有 EXE 安装程序 `NekoKEM-Windows-GUI.exe`，双击即可安装，装的是与 MSI 相同的应用；CI 用它静默安装并启动装好的程序。CLI、GUI、MSI 和 EXE 安装程序均未进行 Authenticode 签名。
 
 Windows 仅支持本地固定 NTFS，检查所有者与 ACL，并拒绝网络、设备、替代数据流及重解析点路径。协议、密码参数及 64 KiB 流式分块不变；Windows 断电持久性不能当作 POSIX 目录 fsync 已验证。Windows 语言配置使用系统 LocalAppData/NekoKEM；无 Locale 环境覆盖时读取 Windows 显示语言。下文的 POSIX 配置路径适用于 Linux 和 macOS CLI。
 
 ## macOS Apple Silicon CLI 与 GUI
 
-v5.2.0 提供面向 M 系列 Apple Silicon Mac 的原生 `arm64` CLI 和原生 SwiftUI GUI。CLI 包名为 `NekoKEM-macos-arm64.tar.gz`；GUI 包为 `NekoKEM-macos-arm64-GUI.zip`（包含 `.app`）和 `NekoKEM-macos-arm64-GUI.dmg`，可从本版 Release 下载。详见 [macOS 构建与使用说明](macos/README.md) 和 [桌面 GUI 文档](desktop/README.md)。不提供 Intel/Rosetta 构建。
+v6.0.0 提供面向 M 系列 Apple Silicon Mac 的原生 `arm64` CLI 和原生 SwiftUI GUI。CLI 包名为 `NekoKEM-macos-arm64.tar.gz`；GUI 包为 `NekoKEM-macos-arm64-GUI.zip`（包含 `.app`）和 `NekoKEM-macos-arm64-GUI.dmg`，可从本版 Release 下载。详见 [macOS 构建与使用说明](macos/README.md) 和 [桌面 GUI 文档](desktop/README.md)。不提供 Intel/Rosetta 构建。
 
 CLI 与 Linux 共用参数解析、五项菜单和语言目录。GUI 在 macOS 26 上采用 Apple 的液态玻璃设计，最低支持 macOS 13，更早的系统使用回退外观。两者静态链接固定 OpenSSL 4.1.0，保留其 arm64 汇编加速；运行仍依赖 macOS 系统库与框架。CLI 构建设置 macOS 11.0 deployment target，原生 CI 在 `macos-15` 上运行；GUI 使用 macOS 26 SDK 构建并在 `macos-26` 上运行 CI。这不代表已验证更早系统的实机或每代 M 系列芯片的兼容性、性能。
 
-macOS 文件层保留严格的所有者、权限、符号链接和硬链接检查，受保护文件与目录只允许空或 deny-only 扩展 ACL，并检查 APFS/HFS+ 大小写及 Unicode 名称别名。普通输出文件要求 `fsync` 与 `F_FULLFSYNC`，提交后要求父目录 `fsync`，失败时不静默降级；详细限制与测试边界见 [macOS 文件安全设计](macos/SECURITY-DESIGN.md)。Core 5.1 读写 NKEM v3、v4、v5 和 NKPR v1、v2，密码参数及 64 KiB 流式分块与其他平台相同。包只有 ad-hoc 签名，未使用 Developer ID，也未进行 Apple 公证；这不能证明发布者身份或保证通过 Gatekeeper。
+macOS 文件层保留严格的所有者、权限、符号链接和硬链接检查，受保护文件与目录只允许空或 deny-only 扩展 ACL，并检查 APFS/HFS+ 大小写及 Unicode 名称别名。普通输出文件要求 `fsync` 与 `F_FULLFSYNC`，提交后要求父目录 `fsync`，失败时不静默降级；详细限制与测试边界见 [macOS 文件安全设计](macos/SECURITY-DESIGN.md)。Core 6.0 读写 NKEM v3、v4、v5，读取 NKPR v1、v2、v3 并写入 NKPR v3，密码参数及 64 KiB 流式分块与其他平台相同。包只有 ad-hoc 签名，未使用 Developer ID，也未进行 Apple 公证；这不能证明发布者身份或保证通过 Gatekeeper。
 
 ## Linux GUI
 
 Linux GUI 支持 `x86_64` 与 `aarch64`（ARM64），与 Windows 使用同一个 Compose Multiplatform 应用：MIUIX 与 Material 3 Expressive 两种风格、五语言自动检测、系统文件选择、进度和取消。每种架构提供 `NekoKEM-linux-<架构>-GUI.deb`、`NekoKEM-linux-<架构>-GUI.rpm` 和 `NekoKEM-linux-<架构>-GUI.tar.gz`。Ubuntu 使用 `sudo apt install ./NekoKEM-linux-x86_64-GUI.deb`；Fedora 使用 `sudo dnf install ./NekoKEM-linux-x86_64-GUI.rpm`，ARM64 将文件名中的架构换为 `aarch64`。安装后可从系统应用菜单打开。图标直接使用现有透明外部白色区域的方形 PNG，README 仍用圆角展示图。
 
-5.2.0 之后的版本每种架构还提供 `NekoKEM-linux-<架构>-GUI.AppImage`：单个文件，不需要安装或 root 权限，`chmod +x` 后直接运行。它通过 FUSE 挂载自身，系统需要 `fusermount3`（Debian/Ubuntu 的 `fuse3` 包）；没有 FUSE 时加 `--appimage-extract-and-run` 运行。与便携包一样，AppImage 不会带来中日韩字体和 `curl`，需要系统自行安装。文件开头的 AppImage 运行时取自 AppImage 项目 [type2-runtime](https://github.com/AppImage/type2-runtime) 的固定版本，构建时核对其发布签名和 SHA-256；CI 通过 FUSE 启动 AppImage 并确认窗口打开。v5.2.0 及更早的发布不含 AppImage。
+6.0.0 起每种架构还提供 `NekoKEM-linux-<架构>-GUI.AppImage`：单个文件，不需要安装或 root 权限，`chmod +x` 后直接运行。它通过 FUSE 挂载自身，系统需要 `fusermount3`（Debian/Ubuntu 的 `fuse3` 包）；没有 FUSE 时加 `--appimage-extract-and-run` 运行。与便携包一样，AppImage 不会带来中日韩字体和 `curl`，需要系统自行安装。文件开头的 AppImage 运行时取自 AppImage 项目 [type2-runtime](https://github.com/AppImage/type2-runtime) 的固定版本，构建时核对其发布签名和 SHA-256；CI 通过 FUSE 启动 AppImage 并确认窗口打开。v5.2.0 及更早的发布不含 AppImage。
 
 Arch Linux 使用仓库中的 [`linux/arch/PKGBUILD`](linux/arch/PKGBUILD)（包名 `nekokem-bin`）：它把已发布的静态 CLI 和 GUI 便携包重新打成 pacman 包，不在本机编译。GUI 装到 `/opt/nekokem`，同时提供 `nekokem`、`nekokem-gui` 命令和应用菜单项，并依赖 Arch 官方仓库的 `noto-fonts-cjk` 与 `curl`。x86_64 与 Arch Linux ARM 的 aarch64 都可用：
 
@@ -184,7 +184,7 @@ cd NekoKEM/linux/arch && makepkg -si
 
 PKGBUILD 固定指向某个已发布版本并核对其 SHA-256，发布新版本后由 `scripts/update_arch_package.py <版本>` 更新版本号、校验值和 `.SRCINFO`（也可直接作为 AUR 包内容）。CI 在 archlinux 容器中用本次构建的归档执行 `makepkg`、`pacman -U` 安装，并以中英文启动 GUI 确认窗口打开。
 
-Flatpak 应用 ID 为 `io.github.shixiaoshi0417.NekoKEM`，GUI 与 `nekokem` 命令行都在其中，运行在 Flathub 的 Freedesktop 26.08 运行时上，x86_64 与 aarch64 都可用。5.2.0 之后的版本每种架构提供单文件包 `NekoKEM-linux-<架构>-GUI.flatpak`，安装时会从 Flathub 取运行时：
+Flatpak 应用 ID 为 `io.github.shixiaoshi0417.NekoKEM`，GUI 与 `nekokem` 命令行都在其中，运行在 Flathub 的 Freedesktop 26.08 运行时上，x86_64 与 aarch64 都可用。6.0.0 起每种架构提供单文件包 `NekoKEM-linux-<架构>-GUI.flatpak`，安装时会从 Flathub 取运行时：
 
 ```sh
 flatpak remote-add --user --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo
@@ -193,11 +193,11 @@ flatpak run io.github.shixiaoshi0417.NekoKEM
 flatpak run --command=nekokem io.github.shixiaoshi0417.NekoKEM --help
 ```
 
-仓库中的 [`linux/flatpak`](linux/flatpak/README.md) 清单从已发布的归档构建，文件选择框需要 5.2.0 之后的版本，因此清单要在下一个版本发布后才能直接构建和上架。沙盒不开放任何文件系统权限：要处理的文件、密钥文件和解密目录都在桌面的文件选择框（xdg-desktop-portal）中选择，应用只能访问选中的文件和目录；新生成和升级的密钥先在沙盒内的私有目录里写好，再复制到选定位置。沙盒内的 `nekokem` 命令行只能访问自己的数据目录，处理其他文件时需临时授权目录（如 `--filesystem=xdg-documents`）或改用静态命令行归档。沙盒可联网（仅用于检查更新），图形走 X11（Wayland 下经 XWayland）。设置、通讯录和语言保存在 `~/.var/app/io.github.shixiaoshi0417.NekoKEM/config/nekokem`，与 DEB/RPM 版的 `~/.config/nekokem` 分开。中日韩字体沿用系统已安装的字体。清单同样固定指向已发布版本，发布后由 `scripts/update_flatpak_manifest.py <版本>` 更新；CI 在两种架构上用本次构建的归档打包、安装，以中英文启动 GUI 确认窗口打开。上架 Flathub 需要维护者本人提交，步骤见 [linux/flatpak/README.md](linux/flatpak/README.md)。
+仓库中的 [`linux/flatpak`](linux/flatpak/README.md) 清单从已发布的归档构建，文件选择框需要 6.0.0 或更新版本，清单指向 6.0.0 后即可直接构建和上架。沙盒不开放任何文件系统权限：要处理的文件、密钥文件和解密目录都在桌面的文件选择框（xdg-desktop-portal）中选择，应用只能访问选中的文件和目录；新生成和升级的密钥先在沙盒内的私有目录里写好，再复制到选定位置。沙盒内的 `nekokem` 命令行只能访问自己的数据目录，处理其他文件时需临时授权目录（如 `--filesystem=xdg-documents`）或改用静态命令行归档。沙盒可联网（仅用于检查更新），图形走 X11（Wayland 下经 XWayland）。设置、通讯录和语言保存在 `~/.var/app/io.github.shixiaoshi0417.NekoKEM/config/nekokem`，与 DEB/RPM 版的 `~/.config/nekokem` 分开。中日韩字体沿用系统已安装的字体。清单同样固定指向已发布版本，发布后由 `scripts/update_flatpak_manifest.py <版本>` 更新；CI 在两种架构上用本次构建的归档打包、安装，以中英文启动 GUI 确认窗口打开。上架 Flathub 需要维护者本人提交，步骤见 [linux/flatpak/README.md](linux/flatpak/README.md)。
 
 构建与原生 CI 基线为 Ubuntu 24.04，CI 另在同架构 Fedora 44 容器中安装并启动 RPM。应用自带 Java 运行时；运行需要 glibc 2.39 或更新版本，DEB/RPM 依赖 Noto Sans CJK 字体和 `curl`（检查更新）。OpenSSL 4.1.0 静态链接进桥接库并隐藏符号，保留完整 RELRO、立即绑定和不可执行栈。Linux 文件权限、认证后提交及取消清理沿用 CLI/Core；NKEM、NKPR、KDF 参数与 64 KiB 流式处理不变。详见 [桌面 GUI 文档](desktop/README.md)。
 
-v5.2.0 Release 包含上述两种架构的全部 Linux GUI 安装包和便携包，现有静态 Linux CLI 包继续保留。原生窗口测试使用 X11 会话，不代表已验证所有 Linux 发行版或 Wayland 实机。
+v6.0.0 Release 包含上述两种架构的全部 Linux GUI 安装包、便携包、AppImage 和 Flatpak 包，现有静态 Linux CLI 包继续保留。原生窗口测试使用 X11 会话，不代表已验证所有 Linux 发行版或 Wayland 实机。
 
 ## 语言设置
 
