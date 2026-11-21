@@ -1,5 +1,14 @@
 # Changelog
 
+## 6.0.0
+
+- 全平台 6.0.0，Core 6.0，Android versionCode 18；沿用既有签名，可覆盖升级。NKEM 文件格式与密码参数不变。
+- 私钥改用带密钥承诺的 NKPR v3；应用内的 NKPR v2 私钥解锁后原地改写为 v3，密钥、口令和指纹不变。5.2.0 及更早版本打不开 NKPR v3 私钥，需先在密钥页「导出给 5.2 及更早版本的私钥」。
+- 旧格式私钥（NKPR v1、v2）只作为应用内的私钥打开；导入时先说明风险并要求确认，4.x 的 v1 私钥可选立即升级或在 3 秒警告后按原格式导入；临时私钥拒绝旧格式。
+- 更新提示附上折叠的发布说明；去掉页面上常驻的说明小字，警告保留。导入待解密文件的大小上限按 NKEM v5 的容器开销计算。完整双语说明见 [v6.0.0](../release/v6.0.0.md)。
+
+Android 6.0.0 / versionCode 18 retains the existing signer; NKEM formats and cryptographic parameters are unchanged. Private keys move to NKPR v3 with key commitment, and the app's own NKPR v2 key is rewritten as v3 after unlocking, keeping its keys, password and fingerprint. NekoKEM 5.2.0 and earlier cannot open an NKPR v3 key; use "Export private key for 5.2 and earlier" on the Keys page first. Older-format keys open only as the app's own key: importing one explains the risk and asks for confirmation, a 4.x NKPR v1 key can be upgraded straight away or imported as it is after a 3-second warning, and temporary keys refuse older formats. The update prompt includes folded release notes, the explanatory small print on the pages is gone while warnings stay, and the import limit for files to decrypt uses the NKEM v5 container overhead. See the [bilingual notes](../release/v6.0.0.md).
+
 ## 5.2.0
 
 - 全平台 5.2.0，Core 5.1，Android versionCode 17；沿用既有签名，可覆盖升级。密码参数不变。

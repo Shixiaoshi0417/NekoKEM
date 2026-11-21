@@ -23,7 +23,7 @@ Linux、macOS、Windows 的 CLI 共用 `linux/src/main.c` 的参数解析。Andr
 
 ## 前提
 
-- 两边都使用会读写 NKEM v3、v4、v5 和 NKPR v1、v2、v3 的构建，即本仓库当前的构建：私钥留在各自机器上，NekoKEM 5.2.0 打不开新生成的 NKPR v3 私钥并不影响往返；CLI 写出的签名文件总是记录原文件名，5.1.0 及更早版本打不开。本仓库 v5.2.0 的 CLI 执行 `nekokem --version`（Windows 为 `nekokem.exe --version`）时打印 `NekoKEM 5.2.0`。报告失败时写上两边的版本字符串。NekoKEM 3.3.2 及更早版本打不开 v4 文件，4.x 及更早版本打不开 v5 文件、NKPR v2 和四段式公钥。
+- 两边都使用会读写 NKEM v3、v4、v5 和 NKPR v1、v2、v3 的构建，即本仓库当前的构建：私钥留在各自机器上，NekoKEM 5.2.0 打不开新生成的 NKPR v3 私钥并不影响往返；CLI 写出的签名文件总是记录原文件名，5.1.0 及更早版本打不开。本仓库 v6.0.0 的 CLI 执行 `nekokem --version`（Windows 为 `nekokem.exe --version`）时打印 `NekoKEM 6.0.0`。报告失败时写上两边的版本字符串。NekoKEM 3.3.2 及更早版本打不开 v4 文件，4.x 及更早版本打不开 v5 文件、NKPR v2 和四段式公钥。
 - 发布包：Linux `NekoKEM-linux-x86_64.tar.gz` 或 `NekoKEM-linux-aarch64.tar.gz`，macOS Apple Silicon `NekoKEM-macos-arm64.tar.gz`（无 Intel 构建），Windows `NekoKEM-windows-x86_64.zip` 中的 `nekokem.exe`。也可以使用同一提交构建出的二进制。
 - 下文命令里的 `nekokem` 指该可执行文件。把它放进 `PATH`，或换成绝对路径。Windows 上把同一个参数交给 `nekokem.exe`。`--lang` 放在子命令之前。
 - 在操作者自己拥有的目录中工作。Windows CLI 只接受本地固定 NTFS；网络路径、FAT/exFAT、设备路径和重解析点会在密码运算之前被拒绝。把文件复制到本地 NTFS 目录后再运行。

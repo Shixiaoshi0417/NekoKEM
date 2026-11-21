@@ -130,10 +130,10 @@ decrypts, refused duplicates and recipient limits, and failures that name the co
 ## Install / 安装
 
 Windows: run the MSI, then open **NekoKEM** from the Start menu. Or unpack the
-ZIP anywhere and open `NekoKEM\NekoKEM.exe`. Releases after 5.2.0 also have
+ZIP anywhere and open `NekoKEM\NekoKEM.exe`. Since 6.0.0 releases also have
 `NekoKEM-Windows-GUI.exe`, an installer that carries the same MSI and installs the
 same app; it passes its arguments to `msiexec`, so `/quiet` installs silently.
-5.2.0 之后的版本另有 EXE 安装程序，双击安装，与 MSI 装的是同一个应用。
+6.0.0 起另有 EXE 安装程序，双击安装，与 MSI 装的是同一个应用。
 
 Linux: use the package matching `uname -m` (`x86_64` is Debian `amd64`,
 `aarch64` is Debian `arm64`), then open **NekoKEM** from the application menu.
@@ -158,7 +158,7 @@ tar -xzf NekoKEM-linux-x86_64-GUI.tar.gz && NekoKEM-linux-x86_64-GUI/bin/NekoKEM
 The DEB and RPM depend on Noto Sans CJK and curl; with the folder archive or
 the AppImage, install a Chinese, Japanese and Korean font and curl yourself.
 
-Releases after 5.2.0 also have an AppImage, one file that runs without
+Since 6.0.0 releases also have an AppImage, one file that runs without
 installing. It mounts itself through FUSE and needs `fusermount3` (the `fuse3`
 package on Debian and Ubuntu); without FUSE, add `--appimage-extract-and-run`.
 
@@ -166,7 +166,7 @@ package on Debian and Ubuntu); without FUSE, add `--appimage-extract-and-run`.
 chmod +x NekoKEM-linux-x86_64-GUI.AppImage && ./NekoKEM-linux-x86_64-GUI.AppImage
 ```
 
-5.2.0 之后的版本另有 AppImage：单个文件，`chmod +x` 后直接运行，不需要安装；需要 FUSE
+6.0.0 起另有 AppImage：单个文件，`chmod +x` 后直接运行，不需要安装；需要 FUSE
 （`fuse3` 包），没有 FUSE 时加 `--appimage-extract-and-run`。字体和 curl 需要系统自行安装。
 
 They also have a Flatpak bundle, `io.github.shixiaoshi0417.NekoKEM`, which takes
