@@ -989,6 +989,20 @@
    "このバージョンをスキップ",
    "이 버전 건너뛰기"
   ],
+  "updateNotesShow": [
+   "Show release notes",
+   "查看发布说明",
+   "查看發布說明",
+   "リリースノートを表示",
+   "릴리스 노트 보기"
+  ],
+  "updateNotesHide": [
+   "Hide release notes",
+   "收起发布说明",
+   "收合發布說明",
+   "リリースノートを閉じる",
+   "릴리스 노트 접기"
+  ],
   "settings-save": [
    "The setting could not be saved and applies only until the App closes.",
    "设置未能保存，仅在本次运行期间有效。",

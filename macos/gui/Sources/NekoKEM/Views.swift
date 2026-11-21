@@ -763,6 +763,50 @@ private struct QrSheet: View {
     }
 }
 
+/// The release notes, folded until asked for; opened, they scroll inside a box
+/// of at most 260 points, so the sheet never grows past the window.
+private struct ReleaseNotesView: View {
+    @ObservedObject var state: AppState
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Button { state.notesOpen.toggle() } label: {
+                HStack {
+                    Text(state.t(state.notesOpen ? "updateNotesHide" : "updateNotesShow")).fontWeight(.medium)
+                    Spacer()
+                    Image(systemName: state.notesOpen ? "chevron.up" : "chevron.down").foregroundStyle(.secondary)
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            if state.notesOpen {
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 4) {
+                        ForEach(Array(state.availableNotes.enumerated()), id: \.offset) { index, line in
+                            switch line.kind {
+                            case "heading":
+                                Text(line.text).font(.callout.weight(.medium)).padding(.top, index > 0 ? 8 : 0)
+                            case "item":
+                                HStack(alignment: .firstTextBaseline, spacing: 0) {
+                                    Text("•").frame(width: 12, alignment: .leading)
+                                    Text(line.text).fixedSize(horizontal: false, vertical: true)
+                                }
+                                .font(.callout).foregroundStyle(.secondary)
+                            default:
+                                Text(line.text).font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                            }
+                        }
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(12)
+                }
+                .frame(maxHeight: 260)
+                .background(Color.primary.opacity(0.05), in: RoundedRectangle(cornerRadius: 10))
+            }
+        }
+    }
+}
+
 private struct UpdateSheet: View {
     @ObservedObject var state: AppState
 
@@ -770,6 +814,7 @@ private struct UpdateSheet: View {
         VStack(alignment: .leading, spacing: 12) {
             Text(state.t("updateAvailableTitle").replacingOccurrences(of: "{version}", with: state.availableVersion)).font(.headline)
             Text(state.t("updateAvailableText").replacingOccurrences(of: "{current}", with: state.version)).fixedSize(horizontal: false, vertical: true)
+            if !state.availableNotes.isEmpty { ReleaseNotesView(state: state) }
             HStack {
                 Button(state.t("ignoreVersion")) { state.ignoreRelease() }.buttonStyle(.link)
                 Spacer()
