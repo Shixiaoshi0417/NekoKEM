@@ -59,7 +59,16 @@ final class AppState: ObservableObject {
     @Published var output = "" { didSet { if output != oldValue { withdrawOverwrite() }; edited("output") } }
     @Published var keyPath = "" { didSet { edited("keyPath") } }
     @Published var publicPath = "" { didSet { if publicPath != oldValue { withdrawReplace() }; edited("publicPath") } }
-    @Published var privatePath = "" { didSet { if privatePath != oldValue { withdrawReplace() }; edited("privatePath") } }
+    @Published var privatePath = "" {
+        didSet {
+            if privatePath != oldValue {
+                withdrawReplace(); withdrawLegacy()
+                // The older-format warning belonged to the previous key.
+                if failure == "legacy-unconfirmed" { failure = nil }
+            }
+            edited("privatePath")
+        }
+    }
     @Published var password = "" { didSet { edited("password") } }
     @Published var confirmation = "" { didSet { edited("confirmation") } }
     // Ticked to hand the password to the login keychain once the operation accepts it.
@@ -108,6 +117,8 @@ final class AppState: ObservableObject {
     // Unverified contacts are encrypted to only after a second, warned press.
     @Published private(set) var unverifiedWarned = false
     @Published private(set) var keyMode = KeyMode.generate
+    // Export mode: the private key for NekoKEM 5.2 instead of the public key for 4.x.
+    @Published private(set) var exportPrivate = false
     // Turning off signing needs an explicit, red-marked confirmation.
     @Published var confirmingUnsigned = false
 
@@ -117,12 +128,25 @@ final class AppState: ObservableObject {
     @Published private(set) var checkingUpdate = false
     @Published private(set) var updateNotice: String?
     @Published var availableVersion = ""
+    @Published var availableNotes: [NoteLine] = []
+    // The release notes start folded each time a release is announced.
+    @Published var notesOpen = false
     @Published var qrFingerprint = ""
     @Published private(set) var signerSaved = false
     // Replacing keys is offered only after Core reported existing keys at the
     // chosen paths, must be ticked for each run and is withdrawn when they change.
     @Published private(set) var replaceOffered = false
     @Published private(set) var overwriteOffered = false
+    // Upgrading an older-format private key that is not the user's saved own
+    // key: the bridge warns first, and the box can be ticked only after the
+    // warning was up for legacyConfirmSeconds (the bridge checks that too).
+    // Withdrawn when the private key path, the mode or the page changes.
+    @Published private(set) var legacyOffered = false
+    @Published var legacyConfirmed = false
+    @Published private(set) var legacyWait = 0
+    private var legacyTimer: Task<Void, Never>?
+    // Same as the bridge's LEGACY_CONFIRM_DELAY.
+    static let legacyConfirmSeconds = 3
     @Published private(set) var invalidField: String?
     @Published private(set) var choosing = false
     @Published var contacts: [Contact] = []
@@ -160,19 +184,24 @@ final class AppState: ObservableObject {
     }
     var kind: Kind {
         switch screen {
-        case .keygen: return keyMode == .generate ? .keygen : (keyMode == .upgrade ? .upgrade : .exportLegacy)
+        case .keygen:
+            switch keyMode {
+            case .generate: return .keygen
+            case .upgrade: return .upgrade
+            case .export: return exportPrivate ? .exportLegacyPrivate : .exportLegacy
+            }
         default: return .fingerprint
         }
     }
     var signing: Bool { fileAction == .encrypt && !unsigned }
-    var passwordRequired: Bool { screen == .keygen && keyMode != .export }
+    var passwordRequired: Bool { screen == .keygen && (keyMode != .export || exportPrivate) }
     /// The private key whose password the visible password field asks for.
     var keychainKeyPath: String {
         if screen == .keygen { return privatePath }
         return fileAction == .encrypt ? signKeyPath : decryptKey
     }
     /// A new key has no saved password to fill in.
-    var keychainFillOffered: Bool { askingPassword || (screen == .keygen && keyMode == .upgrade) }
+    var keychainFillOffered: Bool { askingPassword || (screen == .keygen && (keyMode == .upgrade || (keyMode == .export && exportPrivate))) }
 
     /// Reads the saved password into the field, after Touch ID or the login password.
     func fillFromKeychain() {
@@ -290,7 +319,7 @@ final class AppState: ObservableObject {
             let status = (try? await native { Backend.checkUpdate() }) ?? .failed
             checkingUpdate = false
             if status != .failed { update.lastCheck = now; storeUpdate() }
-            if case .available(let found) = status, manual || found != update.ignored { availableVersion = found }
+            if case .available(let found, let notes) = status, manual || found != update.ignored { availableNotes = notes; notesOpen = false; availableVersion = found }
             else if manual { updateNotice = status == .current ? "upToDate" : "updateFailed" }
         }
     }
@@ -302,6 +331,18 @@ final class AppState: ObservableObject {
     func ignoreRelease() { update.ignored = availableVersion; availableVersion = ""; storeUpdate() }
 
     private func withdrawReplace() { replaceOffered = false; replace = false }
+    private func withdrawLegacy() { legacyTimer?.cancel(); legacyTimer = nil; legacyOffered = false; legacyConfirmed = false; legacyWait = 0 }
+    private func offerLegacy() {
+        withdrawLegacy()
+        legacyOffered = true; legacyWait = Self.legacyConfirmSeconds
+        legacyTimer = Task { @MainActor [weak self] in
+            for _ in 0..<AppState.legacyConfirmSeconds {
+                try? await Task.sleep(nanoseconds: 1_000_000_000)
+                guard let self, !Task.isCancelled else { return }
+                self.legacyWait -= 1
+            }
+        }
+    }
     private func withdrawOverwrite() { overwriteOffered = false; overwrite = false }
 
     func path(_ field: PathField) -> String {
@@ -359,7 +400,7 @@ final class AppState: ObservableObject {
         output = ""
         resetFeedback()
         editing = nil; confirmingDelete = nil; highlighted = nil
-        withdrawReplace(); withdrawOverwrite()
+        withdrawReplace(); withdrawOverwrite(); withdrawLegacy()
         confirmingUnsigned = false; closeRecipientsNow(); discardStaged()
         pasteKey = false
         screen = value
@@ -374,7 +415,16 @@ final class AppState: ObservableObject {
         password = ""; confirmation = ""
         output = ""
         keyMode = mode
-        withdrawReplace(); withdrawOverwrite(); resetFeedback()
+        withdrawReplace(); withdrawOverwrite(); withdrawLegacy(); resetFeedback()
+        if mode == .export && exportPrivate && privatePath.isEmpty { privatePath = signKeyPath }
+    }
+    /// Export mode's choice; the private key starts as the user's own.
+    func changeExportPrivate(_ value: Bool) {
+        if locked || !loaded || value == exportPrivate { return }
+        password = ""; output = ""
+        exportPrivate = value
+        if value && privatePath.isEmpty { privatePath = signKeyPath }
+        withdrawOverwrite(); resetFeedback()
     }
     func changeContactSource(paste: Bool) {
         if locked || !loaded || paste == contactPaste { return }
@@ -398,13 +448,14 @@ final class AppState: ObservableObject {
         choosing = true
         defer { choosing = false }
         // Upgrading changes existing key files, so it opens them.
-        let saving = [.output, .publicPath, .privatePath].contains(field) && !(screen == .keygen && keyMode == .upgrade)
+        let opening = screen == .keygen && (keyMode == .upgrade || (keyMode == .export && field == .privatePath))
+        let saving = [.output, .publicPath, .privatePath].contains(field) && !opening
         let value: String?
         if saving {
             switch field {
             case .publicPath: value = chooseSave("public.key")
             case .privatePath: value = chooseSave("private.key.enc")
-            default: value = chooseSave("legacy-public.key")
+            default: value = chooseSave(exportPrivate ? "private-5.2.nkpr" : "legacy-public.key")
             }
         } else { value = chooseOpen() }
         if let value { setPath(field, value) }
@@ -435,7 +486,11 @@ final class AppState: ObservableObject {
         }
         if password.utf8.count > 1024 { return invalid("password-limit", "password") }
         if confirmation.utf8.count > 1024 { return invalid("password-limit", "confirmation") }
-        if screen == .keygen && keyMode == .export {
+        if screen == .keygen && keyMode == .export && exportPrivate {
+            if privatePath.isEmpty { return invalid("invalid-path", "privatePath") }
+            if output.isEmpty { return invalid("invalid-path", "output") }
+            if password.isEmpty { return invalid("password-empty", "password") }
+        } else if screen == .keygen && keyMode == .export {
             if keyPath.isEmpty { return invalid("invalid-path", "keyPath") }
             if output.isEmpty { return invalid("invalid-path", "output") }
         } else if screen == .keygen {
@@ -477,22 +532,23 @@ final class AppState: ObservableObject {
         jobId = UUID().uuidString
         busy = true; cancelling = false
         let kind = self.kind
-        let exporting = kind == .exportLegacy
+        let exporting = kind == .exportLegacy || kind == .exportLegacyPrivate
         let keys = kind == .keygen || kind == .upgrade
         let pasting = kind == .fingerprint && pasteKey
         var request = OperationRequest(id: jobId, kind: kind)
         request.output = exporting ? output : ""
-        request.keyPath = exporting || (kind == .fingerprint && !pasting) ? keyPath : ""
+        request.keyPath = kind == .exportLegacy || (kind == .fingerprint && !pasting) ? keyPath : ""
         request.publicPath = keys ? publicPath : ""
-        request.privatePath = keys ? privatePath : ""
+        request.privatePath = keys || kind == .exportLegacyPrivate ? privatePath : ""
         request.password = passwordRequired ? password : ""
         request.confirmation = kind == .keygen ? confirmation : ""
         request.keyText = pasting ? keyText : ""
         request.paste = pasting
         request.replace = kind == .keygen && replaceOffered && replace
         request.overwrite = exporting && overwriteOffered && overwrite
-        withdrawReplace(); withdrawOverwrite()
-        let remember = keys && saveToKeychain
+        request.legacyConfirmed = kind == .upgrade && legacyOffered && legacyConfirmed && legacyWait == 0
+        withdrawReplace(); withdrawOverwrite(); withdrawLegacy()
+        let remember = (keys || kind == .exportLegacyPrivate) && saveToKeychain
         // The native layer keeps its own copy until it finishes; the fields are cleared now.
         clearSecrets()
         let id = jobId
@@ -514,6 +570,7 @@ final class AppState: ObservableObject {
                 switch kind {
                 case .upgrade: successMessage = "keyUpgraded"
                 case .exportLegacy: successMessage = "legacyExported"
+                case .exportLegacyPrivate: successMessage = "legacyPrivateExported"
                 default: successMessage = "success"
                 }
             } catch {
@@ -521,6 +578,13 @@ final class AppState: ObservableObject {
                 failure = message
                 if kind == .keygen && message == "key-exists" { replaceOffered = true }
                 if exporting && message == "output-exists" { overwriteOffered = true }
+                if kind == .upgrade && message == "legacy-unconfirmed" {
+                    offerLegacy()
+                    // Core did not use the password before the warning, so it
+                    // stays for the confirmation instead of being typed again.
+                    password = request.password
+                    saveToKeychain = remember
+                }
             }
             busy = false; cancelling = false
             closeIfRequested()
@@ -900,6 +964,7 @@ final class AppState: ObservableObject {
         ownSelected = false; selected = []; otherKeys = []; unverifiedWarned = false
         input = ""; output = ""; password = ""; otherPrivateKey = ""; saveToKeychain = false
         decryptFolder = name == "settings-decrypt-folder" ? "/Users/shawn/Downloads/Decrypted" : ""
+        availableVersion = ""; availableNotes = []; notesOpen = false
         resetFeedback()
         switch name {
         case "files-empty": screen = .files
@@ -915,11 +980,30 @@ final class AppState: ObservableObject {
                 result = done; successMessage = "encryptedSigned"; ownRecipient = true; recipients = [contacts[1]]
             }
         case "keys": screen = .keygen; keyMode = .generate
+        case "keys-export-private":
+            screen = .keygen; keyMode = .export; exportPrivate = true; privatePath = signKeyPath
+            output = "/Users/shawn/Keys/private-5.2.nkpr"
         case "fingerprint":
             screen = .fingerprint; keyPath = ownPublicKey
             result = Outcome(fingerprint: contacts[1].fingerprint); result?.canVerify = true
         case "contacts": screen = .contacts
         case "contacts-selected": screen = .contacts; selected = ["alice", "bob"]
+        case "update", "update-notes":
+            screen = .settings
+            availableNotes = [
+                NoteLine(kind: "heading", text: "What's new"),
+                NoteLine(kind: "text", text: "This release adds release notes to the update prompt."),
+                NoteLine(kind: "item", text: "Release notes: folded until opened, then they scroll inside a box of limited height."),
+                NoteLine(kind: "item", text: "Check for updates: the notes come in the App's language, Chinese or English."),
+                NoteLine(kind: "heading", text: "Compatibility and upgrading"),
+                NoteLine(kind: "item", text: "Files and keys are unchanged; NekoKEM 5.2 opens everything this release writes."),
+                NoteLine(kind: "item", text: "Download the new version from the release page and verify it before installing."),
+                NoteLine(kind: "heading", text: "Platform and validation boundaries"),
+                NoteLine(kind: "item", text: "macOS Apple Silicon arm64, GUI minimum macOS 13, ad-hoc signed."),
+                NoteLine(kind: "item", text: "Windows 10/11 x64 and Linux x86_64 and aarch64."),
+            ]
+            notesOpen = name == "update-notes"
+            availableVersion = "5.3.0"
         default: screen = .settings
         }
     }

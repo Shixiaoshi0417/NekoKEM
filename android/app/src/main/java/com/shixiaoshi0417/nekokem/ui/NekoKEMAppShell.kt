@@ -167,6 +167,8 @@ data class NekoKEMActions(
     val onUiStyleChange: (UiStyle) -> Unit = {},
     val onUpgradeKey: () -> Unit = {},
     val onExportLegacyPublicKey: () -> Unit = {},
+    /** Asks for the password, then where to save the NKPR v2 copy. */
+    val onExportLegacyPrivateKey: () -> Unit = {},
     /** Turning unsigned encryption on goes through the red warning first. */
     val onUnsignedEncryptionChange: (Boolean) -> Unit = {},
     val onRequireSignatureChange: (Boolean) -> Unit = {},
@@ -636,6 +638,19 @@ private fun KeyManagementPage(
                 ),
             ),
         )
+        if (state.privateKeyExists) {
+            ActionButton(
+                labelResource = R.string.action_export_legacy_private_key,
+                enabled = canRun,
+                onClick = actions.onExportLegacyPrivateKey,
+                emphasis = ActionEmphasis.TONAL,
+            )
+            Text(
+                text = stringResource(R.string.legacy_private_export_hint),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
         Spacer(modifier = Modifier.height(12.dp))
         ActionButtonGroup(
             modifier = Modifier.padding(vertical = 4.dp),

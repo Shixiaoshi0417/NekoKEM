@@ -352,7 +352,7 @@ encrypted/test.jpg.nkem -> plaintext/test.jpg
 
 私钥文件内容是 NKPR 时，Hybrid decrypt 会自动提示一次密码；判断依据是文件头，不看扩展名。为兼容已有部署，命令仍接受包含 X448、ML-KEM-1024 两个 PEM 块的旧式明文 `private.key`。
 
-NKPR v1、v2 格式的私钥（NekoKEM 5.2 及更早版本生成）不带密钥承诺，别人写的这种文件可以被构造成能用多个口令打开，借你输入口令来一次试多个候选。因此 CLI 只在 `keys/private.key.enc` 打开它们；其他路径上的旧格式私钥会在询问口令之前被拒绝，只有加上 `--legacy-private-key`（解密时用于私钥，加密时用于 `--sign-key`）才会打开。这个选项只用于你自己从旧版导出的私钥。用旧格式的 `keys/private.key.enc` 时会提示运行 `upgrade-key`，它会把私钥重写为 NKPR v3，密钥和密码都不变。需要把私钥交给 NekoKEM 5.2 及更早版本时，用 `export-legacy-private-key` 导出 NKPR v2 副本：
+NKPR v1、v2 格式的私钥（NekoKEM 5.2 及更早版本生成）不带密钥承诺，别人写的这种文件可以被构造成能用多个口令打开，借你输入口令来一次试多个候选。因此 CLI 只在 `keys/private.key.enc` 打开它们；其他路径上的旧格式私钥会在询问口令之前被拒绝，只有加上 `--legacy-private-key`（解密时用于私钥，加密时用于 `--sign-key`，`upgrade-key <公钥> <私钥>` 时用于给出的私钥）才会打开。`keys/private.key.enc` 按当前工作目录解析，所以只在你自己的密钥目录里运行 CLI；在别人给的目录里，其中的 `keys/private.key.enc` 也会被当成你自己的私钥。这个选项只用于你自己从旧版导出的私钥。用旧格式的 `keys/private.key.enc` 时会提示运行 `upgrade-key`，它会把私钥重写为 NKPR v3，密码不变：NKPR v2 私钥的密钥也不变，4.x 的 NKPR v1 私钥会同时添加签名密钥，公钥随之改变。需要把私钥交给 NekoKEM 5.2 及更早版本时，用 `export-legacy-private-key` 导出 NKPR v2 副本：
 
 ```sh
 ./nekokem decrypt hybrid --legacy-private-key encrypted/old.nkem old.txt backup/private.key.enc
@@ -406,9 +406,9 @@ NKPR 是独立于 NKEM 文件容器的私钥存储格式。version 1 保存旧�
 
 `header || salt || nonce` 全部作为 AES-GCM AAD。读取器严格验证版本、算法、参数、长度和 GCM 标签；错误密码与任何受认证字段或密文的修改都会失败，并对外统一报告无法解锁私钥，不区分错误口令与容器损坏。解密缓冲区即使在标签验证前产生数据也始终只驻留内存，并在失败路径清零。
 
-NKPR 的 AES-GCM 不具备密钥承诺性，不保证一个容器只能由唯一口令或保护密钥认证，也不提供跨保护密钥的明文一致性保证。此处说明现有格式的边界，不改变 NKPR 格式或密码参数。NKEM v4/v5 通过头部 HMAC-SHA512 承诺文件密钥，不受此限制；各处 AES-GCM 的评估和 NKPR v3 设计草案见 [密钥承诺评估](docs/key-commitment.md)。
+AES-GCM 不具备密钥承诺性：NKPR v1、v2 不保证一个容器只能由唯一口令或保护密钥认证，也不提供跨保护密钥的明文一致性保证。NKPR v3 为此加入密钥承诺，见下段。NKEM v4/v5 通过头部 HMAC-SHA512 承诺文件密钥，不受此限制；各处 AES-GCM 的评估和 NKPR v3 设计见 [密钥承诺评估](docs/key-commitment.md)。
 
-NKPR v3 在 NKPR v2 的 salt 之后加入 32 字节密钥承诺，一个容器只能被一个口令打开。各端生成和升级的密钥都写 NKPR v3。Core 只在调用方声明「这是本机自己的私钥」时才接受 NKPR v1、v2，CLI 的规则见上文[参数化命令](#参数化命令)；Android 和桌面 GUI 暂时对所有私钥都按自己的私钥处理，之后的版本再区分本机私钥和导入的私钥。
+NKPR v3 在 NKPR v2 的 salt 之后加入 32 字节密钥承诺，一个容器只能被一个口令打开。各端生成和升级的密钥都写 NKPR v3。Core 只在调用方声明「这是本机自己的私钥」时才接受 NKPR v1、v2，CLI 的规则见上文[参数化命令](#参数化命令)。Android 只把应用内的密钥当作自己的私钥；导入旧格式私钥时，在输入口令之前先弹出说明，确认是自己从旧版导出的私钥后才打开（v1 可选立即升级为身份密钥，或在 3 秒警告后按旧格式导入），临时私钥则拒绝旧格式；桌面 GUI 只把设置里的「我的私钥」当作自己的私钥，见[桌面 GUI 文档](desktop/README.md)。自己的 NKPR v2 私钥解锁后会改写为 NKPR v3，Android 和桌面 GUI 都可以导出给 5.2 的私钥副本。
 
 ## NKEM v3 hybrid 文件格式
 
@@ -420,7 +420,7 @@ v4 用随机 32 字节文件密钥只加密一次文件数据，并为每位接�
 
 ## NKEM v5 签名文件格式
 
-v5 在 v4 多接收方结构上加入发送方认证：发送方用四段式身份密钥（X448、ML-KEM-1024、Ed448、ML-DSA-87）对整个容器做 Ed448 + ML-DSA-87 混合签名，两个签名都通过才接受文件。签名和发送方身份用文件密钥加密，只有接收方能看到是谁发送的。一个格式覆盖 1 至 64 位接收方；身份私钥保存为 NKPR v2，旧的两段式密钥可升级。完整布局、签名策略和升级规则见 [`docs/NKEM-v5.md`](docs/NKEM-v5.md)。`nekokem_encrypt_file_v5_with_progress()` 默认写出 v5，`nekokem_decrypt_file_verified_with_progress()` 解密 v3、v4、v5 并按策略检查签名。
+v5 在 v4 多接收方结构上加入发送方认证：发送方用四段式身份密钥（X448、ML-KEM-1024、Ed448、ML-DSA-87）对整个容器做 Ed448 + ML-DSA-87 混合签名，两个签名都通过才接受文件。签名和发送方身份用文件密钥加密，只有接收方能看到是谁发送的。一个格式覆盖 1 至 64 位接收方；身份私钥保存为 NKPR v3（5.2 及更早版本写 NKPR v2），旧的两段式密钥可升级。完整布局、签名策略和升级规则见 [`docs/NKEM-v5.md`](docs/NKEM-v5.md)。`nekokem_encrypt_file_v5_with_progress()` 默认写出 v5，`nekokem_decrypt_file_verified_with_progress()` 解密 v3、v4、v5 并按策略检查签名。
 
 ## 安全实现说明
 
@@ -523,7 +523,7 @@ CI 在每个 PR 上对每个 harness 只跑 15 秒；[Fuzz workflow](.github/wor
 
 ## 检查更新
 
-Android 和桌面 GUI 可以检查是否有新版本：「设置 > 关于」页（Android）或「设置」页（桌面）有「检查更新」按钮；自动检查默认开启，启动时每天最多检查一次，可在设置中关闭。发现新版本时只提示版本号，「前往下载」打开 GitHub Release 页面，由用户自己下载并按发布说明校验，App 不会自动下载或安装任何内容。可以「忽略此版本」，之后自动检查不再提示该版本。
+Android 和桌面 GUI 可以检查是否有新版本：「设置 > 关于」页（Android）或「设置」页（桌面）有「检查更新」按钮；自动检查默认开启，启动时每天最多检查一次，可在设置中关闭。发现新版本时提示版本号，并附上折叠的发布说明：只取界面语言对应的部分（中文界面取简体中文，其他取英文），按纯文本显示、不含可点击链接，展开后在限定高度内滚动；「前往下载」打开 GitHub Release 页面，由用户自己下载并按发布说明校验，App 不会自动下载或安装任何内容。可以「忽略此版本」，之后自动检查不再提示该版本。
 
 检查只向固定地址 `https://api.github.com/repos/Shixiaoshi0417/NekoKEM/releases/latest` 发送一次 HTTPS GET，不附带密钥、指纹、文件或设置信息；响应超过 1 MiB、不是正式版本或版本号格式不符时视为失败，发布页地址由版本号拼出，不取自响应。GitHub 能看到请求的 IP 地址和时间。Android 为此增加了 INTERNET 权限，用系统 HTTPS；桌面由桥接库调用系统 curl（Windows `System32\curl.exe`，macOS/Linux `/usr/bin/curl`），Compose 和 SwiftUI 界面本身不发起网络请求。该请求失败时（例如同一 IP 的 GitHub 匿名 API 每小时额度用完），再向 `https://github.com/Shixiaoshi0417/NekoKEM/releases/latest` 发送一次 HTTPS HEAD，从重定向地址读出版本号，不跟随重定向；只接受本仓库正式版本 `vX.Y.Z` 的发布页地址。CLI 不检查更新。
 

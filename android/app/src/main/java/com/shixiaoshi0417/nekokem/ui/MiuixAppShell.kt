@@ -442,6 +442,14 @@ private fun LazyListScope.keysPage(state: NekoKEMUiState, actions: NekoKEMAction
         }
         Action(R.string.action_import_private_key, canRun, actions.onImportPrivateKey)
         Action(R.string.action_export_private_key, canRun && state.privateKeyExists, actions.onExportPrivateKey)
+        if (state.privateKeyExists) {
+            ArrowPreference(
+                title = stringResource(R.string.action_export_legacy_private_key),
+                summary = stringResource(R.string.legacy_private_export_hint),
+                enabled = canRun,
+                onClick = actions.onExportLegacyPrivateKey,
+            )
+        }
     }
     section(R.string.miuix_keys_delete_title, key = "delete") {
         Action(R.string.action_delete_public_key, canRun && state.fingerprint != null, actions.onDeletePublicKey, true)

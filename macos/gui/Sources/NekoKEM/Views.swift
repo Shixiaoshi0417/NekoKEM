@@ -76,7 +76,7 @@ private struct KeysModePicker: View {
         })) {
             Text(state.t("keygen")).tag(0)
             Text(state.t("upgradeKey")).tag(1)
-            Text(state.t("exportLegacy")).tag(2)
+            Text(state.t("exportOlder")).tag(2)
             Text(state.t("fingerprintTab")).tag(3)
         }
         .pickerStyle(.segmented).labelsHidden().disabled(!state.editable)
@@ -308,8 +308,19 @@ private struct KeysPage: View {
                 if state.pasteKey { PasteInput(state: state, label: state.t("paste"), name: "keyText", text: $state.keyText) }
                 else { PathInput(state: state, field: .keyPath, label: state.t("key")) }
             } else if state.keyMode == .export {
-                PathInput(state: state, field: .keyPath, label: state.t("publicKey"))
-                PathInput(state: state, field: .output, label: state.t("legacyOutput"))
+                Picker("", selection: Binding(get: { state.exportPrivate ? 1 : 0 }, set: { state.changeExportPrivate($0 == 1) })) {
+                    Text(state.t("exportPublicOption")).tag(0)
+                    Text(state.t("exportPrivateOption")).tag(1)
+                }
+                .pickerStyle(.segmented).labelsHidden().fixedSize().disabled(!state.editable)
+                if state.exportPrivate {
+                    Text(state.t("legacyPrivateHint")).font(.callout).foregroundStyle(.secondary)
+                    PathInput(state: state, field: .privatePath, label: state.t("privateKey"))
+                    PathInput(state: state, field: .output, label: state.t("legacyPrivateOutput"))
+                } else {
+                    PathInput(state: state, field: .keyPath, label: state.t("publicKey"))
+                    PathInput(state: state, field: .output, label: state.t("legacyOutput"))
+                }
             } else {
                 let upgrade = state.keyMode == .upgrade
                 PathInput(state: state, field: .publicPath, label: state.t(upgrade ? "publicKey" : "publicPath"))
@@ -317,6 +328,10 @@ private struct KeysPage: View {
                 if state.replaceOffered {
                     Toggle(state.t("replaceKeys"), isOn: $state.replace).disabled(!state.editable)
                     Text(state.t("replaceKeysHint")).font(.callout).foregroundStyle(danger)
+                }
+                if upgrade && state.legacyOffered {
+                    Toggle(state.t("legacyConfirm") + (state.legacyWait > 0 ? " (\(state.legacyWait))" : ""), isOn: $state.legacyConfirmed)
+                        .disabled(!state.editable || state.legacyWait > 0)
                 }
             }
             OperationFooter(state: state)
@@ -351,7 +366,7 @@ private struct OperationFooter: View {
         case .contacts: return state.t("saveContact")
         case .keygen:
             if state.keyMode == .upgrade { return state.t("upgradeKey") }
-            if state.keyMode == .export { return state.t("exportLegacy") }
+            if state.keyMode == .export { return state.t(state.exportPrivate ? "exportLegacyPrivate" : "exportLegacy") }
             return state.t(state.replace ? "replaceKeysAction" : "keygen")
         default: return state.t(state.screen.rawValue)
         }
@@ -387,6 +402,7 @@ private struct FormFeedback: View {
                     if FingerprintQr.isFingerprint(fingerprint) { Button(state.t("showQr")) { state.qrFingerprint = fingerprint } }
                 }
                 if result.canVerify == false { Text(state.t("legacyKeyHint")).font(.callout).foregroundStyle(danger) }
+                if result.keyUpdated { Text(state.t("keyUpdated")).font(.callout) }
             }
             if let signature = result.signature {
                 let title = signature.status == "trusted" ? "signatureTrusted" : (signature.status == "untrusted" ? "signatureUntrusted" : "signatureNone")
@@ -747,6 +763,50 @@ private struct QrSheet: View {
     }
 }
 
+/// The release notes, folded until asked for; opened, they scroll inside a box
+/// of at most 260 points, so the sheet never grows past the window.
+private struct ReleaseNotesView: View {
+    @ObservedObject var state: AppState
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Button { state.notesOpen.toggle() } label: {
+                HStack {
+                    Text(state.t(state.notesOpen ? "updateNotesHide" : "updateNotesShow")).fontWeight(.medium)
+                    Spacer()
+                    Image(systemName: state.notesOpen ? "chevron.up" : "chevron.down").foregroundStyle(.secondary)
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            if state.notesOpen {
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 4) {
+                        ForEach(Array(state.availableNotes.enumerated()), id: \.offset) { index, line in
+                            switch line.kind {
+                            case "heading":
+                                Text(line.text).font(.callout.weight(.medium)).padding(.top, index > 0 ? 8 : 0)
+                            case "item":
+                                HStack(alignment: .firstTextBaseline, spacing: 0) {
+                                    Text("•").frame(width: 12, alignment: .leading)
+                                    Text(line.text).fixedSize(horizontal: false, vertical: true)
+                                }
+                                .font(.callout).foregroundStyle(.secondary)
+                            default:
+                                Text(line.text).font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                            }
+                        }
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(12)
+                }
+                .frame(maxHeight: 260)
+                .background(Color.primary.opacity(0.05), in: RoundedRectangle(cornerRadius: 10))
+            }
+        }
+    }
+}
+
 private struct UpdateSheet: View {
     @ObservedObject var state: AppState
 
@@ -754,6 +814,7 @@ private struct UpdateSheet: View {
         VStack(alignment: .leading, spacing: 12) {
             Text(state.t("updateAvailableTitle").replacingOccurrences(of: "{version}", with: state.availableVersion)).font(.headline)
             Text(state.t("updateAvailableText").replacingOccurrences(of: "{current}", with: state.version)).fixedSize(horizontal: false, vertical: true)
+            if !state.availableNotes.isEmpty { ReleaseNotesView(state: state) }
             HStack {
                 Button(state.t("ignoreVersion")) { state.ignoreRelease() }.buttonStyle(.link)
                 Spacer()

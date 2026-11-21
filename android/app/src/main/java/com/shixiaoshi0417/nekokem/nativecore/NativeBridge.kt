@@ -24,6 +24,12 @@ object NativeBridge {
     const val RESULT_SIGNATURE_REQUIRED = -11
     const val RESULT_SIGNER_NOT_TRUSTED = -12
 
+    /**
+     * Core's NEKOKEM_ERROR_LEGACY_PRIVATE_KEY: an NKPR v1 or v2 key used as
+     * something other than this device's own key. Nothing was unlocked.
+     */
+    const val RESULT_LEGACY_PRIVATE_KEY = -13
+
     /** Core's NEKOKEM_SIGNATURE_* values, as reported by verified decryption. */
     const val SIGNATURE_UNSIGNED = 0
     const val SIGNATURE_TRUSTED = 1
@@ -66,10 +72,35 @@ object NativeBridge {
         password: ByteArray,
     ): Int
 
+    /**
+     * Unlocks the key once for its fingerprint. Unless [ownKey], an NKPR v1 or
+     * v2 key is refused before the password is used (null).
+     */
     external fun nativePrivateKeyFingerprint(
         privateKeyPath: String,
         password: ByteArray,
+        ownKey: Boolean,
     ): String?
+
+    /** NKPR v1 or v2, judged from the header without a password. */
+    external fun nativePrivateKeyIsLegacy(privateKeyPath: String): Boolean
+
+    /**
+     * Rewrites this device's NKPR v2 key pair as NKPR v3 with the same keys
+     * and password. An NKPR v3 key is only checked.
+     */
+    external fun nativeUpdatePrivateKeyFormat(
+        publicKeyPath: String,
+        privateKeyPath: String,
+        password: ByteArray,
+    ): Int
+
+    /** This device's key as NKPR v2 (v1 for a 4.x key) for NekoKEM 5.2 and earlier. */
+    external fun nativeExportPrivateKeyLegacy(
+        privateKeyPath: String,
+        password: ByteArray,
+        outputPath: String,
+    ): Int
 
     external fun nativeHasPrivateKey(privateKeyPath: String): Boolean
 
@@ -120,11 +151,13 @@ object NativeBridge {
         callback: NativeProgressCallback,
     ): Int
 
+    /** Unless [ownKey], an NKPR v1 or v2 key returns [RESULT_LEGACY_PRIVATE_KEY]. */
     external fun nativeDecryptFileWithProgress(
         inputPath: String,
         outputPath: String,
         privateKeyPath: String,
         password: ByteArray,
+        ownKey: Boolean,
         callback: NativeProgressCallback,
     ): Int
 
@@ -172,13 +205,15 @@ object NativeBridge {
      * Decrypts NKEM v3, v4 or v5 while Core enforces the signature policy.
      * [report] receives {format, status, trusted index}; [signer] the v5
      * signer's fingerprint; [originalName] the recorded file name as UTF-8.
-     * Returns a RESULT_* or RESULT_SIGNATURE_* code.
+     * Returns a RESULT_* or RESULT_SIGNATURE_* code. Unless [ownKey], an NKPR
+     * v1 or v2 key returns [RESULT_LEGACY_PRIVATE_KEY].
      */
     external fun nativeDecryptFileVerifiedWithProgress(
         inputPath: String,
         outputPath: String,
         privateKeyPath: String,
         password: ByteArray,
+        ownKey: Boolean,
         trustedPaths: Array<String>,
         requireSignature: Boolean,
         signerOutputPath: String?,

@@ -323,6 +323,50 @@ class AuditTests(unittest.TestCase):
                           'input', 'x.nkem', 'keys/public.key', data=PASSWORD)
         self.assertEqual(result.returncode, 0, result.stderr)
 
+        # upgrade-key unlocks the file too, so another path follows the same rule.
+        older = (self.root / 'older.enc').read_bytes()
+        result = self.cli('upgrade-key', 'keys/public.key', 'older.enc', data=PASSWORD)
+        self.assertEqual(result.returncode, 1)
+        self.assertIn(b'accepted only as your own key', result.stderr)
+        self.assertNotIn(b'password', result.stdout + result.stderr)
+        self.assertEqual((self.root / 'older.enc').read_bytes(), older)
+        (self.root / 'copy.pub').write_bytes((self.root / 'keys/public.key').read_bytes())
+        (self.root / 'copy.enc').write_bytes(older)
+        (self.root / 'copy.enc').chmod(0o600)
+        result = self.cli('upgrade-key', '--legacy-private-key', 'copy.pub', 'copy.enc', data=PASSWORD)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual((self.root / 'copy.enc').read_bytes()[4], 3)
+
+        # Core checks the format again on the bytes it decrypts: an NKPR v3
+        # file swapped for an older one during the prompt is refused as well,
+        # instead of being unlocked with the password. (A two-component public
+        # key makes the CLI ask for the password for this NKPR v3 key.)
+        self.assertEqual(self.cli('export-legacy-public-key', 'keys/public.key',
+                                  'two.pub').returncode, 0)
+        process = subprocess.Popen([str(BINARY), '--lang', 'en', 'upgrade-key', 'two.pub', 'copy.enc'],
+                                   cwd=self.root, env=self.env, stdin=subprocess.PIPE,
+                                   stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        try:
+            seen = b''
+            deadline = time.monotonic() + 5
+            while b'Enter the private-key password:' not in seen and time.monotonic() < deadline:
+                readable, _, _ = select.select([process.stdout], [], [], 0.1)
+                if readable:
+                    chunk = os.read(process.stdout.fileno(), 4096)
+                    if not chunk:
+                        break
+                    seen += chunk
+            self.assertIn(b'Enter the private-key password:', seen)
+            (self.root / 'copy.enc').write_bytes(older)
+            _, stderr = process.communicate(PASSWORD, timeout=30)
+            self.assertEqual(process.returncode, 1)
+            self.assertIn(b'accepted only as your own key', stderr)
+            self.assertEqual((self.root / 'copy.enc').read_bytes(), older)
+        finally:
+            if process.poll() is None:
+                process.kill()
+                process.wait()
+
         # At the own key's path it opens, with a hint, and upgrade-key rewrites it.
         own.write_bytes((self.root / 'older.enc').read_bytes())
         result = self.cli('decrypt', 'hybrid', 'cipher.nkem', 'out2', 'keys/private.key.enc', data=PASSWORD)

@@ -107,13 +107,15 @@ NKPR v1、v2 不带密钥承诺，别人写的这种文件可以被构造成能�
   一律拒绝旧格式。
 - `nekokem_private_key_is_legacy()`：只看文件头判断是否为 NKPR v1、v2，供前端在
   询问口令之前解释规则。
-- `nekokem_update_private_key_format()`：把本机自己的密钥对重写为 NKPR v3，口令
-  不变；v2 保留原密钥，v1 先升级为身份密钥。已是 v3 时不做改动。
-- `nekokem_export_private_key_legacy()`：把本机自己的私钥以同一口令导出为
-  NekoKEM 5.2 及更早版本可读的 NKPR v2（两段式密钥为 v1）。
+- `nekokem_update_private_key_format()`：把密钥对重写为 NKPR v3，口令不变；v2
+  保留原密钥，v1 先升级为身份密钥。已是 v3 时不做改动，但仍核对口令和配对。
+- `nekokem_export_private_key_legacy()`：把私钥以同一口令导出为 NekoKEM 5.2 及
+  更早版本可读的 NKPR v2（两段式密钥为 v1）。
+- 这两个函数和 `nekokem_internal_private_key_fingerprint()` 同样只在带
+  `NEKOKEM_PRIVATE_KEY_LEGACY` 时打开 NKPR v1、v2，并在解密的同一份数据上判断，
+  所以前端只看文件头的预检被换掉文件也绕不过去。
 
-`nekokem_upgrade_to_identity_keys()` 和 `nekokem_internal_private_key_fingerprint()`
-用于本机自己的私钥，接受旧格式。
+`nekokem_upgrade_to_identity_keys()` 只用于本机自己的私钥，接受 NKPR v1。
 
 ## 密钥文件与中断恢复
 

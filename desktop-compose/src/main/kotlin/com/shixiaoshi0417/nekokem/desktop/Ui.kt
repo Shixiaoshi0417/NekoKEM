@@ -39,9 +39,13 @@ import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material3.Icon
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Settings
 import top.yukonga.miuix.kmp.icon.MiuixIcons
@@ -119,7 +123,7 @@ private fun ColumnScope.Page(state: AppState) {
         Destination.Keys -> {
             // Generate, upgrade and export are the key page's modes; the fingerprint is the fourth tab.
             val selected = if (state.view == View.Fingerprint) 3 else state.keyMode.ordinal
-            kit.Segments(listOf(state.t("keygen"), state.t("upgradeKey"), state.t("exportLegacy"), state.t("fingerprintTab")), selected, state.editable) {
+            kit.Segments(listOf(state.t("keygen"), state.t("upgradeKey"), state.t("exportOlder"), state.t("fingerprintTab")), selected, state.editable) {
                 if (it == 3) state.switchTab(View.Fingerprint) else { state.switchTab(View.Keygen); state.changeKeyMode(KeyMode.entries[it]) }
             }
             Spacer(Modifier.height(16.dp))
@@ -192,7 +196,7 @@ private fun OperationCard(state: AppState) {
                 state.busy || state.contactBusy -> state.t("working")
                 state.view == View.Contacts -> state.t("saveContact")
                 state.view == View.Keygen && state.keyMode == KeyMode.Upgrade -> state.t("upgradeKey")
-                state.view == View.Keygen && state.keyMode == KeyMode.Export -> state.t("exportLegacy")
+                state.view == View.Keygen && state.keyMode == KeyMode.Export -> state.t(if (state.exportPrivate) "exportLegacyPrivate" else "exportLegacy")
                 state.view == View.Keygen && state.replace -> state.t("replaceKeysAction")
                 else -> state.t(state.view.key)
             }
@@ -204,8 +208,15 @@ private fun OperationCard(state: AppState) {
 @Composable
 private fun KeyFields(state: AppState) {
     if (state.keyMode == KeyMode.Export) {
-        PathInput(state, PathField.KeyPath, state.t("publicKey"), "keyPath")
-        PathInput(state, PathField.Output, state.t("legacyOutput"), "output")
+        LocalKit.current.Segments(listOf(state.t("exportPublicOption"), state.t("exportPrivateOption")), if (state.exportPrivate) 1 else 0, state.editable) { state.changeExportPrivate(it == 1) }
+        if (state.exportPrivate) {
+            Hint(state.t("legacyPrivateHint"))
+            PathInput(state, PathField.PrivatePath, state.t("privateKey"), "privatePath")
+            PathInput(state, PathField.Output, state.t("legacyPrivateOutput"), "output")
+        } else {
+            PathInput(state, PathField.KeyPath, state.t("publicKey"), "keyPath")
+            PathInput(state, PathField.Output, state.t("legacyOutput"), "output")
+        }
     } else {
         val upgrade = state.keyMode == KeyMode.Upgrade
         PathInput(state, PathField.PublicPath, state.t(if (upgrade) "publicKey" else "publicPath"), "publicPath")
@@ -214,6 +225,11 @@ private fun KeyFields(state: AppState) {
             Spacer(Modifier.height(8.dp))
             CheckRow(state.replace, state.t("replaceKeys"), state.editable) { state.replace = !state.replace }
             Hint(state.t("replaceKeysHint"), danger = true)
+        }
+        if (upgrade && state.legacyOffered) {
+            Spacer(Modifier.height(8.dp))
+            val label = state.t("legacyConfirm") + if (state.legacyWait > 0) " (${state.legacyWait})" else ""
+            CheckRow(state.legacyConfirmed, label, state.editable && state.legacyWait == 0) { state.legacyConfirmed = !state.legacyConfirmed }
         }
     }
 }
@@ -427,6 +443,7 @@ private fun FormFeedback(state: AppState, first: Boolean = false) {
             if (FingerprintQr.isFingerprint(fingerprint)) { Spacer(Modifier.height(8.dp)); kit.SecondaryButton(state.t("showQr")) { state.showQr(fingerprint) } }
         }
         if (result.canVerify == false) Hint(state.t("legacyKeyHint"), danger = true)
+        if (result.keyUpdated) Hint(state.t("keyUpdated"))
     }
     val signature = result.signature ?: return
     val title = when (signature.status) { "trusted" -> "signatureTrusted"; "untrusted" -> "signatureUntrusted"; else -> "signatureNone" }
@@ -611,11 +628,49 @@ private fun QrDialog(state: AppState) {
     }
 }
 
+/**
+ * The release notes, folded until asked for; opened, they scroll inside a box
+ * of at most 280 dp, so the dialog never grows past the window.
+ */
+@Composable
+private fun ReleaseNotes(state: AppState) {
+    val kit = LocalKit.current
+    val colors = kit.colors()
+    Column(Modifier.fillMaxWidth().padding(bottom = 16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row(
+            Modifier.fillMaxWidth().clip(RoundedCornerShape(6.dp)).clickable(role = Role.Button, onClick = state::toggleNotes).padding(vertical = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            kit.Text(state.t(if (state.notesOpen) "updateNotesHide" else "updateNotesShow"), TextRole.Label, Modifier.weight(1f), color = colors.text)
+            Icon(if (state.notesOpen) Icons.Filled.KeyboardArrowUp else Icons.Filled.KeyboardArrowDown, contentDescription = null, tint = colors.summary, modifier = Modifier.size(20.dp))
+        }
+        if (state.notesOpen) {
+            Column(
+                Modifier.fillMaxWidth().heightIn(max = 280.dp).background(colors.notice, RoundedCornerShape(10.dp))
+                    .verticalScroll(rememberScrollState()).padding(12.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                state.availableNotes.forEachIndexed { index, line ->
+                    when (line.kind) {
+                        "heading" -> kit.Text(line.text, TextRole.Label, if (index > 0) Modifier.padding(top = 8.dp) else Modifier, color = colors.text)
+                        "item" -> Row {
+                            kit.Text("•", TextRole.Small, Modifier.width(12.dp), color = colors.summary)
+                            kit.Text(line.text, TextRole.Small, Modifier.weight(1f), color = colors.summary)
+                        }
+                        else -> kit.Text(line.text, TextRole.Small, Modifier.fillMaxWidth(), color = colors.summary)
+                    }
+                }
+            }
+        }
+    }
+}
+
 @Composable
 private fun UpdateDialog(state: AppState) {
     val kit = LocalKit.current
     val version = state.availableVersion
     kit.Dialog(version.isNotEmpty(), state.t("updateAvailableTitle").replace("{version}", version), state.t("updateAvailableText").replace("{current}", state.version), state::dismissUpdate) {
+        if (state.availableNotes.isNotEmpty()) ReleaseNotes(state)
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End, verticalAlignment = Alignment.CenterVertically) {
             kit.LinkButton(state.t("ignoreVersion"), onClick = state::ignoreRelease)
             Spacer(Modifier.weight(1f))

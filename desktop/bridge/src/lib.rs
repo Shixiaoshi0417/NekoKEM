@@ -9,6 +9,7 @@
 #![allow(clippy::missing_safety_doc)]
 mod contacts;
 mod core;
+mod notes;
 mod preferences;
 mod update;
 
@@ -205,8 +206,12 @@ fn run(call: Call, progress: Option<ProgressCallback>) -> Result<Value, Failure>
         } => json(contact_job(move |store| {
             store.set_verified(&id, &fingerprint, verified)
         })),
-        // Needs no Core lock and no job: it never touches keys or files.
-        Call::CheckUpdate => json(Ok(update::check(VERSION))),
+        // Needs no job: it never touches keys or files. The language is read
+        // under the Core lock, which is released before the network request.
+        Call::CheckUpdate => {
+            let language = locked(|| Ok(core::language()))?;
+            json(Ok(update::check(VERSION, &language)))
+        }
         Call::OpenReleasePage { version } => {
             if update::open_page(&version) {
                 Ok(Value::Null)

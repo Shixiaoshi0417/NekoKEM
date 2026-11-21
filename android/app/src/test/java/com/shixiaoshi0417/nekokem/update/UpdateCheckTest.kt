@@ -31,6 +31,13 @@ class UpdateCheckTest {
         assertFalse(Releases.isNewer("v5.1.0", ""))
     }
 
+    @Test fun releaseNotesAreKept() {
+        val body = """{"tag_name":"v5.1.0","draft":false,"prerelease":false,"body":"## English\n- New"}"""
+        assertEquals("## English\n- New", Releases.parseLatest(body)?.notes)
+        val empty = """{"tag_name":"v5.1.0","draft":false,"prerelease":false,"body":null}"""
+        assertEquals("", Releases.parseLatest(empty)?.notes)
+    }
+
     @Test fun pageAddressIsBuiltFromTheVersion() {
         val parsed = Releases.parseLatest(release("v5.1.0"))
         assertEquals(ReleaseInfo("5.1.0", "https://github.com/Shixiaoshi0417/NekoKEM/releases/tag/v5.1.0"), parsed)

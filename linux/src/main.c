@@ -160,11 +160,16 @@ int main(int argc, char **argv)
         return run_decrypt(argc - 3, argv + 3, argv[0]);
     }
     if (argc == 2 && strcmp(argv[1], "upgrade-key") == 0) {
-        return cli_run_upgrade_key(NULL, NULL) ? EXIT_SUCCESS : EXIT_FAILURE;
+        return cli_run_upgrade_key(NULL, NULL, 0) ? EXIT_SUCCESS : EXIT_FAILURE;
     }
     if (argc == 4 && strcmp(argv[1], "upgrade-key") == 0) {
-        return cli_run_upgrade_key(argv[2], argv[3]) ? EXIT_SUCCESS
-                                                      : EXIT_FAILURE;
+        return cli_run_upgrade_key(argv[2], argv[3], 0) ? EXIT_SUCCESS
+                                                         : EXIT_FAILURE;
+    }
+    if (argc == 5 && strcmp(argv[1], "upgrade-key") == 0 &&
+        strcmp(argv[2], "--legacy-private-key") == 0) {
+        return cli_run_upgrade_key(argv[3], argv[4], 1) ? EXIT_SUCCESS
+                                                         : EXIT_FAILURE;
     }
     if (argc == 4 && strcmp(argv[1], "export-legacy-public-key") == 0) {
         return cli_run_export_legacy_public_key(argv[2], argv[3])

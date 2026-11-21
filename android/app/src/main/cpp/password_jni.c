@@ -173,8 +173,9 @@ static jint check_private_key_password(JNIEnv *env,
     if (result != PASSWORD_JNI_SUCCESS) {
         goto cleanup;
     }
-    /* The app does not yet tell its own key from imported ones, so every
-     * key is accepted as in NekoKEM 5.2; see docs/key-commitment.md. */
+    /* Only this device's key and a key the user imports as their own are
+     * checked here, so NKPR v1 and v2 are accepted; see
+     * docs/key-commitment.md. */
     result = nekokem_check_private_key_password_flags(
                  private_path.value, password, password_len,
                  NEKOKEM_PRIVATE_KEY_LEGACY) == 1
@@ -204,7 +205,8 @@ Java_com_shixiaoshi0417_nekokem_nativecore_NativeBridge_nativePrivateKeyFingerpr
     JNIEnv *env,
     jobject bridge,
     jstring private_key_path,
-    jbyteArray password_array)
+    jbyteArray password_array,
+    jboolean own_key)
 {
     PasswordJniPath private_path = {0};
     unsigned char *password = NULL;
@@ -224,9 +226,12 @@ Java_com_shixiaoshi0417_nekokem_nativecore_NativeBridge_nativePrivateKeyFingerpr
     if (status != PASSWORD_JNI_SUCCESS) {
         goto cleanup;
     }
-    if (!nekokem_internal_private_key_fingerprint(
+    /* A temporary private key may come from someone else: Core refuses
+     * NKPR v1 and v2 for it before the password is used. */
+    if (nekokem_internal_private_key_fingerprint(
             private_path.value, password, password_len,
-            fingerprint, sizeof(fingerprint))) {
+            own_key == JNI_TRUE ? NEKOKEM_PRIVATE_KEY_LEGACY : 0U,
+            fingerprint, sizeof(fingerprint)) != 1) {
         goto cleanup;
     }
     result = (*env)->NewStringUTF(env, fingerprint);
@@ -276,5 +281,107 @@ Java_com_shixiaoshi0417_nekokem_nativecore_NativeBridge_nativeUpgradeToIdentityK
     OPENSSL_clear_free(password, password_len);
     password_path_release(env, &private_path);
     password_path_release(env, &public_path);
+    return (jint)result;
+}
+
+/* NKPR v1 or v2 by the file's header; no password is used. */
+JNIEXPORT jboolean JNICALL
+Java_com_shixiaoshi0417_nekokem_nativecore_NativeBridge_nativePrivateKeyIsLegacy(
+    JNIEnv *env,
+    jobject bridge,
+    jstring private_key_path)
+{
+    PasswordJniPath private_path = {0};
+    jboolean legacy = JNI_FALSE;
+
+    (void)bridge;
+    if (password_path_acquire(env, private_key_path, &private_path) ==
+        PASSWORD_JNI_SUCCESS) {
+        legacy = nekokem_private_key_is_legacy(private_path.value) == 1
+                     ? JNI_TRUE
+                     : JNI_FALSE;
+    }
+    password_path_release(env, &private_path);
+    return legacy;
+}
+
+/*
+ * Rewrites this device's NKPR v2 key pair as NKPR v3 with the same keys and
+ * password. An NKPR v3 key is checked and left as it is.
+ */
+JNIEXPORT jint JNICALL
+Java_com_shixiaoshi0417_nekokem_nativecore_NativeBridge_nativeUpdatePrivateKeyFormat(
+    JNIEnv *env,
+    jobject bridge,
+    jstring public_key_path,
+    jstring private_key_path,
+    jbyteArray password_array)
+{
+    PasswordJniPath public_path = {0};
+    PasswordJniPath private_path = {0};
+    unsigned char *password = NULL;
+    size_t password_len = 0U;
+    int result;
+
+    (void)bridge;
+    result = password_path_acquire(env, public_key_path, &public_path);
+    if (result == PASSWORD_JNI_SUCCESS) {
+        result = password_path_acquire(env, private_key_path, &private_path);
+    }
+    if (result == PASSWORD_JNI_SUCCESS) {
+        result = password_bytes_copy(env, password_array,
+                                     &password, &password_len);
+    }
+    if (result == PASSWORD_JNI_SUCCESS) {
+        /* Only the app's own key pair is passed here. */
+        result = nekokem_update_private_key_format(
+                     public_path.value, private_path.value, password,
+                     password_len, NEKOKEM_PRIVATE_KEY_LEGACY) == 1
+                     ? PASSWORD_JNI_SUCCESS
+                     : PASSWORD_JNI_CORE_ERROR;
+    }
+    OPENSSL_clear_free(password, password_len);
+    password_path_release(env, &private_path);
+    password_path_release(env, &public_path);
+    return (jint)result;
+}
+
+/*
+ * Writes this device's private key as NKPR v2 (v1 for a two-component key),
+ * which NekoKEM 5.2 and earlier read, protected by the same password.
+ */
+JNIEXPORT jint JNICALL
+Java_com_shixiaoshi0417_nekokem_nativecore_NativeBridge_nativeExportPrivateKeyLegacy(
+    JNIEnv *env,
+    jobject bridge,
+    jstring private_key_path,
+    jbyteArray password_array,
+    jstring output_path)
+{
+    PasswordJniPath private_path = {0};
+    PasswordJniPath output = {0};
+    unsigned char *password = NULL;
+    size_t password_len = 0U;
+    int result;
+
+    (void)bridge;
+    result = password_path_acquire(env, private_key_path, &private_path);
+    if (result == PASSWORD_JNI_SUCCESS) {
+        result = password_path_acquire(env, output_path, &output);
+    }
+    if (result == PASSWORD_JNI_SUCCESS) {
+        result = password_bytes_copy(env, password_array,
+                                     &password, &password_len);
+    }
+    if (result == PASSWORD_JNI_SUCCESS) {
+        result = nekokem_export_private_key_legacy(
+                     private_path.value, password, password_len,
+                     output.value, NEKOKEM_PRIVATE_KEY_LEGACY) == 1
+                     ? PASSWORD_JNI_SUCCESS
+                     : PASSWORD_JNI_CORE_ERROR;
+    }
+    OPENSSL_clear_free(password, password_len);
+    password_path_release(env, &output);
+    password_path_release(env, &private_path);
     return (jint)result;
 }

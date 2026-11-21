@@ -1,8 +1,8 @@
 # Key commitment: assessment and design
 
-Status: proposal. This document changes no format; it records where
-NekoKEM's use of AES-GCM depends on key commitment, which uses are already
-covered, and what a future format would change for the one that is not.
+Status: implemented as NKPR v3. This document records where NekoKEM's use
+of AES-GCM depends on key commitment, which uses were already covered, and
+how NKPR v3 covers the one that was not.
 
 ## Background
 
@@ -31,6 +31,7 @@ open under.
 | NKEM v4/v5 payload | HKDF of the random file key | The sender |
 | NKEM v5 signature block | HKDF of the file key | The sender |
 | NKPR v1/v2 private key | Argon2id of the password, used directly | Whoever writes the NKPR file |
+| NKPR v3 private key | HKDF of Argon2id of the password, with a stored key commitment | Whoever writes the NKPR file, but only one password matches the commitment |
 
 ## Assessment
 
@@ -110,12 +111,17 @@ private key", and any key path chosen for decryption in the desktop apps or
 the CLI. The key a NekoKEM installation generated and keeps in its own key
 directory is not, unless an attacker can already replace files there.
 
-## Proposed NKPR v3
+## NKPR v3
 
-Status: the reader, the writer and the Core legacy rule are implemented,
-with the CLI rules below. The Android and desktop apps still pass the
-own-key flag on every call, so they open every key as before; telling their
-own key from imported ones is the remaining step.
+Status: implemented in Core, the CLI, Android and the desktop apps. Android
+treats the key in its key directory as its own; private-key import asks
+about an older-format file before the password and opens it only after the
+user said it is their own key; temporary private keys refuse NKPR v1 and v2. The desktop apps treat the private key set in Settings as their own.
+Their Upgrade key page rewrites that key directly, and any other older-format
+key only after a warning that stays up for three seconds and the user's
+confirmation that it is their own exported key. Both rewrite their own NKPR v2
+key as NKPR v3 after it unlocks, and both export an NKPR v2 copy; an
+older-format input to that export must be their own key.
 
 ### Format
 
@@ -187,19 +193,30 @@ says the file is the installation's own managed key:
   own key, and the CLI's default `keys/private.key.enc`. These keep reading
   v1 and v2, and after the first successful unlock with a writer release,
   the key is rewritten as NKPR v3 in place, with the same password, under
-  the existing pair lock and atomic replace. A v1 key is upgraded to an
-  identity key at the same time, which already keeps its encryption keys and
-  password; the user is told once. The CLI never changes key files as a side
+  the existing pair lock and atomic replace. A v1 key is not rewritten as a
+  side effect, because upgrading it to an identity key changes its public
+  key and fingerprint; the apps' Upgrade key action and the CLI's
+  `upgrade-key` do that, keeping its encryption keys and password. The CLI never changes key files as a side
   effect of encrypting or decrypting, which scripts would not expect: it
   prints a hint instead, and `upgrade-key` performs the rewrite.
-- **Every other source**: private-key import on Android and the desktop,
-  Android temporary private keys, other key paths in the desktop apps and
-  any other key path in the CLI. These refuse NKPR v1 and v2 with a dedicated
-  error that names the older format, instead of asking for the password.
-  Front ends offer one explicit action, "Import a key I exported from an
-  older NekoKEM", which states that only the user's own exported key should
-  be opened this way; on success it writes the key back as NKPR v3. The CLI
-  accepts a legacy file at another path only with `--legacy-private-key`.
+- **Every other source**: Android temporary private keys, other key paths in
+  the desktop apps and any other key path in the CLI. These refuse NKPR v1
+  and v2 before the password is used, with a dedicated error that names the
+  older format.
+- **Explicit action**: each front end has one way to open such a file as the
+  user's own key, which says that only the user's own exported key belongs
+  there: Android's private-key import after its dialog (an NKPR v2 key is
+  imported; an NKPR v1 key is upgraded right away, or kept as it is after a
+  three-second warning), the desktop Upgrade key page after its warning (the
+  bridge refuses a confirmation given before the three seconds have passed),
+  and the CLI's `--legacy-private-key`. Android decides on its private copy of
+  the file: a file that became NKPR v1 or v2 after the header check, so that no
+  dialog was shown, is refused unopened; an answer to the dialog applies to the
+  chosen file. Android's import and the desktop page then write the key as
+  NKPR v3: an NKPR v2 key keeps its keys, and an NKPR v1 key is upgraded to an
+  identity key, unless the user kept it as it is. In the CLI,
+  `--legacy-private-key` with `decrypt` or `encrypt` only opens the key;
+  `upgrade-key` rewrites it.
 
 The explicit action leaves a narrow social-engineering path, in which the
 attacker persuades the user that their file is the user's own old key. It
@@ -217,6 +234,11 @@ in a later release once those keys are rare.
    the legacy rules above apply. A private-key export offers "Export for
    NekoKEM 5.x and earlier" (NKPR v2), as legacy public keys are exported
    today, for moving the key to an older installation.
+
+In the end the reader and the writer were merged for the same release after
+v5.2.0, so no release reads NKPR v3 without also writing it. A key written
+by that release cannot be opened by v5.2.0 or earlier; the NKPR v2 export is
+the way to move it to an older installation.
 
 ### Compatibility
 
@@ -245,9 +267,12 @@ private key, and the default refuses NKPR v1 and v2:
   Argon2id runs, so a refusal never uses the password.
 - `nekokem_private_key_is_legacy()` reads only the header, so a front end can
   explain the rule before asking for a password.
-- `nekokem_update_private_key_format()` rewrites the own key pair and
-  `nekokem_export_private_key_legacy()` writes the NKPR v2 copy; both treat
-  the key as the installation's own.
+- `nekokem_update_private_key_format()` rewrites a key pair as NKPR v3 and
+  `nekokem_export_private_key_legacy()` writes the NKPR v2 copy. Both take
+  `NEKOKEM_PRIVATE_KEY_LEGACY` like the password check, and decide on the
+  bytes they decrypt: a front end's header check before the password prompt
+  only explains the rule early, and replacing the file after that check does
+  not get an older format past it.
 
 ### Implementation notes
 
@@ -290,4 +315,5 @@ of it; the format itself is small.
 3. Ship the NKPR v3 reader in the next release that changes private keys,
    and the writer with the legacy rules at least one release later. Until
    then, the existing guidance stands: enter your password only into your
-   own key files.
+   own key files. (Superseded: both were merged for the same release; see
+   Rollout.)

@@ -273,6 +273,9 @@ internal fun runMiuixUiTests(
             error("${failure.message} (auto=${stored.autoCheck}, last=${stored.lastCheckMillis}, ignored=${stored.ignoredVersion})")
         }
         capture("update-available")
+        click(string(R.string.update_notes_show))
+        await("release notes open") { exact(string(R.string.update_notes_hide)) != null }
+        capture("update-notes")
         click(string(R.string.action_later))
         await("update prompt closed") { exact(updateTitle) == null }
         check(UpdateSettingsStore.read(context).lastCheckMillis > 0L) { "The automatic check was not recorded" }
@@ -369,6 +372,9 @@ internal fun runMiuixUiTests(
         click(string(R.string.action_check_update))
         await("Material update prompt") { exact(updateTitle) != null }
         capture("material-update-available")
+        click(string(R.string.update_notes_show))
+        await("Material release notes open") { exact(string(R.string.update_notes_hide)) != null }
+        capture("material-update-notes")
         click(string(R.string.action_later))
         await("Material update prompt closed") { exact(updateTitle) == null }
         clickNavigationTab(instrumentation, string(R.string.tab_files))

@@ -1,7 +1,7 @@
 import Foundation
 
 /// The commands of desktop/bridge/src/lib.rs, typed for Swift.
-enum Kind: String { case keygen, encrypt, decrypt, fingerprint, upgrade, exportLegacy = "export-legacy" }
+enum Kind: String { case keygen, encrypt, decrypt, fingerprint, upgrade, exportLegacy = "export-legacy", exportLegacyPrivate = "export-legacy-private" }
 
 struct OperationRequest {
     var id: String
@@ -17,13 +17,15 @@ struct OperationRequest {
     var omitName = false
     // Encryption and decryption write to a private staged file; saveOutput moves it to the chosen place.
     var stage = false
+    // Upgrade only: the user confirmed, after the bridge's warning, that an older-format key is their own.
+    var legacyConfirmed = false
 
     var json: [String: Any] {
         ["id": id, "kind": kind.rawValue, "input": input, "output": output, "keyPath": keyPath,
          "publicPath": publicPath, "privatePath": privatePath, "password": password, "confirmation": confirmation,
          "keyText": keyText, "paste": paste, "contacts": contacts, "keyPaths": keyPaths, "replace": replace,
          "overwrite": overwrite, "signKeyPath": signKeyPath, "unsigned": unsigned, "requireSignature": requireSignature,
-         "omitName": omitName, "stage": stage]
+         "omitName": omitName, "stage": stage, "legacyConfirmed": legacyConfirmed]
     }
 }
 
@@ -38,6 +40,8 @@ struct Outcome {
     var canVerify: Bool? = nil
     /// The file name a signed file recorded, already safe for this system.
     var originalName: String? = nil
+    /// The own private key was NKPR v2 and is now NKPR v3; keys and password are unchanged.
+    var keyUpdated = false
 
     init(fingerprint: String? = nil) { self.fingerprint = fingerprint }
     init(_ value: Any) {
@@ -48,6 +52,7 @@ struct Outcome {
         format = fields["format"] as? Int
         canVerify = fields["canVerify"] as? Bool
         originalName = fields["originalName"] as? String
+        keyUpdated = fields["keyUpdated"] as? Bool ?? false
         if let signed = fields["signature"] as? [String: Any] {
             signature = Signature(status: signed["status"] as? String ?? "unsigned", fingerprint: signed["fingerprint"] as? String,
                                   contact: signed["contact"] as? String, signerKey: signed["signerKey"] as? String)
@@ -82,7 +87,10 @@ struct Contact: Identifiable, Equatable {
     }
 }
 
-enum UpdateStatus: Equatable { case available(String), current, failed }
+/// One line of release notes, already plain text; see the bridge's notes.rs.
+struct NoteLine: Equatable { var kind: String; var text: String }
+/// The notes are empty when only the release page's redirect answered.
+enum UpdateStatus: Equatable { case available(String, [NoteLine]), current, failed }
 struct UpdatePreferences { var auto = true; var lastCheck: Int64 = 0; var ignored = "" }
 /// Kept in desktop.json beside the contacts. Unsigned output is never saved.
 struct DesktopPreferences { var requireSignature = false; var signKeyPath = ""; var publicKeyPath = ""; var sidebarOpen = true; var style = "miuix"; var recordName = true; var decryptFolder = "" }
@@ -125,7 +133,13 @@ enum Backend {
     static func checkUpdate() -> UpdateStatus {
         guard let fields = try? Bridge.call("check_update") as? [String: Any] else { return .failed }
         switch fields["status"] as? String {
-        case "available": return (fields["version"] as? String).map(UpdateStatus.available) ?? .failed
+        case "available":
+            guard let version = fields["version"] as? String else { return .failed }
+            let notes = (fields["notes"] as? [[String: Any]] ?? []).compactMap { line -> NoteLine? in
+                guard let kind = line["kind"] as? String, let text = line["text"] as? String else { return nil }
+                return NoteLine(kind: kind, text: text)
+            }
+            return .available(version, notes)
         case "current": return .current
         default: return .failed
         }

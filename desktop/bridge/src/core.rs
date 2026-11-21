@@ -56,6 +56,8 @@ pub enum Kind {
     Fingerprint,
     Upgrade,
     ExportLegacy,
+    // The user's private key in the format NekoKEM 5.2 and earlier read.
+    ExportLegacyPrivate,
 }
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
@@ -112,6 +114,11 @@ pub struct Request {
     // saves afterwards (save_output) or gives up (discard_output). No `output`.
     #[serde(default)]
     pub stage: bool,
+    // Upgrade only: after the warning the bridge offered for an older-format
+    // private key that is not the saved own key, the user confirmed that it
+    // is their own key, exported from an older NekoKEM.
+    #[serde(default)]
+    pub legacy_confirmed: bool,
 }
 #[derive(Serialize, Default)]
 #[serde(rename_all = "camelCase")]
@@ -131,6 +138,10 @@ pub struct Outcome {
     // Decryption: the file name a signed file recorded, made safe for this system.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub original_name: Option<String>,
+    // The user's own private key was NKPR v2 and has been rewritten as NKPR v3
+    // after it opened; the keys and the password are unchanged.
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub key_updated: bool,
 }
 // Core decides the status and matches the signer; the GUI only reports it.
 #[derive(Serialize, Debug)]
@@ -155,6 +166,8 @@ pub struct Job {
 enum Confirmation {
     Keypair(String, String),
     Output(String),
+    // An older-format private key to be opened as the user's own key.
+    Legacy(String),
 }
 // Instant stops while the machine sleeps; the wall clock covers that time.
 struct Offer {
@@ -163,6 +176,9 @@ struct Offer {
     wall: SystemTime,
 }
 const OFFER_LIFETIME: Duration = Duration::from_secs(300);
+// The warning for an older-format private key stays up this long before the
+// user can confirm it; the apps count down the same time.
+pub const LEGACY_CONFIRM_DELAY: Duration = Duration::from_secs(3);
 impl Offer {
     fn fresh(&self) -> bool {
         self.at.elapsed() < OFFER_LIFETIME
@@ -170,6 +186,14 @@ impl Offer {
                 .wall
                 .elapsed()
                 .is_ok_and(|elapsed| elapsed < OFFER_LIFETIME)
+    }
+    // Not confirmed before the warning had its full time on screen.
+    fn waited(&self) -> bool {
+        self.at.elapsed() >= LEGACY_CONFIRM_DELAY
+            && self
+                .wall
+                .elapsed()
+                .is_ok_and(|elapsed| elapsed >= LEGACY_CONFIRM_DELAY)
     }
 }
 pub struct Backend {
@@ -237,11 +261,16 @@ impl Backend {
             ))
         } else if request.overwrite {
             Some(Confirmation::Output(request.output.clone()))
+        } else if request.legacy_confirmed {
+            Some(Confirmation::Legacy(request.private_path.clone()))
         } else {
             None
         };
         if let Some(target) = target {
-            if !offer.is_some_and(|offer| offer.target == target && offer.fresh()) {
+            let legacy = matches!(target, Confirmation::Legacy(_));
+            if !offer.is_some_and(|offer| {
+                offer.target == target && offer.fresh() && (!legacy || offer.waited())
+            }) {
                 return Err(Failure::new("invalid-request"));
             }
         }
@@ -654,6 +683,8 @@ const ENCRYPT_UNSIGNED: u32 = 0x1;
 const ENCRYPT_LEGACY_SENDER_KEY: u32 = 0x2;
 const VERIFY_REQUIRE_SIGNATURE: u32 = 0x1;
 const VERIFY_LEGACY_PRIVATE_KEY: u32 = 0x4;
+// Upgrade and export: the key is the user's own, so NKPR v1/v2 may open.
+const PRIVATE_KEY_LEGACY: u32 = 0x1;
 #[repr(C)]
 struct EncryptOptions {
     struct_size: usize,
@@ -722,13 +753,22 @@ extern "C" {
         callback: Option<Progress>,
         data: *mut c_void,
     ) -> c_int;
-    fn nekokem_upgrade_to_identity_keys(
+    fn nekokem_export_legacy_public_key(key: *const c_char, output: *const c_char) -> c_int;
+    fn nekokem_private_key_is_legacy(key: *const c_char) -> c_int;
+    fn nekokem_update_private_key_format(
         public: *const c_char,
         private: *const c_char,
         password: *const u8,
         length: usize,
+        flags: u32,
     ) -> c_int;
-    fn nekokem_export_legacy_public_key(key: *const c_char, output: *const c_char) -> c_int;
+    fn nekokem_export_private_key_legacy(
+        private: *const c_char,
+        password: *const u8,
+        length: usize,
+        output: *const c_char,
+        flags: u32,
+    ) -> c_int;
     fn nekokem_public_key_fingerprint(
         key: *const c_char,
         output: *mut c_char,
@@ -845,6 +885,55 @@ pub fn legacy_fingerprint(key: &CStr) -> Option<String> {
 }
 pub fn can_verify(key: &CStr) -> bool {
     (unsafe { nekokem_public_key_can_verify(key.as_ptr()) }) == 1
+}
+fn private_key_is_legacy(key: &CStr) -> bool {
+    (unsafe { nekokem_private_key_is_legacy(key.as_ptr()) }) == 1
+}
+// The user's own key pair as saved in the settings, which key generation and
+// upgrading also set. NKPR v1/v2 keys have no key commitment, so Core opens
+// them only for this pair: a v1/v2 file from anyone else could be crafted to
+// open under several passwords and reveal which one the user typed.
+#[cfg(not(test))]
+fn own_keys() -> Option<(String, String)> {
+    let saved = crate::preferences::load(&crate::update::config_directory()?);
+    Some((saved.sign_key_path, saved.public_key_path))
+}
+#[cfg(test)]
+thread_local! {
+    static OWN_KEYS: std::cell::RefCell<Option<(String, String)>> =
+        const { std::cell::RefCell::new(None) };
+}
+#[cfg(test)]
+fn own_keys() -> Option<(String, String)> {
+    OWN_KEYS.with(|keys| keys.borrow().clone())
+}
+// The saved public key when [private] is the user's own private key.
+fn own_private_key(private: &CStr) -> Option<Option<CString>> {
+    let (own, public) = own_keys()?;
+    if own.is_empty() || same_file(private, &path(&own).ok()?) != Some(true) {
+        return None;
+    }
+    Some(path(&public).ok())
+}
+// After the user's own NKPR v2 key opened, it is rewritten as NKPR v3 with
+// the same keys and password, as on Android. Best effort: the operation
+// already succeeded, and the next one tries again.
+// True when the key was rewritten, so the app can say so once.
+fn update_own_key(private: &CStr, public: Option<&CString>, password: &[u8]) -> bool {
+    let Some(public) = public else { return false };
+    if !private_key_is_legacy(private) || !can_verify(public) {
+        return false;
+    }
+    let updated = unsafe {
+        nekokem_update_private_key_format(
+            public.as_ptr(),
+            private.as_ptr(),
+            password.as_ptr(),
+            password.len(),
+            PRIVATE_KEY_LEGACY,
+        )
+    };
+    updated == 1
 }
 pub fn language() -> String {
     unsafe {
@@ -986,6 +1075,9 @@ pub fn execute<F: Fn(u64, u64)>(
     if request.replace && request.kind != Kind::Keygen {
         return Err(Failure::new("invalid-request"));
     }
+    if request.legacy_confirmed && request.kind != Kind::Upgrade {
+        return Err(Failure::new("invalid-request"));
+    }
     if request.stage
         && (!matches!(request.kind, Kind::Encrypt | Kind::Decrypt)
             || !request.output.is_empty()
@@ -1000,7 +1092,7 @@ pub fn execute<F: Fn(u64, u64)>(
     if request.overwrite
         && !matches!(
             request.kind,
-            Kind::Encrypt | Kind::Decrypt | Kind::ExportLegacy
+            Kind::Encrypt | Kind::Decrypt | Kind::ExportLegacy | Kind::ExportLegacyPrivate
         )
     {
         return Err(Failure::new("invalid-request"));
@@ -1119,10 +1211,29 @@ pub fn execute<F: Fn(u64, u64)>(
         }
         let public = path(&request.public_path)?;
         let private = path(&request.private_path)?;
-        if can_verify(&public) {
+        // An identity key from NekoKEM 5.2 (NKPR v2) is rewritten as NKPR v3;
+        // a 4.x key (NKPR v1) also gains the two signing keys.
+        if can_verify(&public) && !private_key_is_legacy(&private) {
             return Err(Failure::new("already-identity"));
         }
-        if on_document_portal(&request.public_path) || on_document_portal(&request.private_path) {
+        // Only the saved own key opens in an older format right away. Any
+        // other older-format key needs the user's confirmation, given after
+        // the warning was shown for LEGACY_CONFIRM_DELAY (consume_offer checks
+        // it): a file from someone else could be built to test the password.
+        // Core decides on the bytes it decrypts, before the password is used.
+        let accept = request.legacy_confirmed || own_private_key(&private).is_some();
+        let update = |public: &CStr, private: &CStr| unsafe {
+            nekokem_update_private_key_format(
+                public.as_ptr(),
+                private.as_ptr(),
+                request.password.as_ptr(),
+                request.password.len(),
+                if accept { PRIVATE_KEY_LEGACY } else { 0 },
+            )
+        };
+        let status = if on_document_portal(&request.public_path)
+            || on_document_portal(&request.private_path)
+        {
             // Upgraded in a private folder and copied back over both files.
             let _lock = lock_portal_pairs()?;
             let stage = PairStage::new()?;
@@ -1136,33 +1247,72 @@ pub fn execute<F: Fn(u64, u64)>(
             );
             if copy_new(public_file, &stage.public()).is_err()
                 || copy_new(private_file, &stage.private()).is_err()
-                || unsafe {
-                    nekokem_upgrade_to_identity_keys(
-                        staged_public.as_ptr(),
-                        staged_private.as_ptr(),
-                        request.password.as_ptr(),
-                        request.password.len(),
-                    )
-                } != 1
-                || place_pair(&stage, public_file, private_file, true).is_err()
             {
                 return Err(Failure::new("core-error"));
             }
-        } else if unsafe {
-            nekokem_upgrade_to_identity_keys(
-                public.as_ptr(),
-                private.as_ptr(),
-                request.password.as_ptr(),
-                request.password.len(),
-            )
-        } != 1
-        {
+            let status = update(&staged_public, &staged_private);
+            if status == 1 && place_pair(&stage, public_file, private_file, true).is_err() {
+                return Err(Failure::new("core-error"));
+            }
+            status
+        } else {
+            update(&public, &private)
+        };
+        if status == -13 {
+            backend.offer(Confirmation::Legacy(request.private_path.clone()))?;
+            return Err(Failure::new("legacy-unconfirmed"));
+        }
+        if status != 1 {
             return Err(Failure::new("core-error"));
         }
         return Ok(Outcome {
             output: Some(request.public_path.clone()),
             fingerprint: fingerprint(&public),
             can_verify: Some(true),
+            ..Outcome::default()
+        });
+    }
+    if request.kind == Kind::ExportLegacyPrivate {
+        // The same password protects the copy, which NekoKEM 5.2 can open.
+        if request.password.is_empty() {
+            return Err(Failure::new("password-empty"));
+        }
+        let private = path(&request.private_path)?;
+        let output = path(&request.output)?;
+        if same_file(&output, &private) == Some(true) {
+            return Err(Failure::new("output-is-key"));
+        }
+        if !request.overwrite && exists(&output) == Some(true) {
+            backend.offer(Confirmation::Output(request.output.clone()))?;
+            return Err(Failure::new("output-exists"));
+        }
+        // Only the saved own key may be NKPR v1/v2 here: exporting someone
+        // else's older-format file would unlock it with the password. A v3 key
+        // carries its commitment and needs no such rule.
+        let own = own_private_key(&private).is_some();
+        let output_mode = OutputMode::new(!request.overwrite);
+        let status = unsafe {
+            nekokem_export_private_key_legacy(
+                private.as_ptr(),
+                request.password.as_ptr(),
+                request.password.len(),
+                output.as_ptr(),
+                if own { PRIVATE_KEY_LEGACY } else { 0 },
+            )
+        };
+        drop(output_mode);
+        if status == -13 {
+            return Err(Failure::new("legacy-private-key"));
+        }
+        if status != 1 {
+            if !request.overwrite && exists(&output) == Some(true) {
+                backend.offer(Confirmation::Output(request.output.clone()))?;
+                return Err(Failure::new("output-exists"));
+            }
+            return Err(Failure::new("core-error"));
+        }
+        return Ok(Outcome {
+            output: Some(request.output.clone()),
             ..Outcome::default()
         });
     }
@@ -1294,6 +1444,14 @@ pub fn execute<F: Fn(u64, u64)>(
         } else {
             None
         };
+        // The private key this operation opens, and the saved public key when
+        // it is the user's own: only then may it be NKPR v1/v2.
+        let opened = match request.kind {
+            Kind::Encrypt => sign_key.clone(),
+            Kind::Decrypt => keys.first().cloned(),
+            _ => None,
+        };
+        let own = opened.as_deref().and_then(own_private_key);
         let mut written = EncryptResult {
             struct_size: std::mem::size_of::<EncryptResult>(),
             format_version: 0,
@@ -1328,13 +1486,14 @@ pub fn execute<F: Fn(u64, u64)>(
                         keys.iter().map(|key| key.as_ptr()).collect();
                     let options = EncryptOptions {
                         struct_size: std::mem::size_of::<EncryptOptions>(),
-                        // The apps do not yet tell their own key from other key files,
-                        // so every key is accepted as in NekoKEM 5.2; see
+                        // Only the user's own key may be NKPR v1/v2; see
                         // docs/key-commitment.md.
-                        flags: if signing {
+                        flags: if !signing {
+                            ENCRYPT_UNSIGNED
+                        } else if own.is_some() {
                             ENCRYPT_LEGACY_SENDER_KEY
                         } else {
-                            ENCRYPT_UNSIGNED
+                            0
                         },
                         sender_private_key_path: sign_key
                             .as_ref()
@@ -1363,13 +1522,16 @@ pub fn execute<F: Fn(u64, u64)>(
                 Kind::Decrypt => {
                     let policy = VerifyPolicy {
                         struct_size: std::mem::size_of::<VerifyPolicy>(),
-                        // As for encryption: every key is accepted as in NekoKEM 5.2.
-                        flags: VERIFY_LEGACY_PRIVATE_KEY
-                            | if request.require_signature {
-                                VERIFY_REQUIRE_SIGNATURE
-                            } else {
-                                0
-                            },
+                        // As for encryption: only the user's own key may be NKPR v1/v2.
+                        flags: (if own.is_some() {
+                            VERIFY_LEGACY_PRIVATE_KEY
+                        } else {
+                            0
+                        }) | if request.require_signature {
+                            VERIFY_REQUIRE_SIGNATURE
+                        } else {
+                            0
+                        },
                         trusted_signer_paths: if signer_paths.is_empty() {
                             std::ptr::null()
                         } else {
@@ -1410,8 +1572,15 @@ pub fn execute<F: Fn(u64, u64)>(
             -10 => return Err(Failure::new("signature-invalid")),
             -11 => return Err(Failure::new("signature-required")),
             -12 => return Err(Failure::new("signer-not-trusted")),
+            -13 => return Err(Failure::new("legacy-private-key")),
             _ => return Err(Failure::new("core-error")),
         }
+        let key_updated = match (&opened, &own) {
+            (Some(private), Some(public)) => {
+                update_own_key(private, public.as_ref(), request.password.as_bytes())
+            }
+            _ => false,
+        };
         let fingerprint = if recipients.len() == 1 && keys.len() == 1 {
             recipients.first().cloned()
         } else {
@@ -1421,6 +1590,7 @@ pub fn execute<F: Fn(u64, u64)>(
             output: (!request.stage).then(|| request.output.clone()),
             fingerprint,
             recipients: recipients.clone(),
+            key_updated,
             ..Outcome::default()
         };
         match request.kind {
@@ -1564,6 +1734,7 @@ mod tests {
         Request {
             stage: false,
             omit_name: false,
+            legacy_confirmed: false,
             id: "test-job".into(),
             input: String::new(),
             output: String::new(),
@@ -2682,15 +2853,25 @@ mod tests {
         r.output = dir.file("old.nkem");
         r.key_path = public.clone();
         run(&backend, r).unwrap();
-        // A legacy key cannot sign.
+        // An NKPR v1 key that is not the user's own is refused before it is
+        // opened; as the user's own key it opens but cannot sign.
+        let sign = |r: &mut Request| {
+            r.input = dir.file("plain");
+            r.output = dir.file("signed.nkem");
+            r.key_path = public.clone();
+            r.unsigned = false;
+            r.sign_key_path = private.clone();
+            r.password = Zeroizing::new("public test password".into());
+        };
         let mut r = request(Kind::Encrypt);
-        r.input = dir.file("plain");
-        r.output = dir.file("signed.nkem");
-        r.key_path = public.clone();
-        r.unsigned = false;
-        r.sign_key_path = private.clone();
-        r.password = Zeroizing::new("public test password".into());
-        assert_eq!(run(&backend, r).err().unwrap().code, "core-error");
+        sign(&mut r);
+        assert_eq!(run(&backend, r).err().unwrap().code, "legacy-private-key");
+        OWN_KEYS.with(|keys| *keys.borrow_mut() = Some((private.clone(), public.clone())));
+        let mut r = request(Kind::Encrypt);
+        sign(&mut r);
+        let refused = run(&backend, r).err().unwrap().code;
+        OWN_KEYS.with(|keys| *keys.borrow_mut() = None);
+        assert_eq!(refused, "core-error");
         let upgrade = |password: &str| {
             let mut r = request(Kind::Upgrade);
             r.public_path = public.clone();
@@ -2698,15 +2879,67 @@ mod tests {
             r.password = Zeroizing::new(password.into());
             r
         };
+        let confirmed = |password: &str| {
+            let mut r = upgrade(password);
+            r.legacy_confirmed = true;
+            r
+        };
         assert_eq!(
             run(&backend, upgrade("")).err().unwrap().code,
             "password-empty"
         );
+        // Not the saved own key: the bridge warns before the password is used,
+        // and accepts the confirmation only after the warning's full time.
         assert_eq!(
             run(&backend, upgrade("wrong")).err().unwrap().code,
-            "core-error"
+            "legacy-unconfirmed"
         );
-        let outcome = run(&backend, upgrade("public test password")).unwrap();
+        assert_eq!(
+            run(&backend, confirmed("public test password"))
+                .err()
+                .unwrap()
+                .code,
+            "invalid-request"
+        );
+        assert_eq!(
+            run(&backend, confirmed("public test password"))
+                .err()
+                .unwrap()
+                .code,
+            "invalid-request"
+        );
+        // The warning's time is simulated by backdating the recorded offer.
+        let waited = || {
+            let mut slot = backend.offer.lock().unwrap();
+            let offer = slot.as_mut().unwrap();
+            offer.at -= LEGACY_CONFIRM_DELAY;
+            offer.wall -= LEGACY_CONFIRM_DELAY;
+        };
+        // Even with a matching, waited offer, only Upgrade takes the confirmation.
+        assert_eq!(
+            run(&backend, upgrade("wrong")).err().unwrap().code,
+            "legacy-unconfirmed"
+        );
+        waited();
+        let mut r = request(Kind::Decrypt);
+        r.private_path = private.clone();
+        r.legacy_confirmed = true;
+        assert_eq!(run(&backend, r).err().unwrap().code, "invalid-request");
+        assert_eq!(fs::read(&private).unwrap()[4], 1);
+        // As the saved own key, a wrong password is simply wrong.
+        OWN_KEYS.with(|keys| *keys.borrow_mut() = Some((private.clone(), public.clone())));
+        let wrong = run(&backend, upgrade("wrong")).err().unwrap().code;
+        OWN_KEYS.with(|keys| *keys.borrow_mut() = None);
+        assert_eq!(wrong, "core-error");
+        assert_eq!(
+            run(&backend, upgrade("public test password"))
+                .err()
+                .unwrap()
+                .code,
+            "legacy-unconfirmed"
+        );
+        waited();
+        let outcome = run(&backend, confirmed("public test password")).unwrap();
         assert_eq!(
             (
                 legacy_fingerprint(&path(&public).unwrap()),
@@ -2738,6 +2971,138 @@ mod tests {
         r.sign_key_path = private.clone();
         r.password = Zeroizing::new("public test password".into());
         assert_eq!(run(&backend, r).unwrap().format, Some(5));
+    }
+    // NKPR v2 has no key commitment, so only the user's own key may be one.
+    #[test]
+    fn older_private_keys_open_only_as_the_users_own_key() {
+        let dir = Directory::new();
+        let backend = Arc::new(Backend::default());
+        let password = "public test password";
+        let mut r = request(Kind::Keygen);
+        r.public_path = dir.file("public.key");
+        r.private_path = dir.file("private.key.enc");
+        r.password = Zeroizing::new(password.into());
+        r.confirmation = r.password.clone();
+        run(&backend, r).unwrap();
+        fs::write(dir.file("plain"), b"public test input").unwrap();
+        let mut r = request(Kind::Encrypt);
+        r.input = dir.file("plain");
+        r.output = dir.file("plain.nkem");
+        r.key_path = dir.file("public.key");
+        run(&backend, r).unwrap();
+        let export = |output: &str, secret: &str, overwrite: bool| {
+            let mut r = request(Kind::ExportLegacyPrivate);
+            r.private_path = dir.file("private.key.enc");
+            r.output = dir.file(output);
+            r.password = Zeroizing::new(secret.into());
+            r.overwrite = overwrite;
+            run(&backend, r)
+        };
+        assert_eq!(
+            export("old.enc", "", false).err().unwrap().code,
+            "password-empty"
+        );
+        assert_eq!(
+            export("private.key.enc", password, false)
+                .err()
+                .unwrap()
+                .code,
+            "output-is-key"
+        );
+        assert_eq!(
+            export("old.enc", "wrong", false).err().unwrap().code,
+            "core-error"
+        );
+        assert!(!std::path::Path::new(&dir.file("old.enc")).exists());
+        assert_eq!(
+            export("old.enc", password, false).unwrap().output,
+            Some(dir.file("old.enc"))
+        );
+        assert_eq!(
+            export("old.enc", password, false).err().unwrap().code,
+            "output-exists"
+        );
+        export("old.enc", password, true).unwrap();
+        let old = path(&dir.file("old.enc")).unwrap();
+        assert!(private_key_is_legacy(&old));
+        // Exporting another older-format file would unlock it with the
+        // password, so only the saved own key may be one.
+        let export_old = |output: &str| {
+            let mut r = request(Kind::ExportLegacyPrivate);
+            r.private_path = dir.file("old.enc");
+            r.output = dir.file(output);
+            r.password = Zeroizing::new(password.into());
+            run(&backend, r)
+        };
+        assert_eq!(
+            export_old("copy.enc").err().unwrap().code,
+            "legacy-private-key"
+        );
+        assert!(!std::path::Path::new(&dir.file("copy.enc")).exists());
+        OWN_KEYS
+            .with(|keys| *keys.borrow_mut() = Some((dir.file("old.enc"), dir.file("public.key"))));
+        let exported = export_old("copy.enc");
+        OWN_KEYS.with(|keys| *keys.borrow_mut() = None);
+        exported.unwrap();
+        assert!(private_key_is_legacy(&path(&dir.file("copy.enc")).unwrap()));
+        let decrypt = |r: &mut Request| {
+            r.input = dir.file("plain.nkem");
+            r.output = dir.file("plain.out");
+            r.key_path = dir.file("old.enc");
+            r.password = Zeroizing::new(password.into());
+        };
+        // Another installation's v2 file is refused before any password is tried.
+        let mut r = request(Kind::Decrypt);
+        decrypt(&mut r);
+        assert_eq!(run(&backend, r).err().unwrap().code, "legacy-private-key");
+        assert!(private_key_is_legacy(&old));
+        // As the user's own key it opens and is rewritten as NKPR v3.
+        OWN_KEYS
+            .with(|keys| *keys.borrow_mut() = Some((dir.file("old.enc"), dir.file("public.key"))));
+        let mut r = request(Kind::Decrypt);
+        decrypt(&mut r);
+        let opened = run(&backend, r);
+        let mut r = request(Kind::Decrypt);
+        decrypt(&mut r);
+        r.output = dir.file("plain.again");
+        let again = run(&backend, r);
+        OWN_KEYS.with(|keys| *keys.borrow_mut() = None);
+        // The rewrite is reported once, by the operation that did it.
+        assert!(opened.unwrap().key_updated);
+        assert!(!again.unwrap().key_updated);
+        assert_eq!(
+            fs::read(dir.file("plain.out")).unwrap(),
+            b"public test input"
+        );
+        assert!(!private_key_is_legacy(&old));
+        // The upgrade page rewrites a v2 identity key, and only once: the
+        // saved own key right away, any other only after the warning.
+        export("older.enc", password, false).unwrap();
+        let upgrade = |secret: &str| {
+            let mut r = request(Kind::Upgrade);
+            r.public_path = dir.file("public.key");
+            r.private_path = dir.file("older.enc");
+            r.password = Zeroizing::new(secret.into());
+            run(&backend, r)
+        };
+        assert_eq!(upgrade(password).err().unwrap().code, "legacy-unconfirmed");
+        OWN_KEYS.with(|keys| {
+            *keys.borrow_mut() = Some((dir.file("older.enc"), dir.file("public.key")))
+        });
+        let wrong = upgrade("wrong").err().unwrap().code;
+        let before = fingerprint(&path(&dir.file("public.key")).unwrap());
+        let upgraded = upgrade(password);
+        OWN_KEYS.with(|keys| *keys.borrow_mut() = None);
+        assert_eq!(wrong, "core-error");
+        let outcome = upgraded.unwrap();
+        assert_eq!(
+            (outcome.fingerprint, outcome.can_verify),
+            (before, Some(true))
+        );
+        assert!(!private_key_is_legacy(
+            &path(&dir.file("older.enc")).unwrap()
+        ));
+        assert_eq!(upgrade(password).err().unwrap().code, "already-identity");
     }
     #[cfg(unix)]
     #[test]

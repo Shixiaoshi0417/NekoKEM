@@ -11,7 +11,7 @@ import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.longOrNull
 
 /** The bridge's commands (desktop/bridge/src/lib.rs), typed for Kotlin. */
-enum class Kind(val wire: String) { Keygen("keygen"), Encrypt("encrypt"), Decrypt("decrypt"), Fingerprint("fingerprint"), Upgrade("upgrade"), ExportLegacy("export-legacy") }
+enum class Kind(val wire: String) { Keygen("keygen"), Encrypt("encrypt"), Decrypt("decrypt"), Fingerprint("fingerprint"), Upgrade("upgrade"), ExportLegacy("export-legacy"), ExportLegacyPrivate("export-legacy-private") }
 
 /** One operation. The secret fields are read from the text fields when the request is written. */
 class OperationRequest(
@@ -26,6 +26,8 @@ class OperationRequest(
     val omitName: Boolean = false,
     // Encryption and decryption write to a private staged file; saveOutput moves it to the chosen place.
     val stage: Boolean = false,
+    // Upgrade only: the user confirmed, after the bridge's warning, that an older-format key is their own.
+    val legacyConfirmed: Boolean = false,
 )
 
 data class Signature(val status: String, val fingerprint: String?, val contact: String?, val signerKey: String?)
@@ -34,12 +36,17 @@ data class Outcome(
     val format: Int? = null, val signature: Signature? = null, val canVerify: Boolean? = null,
     /** The file name a signed file recorded, already safe for this system. */
     val originalName: String? = null,
+    /** The own private key was NKPR v2 and is now NKPR v3; keys and password are unchanged. */
+    val keyUpdated: Boolean = false,
 )
 data class Contact(val id: String, val fingerprint: String, val name: String, val note: String, val canVerify: Boolean, val legacyFingerprint: String?, val pinned: Boolean = false, val verified: Boolean = false)
 data class ContactList(val contacts: List<Contact>, val unreadable: Int)
 data class Settings(val language: String, val selection: String, val version: String)
+/** One line of release notes, already plain text; see the bridge's notes.rs. */
+data class NoteLine(val kind: String, val text: String)
 sealed interface UpdateStatus {
-    data class Available(val version: String) : UpdateStatus
+    /** [notes] is empty when only the release page's redirect answered. */
+    data class Available(val version: String, val notes: List<NoteLine> = emptyList()) : UpdateStatus
     data object Current : UpdateStatus
     data object Failed : UpdateStatus
 }
@@ -49,6 +56,8 @@ data class DesktopPreferences(val requireSignature: Boolean = false, val signKey
 
 // Same limit as Core's NEKOKEM_MAX_RECIPIENTS for one NKEM v4/v5 file.
 const val MAX_RECIPIENTS = 64
+// Same as the bridge's LEGACY_CONFIRM_DELAY: an older-format key's warning stays up this long.
+const val LEGACY_CONFIRM_SECONDS = 3
 
 object Backend {
     private fun JsonElement.obj() = jsonObject
@@ -76,6 +85,7 @@ object Backend {
                     field("replace", request.replace); field("overwrite", request.overwrite)
                     field("signKeyPath", request.signKeyPath); field("unsigned", request.unsigned); field("requireSignature", request.requireSignature)
                     field("omitName", request.omitName); field("stage", request.stage)
+                    field("legacyConfirmed", request.legacyConfirmed)
                 }
             }
         }
@@ -96,6 +106,7 @@ object Backend {
             format = (it["format"] as? JsonPrimitive)?.intOrNull, signature = signature,
             canVerify = it.flag("canVerify"),
             originalName = it.text("originalName"),
+            keyUpdated = it.flag("keyUpdated") ?: false,
         )
     }
 
@@ -119,7 +130,11 @@ object Backend {
 
     fun checkUpdate(): UpdateStatus = try {
         val it = Bridge.request { command("check_update") }.obj()
-        when (it.text("status")) { "available" -> it.text("version")?.let(UpdateStatus::Available) ?: UpdateStatus.Failed; "current" -> UpdateStatus.Current; else -> UpdateStatus.Failed }
+        val notes = (it["notes"] as? JsonArray)?.mapNotNull { line ->
+            val entry = line as? JsonObject ?: return@mapNotNull null
+            NoteLine(entry.text("kind") ?: return@mapNotNull null, entry.text("text") ?: return@mapNotNull null)
+        } ?: emptyList()
+        when (it.text("status")) { "available" -> it.text("version")?.let { version -> UpdateStatus.Available(version, notes) } ?: UpdateStatus.Failed; "current" -> UpdateStatus.Current; else -> UpdateStatus.Failed }
     } catch (_: BridgeFailure) { UpdateStatus.Failed }
 
     fun openReleasePage(version: String) { Bridge.request { obj { field("open_release_page") { field("version", version) } } } }

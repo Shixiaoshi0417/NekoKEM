@@ -11,8 +11,10 @@
 #define NKPR_VERSION_IDENTITY 2U
 /*
  * NKPR v3: an NKPR v2 identity key with a key commitment after the salt, so a
- * container opens under one password only; see docs/key-commitment.md. Core
- * reads it; front ends still write NKPR v2 until a later release.
+ * container opens under one password only; see docs/key-commitment.md. Every
+ * front end writes it for new and upgraded keys. NKPR v1 and v2 are opened
+ * only when the caller says the key is the installation's own (the legacy
+ * flags in nekokem.h).
  */
 #define NKPR_VERSION_COMMITTED 3U
 #define NKPR_COMMITMENT_SIZE 32U

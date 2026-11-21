@@ -283,6 +283,8 @@ jobs:
             android/app/build/reports/tests/testDebugUnitTest/
             android/app/build/test-results/password-manager-screens/
             android/app/build/test-results/decrypt-folder-screens/
+            android/app/build/test-results/legacy-private-export-screens/
+            android/app/build/test-results/update-notes-screens/
           if-no-files-found: warn
           retention-days: 14
 
@@ -805,7 +807,7 @@ jobs:
             sleep 1
           done
           if kill -0 "$pid" 2>/dev/null; then kill -KILL "$pid"; echo 'The screenshot run did not finish' >&2; exit 1; fi
-          for name in files-empty files encrypt-recipients encrypt-warning files-password files-done keys fingerprint contacts contacts-selected settings; do
+          for name in files-empty files encrypt-recipients encrypt-warning files-password files-done keys keys-export-private fingerprint contacts contacts-selected settings; do
             test -s "$screens/$name.png"
           done
       - name: Check the application and write its ZIP and disk image

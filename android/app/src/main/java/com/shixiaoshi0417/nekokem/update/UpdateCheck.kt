@@ -9,8 +9,11 @@ import java.io.InputStream
 import java.net.URL
 import javax.net.ssl.HttpsURLConnection
 
-/** A published NekoKEM release newer than this App. */
-data class ReleaseInfo(val version: String, val pageUrl: String)
+/**
+ * A published NekoKEM release newer than this App. [notes] is the release's
+ * Markdown, empty when only the release page's redirect answered.
+ */
+data class ReleaseInfo(val version: String, val pageUrl: String, val notes: String = "")
 
 sealed interface UpdateResult {
     data object UpToDate : UpdateResult
@@ -125,7 +128,8 @@ object Releases {
             null
         } else {
             val name = version.joinToString(".")
-            ReleaseInfo(version = name, pageUrl = PAGE_PREFIX + "v" + name)
+            val notes = (if (release.isNull("body")) "" else release.optString("body")).take(ReleaseNotes.MAX_INPUT_CHARS)
+            ReleaseInfo(version = name, pageUrl = PAGE_PREFIX + "v" + name, notes = notes)
         }
     } catch (_: JSONException) {
         null

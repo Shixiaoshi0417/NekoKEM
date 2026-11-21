@@ -3,6 +3,7 @@
 // one HEAD of the website's latest-release redirect instead. The addresses are
 // fixed here; the frontend cannot choose where the App connects, and nothing
 // is downloaded or installed.
+use crate::notes::{self, NoteLine};
 use serde::{Deserialize, Serialize};
 use std::ffi::{c_char, c_int, c_void, CStr, CString};
 use std::process::{Command, Stdio};
@@ -19,7 +20,11 @@ const MAX_RESPONSE_BYTES: usize = 1 << 20;
 #[derive(Debug, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase", tag = "status")]
 pub enum UpdateStatus {
-    Available { version: String },
+    /// [notes] is empty when only the release page's redirect answered.
+    Available {
+        version: String,
+        notes: Vec<NoteLine>,
+    },
     Current,
     Failed,
 }
@@ -122,6 +127,8 @@ struct Release {
     draft: bool,
     #[serde(default)]
     prerelease: bool,
+    #[serde(default)]
+    body: Option<String>,
 }
 
 /// "5.0.0" or "v5.0.0" with one to four digits per part; nothing else.
@@ -143,7 +150,8 @@ pub fn parse_version(text: &str) -> Option<[u16; 3]> {
     (count == 3).then_some(parts)
 }
 
-pub fn classify(body: &[u8], current: &str) -> UpdateStatus {
+/// [chinese] picks the Chinese part of the release notes; see notes.rs.
+pub fn classify(body: &[u8], current: &str, chinese: bool) -> UpdateStatus {
     let Ok(release) = serde_json::from_slice::<Release>(body) else {
         return UpdateStatus::Failed;
     };
@@ -157,6 +165,10 @@ pub fn classify(body: &[u8], current: &str) -> UpdateStatus {
     if remote > local {
         UpdateStatus::Available {
             version: format!("{}.{}.{}", remote[0], remote[1], remote[2]),
+            notes: release
+                .body
+                .as_deref()
+                .map_or_else(Vec::new, |body| notes::lines(body, chinese)),
         }
     } else {
         UpdateStatus::Current
@@ -187,6 +199,7 @@ pub fn classify_redirect(headers: &[u8], current: &str) -> UpdateStatus {
     if remote > local {
         UpdateStatus::Available {
             version: format!("{}.{}.{}", remote[0], remote[1], remote[2]),
+            notes: Vec::new(),
         }
     } else {
         UpdateStatus::Current
@@ -256,12 +269,14 @@ fn curl(arguments: &[&str], address: &str) -> Option<Vec<u8>> {
     (output.status.success() && output.stdout.len() <= MAX_RESPONSE_BYTES).then_some(output.stdout)
 }
 
-pub fn check(current: &str) -> UpdateStatus {
+/// [language] is the App's language tag; Chinese ones get the Chinese release notes.
+pub fn check(current: &str, language: &str) -> UpdateStatus {
+    let chinese = language.starts_with("zh");
     let api = curl(
         &["--header", "Accept: application/vnd.github+json"],
         LATEST_URL,
     )
-    .map(|body| classify(&body, current));
+    .map(|body| classify(&body, current, chinese));
     match api {
         Some(status) if status != UpdateStatus::Failed => status,
         // The API refuses once its limit is used up; the page's redirect (never followed) still answers.
@@ -299,30 +314,49 @@ pub fn open_page(version: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+    fn available(version: &str) -> UpdateStatus {
+        UpdateStatus::Available {
+            version: version.into(),
+            notes: Vec::new(),
+        }
+    }
     fn release(tag: &str, draft: bool, prerelease: bool) -> Vec<u8> {
         format!(r#"{{"tag_name":"{tag}","draft":{draft},"prerelease":{prerelease},"html_url":"https://example.invalid/"}}"#).into_bytes()
     }
     #[test]
     fn versions_compare_numerically() {
         assert_eq!(
-            classify(&release("v5.0.10", false, false), "5.0.9"),
-            UpdateStatus::Available {
-                version: "5.0.10".into()
-            }
+            classify(&release("v5.0.10", false, false), "5.0.9", false),
+            available("5.0.10")
         );
         assert_eq!(
-            classify(&release("v6.0.0", false, false), "5.99.99"),
-            UpdateStatus::Available {
-                version: "6.0.0".into()
-            }
+            classify(&release("v6.0.0", false, false), "5.99.99", false),
+            available("6.0.0")
         );
         assert_eq!(
-            classify(&release("v5.0.0", false, false), "5.0.0"),
+            classify(&release("v5.0.0", false, false), "5.0.0", false),
             UpdateStatus::Current
         );
         assert_eq!(
-            classify(&release("v4.4.0", false, false), "5.0.0"),
+            classify(&release("v4.4.0", false, false), "5.0.0", false),
             UpdateStatus::Current
+        );
+    }
+    #[test]
+    fn release_notes_come_with_the_release() {
+        let body = br###"{"tag_name":"v5.1.0","body":"## English\n- New\n## \u7b80\u4f53\u4e2d\u6587\n- \u65b0"}"###;
+        let notes = |chinese| match classify(body, "5.0.0", chinese) {
+            UpdateStatus::Available { notes, .. } => notes,
+            other => panic!("{other:?}"),
+        };
+        assert_eq!(notes(false)[0].text, "New");
+        assert_eq!(notes(true)[0].text, "新");
+        let null = br#"{"tag_name":"v5.1.0","body":null}"#;
+        assert_eq!(classify(null, "5.0.0", false), available("5.1.0"));
+        let json = serde_json::to_string(&classify(body, "5.0.0", false)).unwrap();
+        assert_eq!(
+            json,
+            r#"{"status":"available","version":"5.1.0","notes":[{"kind":"item","text":"New"}]}"#
         );
     }
     #[test]
@@ -337,10 +371,10 @@ mod tests {
             release("v5.1.0/../x", false, false),
             release("v55555.0.0", false, false),
         ] {
-            assert_eq!(classify(&body, "5.0.0"), UpdateStatus::Failed);
+            assert_eq!(classify(&body, "5.0.0", false), UpdateStatus::Failed);
         }
         assert_eq!(
-            classify(&release("v5.1.0", false, false), "dev"),
+            classify(&release("v5.1.0", false, false), "dev", false),
             UpdateStatus::Failed
         );
     }
@@ -352,15 +386,13 @@ mod tests {
         let page = "https://github.com/Shixiaoshi0417/NekoKEM/releases/tag/";
         assert_eq!(
             classify_redirect(&headers(&format!("{page}v5.1.0")), "5.0.0"),
-            UpdateStatus::Available {
-                version: "5.1.0".into()
-            }
+            available("5.1.0")
         );
         assert_eq!(
             classify_redirect(&headers(&format!("{page}v5.1.0")), "5.1.0"),
             UpdateStatus::Current
         );
-        assert_eq!(classify_redirect(format!("HTTP/1.1 200 Connection Established\r\n\r\nHTTP/1.1 302 Found\r\nLocation: {page}v5.1.0\r\n\r\n").as_bytes(),"5.0.0"),UpdateStatus::Available{version:"5.1.0".into()});
+        assert_eq!(classify_redirect(format!("HTTP/1.1 200 Connection Established\r\n\r\nHTTP/1.1 302 Found\r\nLocation: {page}v5.1.0\r\n\r\n").as_bytes(),"5.0.0"),available("5.1.0"));
         for bad in [
             format!("{page}v5.1.0-rc1"),
             format!("{page}v5.1.0/../x"),
@@ -436,11 +468,8 @@ mod tests {
     #[test]
     fn status_serializes_for_the_frontend() {
         assert_eq!(
-            serde_json::to_string(&UpdateStatus::Available {
-                version: "5.1.0".into()
-            })
-            .unwrap(),
-            r#"{"status":"available","version":"5.1.0"}"#
+            serde_json::to_string(&available("5.1.0")).unwrap(),
+            r#"{"status":"available","version":"5.1.0","notes":[]}"#
         );
         assert_eq!(
             serde_json::to_string(&UpdateStatus::Current).unwrap(),
