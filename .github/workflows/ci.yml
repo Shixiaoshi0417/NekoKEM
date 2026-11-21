@@ -279,6 +279,7 @@ jobs:
             android/app/build/test-results/password-manager-screens/
             android/app/build/test-results/decrypt-folder-screens/
             android/app/build/test-results/legacy-private-export-screens/
+            android/app/build/test-results/update-notes-screens/
           if-no-files-found: warn
           retention-days: 14
 
