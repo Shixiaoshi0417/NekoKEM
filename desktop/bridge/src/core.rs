@@ -507,9 +507,10 @@ impl Drop for PairStage {
     }
 }
 // Puts a staged key pair at its two chosen paths. A new pair claims both names
-// and gives the first back when the second is taken. A replacement copies both
-// files beside their destinations before renaming either, so a failed copy
-// leaves the old pair as it was.
+// and gives the first back when the second is taken. A replacement only
+// replaces regular files: it keeps a copy of each original in the stage,
+// copies both new files beside their destinations, then renames them, and puts
+// the original private key back when the public key cannot follow it.
 fn place_pair(
     stage: &PairStage,
     public: &std::path::Path,
@@ -524,6 +525,8 @@ fn place_pair(
         }
         return Ok(());
     }
+    let original_private = keep_original(private, &stage.0.join("original-private.pem"))?;
+    keep_original(public, &stage.0.join("original-public.pem"))?;
     let stamp = SystemTime::now()
         .duration_since(SystemTime::UNIX_EPOCH)
         .map_or(0, |elapsed| elapsed.as_nanos());
@@ -544,9 +547,42 @@ fn place_pair(
         let _ = std::fs::remove_file(&public_part);
         return Err(error);
     }
-    std::fs::rename(&public_part, public).inspect_err(|_| {
+    if let Err(error) = std::fs::rename(&public_part, public) {
         let _ = std::fs::remove_file(&public_part);
-    })
+        // The old public key is still in place: the old private key goes back.
+        let restored = match &original_private {
+            Some(original) => {
+                let back = part(private, "restore");
+                copy_new(original, &back).and_then(|()| {
+                    std::fs::rename(&back, private).inspect_err(|_| {
+                        let _ = std::fs::remove_file(&back);
+                    })
+                })
+            }
+            None => std::fs::remove_file(private),
+        };
+        return Err(restored.err().unwrap_or(error));
+    }
+    Ok(())
+}
+// A copy of the file a replacement would overwrite; None when there is none.
+// Anything other than a regular file is refused before anything changes.
+fn keep_original(
+    destination: &std::path::Path,
+    copy: &std::path::Path,
+) -> std::io::Result<Option<std::path::PathBuf>> {
+    match std::fs::symlink_metadata(destination) {
+        Ok(metadata) if metadata.is_file() => {
+            copy_new(destination, copy)?;
+            Ok(Some(copy.to_path_buf()))
+        }
+        Ok(_) => Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            "a key path is not a regular file",
+        )),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(None),
+        Err(error) => Err(error),
+    }
 }
 const MAX_NAME_NUMBER: u32 = 9999;
 const MAX_NAME_BYTES: usize = 255;
@@ -2958,6 +2994,15 @@ mod tests {
         place_pair(&stage, &public, &private, true).unwrap();
         assert_eq!(fs::read_to_string(&public).unwrap(), "second public");
         assert_eq!(fs::read_to_string(&private).unwrap(), "second private");
+        assert_eq!(fs::read_dir(&folder).unwrap().count(), 2);
+        // A destination that is not a regular file changes nothing.
+        let directory = folder.join("dir.pem");
+        fs::create_dir(&directory).unwrap();
+        fill("third");
+        let error = place_pair(&stage, &directory, &private, true).unwrap_err();
+        assert_eq!(error.kind(), std::io::ErrorKind::InvalidInput);
+        assert_eq!(fs::read_to_string(&private).unwrap(), "second private");
+        fs::remove_dir(&directory).unwrap();
         assert_eq!(fs::read_dir(&folder).unwrap().count(), 2);
         let staged = stage.0.clone();
         drop(stage);
