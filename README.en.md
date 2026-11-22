@@ -121,12 +121,12 @@ gh attestation verify NekoKEM-linux-x86_64.tar.gz --repo Shixiaoshi0417/NekoKEM 
 | AppImage | Run it after `chmod +x`. See [AppImage](#appimage) |
 | Linux CLI | The install script verifies the download. See [Linux CLI installation](#linux-cli-installation) |
 
-On ARM64, replace `x86_64` in the file name with `aarch64`. With the CLI, three steps generate keys, encrypt and decrypt (encryption signs with your own private key by default, and accepts several recipient public keys):
+On ARM64, replace `x86_64` in the file name with `aarch64`. With the CLI, three steps generate keys, encrypt and decrypt. The example encrypts a file to yourself (`keys/public.key`) and to Bob's public key, signs it with your own private key by default, then opens it with your own private key:
 
 ```sh
 nekokem keygen
-nekokem encrypt hybrid report.pdf report.pdf.nkem alice.key bob.key
-nekokem decrypt hybrid report.pdf.nkem report.pdf keys/private.key.enc
+nekokem encrypt hybrid report.pdf report.pdf.nkem keys/public.key bob.key
+nekokem decrypt hybrid report.pdf.nkem decrypted.pdf keys/private.key.enc
 ```
 
 For the interactive menu, every option and the directory conventions, see [Default interactive mode](#default-interactive-mode) and [Parameterized commands](#parameterized-commands).

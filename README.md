@@ -121,12 +121,12 @@ gh attestation verify NekoKEM-linux-x86_64.tar.gz --repo Shixiaoshi0417/NekoKEM 
 | AppImage | `chmod +x` 后直接运行，见 [AppImage](#appimage) |
 | Linux CLI | 安装脚本自动校验下载，见 [Linux CLI 安装](#linux-cli-安装) |
 
-ARM64 设备把文件名中的 `x86_64` 换成 `aarch64`。CLI 三步完成生成密钥、加密和解密（加密默认用自己的私钥签名，可列出多个接收方公钥）：
+ARM64 设备把文件名中的 `x86_64` 换成 `aarch64`。CLI 三步完成生成密钥、加密和解密：下例把文件同时加密给自己（`keys/public.key`）和 Bob 的公钥，默认用自己的私钥签名，再用自己的私钥解开：
 
 ```sh
 nekokem keygen
-nekokem encrypt hybrid report.pdf report.pdf.nkem alice.key bob.key
-nekokem decrypt hybrid report.pdf.nkem report.pdf keys/private.key.enc
+nekokem encrypt hybrid report.pdf report.pdf.nkem keys/public.key bob.key
+nekokem decrypt hybrid report.pdf.nkem decrypted.pdf keys/private.key.enc
 ```
 
 交互菜单、全部参数和目录约定见 [默认交互模式](#默认交互模式) 与 [参数化命令](#参数化命令)。
