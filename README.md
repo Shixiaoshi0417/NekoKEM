@@ -1,35 +1,93 @@
 [简体中文](README.md) | [English](README.en.md)
 
+<div align="center">
+
+<img src="docs/icon-rounded.png" alt="NekoKEM 项目图标" width="128">
+
 # NekoKEM
 
+**后量子混合加密的跨平台文件加密工具**
+
+X448 + ML-KEM-1024 混合密钥封装 · Ed448 + ML-DSA-87 双重签名 · Android / Windows / macOS / Linux
+
+[![Release](https://img.shields.io/github/v/release/Shixiaoshi0417/NekoKEM?style=flat-square&label=release&color=1f2328)](https://github.com/Shixiaoshi0417/NekoKEM/releases/latest)
+[![CI](https://img.shields.io/github/actions/workflow/status/Shixiaoshi0417/NekoKEM/ci.yml?branch=main&style=flat-square&label=CI)](https://github.com/Shixiaoshi0417/NekoKEM/actions/workflows/ci.yml)
+[![Downloads](https://img.shields.io/github/downloads/Shixiaoshi0417/NekoKEM/total?style=flat-square&label=downloads&color=1f2328)](https://github.com/Shixiaoshi0417/NekoKEM/releases)
+[![License](https://img.shields.io/badge/license-Apache--2.0-1f2328?style=flat-square)](LICENSE)
+[![OpenSSL](https://img.shields.io/badge/OpenSSL-4.1.0-1f2328?style=flat-square)](https://openssl-library.org/)
+[![Platforms](https://img.shields.io/badge/platforms-Android%20%C2%B7%20Windows%20%C2%B7%20macOS%20%C2%B7%20Linux-1f2328?style=flat-square)](#下载)
+
+[下载](#下载) · [快速开始](#快速开始) · [密码学设计](#密码学设计) · [安全边界](#安全边界) · [v6.0.0 更新说明](release/v6.0.0.md)
+
+</div>
+
+> [!WARNING]
+> NekoKEM 是用于学习 OpenSSL EVP API 的实验性项目，**没有经过安全审计，不应被视为生产级软件，也不应用来保护重要或敏感数据。**
+
+## 亮点
+
+<table>
+<tr>
+<td width="33%" valign="top">
+
+**后量子混合加密**<br>
+每位接收方一份 X448 + ML-KEM-1024 封装，HKDF-SHA512 派生密钥，AES-256-GCM 按 64 KiB 分块流式加密。
+
+</td>
+<td width="33%" valign="top">
+
+**默认附带发送方签名**<br>
+NKEM v5 用 Ed448 + ML-DSA-87 签名，解密时由 Core 验签并显示签名者指纹，可只接受可信签名者。
+
+</td>
+<td width="33%" valign="top">
+
+**多人加密**<br>
+一个文件最多加密给 64 位接收方，文件数据只加密一次，每位接收方用自己的私钥解开。
+
+</td>
+</tr>
+<tr>
+<td width="33%" valign="top">
+
+**带密钥承诺的私钥**<br>
+NKPR v3 用 Argon2id 保护私钥，一个私钥文件只能被一个口令打开；明文私钥不落盘。
+
+</td>
+<td width="33%" valign="top">
+
+**公钥通讯录**<br>
+保存联系人公钥和备注，核对完整指纹或扫描指纹二维码；每次加密前由 Core 重新校验指纹。
+
+</td>
+<td width="33%" valign="top">
+
+**全平台原生界面**<br>
+Android（MIUIX / Material 3 Expressive）、Windows 与 Linux（Compose）、macOS（SwiftUI）和 CLI，五种界面语言。
+
+</td>
+</tr>
+</table>
+
+## 截图
+
 <p align="center">
-  <img src="docs/icon-rounded.png" alt="NekoKEM 项目图标" width="160">
+  <img src="docs/screenshots/android-files.png" alt="Android 文件加解密" width="22%">
+  <img src="docs/screenshots/android-keys.png" alt="Android 密钥管理" width="22%">
+  <img src="docs/screenshots/android-contacts.png" alt="Android 公钥通讯录" width="22%">
+  <img src="docs/screenshots/android-settings.png" alt="Android 设置" width="22%">
 </p>
+<p align="center"><sub>Android · MIUIX 风格 · 深色模式</sub></p>
 
-NekoKEM 是一个用于学习 OpenSSL EVP API 的实验性后量子文件加密工具。默认写出带发送方签名的 NKEM v5 文件容器（1 至 64 位接收方）；选择不签名时写出 NKEM v3（单接收方）或 NKEM v4（多接收方）Hybrid 文件容器。
+<p align="center">
+  <img src="docs/screenshots/linux-files.png" alt="Linux 桌面 GUI" width="49%">
+  <img src="docs/screenshots/macos-files.png" alt="macOS GUI" width="49%">
+</p>
+<p align="center"><sub>左：Windows / Linux（Compose Multiplatform）· 右：macOS（SwiftUI）</sub></p>
 
-| 模式 | 密钥建立 | KDF | 文件加密 | 容器 |
-|---|---|---|---|---|
-| v5 签名（默认） | 每位接收方 X448 + ML-KEM-1024 | HKDF-SHA512 | 同 v4，另加加密的 Ed448 + ML-DSA-87 发送方签名 | version 5 / algorithm id 5 |
-| v3 hybrid（不签名，单接收方） | X448 + ML-KEM-1024 | HKDF-SHA512 | AES-256-GCM | version 3 / algorithm id 3 |
-| v4 多人（不签名） | 每位接收方 X448 + ML-KEM-1024 | HKDF-SHA512 | AES-256-GCM 包装文件密钥与加密数据，HMAC-SHA512 头部 MAC | version 4 / algorithm id 4 |
+## 下载
 
-本项目不自行实现任何密码算法，也不依赖 liboqs。**它没有经过安全审计，不应被视为生产级软件，也不应用来保护重要或敏感数据。**
-
-## 发布版本 v6.0.0
-
-Android 和各平台 CLI/GUI 统一为 `6.0.0`，Core 为 `6.0`，NKEM 文件格式与密码参数不变：
-
-- 私钥改用带密钥承诺的 NKPR v3，一个私钥文件只能被一个口令打开。新生成和升级的私钥写为 NKPR v3，自己的 NKPR v2 私钥解锁后原地改写，密钥、口令和指纹不变。
-- 旧格式私钥（NKPR v1、v2）只作为本机自己的私钥打开；导入旧版导出的私钥前先说明风险并要求确认，临时私钥拒绝旧格式。CLI 新增 `--legacy-private-key` 和 `export-legacy-private-key`。
-- 各端可以「导出给 5.2 及更早版本的私钥」，用同一口令写出 NKPR v2 副本。
-- 新增 Windows EXE 安装程序、Linux AppImage 和 Flatpak 包（沙盒只通过文件选择框访问文件），仓库附带 Arch Linux 的 `nekokem-bin` PKGBUILD。
-- 更新提示附上折叠的发布说明，展开后限高滚动；各端去掉页面上常驻的说明小字，警告保留。
-- Android 设置新增「禁止截屏和录屏」，默认开启；另修复外部审查发现的问题，包括 Ed448 公钥校验曲线点、X448 公钥拒绝小阶点，以及桌面端保存失败时删除暂存明文。
-
-**5.2.0 及更早版本打不开 NKPR v3 私钥**：要把私钥交给旧版本，请先用「导出给 5.2 及更早版本的私钥」（CLI 为 `export-legacy-private-key`）导出副本。升级后第一次解锁会把本机私钥改写为 NKPR v3，回退到 5.2.0 前也要先这样导出。NKEM 文件不受影响，6.0.0 与 5.2.0 可以互相解密对方的文件。**4.x 及更早版本无法读取 NKEM v5、NKPR v2/v3 和四段式公钥**，给旧版接收方发送文件时请开启不签名加密并使用旧版公钥。完整双语说明见 [v6.0.0](release/v6.0.0.md) 和 [GitHub Release](https://github.com/Shixiaoshi0417/NekoKEM/releases/tag/v6.0.0)。
-
-Android v6.0.0 沿用 v3.2.0/v3.3.0 签名，可直接覆盖升级；建议先备份公钥、加密 NKPR 私钥和私钥密码，升级密钥前尤其需要备份。仅使用旧签名的 v3.1.x 用户需要在验证备份后卸载重装；卸载会删除应用内部密钥。NKEM v1/v2 不再支持。
+当前版本为 **v6.0.0**，全部安装包见 [GitHub Release](https://github.com/Shixiaoshi0417/NekoKEM/releases/tag/v6.0.0)，版本变化见下文 [发布版本 v6.0.0](#发布版本-v600)。
 
 | 平台与架构 | CLI / Android | GUI |
 |---|---|---|
@@ -49,9 +107,66 @@ gh attestation verify NekoKEM-linux-x86_64.tar.gz --repo Shixiaoshi0417/NekoKEM 
   --source-ref refs/heads/main --deny-self-hosted-runners
 ```
 
-Publish 按已知 release ID 上传和发布，分页检查现有版本；只有最高正式语义版本才设为 Latest。匹配的部分草稿可以续传，上传或校验失败会恢复草稿；恢复失败会明确报告 release ID 和未确认的状态。Publish 校验 Windows CLI/GUI 包内的版本、源码提交和构建运行记录。CI 检查应用、打包参数与 Android 签名校验中的版本一致性，不自动修改版本号。
+## 快速开始
 
-Rust、Node 和 Python 分别固定为 `1.99.0`、`24.21.0` 和 `3.13.16`。MSYS2 使用滚动仓库，保留完整更新以避免历史包组合和局部升级造成 ABI、依赖不匹配，并记录实际编译器版本。Release 继续无缓存构建，APK 构建与签名分离，签名只允许在 `main` 上执行；详见 [发布流程](release/README.md)。
+| 平台 | 安装方式 |
+|---|---|
+| Android | 下载 APK 直接安装；v3.2.0 及之后的版本可以覆盖升级 |
+| Windows | 运行 EXE 安装程序或 MSI；CLI ZIP 解压即用，详见 [Windows CLI 与 GUI](#windows-cli-与-gui) |
+| macOS | 打开 DMG 或解压 GUI ZIP；包只有 ad-hoc 签名，详见 [macOS Apple Silicon CLI 与 GUI](#macos-apple-silicon-cli-与-gui) |
+| Debian / Ubuntu | `sudo apt install ./NekoKEM-linux-x86_64-GUI.deb` |
+| Fedora | `sudo dnf install ./NekoKEM-linux-x86_64-GUI.rpm` |
+| Arch Linux | 在 `linux/arch` 中 `makepkg -si`，见 [Arch Linux](#arch-linux) |
+| Flatpak | `flatpak install --user ./NekoKEM-linux-x86_64-GUI.flatpak`，见 [Flatpak](#flatpak) |
+| AppImage | `chmod +x` 后直接运行，见 [AppImage](#appimage) |
+| Linux CLI | 安装脚本自动校验下载，见 [Linux CLI 安装](#linux-cli-安装) |
+
+ARM64 设备把文件名中的 `x86_64` 换成 `aarch64`。CLI 三步完成生成密钥、加密和解密：下例把文件同时加密给自己（`keys/public.key`）和 Bob 的公钥，默认用自己的私钥签名，再用自己的私钥解开：
+
+```sh
+nekokem keygen
+nekokem encrypt hybrid report.pdf report.pdf.nkem keys/public.key bob.key
+nekokem decrypt hybrid report.pdf.nkem decrypted.pdf keys/private.key.enc
+```
+
+交互菜单、全部参数和目录约定见 [默认交互模式](#默认交互模式) 与 [参数化命令](#参数化命令)。
+
+## 密码学设计
+
+默认写出带发送方签名的 NKEM v5 文件容器（1 至 64 位接收方）；选择不签名时写出 NKEM v3（单接收方）或 NKEM v4（多接收方）Hybrid 文件容器。所有平台的解密都会自动识别 v3、v4 与 v5。
+
+| 模式 | 密钥建立 | KDF | 文件加密 | 容器 |
+|---|---|---|---|---|
+| v5 签名（默认） | 每位接收方 X448 + ML-KEM-1024 | HKDF-SHA512 | 同 v4，另加加密的 Ed448 + ML-DSA-87 发送方签名 | version 5 / algorithm id 5 |
+| v3 hybrid（不签名，单接收方） | X448 + ML-KEM-1024 | HKDF-SHA512 | AES-256-GCM | version 3 / algorithm id 3 |
+| v4 多人（不签名） | 每位接收方 X448 + ML-KEM-1024 | HKDF-SHA512 | AES-256-GCM 包装文件密钥与加密数据，HMAC-SHA512 头部 MAC | version 4 / algorithm id 4 |
+
+本项目不自行实现任何密码算法，也不依赖 liboqs，全部算法来自 OpenSSL EVP。格式规范见 [NKEM v5](docs/NKEM-v5.md)、[NKEM v4](docs/NKEM-v4.md)、[NKEM v3](docs/NKEM-v3.md) 和 [密钥承诺](docs/key-commitment.md)。
+
+## 文档导航
+
+| 主题 | 章节 |
+|---|---|
+| 使用 | [多人加密](#多人加密) · [语言设置](#语言设置) · [默认交互模式](#默认交互模式) · [参数化命令](#参数化命令) · [检查更新](#检查更新) · [指纹二维码](#指纹二维码) |
+| 平台 | [Android 公钥通讯录](#android-公钥通讯录) · [桌面 GUI 公钥通讯录](#桌面-gui-公钥通讯录) · [Windows](#windows-cli-与-gui) · [macOS](#macos-apple-silicon-cli-与-gui) · [Linux GUI](#linux-gui) · [Linux CLI](#linux-cli-安装) |
+| 格式 | [NKPR 私钥](#nkpr-加密私钥格式) · [NKEM v3](#nkem-v3-hybrid-文件格式) · [NKEM v4](#nkem-v4-多接收方文件格式) · [NKEM v5](#nkem-v5-签名文件格式) |
+| 安全 | [安全实现说明](#安全实现说明) · [安全边界](#安全边界) · [漏洞报告](#安全声明与漏洞报告) |
+| 开发 | [安装依赖](#安装依赖) · [编译](#编译) · [自动测试](#自动测试) · [AFL++ fuzzing](#afl-fuzzing) · [性能测量](#性能测量) |
+
+## 发布版本 v6.0.0
+
+Android 和各平台 CLI/GUI 统一为 `6.0.0`，Core 为 `6.0`，NKEM 文件格式与密码参数不变：
+
+- 私钥改用带密钥承诺的 NKPR v3，一个私钥文件只能被一个口令打开。新生成和升级的私钥写为 NKPR v3，自己的 NKPR v2 私钥解锁后原地改写，密钥、口令和指纹不变。
+- 旧格式私钥（NKPR v1、v2）只作为本机自己的私钥打开；导入旧版导出的私钥前先说明风险并要求确认，临时私钥拒绝旧格式。CLI 新增 `--legacy-private-key` 和 `export-legacy-private-key`。
+- 各端可以「导出给 5.2 及更早版本的私钥」，用同一口令写出 NKPR v2 副本。
+- 新增 Windows EXE 安装程序、Linux AppImage 和 Flatpak 包（沙盒只通过文件选择框访问文件），仓库附带 Arch Linux 的 `nekokem-bin` PKGBUILD。
+- 更新提示附上折叠的发布说明，展开后限高滚动；各端去掉页面上常驻的说明小字，警告保留。
+- Android 设置新增「禁止截屏和录屏」，默认开启；另修复外部审查发现的问题，包括 Ed448 公钥校验曲线点、X448 公钥拒绝小阶点，以及桌面端保存失败时删除暂存明文。
+
+**5.2.0 及更早版本打不开 NKPR v3 私钥**：要把私钥交给旧版本，请先用「导出给 5.2 及更早版本的私钥」（CLI 为 `export-legacy-private-key`）导出副本。升级后第一次解锁会把本机私钥改写为 NKPR v3，回退到 5.2.0 前也要先这样导出。NKEM 文件不受影响，6.0.0 与 5.2.0 可以互相解密对方的文件。**4.x 及更早版本无法读取 NKEM v5、NKPR v2/v3 和四段式公钥**，给旧版接收方发送文件时请开启不签名加密并使用旧版公钥。完整双语说明见 [v6.0.0](release/v6.0.0.md) 和 [GitHub Release](https://github.com/Shixiaoshi0417/NekoKEM/releases/tag/v6.0.0)。
+
+Android v6.0.0 沿用 v3.2.0/v3.3.0 签名，可直接覆盖升级；建议先备份公钥、加密 NKPR 私钥和私钥密码，升级密钥前尤其需要备份。仅使用旧签名的 v3.1.x 用户需要在验证备份后卸载重装；卸载会删除应用内部密钥。NKEM v1/v2 不再支持。
 
 README 使用专用圆角展示图；Android 保留现有方形白底图案，Windows CLI/GUI EXE 保留方形图案并将外部白色区域改为透明。Windows 应用未进行 Authenticode 签名。
 
@@ -110,22 +225,6 @@ sh install.sh
 
 校验和只能检查下载完整性，不能证明来源。`NEKOKEM_VERIFY_ATTESTATION=1 sh install.sh` 还会使用 `gh attestation verify` 校验来源证明；仅适用于 `v4.1.0` 之后带证明的发布，`v4.1.0` 及更早版本没有来源证明，会拒绝安装。
 
-## 历史版本 v3.2.0
-
-v3.2.0 引入五种界面语言、跟随系统选项和安全修复，并更换 Android 发布签名。该次迁移说明与历史构建记录见 [v3.2.0 更新日志](release/v3.2.0.md)；从 v3.2.0 升级至 v3.3.0 不需要再次卸载。
-
-## 历史版本 v3.1.1
-
-Android App 版本为 `3.1.1`，Core 版本保持 `3.1`，application ID 为
-`com.shixiaoshi0417.nekokem`。Android 工程及构建说明见
-[`android/README.md`](android/README.md)。App 版本 3.1.1 不改变
-协议编号：默认文件容器仍为 **NKEM v3**，NKPR 格式保持不变。
-
-v3.1.1 新增上述 Linux CLI 发行包、自动安装脚本和 GitHub Actions 构建流程，安装方法见 [Linux CLI 安装](#linux-cli-安装)。
-
-Linux CLI 支持 `nekokem --version`。此发行补丁不改变 Core API、密码参数、
-NKEM v3 或 NKPR 格式。
-
 ## 安装依赖
 
 Debian 13：
@@ -154,6 +253,10 @@ make -C linux
 
 GitHub Actions 统一使用 [CI](.github/workflows/ci.yml) 和 [Release](.github/workflows/release.yml)。CI 在 PR 和 main 推送时构建并执行所有平台的安全、语言、互操作、性能和 GUI 回归检查；Release 通过手动运行或 `v*` 标签构建 Linux CLI 归档和 GUI 安装/便携包、Android 签名 APK、Windows CLI/GUI 压缩包及 macOS arm64 包。签名身份与构建产物说明见[构建工作流文档](release/README.md)。
 
+Publish 按已知 release ID 上传和发布，分页检查现有版本；只有最高正式语义版本才设为 Latest。匹配的部分草稿可以续传，上传或校验失败会恢复草稿；恢复失败会明确报告 release ID 和未确认的状态。Publish 校验 Windows CLI/GUI 包内的版本、源码提交和构建运行记录。CI 检查应用、打包参数与 Android 签名校验中的版本一致性，不自动修改版本号。
+
+Rust、Node 和 Python 分别固定为 `1.99.0`、`24.21.0` 和 `3.13.16`。MSYS2 使用滚动仓库，保留完整更新以避免历史包组合和局部升级造成 ABI、依赖不匹配，并记录实际编译器版本。Release 继续无缓存构建，APK 构建与签名分离，签名只允许在 `main` 上执行；详见 [发布流程](release/README.md)。
+
 ## Windows CLI 与 GUI
 
 v6.0.0 提供原生 Windows 10/11 x64 CLI 便携包 `nekokem.exe`，以及 GUI 的 MSI 安装包、EXE 安装程序和 ZIP 便携包。CLI 与 Linux 共用完整参数解析和五项菜单；双击 EXE 或不带参数运行即可进入菜单。构建、使用和导入私钥权限说明见 [Windows CLI 文档](windows/README.md)，文件安全设计见 [Windows 文件层说明](windows/SECURITY-DESIGN.md)。CLI 运行不需要 MSYS2 或 OpenSSL DLL；构建使用 MSYS2 UCRT64 与固定 OpenSSL 4.1.0。
@@ -174,7 +277,15 @@ macOS 文件层保留严格的所有者、权限、符号链接和硬链接检�
 
 Linux GUI 支持 `x86_64` 与 `aarch64`（ARM64），与 Windows 使用同一个 Compose Multiplatform 应用：MIUIX 与 Material 3 Expressive 两种风格、五语言自动检测、系统文件选择、进度和取消。每种架构提供 `NekoKEM-linux-<架构>-GUI.deb`、`NekoKEM-linux-<架构>-GUI.rpm` 和 `NekoKEM-linux-<架构>-GUI.tar.gz`。Ubuntu 使用 `sudo apt install ./NekoKEM-linux-x86_64-GUI.deb`；Fedora 使用 `sudo dnf install ./NekoKEM-linux-x86_64-GUI.rpm`，ARM64 将文件名中的架构换为 `aarch64`。安装后可从系统应用菜单打开。图标直接使用现有透明外部白色区域的方形 PNG，README 仍用圆角展示图。
 
+构建与原生 CI 基线为 Ubuntu 24.04，CI 另在同架构 Fedora 44 容器中安装并启动 RPM。应用自带 Java 运行时；运行需要 glibc 2.39 或更新版本，DEB/RPM 依赖 Noto Sans CJK 字体和 `curl`（检查更新）。OpenSSL 4.1.0 静态链接进桥接库并隐藏符号，保留完整 RELRO、立即绑定和不可执行栈。Linux 文件权限、认证后提交及取消清理沿用 CLI/Core；NKEM、NKPR、KDF 参数与 64 KiB 流式处理不变。详见 [桌面 GUI 文档](desktop/README.md)。
+
+v6.0.0 Release 包含上述两种架构的全部 Linux GUI 安装包、便携包、AppImage 和 Flatpak 包，现有静态 Linux CLI 包继续保留。原生窗口测试使用 X11 会话，不代表已验证所有 Linux 发行版或 Wayland 实机。
+
+### AppImage
+
 6.0.0 起每种架构还提供 `NekoKEM-linux-<架构>-GUI.AppImage`：单个文件，不需要安装或 root 权限，`chmod +x` 后直接运行。它通过 FUSE 挂载自身，系统需要 `fusermount3`（Debian/Ubuntu 的 `fuse3` 包）；没有 FUSE 时加 `--appimage-extract-and-run` 运行。与便携包一样，AppImage 不会带来中日韩字体和 `curl`，需要系统自行安装。文件开头的 AppImage 运行时取自 AppImage 项目 [type2-runtime](https://github.com/AppImage/type2-runtime) 的固定版本，构建时核对其发布签名和 SHA-256；CI 通过 FUSE 启动 AppImage 并确认窗口打开。v5.2.0 及更早的发布不含 AppImage。
+
+### Arch Linux
 
 Arch Linux 使用仓库中的 [`linux/arch/PKGBUILD`](linux/arch/PKGBUILD)（包名 `nekokem-bin`）：它把已发布的静态 CLI 和 GUI 便携包重新打成 pacman 包，不在本机编译。GUI 装到 `/opt/nekokem`，同时提供 `nekokem`、`nekokem-gui` 命令和应用菜单项，并依赖 Arch 官方仓库的 `noto-fonts-cjk` 与 `curl`。x86_64 与 Arch Linux ARM 的 aarch64 都可用：
 
@@ -184,6 +295,8 @@ cd NekoKEM/linux/arch && makepkg -si
 ```
 
 PKGBUILD 固定指向某个已发布版本并核对其 SHA-256，发布新版本后由 `scripts/update_arch_package.py <版本>` 更新版本号、校验值和 `.SRCINFO`（也可直接作为 AUR 包内容）。CI 在 archlinux 容器中用本次构建的归档执行 `makepkg`、`pacman -U` 安装，并以中英文启动 GUI 确认窗口打开。
+
+### Flatpak
 
 Flatpak 应用 ID 为 `io.github.shixiaoshi0417.NekoKEM`，GUI 与 `nekokem` 命令行都在其中，运行在 Flathub 的 Freedesktop 26.08 运行时上，x86_64 与 aarch64 都可用。6.0.0 起每种架构提供单文件包 `NekoKEM-linux-<架构>-GUI.flatpak`，安装时会从 Flathub 取运行时：
 
@@ -195,10 +308,6 @@ flatpak run --command=nekokem io.github.shixiaoshi0417.NekoKEM --help
 ```
 
 仓库中的 [`linux/flatpak`](linux/flatpak/README.md) 清单从已发布的归档构建，文件选择框需要 6.0.0 或更新版本，清单指向 6.0.0 后即可直接构建和上架。沙盒不开放任何文件系统权限：要处理的文件、密钥文件和解密目录都在桌面的文件选择框（xdg-desktop-portal）中选择，应用只能访问选中的文件和目录；新生成和升级的密钥先在沙盒内的私有目录里写好，再复制到选定位置。沙盒内的 `nekokem` 命令行只能访问自己的数据目录，处理其他文件时需临时授权目录（如 `--filesystem=xdg-documents`）或改用静态命令行归档。沙盒不联网，Flatpak 版不检查更新，由 Flatpak 负责更新；图形走 X11（Wayland 下经 XWayland）。设置、通讯录和语言保存在 `~/.var/app/io.github.shixiaoshi0417.NekoKEM/config/nekokem`，与 DEB/RPM 版的 `~/.config/nekokem` 分开。中日韩字体沿用系统已安装的字体。清单同样固定指向已发布版本，发布后由 `scripts/update_flatpak_manifest.py <版本>` 更新；CI 在两种架构上用本次构建的归档打包、安装，以中英文启动 GUI 确认窗口打开。上架 Flathub 需要维护者本人提交，步骤见 [linux/flatpak/README.md](linux/flatpak/README.md)。
-
-构建与原生 CI 基线为 Ubuntu 24.04，CI 另在同架构 Fedora 44 容器中安装并启动 RPM。应用自带 Java 运行时；运行需要 glibc 2.39 或更新版本，DEB/RPM 依赖 Noto Sans CJK 字体和 `curl`（检查更新）。OpenSSL 4.1.0 静态链接进桥接库并隐藏符号，保留完整 RELRO、立即绑定和不可执行栈。Linux 文件权限、认证后提交及取消清理沿用 CLI/Core；NKEM、NKPR、KDF 参数与 64 KiB 流式处理不变。详见 [桌面 GUI 文档](desktop/README.md)。
-
-v6.0.0 Release 包含上述两种架构的全部 Linux GUI 安装包、便携包、AppImage 和 Flatpak 包，现有静态 Linux CLI 包继续保留。原生窗口测试使用 X11 会话，不代表已验证所有 Linux 发行版或 Wayland 实机。
 
 ## 语言设置
 
@@ -544,6 +653,22 @@ v5 的签名信任取决于你是否与对方核对过身份指纹。为了不�
 - 已进行项目内解析器 fuzz，但未经独立第三方审计或广泛互操作测试；
 - 检查更新时 GitHub 能看到请求的 IP 地址和时间；不需要时可在设置中关闭自动检查；
 - 实现不能替代成熟、经过审计的文件加密协议和密钥管理系统。
+
+## 历史版本 v3.2.0
+
+v3.2.0 引入五种界面语言、跟随系统选项和安全修复，并更换 Android 发布签名。该次迁移说明与历史构建记录见 [v3.2.0 更新日志](release/v3.2.0.md)；从 v3.2.0 升级至 v3.3.0 不需要再次卸载。
+
+## 历史版本 v3.1.1
+
+Android App 版本为 `3.1.1`，Core 版本保持 `3.1`，application ID 为
+`com.shixiaoshi0417.nekokem`。Android 工程及构建说明见
+[`android/README.md`](android/README.md)。App 版本 3.1.1 不改变
+协议编号：默认文件容器仍为 **NKEM v3**，NKPR 格式保持不变。
+
+v3.1.1 新增 Linux CLI 发行包、自动安装脚本和 GitHub Actions 构建流程，安装方法见 [Linux CLI 安装](#linux-cli-安装)。
+
+Linux CLI 支持 `nekokem --version`。此发行补丁不改变 Core API、密码参数、
+NKEM v3 或 NKPR 格式。
 
 ## Bug 反馈与功能建议
 
