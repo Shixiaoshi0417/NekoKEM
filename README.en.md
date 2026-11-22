@@ -1,35 +1,93 @@
 [简体中文](README.md) | [English](README.en.md)
 
+<div align="center">
+
+<img src="docs/icon-rounded.png" alt="NekoKEM project icon" width="128">
+
 # NekoKEM
 
+**Cross-platform file encryption with post-quantum hybrid cryptography**
+
+X448 + ML-KEM-1024 hybrid key encapsulation · Ed448 + ML-DSA-87 dual signatures · Android / Windows / macOS / Linux
+
+[![Release](https://img.shields.io/github/v/release/Shixiaoshi0417/NekoKEM?style=flat-square&label=release&color=1f2328)](https://github.com/Shixiaoshi0417/NekoKEM/releases/latest)
+[![CI](https://img.shields.io/github/actions/workflow/status/Shixiaoshi0417/NekoKEM/ci.yml?branch=main&style=flat-square&label=CI)](https://github.com/Shixiaoshi0417/NekoKEM/actions/workflows/ci.yml)
+[![Downloads](https://img.shields.io/github/downloads/Shixiaoshi0417/NekoKEM/total?style=flat-square&label=downloads&color=1f2328)](https://github.com/Shixiaoshi0417/NekoKEM/releases)
+[![License](https://img.shields.io/badge/license-Apache--2.0-1f2328?style=flat-square)](LICENSE)
+[![OpenSSL](https://img.shields.io/badge/OpenSSL-4.1.0-1f2328?style=flat-square)](https://openssl-library.org/)
+[![Platforms](https://img.shields.io/badge/platforms-Android%20%C2%B7%20Windows%20%C2%B7%20macOS%20%C2%B7%20Linux-1f2328?style=flat-square)](#downloads)
+
+[Downloads](#downloads) · [Quick start](#quick-start) · [Cryptographic design](#cryptographic-design) · [Security boundaries](#security-boundaries) · [v6.0.0 release notes](release/v6.0.0.md)
+
+</div>
+
+> [!WARNING]
+> NekoKEM is an experimental project for learning the OpenSSL EVP API. **It has not undergone a security audit, must not be considered production-grade software, and must not be used to protect important or sensitive data.**
+
+## Highlights
+
+<table>
+<tr>
+<td width="33%" valign="top">
+
+**Post-quantum hybrid encryption**<br>
+One X448 + ML-KEM-1024 encapsulation per recipient, HKDF-SHA512 key derivation, and AES-256-GCM streaming in 64 KiB chunks.
+
+</td>
+<td width="33%" valign="top">
+
+**Sender signatures by default**<br>
+NKEM v5 is signed with Ed448 + ML-DSA-87. Core verifies the signatures on decryption, shows the signer fingerprint, and can accept trusted signers only.
+
+</td>
+<td width="33%" valign="top">
+
+**Multi-recipient encryption**<br>
+Encrypt one file to up to 64 recipients. The data is encrypted once, and each recipient opens it with their own private key.
+
+</td>
+</tr>
+<tr>
+<td width="33%" valign="top">
+
+**Key-committing private keys**<br>
+NKPR v3 protects private keys with Argon2id, and a private key file opens under one password only. Plaintext private keys never touch the disk.
+
+</td>
+<td width="33%" valign="top">
+
+**Public-key contacts**<br>
+Save contacts' public keys with notes, compare full fingerprints or scan fingerprint QR codes. Core re-checks the fingerprint before every encryption.
+
+</td>
+<td width="33%" valign="top">
+
+**Native apps everywhere**<br>
+Android (MIUIX / Material 3 Expressive), Windows and Linux (Compose), macOS (SwiftUI) and the CLI, in five interface languages.
+
+</td>
+</tr>
+</table>
+
+## Screenshots
+
 <p align="center">
-  <img src="docs/icon-rounded.png" alt="NekoKEM project icon" width="160">
+  <img src="docs/screenshots/android-files.png" alt="Android file encryption" width="22%">
+  <img src="docs/screenshots/android-keys.png" alt="Android key management" width="22%">
+  <img src="docs/screenshots/android-contacts.png" alt="Android public-key contacts" width="22%">
+  <img src="docs/screenshots/android-settings.png" alt="Android settings" width="22%">
 </p>
+<p align="center"><sub>Android · MIUIX style · dark mode</sub></p>
 
-NekoKEM is an experimental post-quantum file encryption tool for learning the OpenSSL EVP API. By default it writes NKEM v5 file containers signed by the sender (1 to 64 recipients); unsigned encryption writes NKEM v3 (one recipient) or NKEM v4 (several recipients) Hybrid file containers.
+<p align="center">
+  <img src="docs/screenshots/linux-files.png" alt="Linux desktop GUI" width="49%">
+  <img src="docs/screenshots/macos-files.png" alt="macOS GUI" width="49%">
+</p>
+<p align="center"><sub>Left: Windows / Linux (Compose Multiplatform) · Right: macOS (SwiftUI)</sub></p>
 
-| Mode | Key establishment | KDF | File encryption | Container |
-|---|---|---|---|---|
-| v5 signed (default) | X448 + ML-KEM-1024 per recipient | HKDF-SHA512 | As v4, plus an encrypted Ed448 + ML-DSA-87 sender signature | version 5 / algorithm id 5 |
-| v3 hybrid (unsigned, one recipient) | X448 + ML-KEM-1024 | HKDF-SHA512 | AES-256-GCM | version 3 / algorithm id 3 |
-| v4 multi-recipient (unsigned) | X448 + ML-KEM-1024 per recipient | HKDF-SHA512 | AES-256-GCM key wrap and data, HMAC-SHA512 header MAC | version 4 / algorithm id 4 |
+## Downloads
 
-The project does not implement cryptographic algorithms itself and does not depend on liboqs. **It has not undergone a security audit, must not be considered production-grade software, and must not be used to protect important or sensitive data.**
-
-## Release v6.0.0
-
-Android and every CLI/GUI application are `6.0.0`; Core is `6.0`, with unchanged NKEM file formats and cryptographic parameters:
-
-- Private keys move to NKPR v3 with key commitment, so a private key file opens under one password only. New and upgraded keys are written as NKPR v3, and your own NKPR v2 key is rewritten in place after unlocking, keeping its keys, password and fingerprint.
-- Older private keys (NKPR v1 and v2) open only as your own key; importing a key exported by an older version explains the risk and asks for confirmation first, and temporary keys refuse older formats. The CLI gains `--legacy-private-key` and `export-legacy-private-key`.
-- Every app can export the private key for 5.2 and earlier, an NKPR v2 copy under the same password.
-- New Windows EXE installer, Linux AppImages and Flatpak bundles (the sandbox reaches files only through the file chooser), and an Arch Linux `nekokem-bin` PKGBUILD in the repository.
-- The update prompt includes the release notes, folded, scrolling within a fixed height when expanded; every app drops the explanatory small print on its pages, keeping the warnings.
-- Android Settings gain "Block screenshots and screen recording", on by default. Fixes from an external review include curve-point checks for Ed448 public keys, rejection of small-order X448 public keys, and the desktop apps deleting staged plaintext when saving fails.
-
-**NekoKEM 5.2.0 and earlier cannot open an NKPR v3 private key**: to move a key to an older version, first use "Export private key for 5.2 and earlier" (`export-legacy-private-key` in the CLI). The first unlock after upgrading rewrites your own key as NKPR v3, so export it this way before rolling back to 5.2.0 too. NKEM files are unaffected: 6.0.0 and 5.2.0 decrypt each other's files. **NekoKEM 4.x and earlier cannot read NKEM v5, NKPR v2/v3 or four-component public keys**; for recipients on an old version, turn on unsigned encryption and use the legacy public key. See the [bilingual v6.0.0 notes](release/v6.0.0.md) and [GitHub Release](https://github.com/Shixiaoshi0417/NekoKEM/releases/tag/v6.0.0).
-
-Android v6.0.0 retains the v3.2.0/v3.3.0 signing identity and supports an in-place update; back up the public key, encrypted NKPR private key and its password, especially before upgrading the key. Only v3.1.x installations with the old signer need backup verification followed by uninstall/reinstall; uninstalling deletes app-private keys. NKEM v1/v2 are no longer supported.
+The current version is **v6.0.0**. Every package is on the [GitHub Release](https://github.com/Shixiaoshi0417/NekoKEM/releases/tag/v6.0.0); see [Release v6.0.0](#release-v600) below for what changed.
 
 | Platform and architecture | CLI / Android | GUI |
 |---|---|---|
@@ -49,9 +107,66 @@ gh attestation verify NekoKEM-linux-x86_64.tar.gz --repo Shixiaoshi0417/NekoKEM 
   --source-ref refs/heads/main --deny-self-hosted-runners
 ```
 
-Publish uploads and publishes using the known release ID and checks existing versions across all API pages. Only the highest stable semantic version becomes Latest. Matching partial drafts can resume; upload or verification failures restore draft status, and failed recovery explicitly reports the release ID and unconfirmed state. Publish verifies the version, source commit and build run inside Windows CLI/GUI packages. CI checks that application, packaging and Android signing-verification versions agree without changing version numbers.
+## Quick start
 
-Rust, Node and Python are pinned to `1.99.0`, `24.21.0` and `3.13.16`. MSYS2 uses a rolling repository and retains full updates to avoid ABI and dependency mismatches from historical package combinations or partial upgrades; build records include the actual compiler version. Release builds remain uncached, APK building and signing stay separate, and signing runs only on `main`. See the [release process](release/README.md).
+| Platform | Installation |
+|---|---|
+| Android | Install the APK; v3.2.0 and later update in place |
+| Windows | Run the EXE installer or the MSI; the CLI ZIP runs after unpacking. See [Windows CLI and GUI](#windows-cli-and-gui) |
+| macOS | Open the DMG or unpack the GUI ZIP; packages are ad-hoc signed only. See [macOS Apple Silicon CLI and GUI](#macos-apple-silicon-cli-and-gui) |
+| Debian / Ubuntu | `sudo apt install ./NekoKEM-linux-x86_64-GUI.deb` |
+| Fedora | `sudo dnf install ./NekoKEM-linux-x86_64-GUI.rpm` |
+| Arch Linux | `makepkg -si` in `linux/arch`. See [Arch Linux](#arch-linux) |
+| Flatpak | `flatpak install --user ./NekoKEM-linux-x86_64-GUI.flatpak`. See [Flatpak](#flatpak) |
+| AppImage | Run it after `chmod +x`. See [AppImage](#appimage) |
+| Linux CLI | The install script verifies the download. See [Linux CLI installation](#linux-cli-installation) |
+
+On ARM64, replace `x86_64` in the file name with `aarch64`. With the CLI, three steps generate keys, encrypt and decrypt (encryption signs with your own private key by default, and accepts several recipient public keys):
+
+```sh
+nekokem keygen
+nekokem encrypt hybrid report.pdf report.pdf.nkem alice.key bob.key
+nekokem decrypt hybrid report.pdf.nkem report.pdf keys/private.key.enc
+```
+
+For the interactive menu, every option and the directory conventions, see [Default interactive mode](#default-interactive-mode) and [Parameterized commands](#parameterized-commands).
+
+## Cryptographic design
+
+By default NekoKEM writes NKEM v5 file containers signed by the sender (1 to 64 recipients); unsigned encryption writes NKEM v3 (one recipient) or NKEM v4 (several recipients) Hybrid file containers. Decryption on every platform recognizes v3, v4 and v5 automatically.
+
+| Mode | Key establishment | KDF | File encryption | Container |
+|---|---|---|---|---|
+| v5 signed (default) | X448 + ML-KEM-1024 per recipient | HKDF-SHA512 | As v4, plus an encrypted Ed448 + ML-DSA-87 sender signature | version 5 / algorithm id 5 |
+| v3 hybrid (unsigned, one recipient) | X448 + ML-KEM-1024 | HKDF-SHA512 | AES-256-GCM | version 3 / algorithm id 3 |
+| v4 multi-recipient (unsigned) | X448 + ML-KEM-1024 per recipient | HKDF-SHA512 | AES-256-GCM key wrap and data, HMAC-SHA512 header MAC | version 4 / algorithm id 4 |
+
+The project does not implement cryptographic algorithms itself and does not depend on liboqs; every algorithm comes from OpenSSL EVP. The format specifications are [NKEM v5](docs/NKEM-v5.md), [NKEM v4](docs/NKEM-v4.md), [NKEM v3](docs/NKEM-v3.md) and [key commitment](docs/key-commitment.md).
+
+## Documentation map
+
+| Topic | Sections |
+|---|---|
+| Usage | [Multi-recipient encryption](#multi-recipient-encryption) · [Language settings](#language-settings) · [Default interactive mode](#default-interactive-mode) · [Parameterized commands](#parameterized-commands) · [Update checks](#update-checks) · [Fingerprint QR codes](#fingerprint-qr-codes) |
+| Platforms | [Android contacts](#android-public-key-contacts) · [Desktop contacts](#desktop-gui-public-key-contacts) · [Windows](#windows-cli-and-gui) · [macOS](#macos-apple-silicon-cli-and-gui) · [Linux GUI](#linux-gui) · [Linux CLI](#linux-cli-installation) |
+| Formats | [NKPR private keys](#nkpr-encrypted-private-key-format) · [NKEM v3](#nkem-v3-hybrid-file-format) · [NKEM v4](#nkem-v4-multi-recipient-file-format) · [NKEM v5](#nkem-v5-signed-file-format) |
+| Security | [Security implementation](#security-implementation) · [Security boundaries](#security-boundaries) · [Vulnerability reports](#security-notice-and-vulnerability-reports) |
+| Development | [Dependencies](#dependencies) · [Building](#building) · [Automated tests](#automated-tests) · [AFL++ fuzzing](#afl-fuzzing) · [Performance measurements](#performance-measurements) |
+
+## Release v6.0.0
+
+Android and every CLI/GUI application are `6.0.0`; Core is `6.0`, with unchanged NKEM file formats and cryptographic parameters:
+
+- Private keys move to NKPR v3 with key commitment, so a private key file opens under one password only. New and upgraded keys are written as NKPR v3, and your own NKPR v2 key is rewritten in place after unlocking, keeping its keys, password and fingerprint.
+- Older private keys (NKPR v1 and v2) open only as your own key; importing a key exported by an older version explains the risk and asks for confirmation first, and temporary keys refuse older formats. The CLI gains `--legacy-private-key` and `export-legacy-private-key`.
+- Every app can export the private key for 5.2 and earlier, an NKPR v2 copy under the same password.
+- New Windows EXE installer, Linux AppImages and Flatpak bundles (the sandbox reaches files only through the file chooser), and an Arch Linux `nekokem-bin` PKGBUILD in the repository.
+- The update prompt includes the release notes, folded, scrolling within a fixed height when expanded; every app drops the explanatory small print on its pages, keeping the warnings.
+- Android Settings gain "Block screenshots and screen recording", on by default. Fixes from an external review include curve-point checks for Ed448 public keys, rejection of small-order X448 public keys, and the desktop apps deleting staged plaintext when saving fails.
+
+**NekoKEM 5.2.0 and earlier cannot open an NKPR v3 private key**: to move a key to an older version, first use "Export private key for 5.2 and earlier" (`export-legacy-private-key` in the CLI). The first unlock after upgrading rewrites your own key as NKPR v3, so export it this way before rolling back to 5.2.0 too. NKEM files are unaffected: 6.0.0 and 5.2.0 decrypt each other's files. **NekoKEM 4.x and earlier cannot read NKEM v5, NKPR v2/v3 or four-component public keys**; for recipients on an old version, turn on unsigned encryption and use the legacy public key. See the [bilingual v6.0.0 notes](release/v6.0.0.md) and [GitHub Release](https://github.com/Shixiaoshi0417/NekoKEM/releases/tag/v6.0.0).
+
+Android v6.0.0 retains the v3.2.0/v3.3.0 signing identity and supports an in-place update; back up the public key, encrypted NKPR private key and its password, especially before upgrading the key. Only v3.1.x installations with the old signer need backup verification followed by uninstall/reinstall; uninstalling deletes app-private keys. NKEM v1/v2 are no longer supported.
 
 README uses a dedicated rounded display image. Android retains the existing square artwork with its white background; Windows CLI/GUI EXE icons retain the square artwork with the outer white area made transparent. Windows applications are not Authenticode signed.
 
@@ -122,18 +237,6 @@ sh install.sh
 
 Checksums verify download integrity, not provenance. `NEKOKEM_VERIFY_ATTESTATION=1 sh install.sh` additionally invokes `gh attestation verify`; this applies to attested releases after `v4.1.0` and refuses installation of `v4.1.0` and earlier, which carry no provenance attestation.
 
-## Historical release v3.2.0
-
-v3.2.0 introduced five interface languages, system-language selection and security fixes, and changed the Android release signer. Its migration instructions and historical build records remain in the [v3.2.0 notes](release/v3.2.0.md). Updating from v3.2.0 to v3.3.0 does not require another uninstall.
-
-## Historical release v3.1.1
-
-The Android App version is `3.1.1`; the Core version remains `3.1`, and the application ID is `com.shixiaoshi0417.nekokem`. See [`android/README.md`](android/README.md) for the Android project and build instructions. App version 3.1.1 does not change protocol numbering: the default file container remains **NKEM v3**, and the NKPR format is unchanged.
-
-v3.1.1 added these Linux CLI packages, the automatic installation script and GitHub Actions builds; see [Linux CLI installation](#linux-cli-installation).
-
-The Linux CLI supports `nekokem --version`. This release patch does not change the Core API, cryptographic parameters, NKEM v3, or the NKPR format.
-
 ## Dependencies
 
 Debian 13:
@@ -162,6 +265,10 @@ The executable is `linux/nekokem`. The `./nekokem` examples below assume the wor
 
 GitHub Actions uses [CI](.github/workflows/ci.yml) and [Release](.github/workflows/release.yml). CI builds and runs all platform security, language, interoperability, performance and GUI regression checks on PRs and main pushes. Release builds Linux CLI archives and GUI installation/portable packages, a signed Android APK, Windows CLI/GUI packages and macOS arm64 packages through manual runs or `v*` tags. See the [build workflow documentation](release/README.md) for signing identity and artifact details.
 
+Publish uploads and publishes using the known release ID and checks existing versions across all API pages. Only the highest stable semantic version becomes Latest. Matching partial drafts can resume; upload or verification failures restore draft status, and failed recovery explicitly reports the release ID and unconfirmed state. Publish verifies the version, source commit and build run inside Windows CLI/GUI packages. CI checks that application, packaging and Android signing-verification versions agree without changing version numbers.
+
+Rust, Node and Python are pinned to `1.99.0`, `24.21.0` and `3.13.16`. MSYS2 uses a rolling repository and retains full updates to avoid ABI and dependency mismatches from historical package combinations or partial upgrades; build records include the actual compiler version. Release builds remain uncached, APK building and signing stay separate, and signing runs only on `main`. See the [release process](release/README.md).
+
 ## Windows CLI and GUI
 
 v6.0.0 provides the native Windows 10/11 x64 CLI `nekokem.exe` as a portable package, and the GUI as an MSI installer, an EXE installer and a ZIP folder. The CLI shares Linux's complete argument parser and five-option menu; double-clicking the EXE or running it without arguments opens the menu. See the [Windows CLI documentation](windows/README.md) for building, use and imported-key permissions, and the [filesystem design](windows/SECURITY-DESIGN.md) for its boundaries. Running the CLI requires no MSYS2 runtime or OpenSSL DLL; building uses MSYS2 UCRT64 and pinned OpenSSL 4.1.0.
@@ -182,7 +289,15 @@ The macOS file layer preserves strict ownership, permissions, symbolic-link and 
 
 The Linux GUI supports `x86_64` and `aarch64` (ARM64) and is the same Compose Multiplatform app as on Windows: the MIUIX and Material 3 Expressive styles, five-language automatic detection, system file dialogs, progress and cancellation. Each architecture has `NekoKEM-linux-<arch>-GUI.deb`, `NekoKEM-linux-<arch>-GUI.rpm` and `NekoKEM-linux-<arch>-GUI.tar.gz`. On Ubuntu use `sudo apt install ./NekoKEM-linux-x86_64-GUI.deb`; on Fedora use `sudo dnf install ./NekoKEM-linux-x86_64-GUI.rpm`; for ARM64 replace the architecture in the file name with `aarch64`. After installation the app opens from the system application menu. The icon uses the existing square PNG with transparent outer white areas; the README keeps the rounded display image.
 
+Builds and native CI use Ubuntu 24.04, and CI also installs and starts the RPM in Fedora 44 containers of the same architecture. The app carries its own Java runtime; it requires glibc 2.39 or newer, and the DEB/RPM depend on Noto Sans CJK fonts and `curl` (for the update check). OpenSSL 4.1.0 is linked statically into the bridge library with hidden symbols, full RELRO, immediate binding and a non-executable stack. Linux file permissions, authenticated commit and cancellation cleanup follow the CLI/Core; NKEM, NKPR, KDF parameters and 64 KiB streaming are unchanged. See the [desktop GUI documentation](desktop/README.md).
+
+The v6.0.0 Release includes every Linux GUI installation package, portable package, AppImage and Flatpak bundle for both architectures, alongside the existing static CLI packages. Native window tests use X11 and do not establish testing on every Linux distribution or a physical Wayland session.
+
+### AppImage
+
 Since 6.0.0 releases also provide `NekoKEM-linux-<arch>-GUI.AppImage` for each architecture: a single file that runs without installation or root access after `chmod +x`. It mounts itself through FUSE, so the system needs `fusermount3` (the `fuse3` package on Debian/Ubuntu); without FUSE, run it with `--appimage-extract-and-run`. Like the portable archive, the AppImage brings no Chinese, Japanese and Korean fonts or `curl`; install them on the system. The AppImage runtime at the start of the file is a pinned release of the AppImage project's [type2-runtime](https://github.com/AppImage/type2-runtime), checked against its release signature and SHA-256 at build time; CI starts the AppImage through FUSE and checks that its window opens. Releases up to v5.2.0 have no AppImage.
+
+### Arch Linux
 
 On Arch Linux, use [`linux/arch/PKGBUILD`](linux/arch/PKGBUILD) (package `nekokem-bin`). It repackages the published static CLI and GUI portable archives as a pacman package and compiles nothing. The GUI installs to `/opt/nekokem`, with the `nekokem` and `nekokem-gui` commands and an application menu entry, and depends on `noto-fonts-cjk` and `curl` from the official Arch repositories. It works on x86_64 and on aarch64 with Arch Linux ARM:
 
@@ -192,6 +307,8 @@ cd NekoKEM/linux/arch && makepkg -si
 ```
 
 The PKGBUILD points at one published release and checks its SHA-256 digests. After each release, `scripts/update_arch_package.py <version>` updates its version, checksums and `.SRCINFO` (the directory can also serve as the AUR package). CI runs `makepkg` on this build's archives in an archlinux container, installs the result with `pacman -U`, and starts the GUI in English and Chinese to check that its window opens.
+
+### Flatpak
 
 The Flatpak, application ID `io.github.shixiaoshi0417.NekoKEM`, holds the GUI and the `nekokem` command line and runs on Flathub's Freedesktop 26.08 runtime, on x86_64 and aarch64. Since 6.0.0 releases provide a single-file bundle, `NekoKEM-linux-<arch>-GUI.flatpak`, for each architecture; installing it fetches the runtime from Flathub:
 
@@ -203,10 +320,6 @@ flatpak run --command=nekokem io.github.shixiaoshi0417.NekoKEM --help
 ```
 
 The [`linux/flatpak`](linux/flatpak/README.md) manifest builds from published archives; the file chooser needs 6.0.0 or later, so the manifest can be built and published directly once it points at 6.0.0. The sandbox has no file system permission: the files to work on, key files and the decryption folder are chosen in the desktop's file chooser (xdg-desktop-portal), and the app can open only what was chosen. New and upgraded key pairs are written in a private folder inside the sandbox first and then copied to the chosen paths. The `nekokem` command line inside the sandbox sees only its own data folder; for other files grant a folder for that run (for example `--filesystem=xdg-documents`) or use the static CLI archive. The sandbox has no network access; the Flatpak build does not check for updates and leaves updating to Flatpak. It draws through X11 (XWayland on Wayland). Settings, contacts and the language live in `~/.var/app/io.github.shixiaoshi0417.NekoKEM/config/nekokem`, apart from the DEB/RPM app's `~/.config/nekokem`. Chinese, Japanese and Korean text uses the fonts installed on the system. The manifest also points at one published release, and `scripts/update_flatpak_manifest.py <version>` updates it after each release. CI builds and installs the bundle from this build's archives on both architectures and starts the GUI in English and Chinese to check that its window opens. Publishing on Flathub is a step the maintainer takes; see [linux/flatpak/README.md](linux/flatpak/README.md).
-
-Builds and native CI use Ubuntu 24.04, and CI also installs and starts the RPM in Fedora 44 containers of the same architecture. The app carries its own Java runtime; it requires glibc 2.39 or newer, and the DEB/RPM depend on Noto Sans CJK fonts and `curl` (for the update check). OpenSSL 4.1.0 is linked statically into the bridge library with hidden symbols, full RELRO, immediate binding and a non-executable stack. Linux file permissions, authenticated commit and cancellation cleanup follow the CLI/Core; NKEM, NKPR, KDF parameters and 64 KiB streaming are unchanged. See the [desktop GUI documentation](desktop/README.md).
-
-The v6.0.0 Release includes every Linux GUI installation package, portable package, AppImage and Flatpak bundle for both architectures, alongside the existing static CLI packages. Native window tests use X11 and do not establish testing on every Linux distribution or a physical Wayland session.
 
 ## Language settings
 
@@ -551,6 +664,18 @@ The code holds `NEKOKEM-FP1:` and the 64 upper-case hexadecimal digits of the fi
 - Project-internal parser fuzzing has been performed, but there has been no independent third-party audit or broad interoperability testing.
 - When an update check runs, GitHub sees the request's IP address and time; automatic checks can be turned off in Settings.
 - This implementation is not a substitute for mature, audited file encryption protocols and key management systems.
+
+## Historical release v3.2.0
+
+v3.2.0 introduced five interface languages, system-language selection and security fixes, and changed the Android release signer. Its migration instructions and historical build records remain in the [v3.2.0 notes](release/v3.2.0.md). Updating from v3.2.0 to v3.3.0 does not require another uninstall.
+
+## Historical release v3.1.1
+
+The Android App version is `3.1.1`; the Core version remains `3.1`, and the application ID is `com.shixiaoshi0417.nekokem`. See [`android/README.md`](android/README.md) for the Android project and build instructions. App version 3.1.1 does not change protocol numbering: the default file container remains **NKEM v3**, and the NKPR format is unchanged.
+
+v3.1.1 added the Linux CLI packages, the automatic installation script and GitHub Actions builds; see [Linux CLI installation](#linux-cli-installation).
+
+The Linux CLI supports `nekokem --version`. This release patch does not change the Core API, cryptographic parameters, NKEM v3, or the NKPR format.
 
 ## Bug reports and feature requests
 
