@@ -35,8 +35,8 @@
           "only-arches": [
             "x86_64"
           ],
-          "url": "https://github.com/Shixiaoshi0417/NekoKEM/releases/download/v5.2.0/NekoKEM-linux-x86_64.tar.gz",
-          "sha256": "36f66e5e7672f3d2e48ea48e454984ac53ef3791f0e7c382034dbefa9c48f82d",
+          "url": "https://github.com/Shixiaoshi0417/NekoKEM/releases/download/v6.0.0/NekoKEM-linux-x86_64.tar.gz",
+          "sha256": "fad6e581deca5cd8ac091bd1a8b8c2b6a76a8c89241cafc32264313e6e332647",
           "dest": "cli",
           "x-checker-data": {
             "type": "json",
@@ -50,8 +50,8 @@
           "only-arches": [
             "x86_64"
           ],
-          "url": "https://github.com/Shixiaoshi0417/NekoKEM/releases/download/v5.2.0/NekoKEM-linux-x86_64-GUI.tar.gz",
-          "sha256": "8fcbf38bac687fbe7ed68936b7e010ae6ef024fc80314f7ef4b1f9cdf30bdc15",
+          "url": "https://github.com/Shixiaoshi0417/NekoKEM/releases/download/v6.0.0/NekoKEM-linux-x86_64-GUI.tar.gz",
+          "sha256": "891654409def5b8ec11b5590e3b135d93ac689e4815bb7ce68bd5a868550809d",
           "dest": "gui",
           "x-checker-data": {
             "type": "json",
@@ -66,8 +66,8 @@
           "only-arches": [
             "aarch64"
           ],
-          "url": "https://github.com/Shixiaoshi0417/NekoKEM/releases/download/v5.2.0/NekoKEM-linux-aarch64.tar.gz",
-          "sha256": "c1fc59bebb63b11d95949881da5a50bc3bd0ec97ceb679e94dac292ffc71150c",
+          "url": "https://github.com/Shixiaoshi0417/NekoKEM/releases/download/v6.0.0/NekoKEM-linux-aarch64.tar.gz",
+          "sha256": "c0d68478c46312ea9467867a5fc5a12de187375453e9c3d8bf9da13f753da834",
           "dest": "cli",
           "x-checker-data": {
             "type": "json",
@@ -81,8 +81,8 @@
           "only-arches": [
             "aarch64"
           ],
-          "url": "https://github.com/Shixiaoshi0417/NekoKEM/releases/download/v5.2.0/NekoKEM-linux-aarch64-GUI.tar.gz",
-          "sha256": "9274a5dce4ac5d9c5f6608faabb8ffc32bff7d63e6956c53ae150a606ac45f2b",
+          "url": "https://github.com/Shixiaoshi0417/NekoKEM/releases/download/v6.0.0/NekoKEM-linux-aarch64-GUI.tar.gz",
+          "sha256": "00c367cdfc820cc3ea7cc279430d5018f765f7c023751eb5cc2e7768b5f84f9b",
           "dest": "gui",
           "x-checker-data": {
             "type": "json",

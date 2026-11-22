@@ -75,6 +75,9 @@
     <display_length compare="ge">768</display_length>
   </requires>
   <releases>
+    <release version="6.0.0" date="2026-11-21">
+      <url type="details">https://github.com/Shixiaoshi0417/NekoKEM/releases/tag/v6.0.0</url>
+    </release>
     <release version="5.2.0" date="2026-11-15">
       <url type="details">https://github.com/Shixiaoshi0417/NekoKEM/releases/tag/v5.2.0</url>
     </release>
