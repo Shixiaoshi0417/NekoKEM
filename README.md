@@ -148,7 +148,7 @@ nekokem decrypt hybrid report.pdf.nkem decrypted.pdf keys/private.key.enc
 | 主题 | 章节 |
 |---|---|
 | 使用 | [多人加密](#多人加密) · [语言设置](#语言设置) · [默认交互模式](#默认交互模式) · [参数化命令](#参数化命令) · [检查更新](#检查更新) · [指纹二维码](#指纹二维码) |
-| 平台 | [Android 公钥通讯录](#android-公钥通讯录) · [桌面 GUI 公钥通讯录](#桌面-gui-公钥通讯录) · [Windows](#windows-cli-与-gui) · [macOS](#macos-apple-silicon-cli-与-gui) · [Linux GUI](#linux-gui) · [Linux CLI](#linux-cli-安装) |
+| 平台 | [Android 公钥通讯录](#android-公钥通讯录) · [桌面 GUI 公钥通讯录](#桌面-gui-公钥通讯录) · [Windows](#windows-cli-与-gui) · [macOS](#macos-apple-silicon-cli-与-gui) · [iOS](#ios-无签名-ipa) · [Linux GUI](#linux-gui) · [Linux CLI](#linux-cli-安装) |
 | 格式 | [NKPR 私钥](#nkpr-加密私钥格式) · [NKEM v3](#nkem-v3-hybrid-文件格式) · [NKEM v4](#nkem-v4-多接收方文件格式) · [NKEM v5](#nkem-v5-签名文件格式) |
 | 安全 | [安全实现说明](#安全实现说明) · [安全边界](#安全边界) · [漏洞报告](#安全声明与漏洞报告) |
 | 开发 | [安装依赖](#安装依赖) · [编译](#编译) · [自动测试](#自动测试) · [AFL++ fuzzing](#afl-fuzzing) · [性能测量](#性能测量) |
@@ -272,6 +272,10 @@ v6.0.0 提供面向 M 系列 Apple Silicon Mac 的原生 `arm64` CLI 和原生 S
 CLI 与 Linux 共用参数解析、五项菜单和语言目录。GUI 在 macOS 26 上采用 Apple 的液态玻璃设计，最低支持 macOS 13，更早的系统使用回退外观。两者静态链接固定 OpenSSL 4.1.0，保留其 arm64 汇编加速；运行仍依赖 macOS 系统库与框架。CLI 构建设置 macOS 11.0 deployment target，原生 CI 在 `macos-15` 上运行；GUI 使用 macOS 26 SDK 构建并在 `macos-26` 上运行 CI。这不代表已验证更早系统的实机或每代 M 系列芯片的兼容性、性能。
 
 macOS 文件层保留严格的所有者、权限、符号链接和硬链接检查，受保护文件与目录只允许空或 deny-only 扩展 ACL，并检查 APFS/HFS+ 大小写及 Unicode 名称别名。普通输出文件要求 `fsync` 与 `F_FULLFSYNC`，提交后要求父目录 `fsync`，失败时不静默降级；详细限制与测试边界见 [macOS 文件安全设计](macos/SECURITY-DESIGN.md)。Core 6.0 读写 NKEM v3、v4、v5，读取 NKPR v1、v2、v3 并写入 NKPR v3，密码参数及 64 KiB 流式分块与其他平台相同。包只有 ad-hoc 签名，未使用 Developer ID，也未进行 Apple 公证；这不能证明发布者身份或保证通过 Gatekeeper。
+
+## iOS 无签名 IPA
+
+iOS 应用与 macOS GUI 共用 SwiftUI 界面、Rust bridge 和 C17 Core，以四个标签页呈现文件、密钥、通讯录和设置，支持 iPhone 与 iPad（`arm64`，iOS 16 或更新版本）。发布包 `NekoKEM-iOS-arm64-unsigned.ipa` 未签名，需要用 AltStore、SideStore、TrollStore 等自签工具安装：TrollStore 可长期使用，免费 Apple ID 重签的应用通常每 7 天需要续签。iOS 应用不在后台检查更新，设置页可打开 Release 页面。构建、文件位置与安装说明见 [iOS 说明](ios/README.md)。
 
 ## Linux GUI
 
