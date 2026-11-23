@@ -24,7 +24,7 @@ dependencies {
     implementation("top.yukonga.miuix.kmp:miuix-icons-desktop:0.9.4")
     implementation("top.yukonga.miuix.kmp:miuix-preference-desktop:0.9.4")
     // The Material 3 Expressive style; its Expressive widgets ship only in the alphas.
-    implementation("org.jetbrains.compose.material3:material3:1.13.0-beta02")
+    implementation("org.jetbrains.compose.material3:material3:1.13.0-rc01")
     // The filled navigation icons the Android app uses.
     implementation("org.jetbrains.compose.material:material-icons-core:1.7.3")
     // The fingerprint QR code, the same encoder as the Android app.
