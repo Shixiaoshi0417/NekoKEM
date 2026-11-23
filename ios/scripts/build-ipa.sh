@@ -121,6 +121,7 @@ cat > "$app/Info.plist" <<PLIST
     <key>DTSDKName</key><string>$sdk_name$sdk_version</string>
     <key>LSRequiresIPhoneOS</key><true/>
     <key>MinimumOSVersion</key><string>$minimum</string>
+    <key>NSCameraUsageDescription</key><string>NekoKEM reads a contact's fingerprint QR code to verify it. Frames are not stored.</string>
     <key>NSFaceIDUsageDescription</key><string>NekoKEM fills in the private key password saved in Keychain after Face ID.</string>
     <key>UIApplicationSceneManifest</key><dict>
         <key>UIApplicationSupportsMultipleScenes</key><false/>

@@ -136,6 +136,10 @@ final class AppState: ObservableObject {
     // The release notes start folded each time a release is announced.
     @Published var notesOpen = false
     @Published var qrFingerprint = ""
+    #if os(iOS)
+    /// The contact pages opened on top of the contact list.
+    @Published var contactPath: [ContactRoute] = []
+    #endif
     @Published private(set) var signerSaved = false
     // Replacing keys is offered only after Core reported existing keys at the
     // chosen paths, must be ticked for each run and is withdrawn when they change.
@@ -963,6 +967,10 @@ final class AppState: ObservableObject {
     }
     func removeContact(_ contact: Contact) { if !locked { change("contactDeleted", { try Backend.deleteContact(contact.id) }) } }
     func toggleVerified(_ contact: Contact) { if !locked { change(nil, { try Backend.setVerified(contact.id, contact.fingerprint, !contact.verified) }) } }
+    /// A scanned fingerprint code marks the contact verified when it matches and clears the mark when it does not.
+    func setVerified(_ contact: Contact, _ verified: Bool) {
+        if !locked && contact.verified != verified { change(nil, { try Backend.setVerified(contact.id, contact.fingerprint, verified) }) }
+    }
     func togglePin(_ contact: Contact) { if !locked { change(nil, { try Backend.setPinned(contact.id, !contact.pinned) }) } }
 
     func useContact(_ contact: Contact) {
@@ -1051,6 +1059,9 @@ final class AppState: ObservableObject {
         signKeyPath = home + "/Keys/private.key.enc"; ownPublicKey = home + "/Keys/public.key"
         demoContacts()
         choosingRecipients = false; askingPassword = false; fileAction = nil
+        #if os(iOS)
+        contactPath = []
+        #endif
         ownSelected = false; selected = []; otherKeys = []; unverifiedWarned = false
         input = ""; output = ""; password = ""; otherPrivateKey = ""; saveToKeychain = false
         decryptFolder = name == "settings-decrypt-folder" ? home + "/Downloads/Decrypted" : ""
@@ -1083,6 +1094,10 @@ final class AppState: ObservableObject {
             result = Outcome(fingerprint: contacts[1].fingerprint); result?.canVerify = true
         case "contacts": screen = .contacts
         case "contacts-selected": screen = .contacts; selected = ["alice", "bob"]
+        #if os(iOS)
+        case "contact-detail": screen = .contacts; contactPath = [.detail("alice")]
+        case "contact-verify": screen = .contacts; contactPath = [.detail("alice"), .verify("alice")]
+        #endif
         case "update", "update-notes":
             screen = .settings
             availableNotes = [

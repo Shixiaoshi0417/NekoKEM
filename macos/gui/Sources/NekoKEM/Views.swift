@@ -7,11 +7,11 @@ import CoreImage
 import SwiftUI
 
 #if os(macOS)
-private let danger = Color(nsColor: .systemRed)
+let danger = Color(nsColor: .systemRed)
 private let quietFill = Color(nsColor: .quaternaryLabelColor)
 private let separator = Color(nsColor: .separatorColor)
 #else
-private let danger = Color(uiColor: .systemRed)
+let danger = Color(uiColor: .systemRed)
 private let quietFill = Color(uiColor: .quaternarySystemFill)
 private let separator = Color(uiColor: .separator)
 #endif
@@ -68,13 +68,14 @@ private struct CircleCheckbox: ToggleStyle {
             Image(systemName: configuration.isOn ? "checkmark.circle.fill" : "circle").font(.title3)
                 .foregroundStyle(configuration.isOn ? Color.accentColor : Color.secondary)
         }
-        .buttonStyle(.plain)
+        // Borderless: in a list row only the circle toggles, not the whole row.
+        .buttonStyle(.borderless)
     }
 }
 #endif
 
 /// A path as the user knows it: in full on macOS; on iOS where it is in the app's folder, or the file's name.
-private func shown(_ path: String) -> String {
+func shown(_ path: String) -> String {
     #if os(macOS)
     return path
     #else
@@ -139,31 +140,35 @@ struct ContentView: View {
     var body: some View {
         TabView(selection: Binding<Destination>(get: { state.destination }, set: { if state.editable { state.open($0) } })) {
             ForEach(Destination.allCases) { item in
-                NavigationStack {
-                    ScrollView {
-                        VStack(alignment: .leading, spacing: 16) {
-                            switch item {
-                            case .files: FilesPage(state: state)
-                            case .keys:
-                                // The toolbar is too narrow on a phone for the four key tasks.
-                                KeysModePicker(state: state)
-                                KeysPage(state: state)
-                            case .contacts: ContactsPage(state: state)
-                            case .settings: SettingsPage(state: state)
+                if item == .contacts {
+                    // As on Android: a list of contacts, each opening its own page.
+                    NavigationStack(path: $state.contactPath) { PhoneContactsPage(state: state) }
+                        .tabItem { Label(state.t(item.key), systemImage: item.symbol) }
+                        .tag(item)
+                } else {
+                    NavigationStack {
+                        ScrollView {
+                            VStack(alignment: .leading, spacing: 16) {
+                                switch item {
+                                case .files: FilesPage(state: state)
+                                case .keys:
+                                    // The toolbar is too narrow on a phone for the four key tasks.
+                                    KeysModePicker(state: state)
+                                    KeysPage(state: state)
+                                case .contacts: EmptyView()
+                                case .settings: SettingsPage(state: state)
+                                }
                             }
+                            .frame(maxWidth: 640, alignment: .leading)
+                            .padding(16)
+                            .frame(maxWidth: .infinity)
                         }
-                        .frame(maxWidth: 640, alignment: .leading)
-                        .padding(16)
-                        .frame(maxWidth: .infinity)
+                        .scrollDismissesKeyboard(.interactively)
+                        .navigationTitle(state.t(item.key))
                     }
-                    .scrollDismissesKeyboard(.interactively)
-                    .safeAreaInset(edge: .bottom) {
-                        if item == .contacts && !state.selected.isEmpty { SelectionBar(state: state).padding(.bottom, 8) }
-                    }
-                    .navigationTitle(state.t(item.key))
+                    .tabItem { Label(state.t(item.key), systemImage: item.symbol) }
+                    .tag(item)
                 }
-                .tabItem { Label(state.t(item.key), systemImage: item.symbol) }
-                .tag(item)
             }
         }
         // System sheets: half the screen, pulled up for more.
@@ -209,7 +214,7 @@ private struct SelectionBar: View {
 }
 
 /// A titled group box, as in System Settings.
-private struct Card<Content: View>: View {
+struct Card<Content: View>: View {
     @ViewBuilder var content: Content
     var body: some View {
         VStack(alignment: .leading, spacing: 12) { content }
@@ -220,13 +225,13 @@ private struct Card<Content: View>: View {
     }
 }
 
-private struct FieldLabel: View {
+struct FieldLabel: View {
     var text: String
     var invalid: Bool
     var body: some View { Text(text).font(.subheadline).foregroundStyle(invalid ? danger : Color.secondary) }
 }
 
-private struct PathInput: View {
+struct PathInput: View {
     @ObservedObject var state: AppState
     var field: PathField
     var label: String
@@ -292,7 +297,7 @@ private struct KeychainOptions: View {
     }
 }
 
-private struct PasteInput: View {
+struct PasteInput: View {
     @ObservedObject var state: AppState
     var label: String
     var name: String
@@ -311,7 +316,7 @@ private struct PasteInput: View {
     }
 }
 
-private struct Notice<Content: View>: View {
+struct Notice<Content: View>: View {
     var title: String
     var warn = false
     @ViewBuilder var content: Content
@@ -327,7 +332,7 @@ private struct Notice<Content: View>: View {
     }
 }
 
-private struct Detail: View {
+struct Detail: View {
     var text: String
     var mono = false
     var body: some View {
@@ -336,7 +341,7 @@ private struct Detail: View {
 }
 
 /// As on Android and Signal: a shield with a tick once the fingerprint was compared. Unverified keys have no mark.
-private struct VerifiedMark: View {
+struct VerifiedMark: View {
     var verified: Bool
     var body: some View {
         if verified { Image(systemName: "checkmark.shield").foregroundStyle(.primary) }
@@ -464,7 +469,7 @@ private struct KeysPage: View {
 }
 
 /// Password, progress, the result and the action button: shared by every operation.
-private struct OperationFooter: View {
+struct OperationFooter: View {
     @ObservedObject var state: AppState
 
     var body: some View {

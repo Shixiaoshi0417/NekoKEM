@@ -21,6 +21,8 @@ Release 资产 `NekoKEM-iOS-arm64-unsigned.ipa` 未签名，也没有描述文�
 - 设置和通讯录保存在 Application Support（相当于桌面端的 `$XDG_CONFIG_HOME/nekokem`）。每次安装 App 容器路径会变，启动时会把保存的密钥路径换到新容器。
 - 私钥密码可以保存到钥匙串，读取前要求 Face ID、Touch ID 或设备密码；不同步到 iCloud 钥匙串。用户自签的 App 是否能使用钥匙串取决于签名工具写入的 entitlements，不能使用时会提示未保存。
 
+通讯录与 Android 相同：列表每行显示勾选、名称、短指纹和核对标记，左右滑动可置顶或删除，点进去是联系人页（选择、核对指纹、用于加密、编辑备注、删除），核对指纹页可显示二维码、扫码核对或手动标记；扫码只在开始扫描时请求相机权限，画面不保存。
+
 iOS 不能在后台调用 GitHub 检查更新，设置页提供打开最新 Release 页面的按钮；也没有「保存到指定文件夹」选项。
 
 ### 构建
@@ -56,6 +58,8 @@ Verify the IPA against the release's `SHA256SUMS.txt` first. `Payload/NekoKEM.ap
 - Files chosen in the system document picker are copied into the app: keys to Application Support, files to encrypt or decrypt to the temporary folder, which the system empties.
 - Settings and contacts are kept in Application Support (the desktop's `$XDG_CONFIG_HOME/nekokem`). Each install moves the app's container; saved key paths are moved to the new container at launch.
 - The private key password can be saved to Keychain and is read back only after Face ID, Touch ID or the device passcode; it is not synced to iCloud Keychain. Whether a sideloaded app can use Keychain depends on the entitlements its signing tool adds; if it cannot, the app reports that the password was not saved.
+
+Contacts work as on Android: each row shows the tick box, name, short fingerprint and verification mark, swipes to pin or delete, and opens the contact's page (select, verify fingerprint, use for encryption, edit note, delete). The verification page shows the QR code, scans the owner's code or marks the fingerprint compared by hand; the camera is asked for only when a scan starts, and frames are not stored.
 
 iOS cannot ask GitHub for updates in the background, so Settings has a button that opens the latest release page. There is no decrypt-folder option.
 
