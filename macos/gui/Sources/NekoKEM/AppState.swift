@@ -1,4 +1,8 @@
+#if os(macOS)
 import AppKit
+#else
+import UIKit
+#endif
 import Foundation
 
 enum Destination: String, CaseIterable, Identifiable {
@@ -257,6 +261,10 @@ final class AppState: ObservableObject {
                 if let saved = try? await native({ try Backend.desktopPreferences() }) {
                     stored = saved
                     requireSignature = saved.requireSignature; signKeyPath = saved.signKeyPath; ownPublicKey = saved.publicKeyPath
+                    #if os(iOS)
+                    // The app's container moves with each install; the keys moved with it.
+                    signKeyPath = AppFiles.relocated(signKeyPath); ownPublicKey = AppFiles.relocated(ownPublicKey)
+                    #endif
                     recordName = saved.recordName
                     decryptFolder = saved.decryptFolder
                 }
@@ -265,8 +273,11 @@ final class AppState: ObservableObject {
                     print("NekoKEM native startup: settings-ready"); fflush(stdout)
                 }
             } catch { failure = code(error); return }
+            #if os(macOS)
+            // iOS has no program to ask GitHub with; its settings link to the release page instead.
             if let saved = try? await native({ try Backend.updatePreferences() }) { update = saved; autoUpdate = saved.auto }
             if update.auto && (now - update.lastCheck >= Self.day || now < update.lastCheck) { checkForUpdate(manual: false) }
+            #endif
             await refreshContacts()
         }
     }
@@ -295,6 +306,7 @@ final class AppState: ObservableObject {
     }
     func chooseDecryptFolder() {
         if locked || !loaded { return }
+        #if os(macOS)
         choosing = true
         defer { choosing = false }
         let panel = NSOpenPanel()
@@ -302,6 +314,7 @@ final class AppState: ObservableObject {
         if !decryptFolder.isEmpty { panel.directoryURL = URL(fileURLWithPath: decryptFolder, isDirectory: true) }
         guard panel.runModal() == .OK, let path = panel.url?.path else { return }
         decryptFolder = path; decryptFolderFailed = false; storePreferences()
+        #endif
     }
     func changeAutoUpdate(_ value: Bool) { autoUpdate = value; update.auto = value; storeUpdate() }
     func toggleUnsigned(_ value: Bool) {
@@ -329,6 +342,12 @@ final class AppState: ObservableObject {
         Task { do { try await native { try Backend.openReleasePage(target) } } catch { updateNotice = code(error) } }
     }
     func ignoreRelease() { update.ignored = availableVersion; availableVersion = ""; storeUpdate() }
+    #if os(iOS)
+    /// The latest release on GitHub, in the system's browser.
+    func openLatestRelease() {
+        if let url = URL(string: "https://github.com/Shixiaoshi0417/NekoKEM/releases/latest") { UIApplication.shared.open(url) }
+    }
+    #endif
 
     private func withdrawReplace() { replaceOffered = false; replace = false }
     private func withdrawLegacy() { legacyTimer?.cancel(); legacyTimer = nil; legacyOffered = false; legacyConfirmed = false; legacyWait = 0 }
@@ -404,6 +423,9 @@ final class AppState: ObservableObject {
         confirmingUnsigned = false; closeRecipientsNow(); discardStaged()
         pasteKey = false
         screen = value
+        #if os(iOS)
+        fillSaveDefaults()
+        #endif
         if value == .files || value == .contacts { Task { await refreshContacts() } }
     }
     func changeSource(paste: Bool) {
@@ -417,6 +439,9 @@ final class AppState: ObservableObject {
         keyMode = mode
         withdrawReplace(); withdrawOverwrite(); withdrawLegacy(); resetFeedback()
         if mode == .export && exportPrivate && privatePath.isEmpty { privatePath = signKeyPath }
+        #if os(iOS)
+        fillSaveDefaults()
+        #endif
     }
     /// Export mode's choice; the private key starts as the user's own.
     func changeExportPrivate(_ value: Bool) {
@@ -425,6 +450,9 @@ final class AppState: ObservableObject {
         exportPrivate = value
         if value && privatePath.isEmpty { privatePath = signKeyPath }
         withdrawOverwrite(); resetFeedback()
+        #if os(iOS)
+        fillSaveDefaults()
+        #endif
     }
     func changeContactSource(paste: Bool) {
         if locked || !loaded || paste == contactPaste { return }
@@ -432,6 +460,20 @@ final class AppState: ObservableObject {
     }
 
     private func fileName(_ path: String) -> String { (path as NSString).lastPathComponent }
+    /// The field names a file that the operation writes, rather than one it reads.
+    func saves(_ field: PathField) -> Bool {
+        // Upgrading changes existing key files, so it opens them.
+        let opening = screen == .keygen && (keyMode == .upgrade || (keyMode == .export && field == .privatePath))
+        return [.output, .publicPath, .privatePath].contains(field) && !opening
+    }
+    private func saveName(_ field: PathField) -> String {
+        switch field {
+        case .publicPath: return "public.key"
+        case .privatePath: return "private.key.enc"
+        default: return exportPrivate ? "private-5.2.nkpr" : "legacy-public.key"
+        }
+    }
+    #if os(macOS)
     private func chooseOpen() -> String? {
         let panel = NSOpenPanel()
         panel.canChooseFiles = true; panel.canChooseDirectories = false; panel.allowsMultipleSelection = false
@@ -447,19 +489,36 @@ final class AppState: ObservableObject {
         if locked || !loaded { return }
         choosing = true
         defer { choosing = false }
-        // Upgrading changes existing key files, so it opens them.
-        let opening = screen == .keygen && (keyMode == .upgrade || (keyMode == .export && field == .privatePath))
-        let saving = [.output, .publicPath, .privatePath].contains(field) && !opening
-        let value: String?
-        if saving {
-            switch field {
-            case .publicPath: value = chooseSave("public.key")
-            case .privatePath: value = chooseSave("private.key.enc")
-            default: value = chooseSave(exportPrivate ? "private-5.2.nkpr" : "legacy-public.key")
-            }
-        } else { value = chooseOpen() }
+        let value = saves(field) ? chooseSave(saveName(field)) : chooseOpen()
         if let value { setPath(field, value) }
     }
+    #else
+    // iOS has no save panel: what NekoKEM writes goes to its own folder, which
+    // the Files app shows, and is shared from there or from the result.
+    private func chooseSave(_ name: String, directory: String? = nil) -> String? { AppFiles.freePath(name) }
+    /// Keys are kept in the app's own storage; a file to encrypt or decrypt only until it is replaced.
+    private func chooseOpen(_ field: PathField) async -> String? { await DocumentPicker.open(keep: field != .input) }
+    func browse(_ field: PathField) {
+        if locked || !loaded { return }
+        if saves(field) { fillSaveDefaults(); return }
+        choosing = true
+        Task {
+            let value = await chooseOpen(field)
+            choosing = false
+            if let value { setPath(field, value) }
+        }
+    }
+    /// The files a key operation writes start in the app's folder: new keys in Keys, exports beside them.
+    private func fillSaveDefaults() {
+        guard screen == .keygen else { return }
+        if keyMode == .generate {
+            if publicPath.isEmpty { publicPath = AppFiles.keyPath(saveName(.publicPath)) }
+            if privatePath.isEmpty { privatePath = AppFiles.keyPath(saveName(.privatePath)) }
+        } else if keyMode == .export && output.isEmpty {
+            output = AppFiles.freePath(saveName(.output))
+        }
+    }
+    #endif
 
     func changeLanguage(_ tag: String) {
         selectedLanguage = tag
@@ -928,9 +987,18 @@ final class AppState: ObservableObject {
     /// "Other public key file…": a one-off recipient for this file, never saved.
     func addOtherKey() {
         if locked || atRecipientLimit { return }
+        #if os(macOS)
         choosing = true
         defer { choosing = false }
         if let value = chooseOpen(), value != ownPublicKey, !otherKeys.contains(value) { otherKeys.append(value); edited("contacts") }
+        #else
+        choosing = true
+        Task {
+            let value = await chooseOpen(.keyPath)
+            choosing = false
+            if let value, value != ownPublicKey, !otherKeys.contains(value), !atRecipientLimit { otherKeys.append(value); edited("contacts") }
+        }
+        #endif
     }
 
     func cancel() {
@@ -951,7 +1019,9 @@ final class AppState: ObservableObject {
         return true
     }
     private func closeIfRequested() {
+        #if os(macOS)
         if closeRequested && Bridge.closeReady() { leave(); NSApp.terminate(nil) }
+        #endif
     }
     // An output that was never saved is deleted before the app goes.
     private func leave() {
@@ -973,31 +1043,36 @@ final class AppState: ObservableObject {
     }
     func showDemo(_ name: String) {
         demo = true; loaded = true
-        signKeyPath = "/Users/shawn/Keys/private.key.enc"; ownPublicKey = "/Users/shawn/Keys/public.key"
+        #if os(macOS)
+        let home = "/Users/shawn"
+        #else
+        let home = AppFiles.documents.path
+        #endif
+        signKeyPath = home + "/Keys/private.key.enc"; ownPublicKey = home + "/Keys/public.key"
         demoContacts()
         choosingRecipients = false; askingPassword = false; fileAction = nil
         ownSelected = false; selected = []; otherKeys = []; unverifiedWarned = false
         input = ""; output = ""; password = ""; otherPrivateKey = ""; saveToKeychain = false
-        decryptFolder = name == "settings-decrypt-folder" ? "/Users/shawn/Downloads/Decrypted" : ""
+        decryptFolder = name == "settings-decrypt-folder" ? home + "/Downloads/Decrypted" : ""
         availableVersion = ""; availableNotes = []; notesOpen = false
         resetFeedback()
         switch name {
         case "files-empty": screen = .files
         case "files", "encrypt-recipients", "encrypt-warning", "files-password", "files-done":
             screen = .files
-            input = name == "files-password" ? "/Users/shawn/Downloads/report.pdf.nkem" : "/Users/shawn/Documents/report.pdf"
+            input = name == "files-password" ? home + "/Downloads/report.pdf.nkem" : home + "/Documents/report.pdf"
             if name == "encrypt-recipients" || name == "encrypt-warning" { fileAction = .encrypt; choosingRecipients = true; ownSelected = true; selected = ["alice"] }
             if name == "encrypt-warning" { selected = ["alice", "carol"]; unverifiedWarned = true }
             if name == "files-password" { fileAction = .decrypt; askingPassword = true; password = "demo-password"; saveToKeychain = true }
             if name == "files-done" {
                 var done = Outcome()
-                done.output = "/Users/shawn/Documents/report.pdf.nkem"; done.format = 5
+                done.output = home + "/Documents/report.pdf.nkem"; done.format = 5
                 result = done; successMessage = "encryptedSigned"; ownRecipient = true; recipients = [contacts[1]]
             }
         case "keys": screen = .keygen; keyMode = .generate
         case "keys-export-private":
             screen = .keygen; keyMode = .export; exportPrivate = true; privatePath = signKeyPath
-            output = "/Users/shawn/Keys/private-5.2.nkpr"
+            output = home + "/Keys/private-5.2.nkpr"
         case "fingerprint":
             screen = .fingerprint; keyPath = ownPublicKey
             result = Outcome(fingerprint: contacts[1].fingerprint); result?.canVerify = true
