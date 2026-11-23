@@ -8,6 +8,7 @@ import SwiftUI
 @main
 struct NekoKEMApp: App {
     @StateObject private var state: AppState
+    private var demo: String?
 
     init() {
         AppFiles.prepare()
@@ -15,7 +16,7 @@ struct NekoKEMApp: App {
         _state = StateObject(wrappedValue: state)
         let arguments = CommandLine.arguments
         if let index = arguments.firstIndex(of: "--demo"), index + 1 < arguments.count {
-            state.showDemo(arguments[index + 1])
+            demo = arguments[index + 1]
         } else if arguments.contains("--self-test") {
             SelfTest.start()
         } else {
@@ -24,7 +25,15 @@ struct NekoKEMApp: App {
     }
 
     var body: some Scene {
-        WindowGroup { ContentView(state: state) }
+        WindowGroup {
+            ContentView(state: state)
+                // A sheet asked for before the window is up is not presented: the page comes first.
+                .task {
+                    guard let demo else { return }
+                    try? await Task.sleep(nanoseconds: 500_000_000)
+                    state.showDemo(demo)
+                }
+        }
     }
 }
 

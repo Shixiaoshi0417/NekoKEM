@@ -56,7 +56,7 @@ extension View {
         #if os(macOS)
         frame(width: 440)
         #else
-        frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        frame(maxWidth: .infinity, alignment: .leading).padding(.top, 8)
         #endif
     }
 }
@@ -166,10 +166,14 @@ struct ContentView: View {
                 .tag(item)
             }
         }
+        // System sheets: half the screen, pulled up for more.
         .sheet(isPresented: Binding(get: { state.choosingRecipients || state.askingPassword }, set: { if !$0 { state.closeRecipients() } })) {
-            if state.askingPassword { PasswordSheet(state: state) } else { RecipientSheet(state: state) }
+            Group { if state.askingPassword { PasswordSheet(state: state) } else { RecipientSheet(state: state) } }
+                .presentationDetents([.medium, .large]).presentationDragIndicator(.visible)
         }
-        .sheet(isPresented: Binding(get: { !state.qrFingerprint.isEmpty }, set: { if !$0 { state.qrFingerprint = "" } })) { QrSheet(state: state) }
+        .sheet(isPresented: Binding(get: { !state.qrFingerprint.isEmpty }, set: { if !$0 { state.qrFingerprint = "" } })) {
+            QrSheet(state: state).presentationDetents([.medium, .large]).presentationDragIndicator(.visible)
+        }
     }
 }
 #endif

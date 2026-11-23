@@ -62,7 +62,7 @@ for appearance in light dark; do
     for page in "${pages[@]}"; do
         xcrun simctl launch --terminate-running-process "$udid" "$bundle" --demo "$page" >/dev/null
         # Let the page and any sheet finish drawing.
-        sleep 3
+        sleep 4
         xcrun simctl io "$udid" screenshot --type=png "$screens/$appearance-$page.png" >/dev/null
         test -s "$screens/$appearance-$page.png"
     done

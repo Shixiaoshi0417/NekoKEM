@@ -1069,7 +1069,12 @@ final class AppState: ObservableObject {
                 done.output = home + "/Documents/report.pdf.nkem"; done.format = 5
                 result = done; successMessage = "encryptedSigned"; ownRecipient = true; recipients = [contacts[1]]
             }
-        case "keys": screen = .keygen; keyMode = .generate
+        case "keys":
+            screen = .keygen; keyMode = .generate
+            #if os(iOS)
+            publicPath = ""; privatePath = ""
+            fillSaveDefaults()
+            #endif
         case "keys-export-private":
             screen = .keygen; keyMode = .export; exportPrivate = true; privatePath = signKeyPath
             output = home + "/Keys/private-5.2.nkpr"
