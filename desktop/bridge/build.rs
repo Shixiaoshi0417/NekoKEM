@@ -1,6 +1,6 @@
 // Compiles the C17 Core and the desktop adapter for the Compose desktop app
 // (Windows and Linux), which loads the library through Java's foreign function
-// API, and for the SwiftUI macOS app, which links the static library.
+// API, and for the SwiftUI macOS and iOS apps, which link the static library.
 use std::{env, path::PathBuf};
 fn main() {
     let target = env::var("TARGET").unwrap();
@@ -10,8 +10,11 @@ fn main() {
         "x86_64-unknown-linux-gnu" | "aarch64-unknown-linux-gnu"
     );
     let macos = target == "aarch64-apple-darwin";
+    // iPhone and iPad, and the simulator that CI takes the screenshots on.
+    let ios = target == "aarch64-apple-ios";
+    let ios_simulator = target == "aarch64-apple-ios-sim";
     assert!(
-        windows || linux || macos,
+        windows || linux || macos || ios || ios_simulator,
         "Unsupported desktop bridge target: {target}"
     );
     let root = PathBuf::from(env::var("CARGO_MANIFEST_DIR").unwrap()).join("../..");
@@ -48,6 +51,14 @@ fn main() {
     } else if macos {
         build
             .flag("-mmacosx-version-min=11.0")
+            .define("_DARWIN_C_SOURCE", "1");
+    } else if ios {
+        build
+            .flag("-mios-version-min=16.0")
+            .define("_DARWIN_C_SOURCE", "1");
+    } else if ios_simulator {
+        build
+            .flag("-mios-simulator-version-min=16.0")
             .define("_DARWIN_C_SOURCE", "1");
     } else {
         build
@@ -104,6 +115,10 @@ fn main() {
         println!("cargo:rustc-link-arg=-mmacosx-version-min=11.0");
         println!("cargo:rustc-link-lib=framework=CoreFoundation");
         println!("cargo:rerun-if-env-changed=MACOSX_DEPLOYMENT_TARGET");
+    } else if ios || ios_simulator {
+        // Only the static library is built; the iOS app links it with the system frameworks.
+        println!("cargo:rustc-link-lib=framework=CoreFoundation");
+        println!("cargo:rerun-if-env-changed=IPHONEOS_DEPLOYMENT_TARGET");
     } else {
         println!("cargo:rustc-link-arg=-Wl,-z,relro,-z,now,-z,noexecstack,--gc-sections");
         println!("cargo:rustc-link-arg=-Wl,--exclude-libs,libcrypto.a:libnekokem_core.a");
