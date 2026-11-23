@@ -152,17 +152,17 @@ kotlin {
 
 dependencies {
     testImplementation("junit:junit:4.13.2")
-    testImplementation("org.robolectric:robolectric:4.18")
+    testImplementation("org.robolectric:robolectric:4.18.1")
     // Renders the password dialogs off device: they are secure windows, so
     // device screenshots come out blank.
-    testImplementation(platform("androidx.compose:compose-bom:2026.09.00"))
+    testImplementation(platform("androidx.compose:compose-bom:2026.11.01"))
     testImplementation("androidx.compose.ui:ui-test-junit4")
     debugImplementation("androidx.compose.ui:ui-test-manifest")
 
-    implementation(platform("androidx.compose:compose-bom:2026.09.00"))
+    implementation(platform("androidx.compose:compose-bom:2026.11.01"))
     implementation("androidx.activity:activity-compose:1.13.0")
     // Material 3 Expressive components; the BOM still pins material3 1.4.
-    implementation("androidx.compose.material3:material3:1.5.0-rc01")
+    implementation("androidx.compose.material3:material3:1.6.0-alpha01")
     implementation("androidx.compose.ui:ui")
     // Filled and outlined tab icons for the Material navigation bar.
     implementation("androidx.compose.material:material-icons-core")
@@ -176,9 +176,9 @@ dependencies {
     // Fingerprint QR codes: ZXing draws and reads them; CameraX supplies the
     // camera frames for scanning. Neither needs Google Play services.
     implementation("com.google.zxing:core:3.5.4")
-    implementation("androidx.camera:camera-camera2:1.6.2")
-    implementation("androidx.camera:camera-lifecycle:1.6.2")
-    implementation("androidx.camera:camera-view:1.6.2")
+    implementation("androidx.camera:camera-camera2:1.7.0")
+    implementation("androidx.camera:camera-lifecycle:1.7.0")
+    implementation("androidx.camera:camera-view:1.7.0")
     // Saves and fills the private-key password through the system Credential
     // Manager (Android 14 and later). The Play services bridge for older
     // versions is left out, so this does not need Google Play services either.
