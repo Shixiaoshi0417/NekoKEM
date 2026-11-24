@@ -309,27 +309,32 @@ private struct AddContactSheet: View {
 
     var body: some View {
         NavigationStack {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 12) {
+            Form {
+                Section {
                     Picker("", selection: Binding(get: { state.contactPaste ? 1 : 0 }, set: { state.changeContactSource(paste: $0 == 1) })) {
                         Text(state.t("path")).tag(0)
                         Text(state.t("paste")).tag(1)
                     }
                     .pickerStyle(.segmented).labelsHidden().disabled(!state.editable)
-                    if state.contactPaste { PasteInput(state: state, label: state.t("paste"), name: "contactKeyText", text: $state.contactKeyText) }
-                    else { PathInput(state: state, field: .contactKeyPath, label: state.t("publicKey")) }
-                    VStack(alignment: .leading, spacing: 4) {
-                        FieldLabel(text: state.t("note"), invalid: state.invalidField == "note")
-                        TextField("", text: $state.note).textFieldStyle(.roundedBorder).disabled(!state.editable).accessibilityLabel(state.t("note"))
-                    }
-                    OperationFooter(state: state)
+                    .listRowInsets(EdgeInsets()).listRowBackground(Color.clear)
                 }
-                .padding(16)
+                Section {
+                    if state.contactPaste { PasteRow(state: state, label: state.t("paste"), name: "contactKeyText", text: $state.contactKeyText) }
+                    else { PathRow(state: state, field: .contactKeyPath, label: state.t("publicKey")) }
+                    TextField(state.t("note"), text: $state.note)
+                        .foregroundStyle(state.invalidField == "note" ? danger : Color.primary)
+                        .disabled(!state.editable).accessibilityLabel(state.t("note"))
+                }
+                UpgradeSection(state: state)
+                FeedbackSections(state: state)
             }
             .navigationTitle(state.t("addContact"))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) { Button(state.t("cancel")) { done() }.disabled(state.locked) }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button(state.t(state.contactBusy ? "working" : "saveContact")) { state.submit() }.fontWeight(.semibold).disabled(!state.editable)
+                }
             }
         }
         // Saved: back to the list, where the new contact is.

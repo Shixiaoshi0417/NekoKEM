@@ -139,6 +139,8 @@ final class AppState: ObservableObject {
     #if os(iOS)
     /// The contact pages opened on top of the contact list.
     @Published var contactPath: [ContactRoute] = []
+    /// The key task open under the Keys tab.
+    @Published var keysPath: [KeyRoute] = []
     #endif
     @Published private(set) var signerSaved = false
     // Replacing keys is offered only after Core reported existing keys at the
@@ -1060,7 +1062,7 @@ final class AppState: ObservableObject {
         demoContacts()
         choosingRecipients = false; askingPassword = false; fileAction = nil
         #if os(iOS)
-        contactPath = []
+        contactPath = []; keysPath = []
         #endif
         ownSelected = false; selected = []; otherKeys = []; unverifiedWarned = false
         input = ""; output = ""; password = ""; otherPrivateKey = ""; saveToKeychain = false
@@ -1080,18 +1082,25 @@ final class AppState: ObservableObject {
                 done.output = home + "/Documents/report.pdf.nkem"; done.format = 5
                 result = done; successMessage = "encryptedSigned"; ownRecipient = true; recipients = [contacts[1]]
             }
-        case "keys":
+        case "keys", "keys-generate":
             screen = .keygen; keyMode = .generate
             #if os(iOS)
             publicPath = ""; privatePath = ""
             fillSaveDefaults()
+            if name == "keys-generate" { keysPath = [.generate] }
             #endif
         case "keys-export-private":
             screen = .keygen; keyMode = .export; exportPrivate = true; privatePath = signKeyPath
             output = home + "/Keys/private-5.2.nkpr"
+            #if os(iOS)
+            keysPath = [.export]
+            #endif
         case "fingerprint":
             screen = .fingerprint; keyPath = ownPublicKey
             result = Outcome(fingerprint: contacts[1].fingerprint); result?.canVerify = true
+            #if os(iOS)
+            keysPath = [.fingerprint]
+            #endif
         case "contacts": screen = .contacts
         case "contacts-selected": screen = .contacts; selected = ["alice", "bob"]
         #if os(iOS)

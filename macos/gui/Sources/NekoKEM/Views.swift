@@ -132,56 +132,8 @@ struct ContentView: View {
         .sheet(isPresented: Binding(get: { !state.availableVersion.isEmpty }, set: { if !$0 { state.availableVersion = "" } })) { UpdateSheet(state: state) }
     }
 }
-#else
-/// iPhone and iPad: the four pages are tabs, each a scrolling page under its title.
-struct ContentView: View {
-    @ObservedObject var state: AppState
-
-    var body: some View {
-        TabView(selection: Binding<Destination>(get: { state.destination }, set: { if state.editable { state.open($0) } })) {
-            ForEach(Destination.allCases) { item in
-                if item == .contacts {
-                    // As on Android: a list of contacts, each opening its own page.
-                    NavigationStack(path: $state.contactPath) { PhoneContactsPage(state: state) }
-                        .tabItem { Label(state.t(item.key), systemImage: item.symbol) }
-                        .tag(item)
-                } else {
-                    NavigationStack {
-                        ScrollView {
-                            VStack(alignment: .leading, spacing: 16) {
-                                switch item {
-                                case .files: FilesPage(state: state)
-                                case .keys:
-                                    // The toolbar is too narrow on a phone for the four key tasks.
-                                    KeysModePicker(state: state)
-                                    KeysPage(state: state)
-                                case .contacts: EmptyView()
-                                case .settings: SettingsPage(state: state)
-                                }
-                            }
-                            .frame(maxWidth: 640, alignment: .leading)
-                            .padding(16)
-                            .frame(maxWidth: .infinity)
-                        }
-                        .scrollDismissesKeyboard(.interactively)
-                        .navigationTitle(state.t(item.key))
-                    }
-                    .tabItem { Label(state.t(item.key), systemImage: item.symbol) }
-                    .tag(item)
-                }
-            }
-        }
-        // System sheets: half the screen, pulled up for more.
-        .sheet(isPresented: Binding(get: { state.choosingRecipients || state.askingPassword }, set: { if !$0 { state.closeRecipients() } })) {
-            Group { if state.askingPassword { PasswordSheet(state: state) } else { RecipientSheet(state: state) } }
-                .presentationDetents([.medium, .large]).presentationDragIndicator(.visible)
-        }
-        .sheet(isPresented: Binding(get: { !state.qrFingerprint.isEmpty }, set: { if !$0 { state.qrFingerprint = "" } })) {
-            QrSheet(state: state).presentationDetents([.medium, .large]).presentationDragIndicator(.visible)
-        }
-    }
-}
 #endif
+// The iPhone and iPad pages are in ios/Sources/Pages.swift.
 
 /// The four key tasks, in the toolbar.
 private struct KeysModePicker: View {

@@ -13,7 +13,7 @@ app=$1
 mkdir -p "$2"
 screens=$(cd "$2" && pwd -P)
 readonly bundle=com.shixiaoshi0417.nekokem.ios
-readonly pages=(files-empty files encrypt-recipients encrypt-warning files-password files-done keys keys-export-private fingerprint contacts contacts-selected contact-detail contact-verify settings)
+readonly pages=(files-empty files encrypt-recipients encrypt-warning files-password files-done keys keys-generate keys-export-private fingerprint contacts contacts-selected contact-detail contact-verify settings)
 
 # A 6.7-inch iPhone where the runner has one, as the Android screenshots use.
 device=$(xcrun simctl list devices available -j | python3 -c '
