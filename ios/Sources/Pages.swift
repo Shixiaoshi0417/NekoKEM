@@ -224,8 +224,10 @@ struct FeedbackSections: View {
         if let notice = state.keychainNotice, notice == "keychainSaved" || notice == "keychainNotSaved" {
             Section { Text(state.t(notice)).foregroundStyle(notice == "keychainSaved" ? Color.secondary : danger) }
         }
-        // The recipient and password sheets show their own errors.
-        if let failure = state.failure, state.invalidField != "contacts", state.invalidField != "password" {
+        // The recipient and password sheets show their own errors while they are open;
+        // the key pages ask for the password inline and show it here.
+        let inSheet = (state.invalidField == "contacts" && state.choosingRecipients) || (state.invalidField == "password" && state.askingPassword)
+        if let failure = state.failure, !inSheet {
             Section {
                 Text(state.t(failure)).foregroundStyle(failure == "cancelled" ? Color.primary : danger)
                 if let contact = state.failedContact {
@@ -315,6 +317,8 @@ private struct PhoneFilesPage: View {
                 if other { Button(state.t("restoreDefaultPrivateKey")) { state.restoreDefaultKey() }.disabled(!state.editable) }
             } header: { Text(state.t("decryptKeyTitle")) }
             ProgressSection(state: state, cancellable: true)
+            // Saving a signer that upgrades an older-format contact asks here.
+            UpgradeSection(state: state)
             FeedbackSections(state: state)
             if state.unsaved { ActionSection(title: state.t("saveAs"), enabled: state.editable) { state.saveAgain() } }
         }
