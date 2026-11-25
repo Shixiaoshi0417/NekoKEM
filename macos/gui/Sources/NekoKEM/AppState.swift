@@ -518,8 +518,9 @@ final class AppState: ObservableObject {
     private func fillSaveDefaults() {
         guard screen == .keygen else { return }
         if keyMode == .generate {
-            if publicPath.isEmpty { publicPath = AppFiles.keyPath(saveName(.publicPath)) }
-            if privatePath.isEmpty { privatePath = AppFiles.keyPath(saveName(.privatePath)) }
+            // Always Documents/Keys: Upgrade and Export leave the keys they opened in the same fields.
+            publicPath = AppFiles.keyPath(saveName(.publicPath))
+            privatePath = AppFiles.keyPath(saveName(.privatePath))
         } else if keyMode == .export && output.isEmpty {
             output = AppFiles.freePath(saveName(.output))
         }
