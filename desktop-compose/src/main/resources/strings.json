@@ -940,6 +940,125 @@
    "ダウンロードページへ",
    "다운로드하러 가기"
   ],
+  "addContact": [
+   "Add Public Key",
+   "添加公钥",
+   "新增公鑰",
+   "公開鍵を追加",
+   "공개키 추가"
+  ],
+  "verifyFingerprint": [
+   "Verify Fingerprint",
+   "核对指纹",
+   "核對指紋",
+   "フィンガープリントを照合",
+   "지문 확인"
+  ],
+  "scanFingerprint": [
+   "Scan to verify",
+   "扫码核对",
+   "掃碼核對",
+   "読み取って照合",
+   "스캔해서 확인"
+  ],
+  "scanTitle": [
+   "Scan fingerprint",
+   "扫描指纹",
+   "掃描指紋",
+   "フィンガープリントを読み取る",
+   "지문 스캔"
+  ],
+  "scanHint": [
+   "Scan the fingerprint QR code that “{name}” shows under Keys in NekoKEM.",
+   "请扫描“{name}”在 NekoKEM「密钥」页显示的指纹二维码。",
+   "請掃描「{name}」在 NekoKEM「金鑰」頁顯示的指紋 QR 碼。",
+   "「{name}」が NekoKEM の「鍵」ページに表示するフィンガープリントの QR コードを読み取ってください。",
+   "“{name}”이(가) NekoKEM의 키 페이지에 표시하는 지문 QR 코드를 스캔하세요."
+  ],
+  "scanPermissionDenied": [
+   "Scanning needs the camera. Allow camera access in the system settings, or compare the full fingerprint with the owner by eye.",
+   "扫码需要使用相机。请在系统设置中允许相机权限，或与对方逐字核对完整指纹。",
+   "掃碼需要使用相機。請在系統設定中允許相機權限，或與對方逐字核對完整指紋。",
+   "読み取りにはカメラが必要です。システム設定でカメラへのアクセスを許可するか、完全なフィンガープリントを相手と目で照合してください。",
+   "스캔하려면 카메라가 필요합니다. 시스템 설정에서 카메라 접근을 허용하거나, 상대와 전체 지문을 눈으로 비교하세요."
+  ],
+  "scanMatchTitle": [
+   "Fingerprint matches",
+   "指纹一致",
+   "指紋一致",
+   "フィンガープリントが一致しました",
+   "지문 일치"
+  ],
+  "scanMatch": [
+   "The scanned fingerprint is the one saved for “{name}”. The contact is now marked as verified.",
+   "扫描到的指纹与“{name}”保存的指纹一致，该联系人已标记为已核对。",
+   "掃描到的指紋與「{name}」儲存的指紋一致，該聯絡人已標記為已核對。",
+   "読み取ったフィンガープリントは「{name}」に保存されたものと一致します。この連絡先を照合済みにしました。",
+   "스캔한 지문이 “{name}”에 저장된 지문과 같습니다. 이 연락처를 확인됨으로 표시했습니다."
+  ],
+  "scanMismatchTitle": [
+   "Fingerprint does not match",
+   "指纹不一致",
+   "指紋不一致",
+   "フィンガープリントが一致しません",
+   "지문 불일치"
+  ],
+  "scanMismatch": [
+   "The scanned fingerprint is not the one saved for “{name}”. Do not rely on this contact or on files it signs until you have found out why with the owner. Any earlier verification was removed.",
+   "扫描到的指纹与“{name}”保存的指纹不同。在与对方查明原因之前，请不要信任该联系人及其签名的文件。之前的核对标记已清除。",
+   "掃描到的指紋與「{name}」儲存的指紋不同。在與對方查明原因之前，請不要信任該聯絡人及其簽章的檔案。先前的核對標記已清除。",
+   "読み取ったフィンガープリントは「{name}」に保存されたものと異なります。相手と原因を確認するまで、この連絡先とその署名付きファイルを信頼しないでください。以前の照合済み表示は解除されました。",
+   "스캔한 지문이 “{name}”에 저장된 지문과 다릅니다. 상대와 원인을 확인하기 전까지 이 연락처와 그 서명 파일을 신뢰하지 마세요. 이전 확인 표시는 지워졌습니다."
+  ],
+  "scanSavedLine": [
+   "Saved: {name}",
+   "已保存：{name}",
+   "已儲存：{name}",
+   "保存済み: {name}",
+   "저장됨: {name}"
+  ],
+  "scanScannedLine": [
+   "Scanned: {name}",
+   "扫描到：{name}",
+   "掃描到：{name}",
+   "読み取り: {name}",
+   "스캔됨: {name}"
+  ],
+  "scanInvalidTitle": [
+   "Not a NekoKEM fingerprint code",
+   "不是 NekoKEM 指纹二维码",
+   "不是 NekoKEM 指紋 QR 碼",
+   "NekoKEM のフィンガープリントコードではありません",
+   "NekoKEM 지문 코드가 아님"
+  ],
+  "scanInvalid": [
+   "This QR code does not hold a NekoKEM fingerprint. Ask the owner to open Keys and show the fingerprint QR code.",
+   "这个二维码不包含 NekoKEM 指纹。请让对方打开「密钥」页并显示指纹二维码。",
+   "這個 QR 碼不包含 NekoKEM 指紋。請讓對方開啟「金鑰」頁並顯示指紋 QR 碼。",
+   "この QR コードには NekoKEM のフィンガープリントが含まれていません。相手に「鍵」ページでフィンガープリントの QR コードを表示してもらってください。",
+   "이 QR 코드에는 NekoKEM 지문이 없습니다. 상대에게 키 페이지에서 지문 QR 코드를 표시해 달라고 하세요."
+  ],
+  "scanCameraUnavailable": [
+   "No usable camera was found, so this device cannot scan. Compare the full fingerprint with the owner by eye instead.",
+   "未找到可用的相机，此设备无法扫码。请改为与对方逐字核对完整指纹。",
+   "找不到可用的相機，此裝置無法掃碼。請改為與對方逐字核對完整指紋。",
+   "使用できるカメラが見つからないため、この端末では読み取れません。代わりに完全なフィンガープリントを相手と目で照合してください。",
+   "사용할 수 있는 카메라가 없어 이 기기에서는 스캔할 수 없습니다. 대신 상대와 전체 지문을 눈으로 비교하세요."
+  ],
+  "shareFingerprint": [
+   "Share fingerprint",
+   "分享指纹",
+   "分享指紋",
+   "フィンガープリントを共有",
+   "지문 공유"
+  ],
+  "share": [
+   "Share",
+   "分享",
+   "分享",
+   "共有",
+   "공유"
+  ],
   "later": [
    "Later",
    "稍后",

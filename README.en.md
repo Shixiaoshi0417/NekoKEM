@@ -148,7 +148,7 @@ The project does not implement cryptographic algorithms itself and does not depe
 | Topic | Sections |
 |---|---|
 | Usage | [Multi-recipient encryption](#multi-recipient-encryption) · [Language settings](#language-settings) · [Default interactive mode](#default-interactive-mode) · [Parameterized commands](#parameterized-commands) · [Update checks](#update-checks) · [Fingerprint QR codes](#fingerprint-qr-codes) |
-| Platforms | [Android contacts](#android-public-key-contacts) · [Desktop contacts](#desktop-gui-public-key-contacts) · [Windows](#windows-cli-and-gui) · [macOS](#macos-apple-silicon-cli-and-gui) · [Linux GUI](#linux-gui) · [Linux CLI](#linux-cli-installation) |
+| Platforms | [Android contacts](#android-public-key-contacts) · [Desktop contacts](#desktop-gui-public-key-contacts) · [Windows](#windows-cli-and-gui) · [macOS](#macos-apple-silicon-cli-and-gui) · [iOS](#ios-unsigned-ipa) · [Linux GUI](#linux-gui) · [Linux CLI](#linux-cli-installation) |
 | Formats | [NKPR private keys](#nkpr-encrypted-private-key-format) · [NKEM v3](#nkem-v3-hybrid-file-format) · [NKEM v4](#nkem-v4-multi-recipient-file-format) · [NKEM v5](#nkem-v5-signed-file-format) |
 | Security | [Security implementation](#security-implementation) · [Security boundaries](#security-boundaries) · [Vulnerability reports](#security-notice-and-vulnerability-reports) |
 | Development | [Dependencies](#dependencies) · [Building](#building) · [Automated tests](#automated-tests) · [AFL++ fuzzing](#afl-fuzzing) · [Performance measurements](#performance-measurements) |
@@ -284,6 +284,10 @@ v6.0.0 provides a native `arm64` CLI and a native SwiftUI GUI for M-series Apple
 The CLI shares Linux's argument parser, five-option menu and language catalogs. The GUI uses Apple's Liquid Glass design on macOS 26, runs on macOS 13 or newer, and has a fallback appearance on earlier systems. Both statically link pinned OpenSSL 4.1.0 and keep its arm64 assembly acceleration; they still depend on macOS system libraries and frameworks. The CLI is built with a macOS 11.0 deployment target and its native CI runs on `macos-15`; the GUI is built with the macOS 26 SDK and its CI runs on `macos-26`. This does not establish testing on real machines with earlier systems, or the compatibility and performance of every M-series generation.
 
 The macOS file layer preserves strict ownership, permissions, symbolic-link and hard-link checks, permits only empty or deny-only extended ACLs on protected files/directories, and checks APFS/HFS+ case and Unicode name aliases. Regular output files require `fsync` and `F_FULLFSYNC`; commits require parent-directory `fsync`, without silent fallback on failure. See the [macOS filesystem design](macos/SECURITY-DESIGN.md) for limits and test boundaries. Core 6.0 reads and writes NKEM v3, v4 and v5, reads NKPR v1, v2 and v3 and writes NKPR v3, with the same cryptographic parameters and 64 KiB streaming chunks as the other platforms. Packages use ad-hoc signing only, without Developer ID or Apple notarization; this neither authenticates the publisher nor guarantees Gatekeeper acceptance.
+
+## iOS unsigned IPA
+
+The iOS app shares the SwiftUI interface, the Rust bridge and the C17 Core with the macOS GUI, and shows Files, Keys, Contacts and Settings as four tabs on iPhone and iPad (`arm64`, iOS 16 or newer). The release package `NekoKEM-iOS-arm64-unsigned.ipa` is unsigned: install it with a sideloading tool such as AltStore, SideStore or TrollStore. TrollStore installs it permanently; an app re-signed with a free Apple ID usually needs renewing every 7 days. The iOS app does not check for updates in the background; Settings opens the release page. See the [iOS guide](ios/README.md) for building, file locations and installation.
 
 ## Linux GUI
 

@@ -13,8 +13,16 @@ import Security
 enum PrivateKeyKeychain {
     static let service = "NekoKEM private key password"
 
-    /// Items are named by the private key file's full path.
-    static func account(_ path: String) -> String { URL(fileURLWithPath: path).standardizedFileURL.path }
+    /// Items are named by the private key file's full path. On iOS the path
+    /// inside the app's container, which moves with each install.
+    static func account(_ path: String) -> String {
+        let full = URL(fileURLWithPath: path).standardizedFileURL.path
+        #if os(iOS)
+        let home = URL(fileURLWithPath: NSHomeDirectory()).standardizedFileURL.path
+        if full.hasPrefix(home + "/") { return "~" + full.dropFirst(home.count) }
+        #endif
+        return full
+    }
 
     private static func query(_ path: String) -> [String: Any] {
         [kSecClass as String: kSecClassGenericPassword, kSecAttrService as String: service, kSecAttrAccount as String: account(path)]

@@ -16,7 +16,7 @@ GitHub Actions has four workflow definitions:
   `.deb`/`.rpm`/portable archives/AppImages/Flatpak bundles. Regression suites run in CI. Source checksums, dependency
   versions, compiler hardening, binary imports/protections,
   icons, APK identity/signature and package checksums remain build requirements.
-  Its final job selects the 20 public packages and their `SHA256SUMS.txt` with
+  Its final job selects the 21 public packages and their `SHA256SUMS.txt` with
   `.github/scripts/release_assets.py` and attests each with GitHub build
   provenance (`actions/attest-build-provenance`), binding it to this run, this
   workflow and the built commit. Release never reads or writes an Actions
@@ -148,13 +148,15 @@ Releases up to v5.0.0 contain 14 packages, with the earlier Tauri desktop app.
 From v5.1.0, the desktop packages are the Compose (Windows, Linux) and
 SwiftUI (macOS) apps, and the Windows installer joins them, for 15 packages up
 to v5.2.0. From v6.0.0, releases add an AppImage and a Flatpak bundle for each Linux
-architecture and a Windows EXE installer, for 20 packages:
+architecture and a Windows EXE installer, for 20 packages; the release after v6.0.0
+adds the unsigned iOS IPA, for 21:
 
 | Platform | Public assets |
 |---|---|
 | Android ARM64 | `app-release.apk` |
 | Windows x64 | `NekoKEM-windows-x86_64.zip`, `NekoKEM-Windows-GUI.zip`, `NekoKEM-Windows-GUI.msi`, `NekoKEM-Windows-GUI.exe` |
 | macOS Apple Silicon | `NekoKEM-macos-arm64.tar.gz`, `NekoKEM-macos-arm64-GUI.zip`, `NekoKEM-macos-arm64-GUI.dmg` |
+| iOS / iPadOS arm64 | `NekoKEM-iOS-arm64-unsigned.ipa` |
 | Linux x86_64 | `NekoKEM-linux-x86_64.tar.gz`, `NekoKEM-linux-x86_64-GUI.deb`, `NekoKEM-linux-x86_64-GUI.rpm`, `NekoKEM-linux-x86_64-GUI.tar.gz`, `NekoKEM-linux-x86_64-GUI.AppImage`, `NekoKEM-linux-x86_64-GUI.flatpak` |
 | Linux ARM64 | `NekoKEM-linux-aarch64.tar.gz`, `NekoKEM-linux-aarch64-GUI.deb`, `NekoKEM-linux-aarch64-GUI.rpm`, `NekoKEM-linux-aarch64-GUI.tar.gz`, `NekoKEM-linux-aarch64-GUI.AppImage`, `NekoKEM-linux-aarch64-GUI.flatpak` |
 
@@ -210,6 +212,16 @@ remain runtime dependencies. CLI and GUI use ad-hoc signatures, with no Develope
 ID or Apple notarization: the build verifies their structure and integrity, which
 does not authenticate the publisher or guarantee Gatekeeper acceptance. See
 [macOS usage](../macos/README.md) and [filesystem boundaries](../macos/SECURITY-DESIGN.md).
+
+iOS and iPadOS arm64 (`macos-26`, iOS 26 SDK, minimum iOS 16):
+
+- `NekoKEM-iOS-arm64-unsigned.ipa`: `Payload/NekoKEM.app` with `build-metadata.json`,
+  built from the macOS app's SwiftUI sources with `swiftc`.
+
+The IPA is deliberately unsigned, with no provisioning profile or entitlements:
+sideloading tools such as AltStore, SideStore and TrollStore sign it on
+installation. `release_assets.py` checks its source commit, version and that it
+is the unsigned build. See [iOS usage](../ios/README.md).
 
 Linux x86_64 and ARM64 (Compose Multiplatform, native Ubuntu 24.04 runners), for
 each architecture:

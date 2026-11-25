@@ -826,6 +826,68 @@ jobs:
             ${{ runner.temp }}/macos-gui
           retention-days: 14
 
+  ios:
+    name: iOS unsigned IPA, simulator self-test and screenshots
+    # The same SDK as the macOS app: iOS 26 draws the tab bar in Liquid Glass.
+    runs-on: macos-26
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: '3.13.16'
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master
+        with:
+          toolchain: 1.99.0
+          targets: aarch64-apple-ios,aarch64-apple-ios-sim
+      - name: Identify the Apple compiler and iOS SDKs
+        id: compiler
+        run: |
+          set -Eeuo pipefail
+          test "$(uname -m)" = arm64
+          identity=$({ xcrun clang --version; xcrun --sdk iphoneos --show-sdk-version; xcrun --sdk iphonesimulator --show-sdk-version; } | shasum -a 256 | cut -d ' ' -f 1)
+          echo "identity=$identity" >> "$GITHUB_OUTPUT"
+          xcrun swift --version
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ${{ runner.temp }}/ios-openssl
+            ${{ runner.temp }}/ios-simulator-openssl
+          key: ios-arm64-openssl-4.1.0-${{ steps.compiler.outputs.identity }}-${{ hashFiles('ios/scripts/build-openssl.sh') }}
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
+        with:
+          workspaces: desktop/bridge
+          cache-on-failure: true
+      - name: Build the pinned native static dependency for devices and the simulator
+        run: |
+          set -Eeuo pipefail
+          bash ios/scripts/build-openssl.sh "$RUNNER_TEMP/ios-openssl" device
+          bash ios/scripts/build-openssl.sh "$RUNNER_TEMP/ios-simulator-openssl" simulator
+      - name: Build the unsigned IPA
+        env:
+          NEKOKEM_SOURCE_SHA: ${{ github.sha }}
+        run: NEKOKEM_OPENSSL_PREFIX="$RUNNER_TEMP/ios-openssl" bash ios/scripts/build-ipa.sh "$RUNNER_TEMP/ios" device
+      - name: Build the app for the simulator
+        env:
+          NEKOKEM_SOURCE_SHA: ${{ github.sha }}
+        run: NEKOKEM_OPENSSL_PREFIX="$RUNNER_TEMP/ios-simulator-openssl" bash ios/scripts/build-ipa.sh "$RUNNER_TEMP/ios-simulator" simulator
+      - name: Run the bridge self-test and capture every page on an iPhone simulator
+        run: bash ios/scripts/simulator-check.sh "$RUNNER_TEMP/ios-simulator/NekoKEM.app" "$RUNNER_TEMP/ios-screens"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: NekoKEM-ios-arm64
+          path: |
+            ${{ runner.temp }}/ios/NekoKEM-iOS-arm64-unsigned.ipa
+            ${{ runner.temp }}/ios/ios-SHA256SUMS.txt
+          retention-days: 14
+          if-no-files-found: error
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: ios-screens
+          path: ${{ runner.temp }}/ios-screens
+          retention-days: 14
+
   compose-linux:
     name: Linux ${{ matrix.arch }} Compose desktop build, screenshots and packages
     runs-on: ${{ matrix.runner }}

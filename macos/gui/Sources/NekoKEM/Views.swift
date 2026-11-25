@@ -1,8 +1,20 @@
+#if os(macOS)
 import AppKit
+#else
+import UIKit
+#endif
 import CoreImage
 import SwiftUI
 
-private let danger = Color(nsColor: .systemRed)
+#if os(macOS)
+let danger = Color(nsColor: .systemRed)
+private let quietFill = Color(nsColor: .quaternaryLabelColor)
+private let separator = Color(nsColor: .separatorColor)
+#else
+let danger = Color(uiColor: .systemRed)
+private let quietFill = Color(uiColor: .quaternarySystemFill)
+private let separator = Color(uiColor: .separator)
+#endif
 
 // Liquid Glass belongs to the navigation layer: the system draws the sidebar
 // and the toolbar as glass on macOS 26, and the page content stays plain
@@ -10,14 +22,68 @@ private let danger = Color(nsColor: .systemRed)
 extension View {
     /// The one main action of a page or sheet.
     @ViewBuilder func primaryAction() -> some View {
-        if #available(macOS 26.0, *) { buttonStyle(.glassProminent) } else { buttonStyle(.borderedProminent) }
+        if #available(macOS 26.0, iOS 26.0, *) { buttonStyle(.glassProminent) } else { buttonStyle(.borderedProminent) }
     }
     /// Controls that float over content.
     @ViewBuilder func floatingGlass() -> some View {
-        if #available(macOS 26.0, *) { glassEffect(.regular, in: .capsule) } else { background(.regularMaterial, in: Capsule()) }
+        if #available(macOS 26.0, iOS 26.0, *) { glassEffect(.regular, in: .capsule) } else { background(.regularMaterial, in: Capsule()) }
+    }
+    /// A tick box: macOS draws its own; iOS has none, so a circle as in Mail and Files.
+    @ViewBuilder func checkbox() -> some View {
+        #if os(macOS)
+        toggleStyle(.checkbox)
+        #else
+        toggleStyle(CircleCheckbox())
+        #endif
+    }
+    /// A secondary action shown as text.
+    @ViewBuilder func linkButton() -> some View {
+        #if os(macOS)
+        buttonStyle(.link)
+        #else
+        buttonStyle(.borderless)
+        #endif
+    }
+    @ViewBuilder func borderlessMenu() -> some View {
+        #if os(macOS)
+        menuStyle(.borderlessButton)
+        #else
+        self
+        #endif
+    }
+    /// Sheets are a fixed width on macOS; on iOS they take the screen.
+    @ViewBuilder func sheetFrame() -> some View {
+        #if os(macOS)
+        frame(width: 440)
+        #else
+        frame(maxWidth: .infinity, alignment: .leading).padding(.top, 8)
+        #endif
     }
 }
 
+#if os(iOS)
+private struct CircleCheckbox: ToggleStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        Button { configuration.isOn.toggle() } label: {
+            Image(systemName: configuration.isOn ? "checkmark.circle.fill" : "circle").font(.title3)
+                .foregroundStyle(configuration.isOn ? Color.accentColor : Color.secondary)
+        }
+        // Borderless: in a list row only the circle toggles, not the whole row.
+        .buttonStyle(.borderless)
+    }
+}
+#endif
+
+/// A path as the user knows it: in full on macOS; on iOS where it is in the app's folder, or the file's name.
+func shown(_ path: String) -> String {
+    #if os(macOS)
+    return path
+    #else
+    return AppFiles.display(path)
+    #endif
+}
+
+#if os(macOS)
 struct ContentView: View {
     @ObservedObject var state: AppState
 
@@ -66,6 +132,8 @@ struct ContentView: View {
         .sheet(isPresented: Binding(get: { !state.availableVersion.isEmpty }, set: { if !$0 { state.availableVersion = "" } })) { UpdateSheet(state: state) }
     }
 }
+#endif
+// The iPhone and iPad pages are in ios/Sources/Pages.swift.
 
 /// The four key tasks, in the toolbar.
 private struct KeysModePicker: View {
@@ -89,7 +157,7 @@ private struct SelectionBar: View {
     var body: some View {
         HStack(spacing: 12) {
             Text(state.t("selectedCount").replacingOccurrences(of: "{count}", with: String(state.selected.count)))
-            Button(state.t("clearSelection")) { state.clearSelection() }.buttonStyle(.link).disabled(state.locked)
+            Button(state.t("clearSelection")) { state.clearSelection() }.linkButton().disabled(state.locked)
             Button(state.t("encryptSelected")) { state.encryptSelected() }.primaryAction().disabled(state.locked)
         }
         .padding(.leading, 16).padding(.trailing, 8).padding(.vertical, 8)
@@ -98,7 +166,7 @@ private struct SelectionBar: View {
 }
 
 /// A titled group box, as in System Settings.
-private struct Card<Content: View>: View {
+struct Card<Content: View>: View {
     @ViewBuilder var content: Content
     var body: some View {
         VStack(alignment: .leading, spacing: 12) { content }
@@ -109,13 +177,13 @@ private struct Card<Content: View>: View {
     }
 }
 
-private struct FieldLabel: View {
+struct FieldLabel: View {
     var text: String
     var invalid: Bool
     var body: some View { Text(text).font(.subheadline).foregroundStyle(invalid ? danger : Color.secondary) }
 }
 
-private struct PathInput: View {
+struct PathInput: View {
     @ObservedObject var state: AppState
     var field: PathField
     var label: String
@@ -123,6 +191,7 @@ private struct PathInput: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
             FieldLabel(text: label, invalid: state.invalidField == field.rawValue)
+            #if os(macOS)
             HStack(spacing: 8) {
                 TextField("", text: Binding(get: { state.path(field) }, set: { state.setPath(field, $0) }))
                     .textFieldStyle(.roundedBorder)
@@ -130,6 +199,19 @@ private struct PathInput: View {
                     .accessibilityLabel(label)
                 Button(state.t("browse")) { state.browse(field) }.disabled(!state.editable)
             }
+            #else
+            // Files come from the system's picker; what NekoKEM writes goes to its own folder.
+            HStack(spacing: 8) {
+                let value = state.path(field)
+                Text(value.isEmpty ? state.t("notSet") : shown(value))
+                    .foregroundStyle(value.isEmpty ? Color.secondary : Color.primary)
+                    .lineLimit(2).truncationMode(.middle)
+                    .accessibilityLabel(label)
+                Spacer()
+                if !state.saves(field) { Button(state.t("browse")) { state.browse(field) }.disabled(!state.editable) }
+            }
+            .padding(.vertical, 4)
+            #endif
         }
     }
 }
@@ -167,7 +249,7 @@ private struct KeychainOptions: View {
     }
 }
 
-private struct PasteInput: View {
+struct PasteInput: View {
     @ObservedObject var state: AppState
     var label: String
     var name: String
@@ -179,14 +261,14 @@ private struct PasteInput: View {
             TextEditor(text: $text)
                 .font(.system(.body, design: .monospaced))
                 .frame(height: 88)
-                .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(Color(nsColor: .separatorColor)))
+                .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(separator))
                 .disabled(!state.editable)
                 .accessibilityLabel(label)
         }
     }
 }
 
-private struct Notice<Content: View>: View {
+struct Notice<Content: View>: View {
     var title: String
     var warn = false
     @ViewBuilder var content: Content
@@ -198,11 +280,11 @@ private struct Notice<Content: View>: View {
         }
         .padding(12)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color(nsColor: .quaternaryLabelColor), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+        .background(quietFill, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
     }
 }
 
-private struct Detail: View {
+struct Detail: View {
     var text: String
     var mono = false
     var body: some View {
@@ -211,7 +293,7 @@ private struct Detail: View {
 }
 
 /// As on Android and Signal: a shield with a tick once the fingerprint was compared. Unverified keys have no mark.
-private struct VerifiedMark: View {
+struct VerifiedMark: View {
     var verified: Bool
     var body: some View {
         if verified { Image(systemName: "checkmark.shield").foregroundStyle(.primary) }
@@ -232,7 +314,7 @@ private struct FilesPage: View {
         Card {
             VStack(alignment: .leading, spacing: 2) {
                 Text(chosen ? fileName(state.input) : state.t("noFileSelected")).font(.title3).fontWeight(.semibold)
-                Text(chosen ? state.input : state.t("selectedFile")).font(.callout).foregroundStyle(.secondary).lineLimit(2).truncationMode(.middle)
+                Text(chosen ? shown(state.input) : state.t("selectedFile")).font(.callout).foregroundStyle(.secondary).lineLimit(2).truncationMode(.middle)
             }
             HStack(spacing: 8) {
                 Button { state.encrypt() } label: { Text(state.t("encryptAction")).frame(maxWidth: .infinity) }
@@ -243,19 +325,19 @@ private struct FilesPage: View {
             if state.unsigned { Text(state.t("unsignedWarning")).font(.callout).foregroundStyle(danger) }
             HStack(spacing: 12) {
                 Button(state.t("selectFile")) { state.browse(.input) }.disabled(!state.editable)
-                if chosen { Button(state.t("clearSelection")) { state.clearFile() }.buttonStyle(.link).disabled(!state.editable) }
+                if chosen { Button(state.t("clearSelection")) { state.clearFile() }.linkButton().disabled(!state.editable) }
             }
         }
         Text(state.t("decryptKeyTitle")).font(.headline).padding(.top, 8)
         Card {
             VStack(alignment: .leading, spacing: 2) {
                 Text(state.t("keySourceLine").replacingOccurrences(of: "{source}", with: state.t(other ? "keySourceChosen" : "myPrivateKey")))
-                Text(state.t("keyFileLine").replacingOccurrences(of: "{file}", with: state.decryptKey.isEmpty ? state.t("notSet") : state.decryptKey))
+                Text(state.t("keyFileLine").replacingOccurrences(of: "{file}", with: state.decryptKey.isEmpty ? state.t("notSet") : shown(state.decryptKey)))
                     .font(.callout).foregroundStyle(.secondary).lineLimit(2).truncationMode(.middle)
             }
             HStack(spacing: 12) {
                 Button(state.t("selectOtherPrivateKey")) { state.browse(.otherPrivateKey) }.disabled(!state.editable)
-                if other { Button(state.t("restoreDefaultPrivateKey")) { state.restoreDefaultKey() }.buttonStyle(.link).disabled(!state.editable) }
+                if other { Button(state.t("restoreDefaultPrivateKey")) { state.restoreDefaultKey() }.linkButton().disabled(!state.editable) }
             }
         }
         if state.busy || state.unsaved || state.failure != nil || state.result != nil {
@@ -339,7 +421,7 @@ private struct KeysPage: View {
 }
 
 /// Password, progress, the result and the action button: shared by every operation.
-private struct OperationFooter: View {
+struct OperationFooter: View {
     @ObservedObject var state: AppState
 
     var body: some View {
@@ -393,7 +475,12 @@ private struct FormFeedback: View {
         }
         if let result = state.result {
             Notice(title: state.t(state.successMessage), warn: state.successMessage == "encryptedUnsigned") {
-                if let output = result.output { Detail(text: output) }
+                if let output = result.output {
+                    Detail(text: shown(output))
+                    #if os(iOS)
+                    ShareLink(item: URL(fileURLWithPath: output)) { Label(state.t("share"), systemImage: "square.and.arrow.up") }
+                    #endif
+                }
                 let names = (state.ownRecipient ? [state.t("myPublicKey")] : []) + state.otherRecipients.map(fileName) + state.recipients.map(state.label)
                 if !names.isEmpty { Detail(text: "\(state.t(names.count > 1 ? "recipients" : "recipient")): \(names.joined(separator: ", "))") }
                 if let fingerprint = result.fingerprint {
@@ -483,7 +570,7 @@ private struct ContactRow: View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(alignment: .top, spacing: 12) {
                 Toggle("", isOn: Binding(get: { chosen }, set: { _ in state.toggleContact(contact) }))
-                    .toggleStyle(.checkbox).labelsHidden()
+                    .checkbox().labelsHidden()
                     .disabled(state.locked || (!chosen && state.atRecipientLimit))
                     .accessibilityLabel("\(state.t("selectContact")) · \(state.label(contact))")
                 VStack(alignment: .leading, spacing: 4) {
@@ -504,11 +591,11 @@ private struct ContactRow: View {
                     TextField("", text: $state.noteDraft).textFieldStyle(.roundedBorder).disabled(state.locked)
                         .accessibilityLabel("\(state.t("note")) · \(state.label(contact))")
                     Button(state.t("saveNote")) { state.saveNote(contact) }.disabled(state.locked)
-                    Button(state.t("cancel")) { state.cancelEdit() }.buttonStyle(.link).disabled(state.locked)
+                    Button(state.t("cancel")) { state.cancelEdit() }.linkButton().disabled(state.locked)
                 } else if state.confirmingDelete == contact.id {
                     Text(state.t("deletePrompt"))
                     Button(state.t("confirmDelete"), role: .destructive) { state.removeContact(contact) }.disabled(state.locked)
-                    Button(state.t("cancel")) { state.cancelDelete() }.buttonStyle(.link).disabled(state.locked)
+                    Button(state.t("cancel")) { state.cancelDelete() }.linkButton().disabled(state.locked)
                 } else {
                     Button(state.t("useContact")) { state.useContact(contact) }.disabled(state.locked)
                     Menu {
@@ -519,7 +606,7 @@ private struct ContactRow: View {
                         Divider()
                         Button(state.t("deleteContact"), role: .destructive) { state.askDelete(contact) }
                     } label: { Image(systemName: "ellipsis.circle") }
-                    .menuStyle(.borderlessButton).fixedSize().disabled(state.locked)
+                    .borderlessMenu().fixedSize().disabled(state.locked)
                     .accessibilityLabel(state.label(contact))
                 }
             }
@@ -562,11 +649,11 @@ private struct SettingsPage: View {
         }
         Text(state.t("settingsKeys")).font(.headline)
         Card {
-            SettingRow(title: state.t("myPrivateKey"), detail: state.signKeyPath.isEmpty ? state.t("notSet") : state.signKeyPath) {
+            SettingRow(title: state.t("myPrivateKey"), detail: state.signKeyPath.isEmpty ? state.t("notSet") : shown(state.signKeyPath)) {
                 Button(state.t("browse")) { state.browse(.signKeyPath) }.disabled(!state.editable)
             }
             Divider()
-            SettingRow(title: state.t("myPublicKey"), detail: state.ownPublicKey.isEmpty ? state.t("notSet") : state.ownPublicKey) {
+            SettingRow(title: state.t("myPublicKey"), detail: state.ownPublicKey.isEmpty ? state.t("notSet") : shown(state.ownPublicKey)) {
                 Button(state.t("browse")) { state.browse(.ownPublicKey) }.disabled(!state.editable)
             }
         }
@@ -593,6 +680,7 @@ private struct SettingsPage: View {
             Button(state.t("unsignedConfirm"), role: .destructive) { state.confirmUnsigned(true) }
             Button(state.t("cancel"), role: .cancel) { state.confirmUnsigned(false) }
         } message: { Text(state.t("unsignedConfirmText")) }
+        #if os(macOS)
         Text(state.t("settingsDecrypt")).font(.headline)
         Card {
             SettingRow(title: state.t("decryptFolder")) {
@@ -617,6 +705,15 @@ private struct SettingsPage: View {
                 Button(state.t(state.checkingUpdate ? "checkingUpdate" : "checkUpdate")) { state.checkForUpdate(manual: true) }.disabled(state.checkingUpdate)
             }
         }
+        #else
+        // Decrypted files go to the app's folder, and iOS cannot ask GitHub for releases in the background.
+        Text(state.t("settingsUpdates")).font(.headline)
+        Card {
+            SettingRow(title: "NekoKEM v" + state.version) {
+                Button(state.t("openRelease")) { state.openLatestRelease() }
+            }
+        }
+        #endif
     }
 }
 
@@ -633,7 +730,7 @@ private struct RecipientRow: View {
 
     var body: some View {
         HStack(spacing: 12) {
-            Toggle("", isOn: Binding(get: { checked }, set: { _ in toggle() })).toggleStyle(.checkbox).labelsHidden().disabled(!enabled).accessibilityLabel(title)
+            Toggle("", isOn: Binding(get: { checked }, set: { _ in toggle() })).checkbox().labelsHidden().disabled(!enabled).accessibilityLabel(title)
             VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: 8) {
                     Text(title)
@@ -676,7 +773,7 @@ private struct RecipientSheet: View {
                 }
             }
             .frame(maxHeight: 300)
-            Button(state.t("otherKeyFile")) { state.addOtherKey() }.buttonStyle(.link).disabled(state.locked || state.atRecipientLimit)
+            Button(state.t("otherKeyFile")) { state.addOtherKey() }.linkButton().disabled(state.locked || state.atRecipientLimit)
             if let failure = state.contactsFailure { Text(state.t(failure)).font(.callout).foregroundStyle(danger) }
             if state.invalidField == "contacts", let failure = state.failure { Text(state.t(failure)).font(.callout).foregroundStyle(danger) }
             if warned {
@@ -692,7 +789,7 @@ private struct RecipientSheet: View {
             }
         }
         .padding(20)
-        .frame(width: 440)
+        .sheetFrame()
     }
 }
 
@@ -714,7 +811,7 @@ private struct PasswordSheet: View {
             }
         }
         .padding(20)
-        .frame(width: 440)
+        .sheetFrame()
     }
 }
 
@@ -725,15 +822,12 @@ enum FingerprintQr {
         let parts = value.split(separator: ":", omittingEmptySubsequences: false)
         return parts.count == 32 && parts.allSatisfy { $0.count == 2 && $0.allSatisfy { "0123456789ABCDEF".contains($0) } }
     }
-    static func image(_ fingerprint: String) -> NSImage? {
+    static func image(_ fingerprint: String) -> CGImage? {
         guard isFingerprint(fingerprint), let filter = CIFilter(name: "CIQRCodeGenerator") else { return nil }
         filter.setValue(Data(("NEKOKEM-FP1:" + fingerprint.replacingOccurrences(of: ":", with: "")).utf8), forKey: "inputMessage")
         filter.setValue("M", forKey: "inputCorrectionLevel")
         guard let output = filter.outputImage?.transformed(by: CGAffineTransform(scaleX: 8, y: 8)) else { return nil }
-        let representation = NSCIImageRep(ciImage: output)
-        let image = NSImage(size: representation.size)
-        image.addRepresentation(representation)
-        return image
+        return CIContext().createCGImage(output, from: output.extent)
     }
 }
 
@@ -746,7 +840,7 @@ private struct QrSheet: View {
             Text(state.t("qrTitle")).font(.headline)
             // Black on white in both themes, so cameras read it.
             if let image = FingerprintQr.image(fingerprint) {
-                Image(nsImage: image).interpolation(.none).resizable().frame(width: 220, height: 220)
+                Image(decorative: image, scale: 1).interpolation(.none).resizable().frame(width: 220, height: 220)
                     .padding(12).background(Color.white, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
             }
             VStack(spacing: 2) {
@@ -757,7 +851,7 @@ private struct QrSheet: View {
             Button(state.t("close")) { state.qrFingerprint = "" }.keyboardShortcut(.defaultAction)
         }
         .padding(20)
-        .frame(width: 440)
+        .sheetFrame()
     }
 }
 
@@ -814,13 +908,13 @@ private struct UpdateSheet: View {
             Text(state.t("updateAvailableText").replacingOccurrences(of: "{current}", with: state.version)).fixedSize(horizontal: false, vertical: true)
             if !state.availableNotes.isEmpty { ReleaseNotesView(state: state) }
             HStack {
-                Button(state.t("ignoreVersion")) { state.ignoreRelease() }.buttonStyle(.link)
+                Button(state.t("ignoreVersion")) { state.ignoreRelease() }.linkButton()
                 Spacer()
                 Button(state.t("later"), role: .cancel) { state.availableVersion = "" }.keyboardShortcut(.cancelAction)
                 Button(state.t("openRelease")) { state.openRelease() }.primaryAction().keyboardShortcut(.defaultAction)
             }
         }
         .padding(20)
-        .frame(width: 440)
+        .sheetFrame()
     }
 }

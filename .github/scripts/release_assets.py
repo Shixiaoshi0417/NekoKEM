@@ -30,6 +30,7 @@ PACKAGES = (
     'NekoKEM-macos-arm64.tar.gz',
     'NekoKEM-macos-arm64-GUI.zip',
     'NekoKEM-macos-arm64-GUI.dmg',
+    'NekoKEM-iOS-arm64-unsigned.ipa',
     'NekoKEM-linux-x86_64.tar.gz',
     'NekoKEM-linux-x86_64-GUI.deb',
     'NekoKEM-linux-x86_64-GUI.rpm',
@@ -50,6 +51,7 @@ INTERNAL_SUMS = (
     'NekoKEM-linux-aarch64-gui/gui-SHA256SUMS.txt',
     'NekoKEM-macos-arm64/macos-SHA256SUMS.txt',
     'NekoKEM-macos-arm64-gui/gui-SHA256SUMS.txt',
+    'NekoKEM-ios-arm64/ios-SHA256SUMS.txt',
     'NekoKEM-windows-x86_64/windows-SHA256SUMS.txt',
     'NekoKEM-windows-gui-x86_64/gui-SHA256SUMS.txt',
 )
@@ -90,7 +92,7 @@ def sums_text(hashes):
 
 
 def collect(artifacts, output):
-    """Copy the 20 packages into a new directory and add SHA256SUMS.txt."""
+    """Copy the 21 packages into a new directory and add SHA256SUMS.txt."""
     output = Path(output)
     output.mkdir(parents=True)
     hashes = {}
@@ -205,6 +207,14 @@ def verify(artifacts, version, source, run, apk_check=check_apk):
     info = plistlib.loads(zip_member(gui_zip, 'NekoKEM-macos-arm64-GUI/NekoKEM.app/Contents/Info.plist'))
     require(info.get('CFBundleShortVersionString') == version, f'macOS app is not version {version}')
 
+    # The IPA is unsigned on purpose: sideloading tools sign it on installation.
+    ipa = locate(artifacts, 'NekoKEM-iOS-arm64-unsigned.ipa')
+    ios = json.loads(zip_member(ipa, 'Payload/NekoKEM.app/build-metadata.json'))
+    check_metadata(ios, 'iOS app', source, run, version)
+    require(ios.get('signed') is False, 'The iOS app must be the unsigned build')
+    info = plistlib.loads(zip_member(ipa, 'Payload/NekoKEM.app/Info.plist'))
+    require(info.get('CFBundleShortVersionString') == version, f'iOS app is not version {version}')
+
     for name, label in (('NekoKEM-windows-x86_64.zip', 'Windows CLI'),
                         ('NekoKEM-Windows-GUI.zip', 'Windows GUI')):
         check_metadata(json.loads(zip_member(locate(artifacts, name), 'build-metadata.json')),
@@ -234,7 +244,7 @@ def build_records(language, source, ci_run, release_run, hashes):
 
 
 def fill_notes(notes, source, ci_run, release_run, hashes):
-    require(sorted(hashes) == sorted(PACKAGES), 'Release notes must list the 20 packages')
+    require(sorted(hashes) == sorted(PACKAGES), 'Release notes must list the 21 packages')
     require(notes.count(ZH_PLACEHOLDER) == 1 and notes.count(EN_PLACEHOLDER) == 1,
             'Release notes need each build-record placeholder exactly once')
     notes = notes.replace(ZH_PLACEHOLDER, build_records('zh', source, ci_run, release_run, hashes))

@@ -171,7 +171,17 @@ static int stage_directory(char *directory_path, size_t capacity, int on_disk)
         size_t length = confstr(_CS_DARWIN_USER_TEMP_DIR, darwin, sizeof(darwin));
         if (length > 1U && length <= sizeof(darwin)) {
             if (darwin[length - 2U] == '/') darwin[length - 2U] = '\0';
-            if (private_parent(darwin)) base = darwin;
+            if (private_parent(darwin)) {
+                base = darwin;
+            } else {
+                /* An iOS app's temporary directory is its own but not 0700;
+                 * a 0700 folder inside it serves, never the folder itself. */
+                size_t used = strlen(darwin);
+                if (used + sizeof("/nekokem-private") <= sizeof(darwin)) {
+                    memcpy(darwin + used, "/nekokem-private", sizeof("/nekokem-private"));
+                    if (ensure_directory(darwin, 0700) && private_parent(darwin)) base = darwin;
+                }
+            }
         }
 #endif
     }

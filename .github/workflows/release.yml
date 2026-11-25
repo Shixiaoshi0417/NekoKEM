@@ -375,6 +375,42 @@ jobs:
           retention-days: 14
           if-no-files-found: error
 
+  build-ios:
+    name: Build unsigned iOS IPA
+    runs-on: macos-26
+    outputs:
+      artifact: ${{ steps.upload.outputs.artifact-id }}
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: '3.13.16'
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master
+        with:
+          toolchain: 1.99.0
+          targets: aarch64-apple-ios
+      - name: Check the native architecture and set the OpenSSL prefix
+        run: |
+          set -Eeuo pipefail
+          test "$(uname -m)" = arm64
+          echo "NEKOKEM_OPENSSL_PREFIX=$RUNNER_TEMP/ios-openssl" >> "$GITHUB_ENV"
+      - name: Build the pinned native static dependency
+        run: bash ios/scripts/build-openssl.sh "$NEKOKEM_OPENSSL_PREFIX" device
+      - name: Build and check the unsigned IPA
+        env:
+          NEKOKEM_SOURCE_SHA: ${{ github.sha }}
+        run: bash ios/scripts/build-ipa.sh "$RUNNER_TEMP/ios" device
+      - id: upload
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: NekoKEM-ios-arm64
+          path: |
+            ${{ runner.temp }}/ios/NekoKEM-iOS-arm64-unsigned.ipa
+            ${{ runner.temp }}/ios/ios-SHA256SUMS.txt
+          retention-days: 14
+          if-no-files-found: error
+
   build-linux-gui:
     name: Build Linux ${{ matrix.arch }} GUI
     # The Flatpak also carries this run's CLI.
@@ -483,7 +519,7 @@ jobs:
 
   attest:
     name: Attest public packages
-    needs: [build-linux, signed-apk, build-windows, build-macos, build-macos-gui, build-linux-gui]
+    needs: [build-linux, signed-apk, build-windows, build-macos, build-macos-gui, build-ios, build-linux-gui]
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     permissions:
@@ -509,10 +545,11 @@ jobs:
             ${{ needs.build-windows.outputs.gui_artifact }},
             ${{ needs.build-macos.outputs.artifact }},
             ${{ needs.build-macos-gui.outputs.artifact }},
+            ${{ needs.build-ios.outputs.artifact }},
             ${{ needs.build-linux-gui.outputs.artifact_x86_64 }},
             ${{ needs.build-linux-gui.outputs.artifact_aarch64 }}
           path: ${{ runner.temp }}/release-artifacts
-      # The same selection the Publish workflow uploads: the 20 packages and
+      # The same selection the Publish workflow uploads: the 21 packages and
       # their SHA256SUMS.txt, never the encrypted signing recovery envelope.
       - name: Select exactly the public packages
         run: python3 .github/scripts/release_assets.py collect "$RUNNER_TEMP/release-artifacts" "$RUNNER_TEMP/public"

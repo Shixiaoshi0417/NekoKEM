@@ -88,6 +88,13 @@ def build_release(root, version=VERSION, app_version=VERSION, windows_run=RUN, r
     (macos_gui / 'NekoKEM-macos-arm64-GUI.dmg').write_bytes(b'disk image')
     write_sums(macos_gui / 'gui-SHA256SUMS.txt',
                [macos_gui / 'NekoKEM-macos-arm64-GUI.zip', macos_gui / 'NekoKEM-macos-arm64-GUI.dmg'])
+    ios = root / 'NekoKEM-ios-arm64'
+    ios.mkdir()
+    write_zip(ios / 'NekoKEM-iOS-arm64-unsigned.ipa', {
+        'Payload/NekoKEM.app/build-metadata.json': json.dumps(
+            {'source_sha': SOURCE, 'version': version, 'signed': False}),
+        'Payload/NekoKEM.app/Info.plist': info})
+    write_sums(ios / 'ios-SHA256SUMS.txt', [ios / 'NekoKEM-iOS-arm64-unsigned.ipa'])
     windows = root / 'NekoKEM-windows-x86_64'
     windows.mkdir()
     windows_metadata = json.dumps({'source_sha': SOURCE, 'run_id': windows_run,
@@ -198,6 +205,21 @@ class ReleaseAssetTests(unittest.TestCase):
                                    [package, package.with_suffix('.msi')])
                     with self.assertRaisesRegex(assets.ReleaseError, 'Windows.*not version'):
                         self.verify()
+
+    def test_ios_package_must_be_the_unsigned_build_of_this_source(self):
+        for label, record in (('signed', {'source_sha': SOURCE, 'version': VERSION, 'signed': True}),
+                              ('source', {'source_sha': 'b' * 40, 'version': VERSION, 'signed': False}),
+                              ('version', {'source_sha': SOURCE, 'version': '4.1.0', 'signed': False})):
+            with self.subTest(label):
+                shutil.rmtree(self.artifacts, ignore_errors=True)
+                build_release(self.artifacts)
+                ipa = self.artifacts / 'NekoKEM-ios-arm64/NekoKEM-iOS-arm64-unsigned.ipa'
+                write_zip(ipa, {'Payload/NekoKEM.app/build-metadata.json': json.dumps(record),
+                                'Payload/NekoKEM.app/Info.plist':
+                                    plistlib.dumps({'CFBundleShortVersionString': VERSION})})
+                write_sums(ipa.parent / 'ios-SHA256SUMS.txt', [ipa])
+                with self.assertRaises(assets.ReleaseError):
+                    self.verify()
 
     def test_notes_receive_build_records_once(self):
         hashes = {name: digest(name.encode()) for name in assets.PACKAGES}
