@@ -86,7 +86,7 @@ class AdaptiveLayoutScreenshots {
     private fun tabs(style: UiStyle, dark: Boolean, device: String, color: ThemeColor = ThemeColor.BLUE) {
         val state = NekoKEMUiState(
             nativeConnected = true,
-            nativeVersion = "6.0.0",
+            nativeVersion = "6.1.0",
             privateKeyExists = true,
             fingerprint = FINGERPRINT,
             selectedFileName = "report.pdf",

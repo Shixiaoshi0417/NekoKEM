@@ -47,7 +47,7 @@ class AppState(
     var view by mutableStateOf(View.Files); private set
     var language by mutableStateOf("en"); private set
     var selectedLanguage by mutableStateOf("system"); private set
-    var version by mutableStateOf("6.0.0"); private set
+    var version by mutableStateOf("6.1.0"); private set
     var loaded by mutableStateOf(false); private set
     var busy by mutableStateOf(false); private set
     var cancelling by mutableStateOf(false); private set
