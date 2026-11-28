@@ -5,6 +5,7 @@ import android.os.Build
 import androidx.activity.BackEventCompat
 import androidx.activity.compose.PredictiveBackHandler
 import androidx.compose.foundation.clickable
+import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.material3.IconButton
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -16,6 +17,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.material3.AlertDialog
@@ -737,31 +739,43 @@ private fun SettingsPage(state: NekoKEMUiState, actions: NekoKEMActions, onOpenA
             onDismissRequest = { showThemeColors = false },
             title = { Text(stringResource(R.string.settings_theme_color_title)) },
             text = {
+                val colors = state.themeColors
+                @Composable
+                fun Option(selected: Boolean, swatch: Color, label: String, onClick: () -> Unit) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth().selectable(
+                            selected = selected,
+                            role = Role.RadioButton,
+                            onClick = {
+                                showThemeColors = false
+                                onClick()
+                            },
+                        ).padding(vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        RadioButton(selected = selected, onClick = null)
+                        // The color itself, beside its name.
+                        Box(Modifier.padding(start = 12.dp).size(20.dp).background(swatch, CircleShape))
+                        Text(label, modifier = Modifier.padding(start = 12.dp).weight(1f))
+                    }
+                }
                 Column(Modifier.selectableGroup()) {
+                    if (Build.VERSION.SDK_INT >= 31) {
+                        // The swatch is the wallpaper color the switch would apply.
+                        Option(
+                            selected = colors.dynamic,
+                            swatch = dynamicLightColorScheme(context).primary,
+                            label = stringResource(R.string.settings_dynamic_color_title),
+                            onClick = { actions.onThemeColorsChange(colors.copy(dynamic = true)) },
+                        )
+                    }
                     ThemeColor.entries.forEach { color ->
-                        val selected = state.themeColors.color == color
-                        Row(
-                            modifier = Modifier.fillMaxWidth().selectable(
-                                selected = selected,
-                                role = Role.RadioButton,
-                                onClick = {
-                                    showThemeColors = false
-                                    actions.onThemeColorsChange(state.themeColors.copy(color = color))
-                                },
-                            ).padding(vertical = 8.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            RadioButton(selected = selected, onClick = null)
-                            // The color itself, beside its name.
-                            Box(
-                                Modifier.padding(start = 12.dp).size(20.dp)
-                                    .background(color.seed, CircleShape),
-                            )
-                            Text(
-                                stringResource(color.labelResource),
-                                modifier = Modifier.padding(start = 12.dp).weight(1f),
-                            )
-                        }
+                        Option(
+                            selected = !(colors.dynamic && ThemeColors.dynamicSupported) && colors.color == color,
+                            swatch = color.seed,
+                            label = stringResource(color.labelResource),
+                            onClick = { actions.onThemeColorsChange(ThemeColorSettings(color, dynamic = false)) },
+                        )
                     }
                 }
             },
@@ -875,7 +889,7 @@ private fun SettingsPage(state: NekoKEMUiState, actions: NekoKEMActions, onOpenA
                 },
                 onClick = { showLanguages = true },
             )
-            // Wallpaper color replaces the chosen color, so the choice waits for it to be off.
+            // Dynamic color is both a switch and the first choice in the color list.
             val colors = state.themeColors
             if (ThemeColors.dynamicSupported) {
                 SwitchSetting(
@@ -887,8 +901,12 @@ private fun SettingsPage(state: NekoKEMUiState, actions: NekoKEMActions, onOpenA
             }
             ChoiceSetting(
                 title = stringResource(R.string.settings_theme_color_title),
-                running = running || (colors.dynamic && ThemeColors.dynamicSupported),
-                value = stringResource(colors.color.labelResource),
+                running = running,
+                value = if (colors.dynamic && ThemeColors.dynamicSupported) {
+                    stringResource(R.string.settings_dynamic_color_title)
+                } else {
+                    stringResource(colors.color.labelResource)
+                },
                 onClick = { showThemeColors = true },
             )
             SettingRow(
