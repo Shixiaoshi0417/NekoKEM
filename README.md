@@ -15,9 +15,9 @@ X448 + ML-KEM-1024 混合密钥封装 · Ed448 + ML-DSA-87 双重签名 · Andro
 [![Downloads](https://img.shields.io/github/downloads/Shixiaoshi0417/NekoKEM/total?style=flat-square&label=downloads&color=1f2328)](https://github.com/Shixiaoshi0417/NekoKEM/releases)
 [![License](https://img.shields.io/badge/license-Apache--2.0-1f2328?style=flat-square)](LICENSE)
 [![OpenSSL](https://img.shields.io/badge/OpenSSL-4.1.0-1f2328?style=flat-square)](https://openssl-library.org/)
-[![Platforms](https://img.shields.io/badge/platforms-Android%20%C2%B7%20Windows%20%C2%B7%20macOS%20%C2%B7%20Linux-1f2328?style=flat-square)](#下载)
+[![Platforms](https://img.shields.io/badge/platforms-Android%20%C2%B7%20iOS%20%C2%B7%20Windows%20%C2%B7%20macOS%20%C2%B7%20Linux-1f2328?style=flat-square)](#下载)
 
-[下载](#下载) · [快速开始](#快速开始) · [密码学设计](#密码学设计) · [安全边界](#安全边界) · [v6.0.0 更新说明](release/v6.0.0.md)
+[下载](#下载) · [快速开始](#快速开始) · [密码学设计](#密码学设计) · [安全边界](#安全边界) · [v6.1.0 更新说明](release/v6.0.0.md)
 
 </div>
 
@@ -87,17 +87,18 @@ Android（MIUIX / Material 3 Expressive）、Windows 与 Linux（Compose）、ma
 
 ## 下载
 
-当前版本为 **v6.0.0**，全部安装包见 [GitHub Release](https://github.com/Shixiaoshi0417/NekoKEM/releases/tag/v6.0.0)，版本变化见下文 [发布版本 v6.0.0](#发布版本-v600)。
+当前版本为 **v6.1.0**，全部安装包见 [GitHub Release](https://github.com/Shixiaoshi0417/NekoKEM/releases/tag/v6.1.0)，版本变化见下文 [发布版本 v6.1.0](#发布版本-v610)。
 
 | 平台与架构 | CLI / Android | GUI |
 |---|---|---|
-| Android 8.0+ ARM64 | [APK](https://github.com/Shixiaoshi0417/NekoKEM/releases/download/v6.0.0/app-release.apk) | APK 内置界面 |
-| Windows 10/11 x64 | [CLI ZIP](https://github.com/Shixiaoshi0417/NekoKEM/releases/download/v6.0.0/NekoKEM-windows-x86_64.zip) | [MSI](https://github.com/Shixiaoshi0417/NekoKEM/releases/download/v6.0.0/NekoKEM-Windows-GUI.msi) · [EXE](https://github.com/Shixiaoshi0417/NekoKEM/releases/download/v6.0.0/NekoKEM-Windows-GUI.exe) · [ZIP](https://github.com/Shixiaoshi0417/NekoKEM/releases/download/v6.0.0/NekoKEM-Windows-GUI.zip) |
-| macOS Apple Silicon arm64 | [CLI TAR.GZ](https://github.com/Shixiaoshi0417/NekoKEM/releases/download/v6.0.0/NekoKEM-macos-arm64.tar.gz) | [GUI ZIP](https://github.com/Shixiaoshi0417/NekoKEM/releases/download/v6.0.0/NekoKEM-macos-arm64-GUI.zip) · [DMG](https://github.com/Shixiaoshi0417/NekoKEM/releases/download/v6.0.0/NekoKEM-macos-arm64-GUI.dmg) |
-| Linux x86_64 | [静态 CLI](https://github.com/Shixiaoshi0417/NekoKEM/releases/download/v6.0.0/NekoKEM-linux-x86_64.tar.gz) | [DEB](https://github.com/Shixiaoshi0417/NekoKEM/releases/download/v6.0.0/NekoKEM-linux-x86_64-GUI.deb) · [RPM](https://github.com/Shixiaoshi0417/NekoKEM/releases/download/v6.0.0/NekoKEM-linux-x86_64-GUI.rpm) · [便携包](https://github.com/Shixiaoshi0417/NekoKEM/releases/download/v6.0.0/NekoKEM-linux-x86_64-GUI.tar.gz) · [AppImage](https://github.com/Shixiaoshi0417/NekoKEM/releases/download/v6.0.0/NekoKEM-linux-x86_64-GUI.AppImage) · [Flatpak](https://github.com/Shixiaoshi0417/NekoKEM/releases/download/v6.0.0/NekoKEM-linux-x86_64-GUI.flatpak) |
-| Linux ARM64 / aarch64 | [静态 CLI](https://github.com/Shixiaoshi0417/NekoKEM/releases/download/v6.0.0/NekoKEM-linux-aarch64.tar.gz) | [DEB](https://github.com/Shixiaoshi0417/NekoKEM/releases/download/v6.0.0/NekoKEM-linux-aarch64-GUI.deb) · [RPM](https://github.com/Shixiaoshi0417/NekoKEM/releases/download/v6.0.0/NekoKEM-linux-aarch64-GUI.rpm) · [便携包](https://github.com/Shixiaoshi0417/NekoKEM/releases/download/v6.0.0/NekoKEM-linux-aarch64-GUI.tar.gz) · [AppImage](https://github.com/Shixiaoshi0417/NekoKEM/releases/download/v6.0.0/NekoKEM-linux-aarch64-GUI.AppImage) · [Flatpak](https://github.com/Shixiaoshi0417/NekoKEM/releases/download/v6.0.0/NekoKEM-linux-aarch64-GUI.flatpak) |
+| Android 8.0+ ARM64 | [APK](https://github.com/Shixiaoshi0417/NekoKEM/releases/download/v6.1.0/app-release.apk) | APK 内置界面 |
+| Windows 10/11 x64 | [CLI ZIP](https://github.com/Shixiaoshi0417/NekoKEM/releases/download/v6.1.0/NekoKEM-windows-x86_64.zip) | [MSI](https://github.com/Shixiaoshi0417/NekoKEM/releases/download/v6.1.0/NekoKEM-Windows-GUI.msi) · [EXE](https://github.com/Shixiaoshi0417/NekoKEM/releases/download/v6.1.0/NekoKEM-Windows-GUI.exe) · [ZIP](https://github.com/Shixiaoshi0417/NekoKEM/releases/download/v6.1.0/NekoKEM-Windows-GUI.zip) |
+| macOS Apple Silicon arm64 | [CLI TAR.GZ](https://github.com/Shixiaoshi0417/NekoKEM/releases/download/v6.1.0/NekoKEM-macos-arm64.tar.gz) | [GUI ZIP](https://github.com/Shixiaoshi0417/NekoKEM/releases/download/v6.1.0/NekoKEM-macos-arm64-GUI.zip) · [DMG](https://github.com/Shixiaoshi0417/NekoKEM/releases/download/v6.1.0/NekoKEM-macos-arm64-GUI.dmg) |
+| iOS / iPadOS 16+ arm64 | — | [IPA（未签名）](https://github.com/Shixiaoshi0417/NekoKEM/releases/download/v6.1.0/NekoKEM-iOS-arm64-unsigned.ipa) |
+| Linux x86_64 | [静态 CLI](https://github.com/Shixiaoshi0417/NekoKEM/releases/download/v6.1.0/NekoKEM-linux-x86_64.tar.gz) | [DEB](https://github.com/Shixiaoshi0417/NekoKEM/releases/download/v6.1.0/NekoKEM-linux-x86_64-GUI.deb) · [RPM](https://github.com/Shixiaoshi0417/NekoKEM/releases/download/v6.1.0/NekoKEM-linux-x86_64-GUI.rpm) · [便携包](https://github.com/Shixiaoshi0417/NekoKEM/releases/download/v6.1.0/NekoKEM-linux-x86_64-GUI.tar.gz) · [AppImage](https://github.com/Shixiaoshi0417/NekoKEM/releases/download/v6.1.0/NekoKEM-linux-x86_64-GUI.AppImage) · [Flatpak](https://github.com/Shixiaoshi0417/NekoKEM/releases/download/v6.1.0/NekoKEM-linux-x86_64-GUI.flatpak) |
+| Linux ARM64 / aarch64 | [静态 CLI](https://github.com/Shixiaoshi0417/NekoKEM/releases/download/v6.1.0/NekoKEM-linux-aarch64.tar.gz) | [DEB](https://github.com/Shixiaoshi0417/NekoKEM/releases/download/v6.1.0/NekoKEM-linux-aarch64-GUI.deb) · [RPM](https://github.com/Shixiaoshi0417/NekoKEM/releases/download/v6.1.0/NekoKEM-linux-aarch64-GUI.rpm) · [便携包](https://github.com/Shixiaoshi0417/NekoKEM/releases/download/v6.1.0/NekoKEM-linux-aarch64-GUI.tar.gz) · [AppImage](https://github.com/Shixiaoshi0417/NekoKEM/releases/download/v6.1.0/NekoKEM-linux-aarch64-GUI.AppImage) · [Flatpak](https://github.com/Shixiaoshi0417/NekoKEM/releases/download/v6.1.0/NekoKEM-linux-aarch64-GUI.flatpak) |
 
-下载后先用 [SHA256SUMS.txt](https://github.com/Shixiaoshi0417/NekoKEM/releases/download/v6.0.0/SHA256SUMS.txt) 校验对应归档，再校验包内文件。Linux GUI 需要 glibc 2.39+，DEB/RPM 依赖 Noto Sans CJK 字体和 `curl`；macOS GUI 需要 macOS 13 或更新版本，CLI 的部署目标为 11.0。安装步骤与签名限制见下文各平台说明。
+下载后先用 [SHA256SUMS.txt](https://github.com/Shixiaoshi0417/NekoKEM/releases/download/v6.1.0/SHA256SUMS.txt) 校验对应归档，再校验包内文件。Linux GUI 需要 glibc 2.39+，DEB/RPM 依赖 Noto Sans CJK 字体和 `curl`；macOS GUI 需要 macOS 13 或更新版本，CLI 的部署目标为 11.0。安装步骤与签名限制见下文各平台说明。
 
 v4.1.0 之后发布的版本，每个附件还带有 GitHub 构建来源证明，可用 GitHub CLI 确认文件由本仓库 `main` 分支上的 Release 工作流构建（把文件名换成实际下载的附件）：
 
@@ -153,20 +154,19 @@ nekokem decrypt hybrid report.pdf.nkem decrypted.pdf keys/private.key.enc
 | 安全 | [安全实现说明](#安全实现说明) · [安全边界](#安全边界) · [漏洞报告](#安全声明与漏洞报告) |
 | 开发 | [安装依赖](#安装依赖) · [编译](#编译) · [自动测试](#自动测试) · [AFL++ fuzzing](#afl-fuzzing) · [性能测量](#性能测量) |
 
-## 发布版本 v6.0.0
+## 发布版本 v6.1.0
 
-Android 和各平台 CLI/GUI 统一为 `6.0.0`，Core 为 `6.0`，NKEM 文件格式与密码参数不变：
+Android 和各平台 CLI/GUI 统一为 `6.1.0`，Core 仍为 `6.0`，NKEM、NKPR 文件格式与密码参数不变：
 
-- 私钥改用带密钥承诺的 NKPR v3，一个私钥文件只能被一个口令打开。新生成和升级的私钥写为 NKPR v3，自己的 NKPR v2 私钥解锁后原地改写，密钥、口令和指纹不变。
-- 旧格式私钥（NKPR v1、v2）只作为本机自己的私钥打开；导入旧版导出的私钥前先说明风险并要求确认，临时私钥拒绝旧格式。CLI 新增 `--legacy-private-key` 和 `export-legacy-private-key`。
-- 各端可以「导出给 5.2 及更早版本的私钥」，用同一口令写出 NKPR v2 副本。
-- 新增 Windows EXE 安装程序、Linux AppImage 和 Flatpak 包（沙盒只通过文件选择框访问文件），仓库附带 Arch Linux 的 `nekokem-bin` PKGBUILD。
-- 更新提示附上折叠的发布说明，展开后限高滚动；各端去掉页面上常驻的说明小字，警告保留。
-- Android 设置新增「禁止截屏和录屏」，默认开启；另修复外部审查发现的问题，包括 Ed448 公钥校验曲线点、X448 公钥拒绝小阶点，以及桌面端保存失败时删除暂存明文。
+- 新增 iOS / iPadOS 无签名 IPA（iOS 16 起），与 macOS GUI 共用 SwiftUI 界面，布局与 Android 一致，需要用自签工具安装。
+- 平板与 iPad 适配：宽屏改为侧边导航，内容居中限宽，通讯录分两栏。
+- Android MIUIX 风格加入液态玻璃：磨砂标题栏、玻璃侧栏与添加按钮，Android 12 起弹窗模糊背后页面。
+- Android Material 3 风格可选主题色（默认蓝色），Android 12 起可选动态颜色，默认关闭。
+- 各端文件页只显示文件名或「尚未选择文件」，未选择时加密和解密按钮同为灰色。
 
-**5.2.0 及更早版本打不开 NKPR v3 私钥**：要把私钥交给旧版本，请先用「导出给 5.2 及更早版本的私钥」（CLI 为 `export-legacy-private-key`）导出副本。升级后第一次解锁会把本机私钥改写为 NKPR v3，回退到 5.2.0 前也要先这样导出。NKEM 文件不受影响，6.0.0 与 5.2.0 可以互相解密对方的文件。**4.x 及更早版本无法读取 NKEM v5、NKPR v2/v3 和四段式公钥**，给旧版接收方发送文件时请开启不签名加密并使用旧版公钥。完整双语说明见 [v6.0.0](release/v6.0.0.md) 和 [GitHub Release](https://github.com/Shixiaoshi0417/NekoKEM/releases/tag/v6.0.0)。
+**5.2.0 及更早版本打不开 6.0.0 起使用的 NKPR v3 私钥**：要把私钥交给旧版本，请先用「导出给 5.2 及更早版本的私钥」（CLI 为 `export-legacy-private-key`）导出副本。从 5.2.0 升级后第一次解锁会把本机私钥改写为 NKPR v3，回退前也要先这样导出。NKEM 文件不受影响，6.x 与 5.2.0 可以互相解密对方的文件。**4.x 及更早版本无法读取 NKEM v5、NKPR v2/v3 和四段式公钥**，给旧版接收方发送文件时请开启不签名加密并使用旧版公钥。完整双语说明见 [v6.1.0](release/v6.1.0.md)、[v6.0.0](release/v6.0.0.md) 和 [GitHub Release](https://github.com/Shixiaoshi0417/NekoKEM/releases/tag/v6.1.0)。
 
-Android v6.0.0 沿用 v3.2.0/v3.3.0 签名，可直接覆盖升级；建议先备份公钥、加密 NKPR 私钥和私钥密码，升级密钥前尤其需要备份。仅使用旧签名的 v3.1.x 用户需要在验证备份后卸载重装；卸载会删除应用内部密钥。NKEM v1/v2 不再支持。
+Android v6.1.0 沿用 v3.2.0/v3.3.0 签名，可直接覆盖升级；建议先备份公钥、加密 NKPR 私钥和私钥密码，升级密钥前尤其需要备份。仅使用旧签名的 v3.1.x 用户需要在验证备份后卸载重装；卸载会删除应用内部密钥。NKEM v1/v2 不再支持。
 
 README 使用专用圆角展示图；Android 保留现有方形白底图案，Windows CLI/GUI EXE 保留方形图案并将外部白色区域改为透明。Windows 应用未进行 Authenticode 签名。
 
@@ -213,7 +213,7 @@ Windows、macOS 与 Linux 的桌面 GUI 提供“公钥通讯录”页面：
 
 Linux x86_64/aarch64 CLI 发行包没有运行时共享库依赖。安装脚本下载最新已发布
 Release 中与本机架构匹配的包（只解析一次，所有下载都来自同一发布；
-`NEKOKEM_RELEASE_TAG=v6.0.0 sh install.sh` 安装指定版本，安装的程序必须报告该版本），先使用 Release 顶层 `SHA256SUMS.txt` 验证
+`NEKOKEM_RELEASE_TAG=v6.1.0 sh install.sh` 安装指定版本，安装的程序必须报告该版本），先使用 Release 顶层 `SHA256SUMS.txt` 验证
 归档，再验证包内文件的 SHA-256：
 
 ```sh
@@ -259,7 +259,7 @@ Rust、Node 和 Python 分别固定为 `1.99.0`、`24.21.0` 和 `3.13.16`。MSYS
 
 ## Windows CLI 与 GUI
 
-v6.0.0 提供原生 Windows 10/11 x64 CLI 便携包 `nekokem.exe`，以及 GUI 的 MSI 安装包、EXE 安装程序和 ZIP 便携包。CLI 与 Linux 共用完整参数解析和五项菜单；双击 EXE 或不带参数运行即可进入菜单。构建、使用和导入私钥权限说明见 [Windows CLI 文档](windows/README.md)，文件安全设计见 [Windows 文件层说明](windows/SECURITY-DESIGN.md)。CLI 运行不需要 MSYS2 或 OpenSSL DLL；构建使用 MSYS2 UCRT64 与固定 OpenSSL 4.1.0。
+v6.1.0 提供原生 Windows 10/11 x64 CLI 便携包 `nekokem.exe`，以及 GUI 的 MSI 安装包、EXE 安装程序和 ZIP 便携包。CLI 与 Linux 共用完整参数解析和五项菜单；双击 EXE 或不带参数运行即可进入菜单。构建、使用和导入私钥权限说明见 [Windows CLI 文档](windows/README.md)，文件安全设计见 [Windows 文件层说明](windows/SECURITY-DESIGN.md)。CLI 运行不需要 MSYS2 或 OpenSSL DLL；构建使用 MSYS2 UCRT64 与固定 OpenSSL 4.1.0。
 
 GUI 是 Compose Multiplatform 应用，界面与 Android 一致，提供 MIUIX（默认）和 Material 3 Expressive 两种风格；通过桥接库调用同一 C17 Core，提供系统文件选择、进度和取消。应用自带 Java 运行时，不需要 WebView2 Runtime；详见 [桌面 GUI 文档](desktop/README.md)。6.0.0 起另有 EXE 安装程序 `NekoKEM-Windows-GUI.exe`，双击即可安装，装的是与 MSI 相同的应用；CI 用它静默安装并启动装好的程序。CLI、GUI、MSI 和 EXE 安装程序均未进行 Authenticode 签名。
 
@@ -267,7 +267,7 @@ Windows 仅支持本地固定 NTFS，检查所有者与 ACL，并拒绝网络、
 
 ## macOS Apple Silicon CLI 与 GUI
 
-v6.0.0 提供面向 M 系列 Apple Silicon Mac 的原生 `arm64` CLI 和原生 SwiftUI GUI。CLI 包名为 `NekoKEM-macos-arm64.tar.gz`；GUI 包为 `NekoKEM-macos-arm64-GUI.zip`（包含 `.app`）和 `NekoKEM-macos-arm64-GUI.dmg`，可从本版 Release 下载。详见 [macOS 构建与使用说明](macos/README.md) 和 [桌面 GUI 文档](desktop/README.md)。不提供 Intel/Rosetta 构建。
+v6.1.0 提供面向 M 系列 Apple Silicon Mac 的原生 `arm64` CLI 和原生 SwiftUI GUI。CLI 包名为 `NekoKEM-macos-arm64.tar.gz`；GUI 包为 `NekoKEM-macos-arm64-GUI.zip`（包含 `.app`）和 `NekoKEM-macos-arm64-GUI.dmg`，可从本版 Release 下载。详见 [macOS 构建与使用说明](macos/README.md) 和 [桌面 GUI 文档](desktop/README.md)。不提供 Intel/Rosetta 构建。
 
 CLI 与 Linux 共用参数解析、五项菜单和语言目录。GUI 在 macOS 26 上采用 Apple 的液态玻璃设计，最低支持 macOS 13，更早的系统使用回退外观。两者静态链接固定 OpenSSL 4.1.0，保留其 arm64 汇编加速；运行仍依赖 macOS 系统库与框架。CLI 构建设置 macOS 11.0 deployment target，原生 CI 在 `macos-15` 上运行；GUI 使用 macOS 26 SDK 构建并在 `macos-26` 上运行 CI。这不代表已验证更早系统的实机或每代 M 系列芯片的兼容性、性能。
 
@@ -283,7 +283,7 @@ Linux GUI 支持 `x86_64` 与 `aarch64`（ARM64），与 Windows 使用同一个
 
 构建与原生 CI 基线为 Ubuntu 24.04，CI 另在同架构 Fedora 44 容器中安装并启动 RPM。应用自带 Java 运行时；运行需要 glibc 2.39 或更新版本，DEB/RPM 依赖 Noto Sans CJK 字体和 `curl`（检查更新）。OpenSSL 4.1.0 静态链接进桥接库并隐藏符号，保留完整 RELRO、立即绑定和不可执行栈。Linux 文件权限、认证后提交及取消清理沿用 CLI/Core；NKEM、NKPR、KDF 参数与 64 KiB 流式处理不变。详见 [桌面 GUI 文档](desktop/README.md)。
 
-v6.0.0 Release 包含上述两种架构的全部 Linux GUI 安装包、便携包、AppImage 和 Flatpak 包，现有静态 Linux CLI 包继续保留。原生窗口测试使用 X11 会话，不代表已验证所有 Linux 发行版或 Wayland 实机。
+v6.1.0 Release 包含上述两种架构的全部 Linux GUI 安装包、便携包、AppImage 和 Flatpak 包，现有静态 Linux CLI 包继续保留。原生窗口测试使用 X11 会话，不代表已验证所有 Linux 发行版或 Wayland 实机。
 
 ### AppImage
 

@@ -15,9 +15,9 @@ X448 + ML-KEM-1024 hybrid key encapsulation · Ed448 + ML-DSA-87 dual signatures
 [![Downloads](https://img.shields.io/github/downloads/Shixiaoshi0417/NekoKEM/total?style=flat-square&label=downloads&color=1f2328)](https://github.com/Shixiaoshi0417/NekoKEM/releases)
 [![License](https://img.shields.io/badge/license-Apache--2.0-1f2328?style=flat-square)](LICENSE)
 [![OpenSSL](https://img.shields.io/badge/OpenSSL-4.1.0-1f2328?style=flat-square)](https://openssl-library.org/)
-[![Platforms](https://img.shields.io/badge/platforms-Android%20%C2%B7%20Windows%20%C2%B7%20macOS%20%C2%B7%20Linux-1f2328?style=flat-square)](#downloads)
+[![Platforms](https://img.shields.io/badge/platforms-Android%20%C2%B7%20iOS%20%C2%B7%20Windows%20%C2%B7%20macOS%20%C2%B7%20Linux-1f2328?style=flat-square)](#downloads)
 
-[Downloads](#downloads) · [Quick start](#quick-start) · [Cryptographic design](#cryptographic-design) · [Security boundaries](#security-boundaries) · [v6.0.0 release notes](release/v6.0.0.md)
+[Downloads](#downloads) · [Quick start](#quick-start) · [Cryptographic design](#cryptographic-design) · [Security boundaries](#security-boundaries) · [v6.1.0 release notes](release/v6.0.0.md)
 
 </div>
 
@@ -87,17 +87,18 @@ Android (MIUIX / Material 3 Expressive), Windows and Linux (Compose), macOS (Swi
 
 ## Downloads
 
-The current version is **v6.0.0**. Every package is on the [GitHub Release](https://github.com/Shixiaoshi0417/NekoKEM/releases/tag/v6.0.0); see [Release v6.0.0](#release-v600) below for what changed.
+The current version is **v6.1.0**. Every package is on the [GitHub Release](https://github.com/Shixiaoshi0417/NekoKEM/releases/tag/v6.1.0); see [Release v6.1.0](#release-v610) below for what changed.
 
 | Platform and architecture | CLI / Android | GUI |
 |---|---|---|
-| Android 8.0+ ARM64 | [APK](https://github.com/Shixiaoshi0417/NekoKEM/releases/download/v6.0.0/app-release.apk) | Interface included in APK |
-| Windows 10/11 x64 | [CLI ZIP](https://github.com/Shixiaoshi0417/NekoKEM/releases/download/v6.0.0/NekoKEM-windows-x86_64.zip) | [MSI](https://github.com/Shixiaoshi0417/NekoKEM/releases/download/v6.0.0/NekoKEM-Windows-GUI.msi) · [EXE](https://github.com/Shixiaoshi0417/NekoKEM/releases/download/v6.0.0/NekoKEM-Windows-GUI.exe) · [ZIP](https://github.com/Shixiaoshi0417/NekoKEM/releases/download/v6.0.0/NekoKEM-Windows-GUI.zip) |
-| macOS Apple Silicon arm64 | [CLI TAR.GZ](https://github.com/Shixiaoshi0417/NekoKEM/releases/download/v6.0.0/NekoKEM-macos-arm64.tar.gz) | [GUI ZIP](https://github.com/Shixiaoshi0417/NekoKEM/releases/download/v6.0.0/NekoKEM-macos-arm64-GUI.zip) · [DMG](https://github.com/Shixiaoshi0417/NekoKEM/releases/download/v6.0.0/NekoKEM-macos-arm64-GUI.dmg) |
-| Linux x86_64 | [Static CLI](https://github.com/Shixiaoshi0417/NekoKEM/releases/download/v6.0.0/NekoKEM-linux-x86_64.tar.gz) | [DEB](https://github.com/Shixiaoshi0417/NekoKEM/releases/download/v6.0.0/NekoKEM-linux-x86_64-GUI.deb) · [RPM](https://github.com/Shixiaoshi0417/NekoKEM/releases/download/v6.0.0/NekoKEM-linux-x86_64-GUI.rpm) · [Portable](https://github.com/Shixiaoshi0417/NekoKEM/releases/download/v6.0.0/NekoKEM-linux-x86_64-GUI.tar.gz) · [AppImage](https://github.com/Shixiaoshi0417/NekoKEM/releases/download/v6.0.0/NekoKEM-linux-x86_64-GUI.AppImage) · [Flatpak](https://github.com/Shixiaoshi0417/NekoKEM/releases/download/v6.0.0/NekoKEM-linux-x86_64-GUI.flatpak) |
-| Linux ARM64 / aarch64 | [Static CLI](https://github.com/Shixiaoshi0417/NekoKEM/releases/download/v6.0.0/NekoKEM-linux-aarch64.tar.gz) | [DEB](https://github.com/Shixiaoshi0417/NekoKEM/releases/download/v6.0.0/NekoKEM-linux-aarch64-GUI.deb) · [RPM](https://github.com/Shixiaoshi0417/NekoKEM/releases/download/v6.0.0/NekoKEM-linux-aarch64-GUI.rpm) · [Portable](https://github.com/Shixiaoshi0417/NekoKEM/releases/download/v6.0.0/NekoKEM-linux-aarch64-GUI.tar.gz) · [AppImage](https://github.com/Shixiaoshi0417/NekoKEM/releases/download/v6.0.0/NekoKEM-linux-aarch64-GUI.AppImage) · [Flatpak](https://github.com/Shixiaoshi0417/NekoKEM/releases/download/v6.0.0/NekoKEM-linux-aarch64-GUI.flatpak) |
+| Android 8.0+ ARM64 | [APK](https://github.com/Shixiaoshi0417/NekoKEM/releases/download/v6.1.0/app-release.apk) | Interface included in APK |
+| Windows 10/11 x64 | [CLI ZIP](https://github.com/Shixiaoshi0417/NekoKEM/releases/download/v6.1.0/NekoKEM-windows-x86_64.zip) | [MSI](https://github.com/Shixiaoshi0417/NekoKEM/releases/download/v6.1.0/NekoKEM-Windows-GUI.msi) · [EXE](https://github.com/Shixiaoshi0417/NekoKEM/releases/download/v6.1.0/NekoKEM-Windows-GUI.exe) · [ZIP](https://github.com/Shixiaoshi0417/NekoKEM/releases/download/v6.1.0/NekoKEM-Windows-GUI.zip) |
+| macOS Apple Silicon arm64 | [CLI TAR.GZ](https://github.com/Shixiaoshi0417/NekoKEM/releases/download/v6.1.0/NekoKEM-macos-arm64.tar.gz) | [GUI ZIP](https://github.com/Shixiaoshi0417/NekoKEM/releases/download/v6.1.0/NekoKEM-macos-arm64-GUI.zip) · [DMG](https://github.com/Shixiaoshi0417/NekoKEM/releases/download/v6.1.0/NekoKEM-macos-arm64-GUI.dmg) |
+| iOS / iPadOS 16+ arm64 | — | [IPA (unsigned)](https://github.com/Shixiaoshi0417/NekoKEM/releases/download/v6.1.0/NekoKEM-iOS-arm64-unsigned.ipa) |
+| Linux x86_64 | [Static CLI](https://github.com/Shixiaoshi0417/NekoKEM/releases/download/v6.1.0/NekoKEM-linux-x86_64.tar.gz) | [DEB](https://github.com/Shixiaoshi0417/NekoKEM/releases/download/v6.1.0/NekoKEM-linux-x86_64-GUI.deb) · [RPM](https://github.com/Shixiaoshi0417/NekoKEM/releases/download/v6.1.0/NekoKEM-linux-x86_64-GUI.rpm) · [Portable](https://github.com/Shixiaoshi0417/NekoKEM/releases/download/v6.1.0/NekoKEM-linux-x86_64-GUI.tar.gz) · [AppImage](https://github.com/Shixiaoshi0417/NekoKEM/releases/download/v6.1.0/NekoKEM-linux-x86_64-GUI.AppImage) · [Flatpak](https://github.com/Shixiaoshi0417/NekoKEM/releases/download/v6.1.0/NekoKEM-linux-x86_64-GUI.flatpak) |
+| Linux ARM64 / aarch64 | [Static CLI](https://github.com/Shixiaoshi0417/NekoKEM/releases/download/v6.1.0/NekoKEM-linux-aarch64.tar.gz) | [DEB](https://github.com/Shixiaoshi0417/NekoKEM/releases/download/v6.1.0/NekoKEM-linux-aarch64-GUI.deb) · [RPM](https://github.com/Shixiaoshi0417/NekoKEM/releases/download/v6.1.0/NekoKEM-linux-aarch64-GUI.rpm) · [Portable](https://github.com/Shixiaoshi0417/NekoKEM/releases/download/v6.1.0/NekoKEM-linux-aarch64-GUI.tar.gz) · [AppImage](https://github.com/Shixiaoshi0417/NekoKEM/releases/download/v6.1.0/NekoKEM-linux-aarch64-GUI.AppImage) · [Flatpak](https://github.com/Shixiaoshi0417/NekoKEM/releases/download/v6.1.0/NekoKEM-linux-aarch64-GUI.flatpak) |
 
-Verify each downloaded archive against [SHA256SUMS.txt](https://github.com/Shixiaoshi0417/NekoKEM/releases/download/v6.0.0/SHA256SUMS.txt), then verify its internal checksums. The Linux GUI requires glibc 2.39+, and its DEB/RPM depend on Noto Sans CJK fonts and `curl`. The macOS GUI needs macOS 13 or newer; the CLI has an 11.0 deployment target. Platform installation steps and signing limits are described in the platform sections below.
+Verify each downloaded archive against [SHA256SUMS.txt](https://github.com/Shixiaoshi0417/NekoKEM/releases/download/v6.1.0/SHA256SUMS.txt), then verify its internal checksums. The Linux GUI requires glibc 2.39+, and its DEB/RPM depend on Noto Sans CJK fonts and `curl`. The macOS GUI needs macOS 13 or newer; the CLI has an 11.0 deployment target. Platform installation steps and signing limits are described in the platform sections below.
 
 Releases after v4.1.0 also carry GitHub build provenance for every asset. With the GitHub CLI, confirm that a file was built by this repository's Release workflow on `main` (substitute the asset you downloaded):
 
@@ -153,20 +154,19 @@ The project does not implement cryptographic algorithms itself and does not depe
 | Security | [Security implementation](#security-implementation) · [Security boundaries](#security-boundaries) · [Vulnerability reports](#security-notice-and-vulnerability-reports) |
 | Development | [Dependencies](#dependencies) · [Building](#building) · [Automated tests](#automated-tests) · [AFL++ fuzzing](#afl-fuzzing) · [Performance measurements](#performance-measurements) |
 
-## Release v6.0.0
+## Release v6.1.0
 
-Android and every CLI/GUI application are `6.0.0`; Core is `6.0`, with unchanged NKEM file formats and cryptographic parameters:
+Android and every CLI/GUI application are `6.1.0`; Core stays `6.0`, with unchanged NKEM and NKPR file formats and cryptographic parameters:
 
-- Private keys move to NKPR v3 with key commitment, so a private key file opens under one password only. New and upgraded keys are written as NKPR v3, and your own NKPR v2 key is rewritten in place after unlocking, keeping its keys, password and fingerprint.
-- Older private keys (NKPR v1 and v2) open only as your own key; importing a key exported by an older version explains the risk and asks for confirmation first, and temporary keys refuse older formats. The CLI gains `--legacy-private-key` and `export-legacy-private-key`.
-- Every app can export the private key for 5.2 and earlier, an NKPR v2 copy under the same password.
-- New Windows EXE installer, Linux AppImages and Flatpak bundles (the sandbox reaches files only through the file chooser), and an Arch Linux `nekokem-bin` PKGBUILD in the repository.
-- The update prompt includes the release notes, folded, scrolling within a fixed height when expanded; every app drops the explanatory small print on its pages, keeping the warnings.
-- Android Settings gain "Block screenshots and screen recording", on by default. Fixes from an external review include curve-point checks for Ed448 public keys, rejection of small-order X448 public keys, and the desktop apps deleting staged plaintext when saving fails.
+- New unsigned iOS / iPadOS IPA (iOS 16 or newer), sharing the SwiftUI interface with the macOS GUI and laid out like the Android app; install it with a sideloading tool.
+- Tablet and iPad layouts: wide screens get side navigation, centred content of limited width and two-pane contacts.
+- The Android MIUIX style gains liquid glass: a frosted title bar, a glass side rail and add button, and dialogs that blur the page behind them on Android 12 and newer.
+- The Android Material 3 style offers a choice of theme color (blue by default), and Dynamic color from Android 12, off by default.
+- The Files page in every app shows only the file name or "No file selected", with Encrypt and Decrypt both grey until a file is chosen.
 
-**NekoKEM 5.2.0 and earlier cannot open an NKPR v3 private key**: to move a key to an older version, first use "Export private key for 5.2 and earlier" (`export-legacy-private-key` in the CLI). The first unlock after upgrading rewrites your own key as NKPR v3, so export it this way before rolling back to 5.2.0 too. NKEM files are unaffected: 6.0.0 and 5.2.0 decrypt each other's files. **NekoKEM 4.x and earlier cannot read NKEM v5, NKPR v2/v3 or four-component public keys**; for recipients on an old version, turn on unsigned encryption and use the legacy public key. See the [bilingual v6.0.0 notes](release/v6.0.0.md) and [GitHub Release](https://github.com/Shixiaoshi0417/NekoKEM/releases/tag/v6.0.0).
+**NekoKEM 5.2.0 and earlier cannot open the NKPR v3 private keys used since 6.0.0**: to move a key to an older version, first use "Export private key for 5.2 and earlier" (`export-legacy-private-key` in the CLI). The first unlock after upgrading from 5.2.0 rewrites your own key as NKPR v3, so export it this way before rolling back too. NKEM files are unaffected: 6.x and 5.2.0 decrypt each other's files. **NekoKEM 4.x and earlier cannot read NKEM v5, NKPR v2/v3 or four-component public keys**; for recipients on an old version, turn on unsigned encryption and use the legacy public key. See the bilingual [v6.1.0](release/v6.1.0.md) and [v6.0.0](release/v6.0.0.md) notes and the [GitHub Release](https://github.com/Shixiaoshi0417/NekoKEM/releases/tag/v6.1.0).
 
-Android v6.0.0 retains the v3.2.0/v3.3.0 signing identity and supports an in-place update; back up the public key, encrypted NKPR private key and its password, especially before upgrading the key. Only v3.1.x installations with the old signer need backup verification followed by uninstall/reinstall; uninstalling deletes app-private keys. NKEM v1/v2 are no longer supported.
+Android v6.1.0 retains the v3.2.0/v3.3.0 signing identity and supports an in-place update; back up the public key, encrypted NKPR private key and its password, especially before upgrading the key. Only v3.1.x installations with the old signer need backup verification followed by uninstall/reinstall; uninstalling deletes app-private keys. NKEM v1/v2 are no longer supported.
 
 README uses a dedicated rounded display image. Android retains the existing square artwork with its white background; Windows CLI/GUI EXE icons retain the square artwork with the outer white area made transparent. Windows applications are not Authenticode signed.
 
@@ -226,7 +226,7 @@ Desktop encryption and decryption report an existing output before writing; conf
 
 ## Linux CLI installation
 
-The Linux x86_64/aarch64 CLI packages have no runtime shared-library dependencies. The installer selects the package for the local architecture from the latest published Release, resolved once so every download comes from the same release; `NEKOKEM_RELEASE_TAG=v6.0.0 sh install.sh` installs a specific release, and the installed binary must report that version. It first verifies the archive against the release's top-level `SHA256SUMS.txt`, then verifies SHA-256 hashes of the files inside the package:
+The Linux x86_64/aarch64 CLI packages have no runtime shared-library dependencies. The installer selects the package for the local architecture from the latest published Release, resolved once so every download comes from the same release; `NEKOKEM_RELEASE_TAG=v6.1.0 sh install.sh` installs a specific release, and the installed binary must report that version. It first verifies the archive against the release's top-level `SHA256SUMS.txt`, then verifies SHA-256 hashes of the files inside the package:
 
 ```sh
 curl --fail --location --output install.sh \
@@ -271,7 +271,7 @@ Rust, Node and Python are pinned to `1.99.0`, `24.21.0` and `3.13.16`. MSYS2 use
 
 ## Windows CLI and GUI
 
-v6.0.0 provides the native Windows 10/11 x64 CLI `nekokem.exe` as a portable package, and the GUI as an MSI installer, an EXE installer and a ZIP folder. The CLI shares Linux's complete argument parser and five-option menu; double-clicking the EXE or running it without arguments opens the menu. See the [Windows CLI documentation](windows/README.md) for building, use and imported-key permissions, and the [filesystem design](windows/SECURITY-DESIGN.md) for its boundaries. Running the CLI requires no MSYS2 runtime or OpenSSL DLL; building uses MSYS2 UCRT64 and pinned OpenSSL 4.1.0.
+v6.1.0 provides the native Windows 10/11 x64 CLI `nekokem.exe` as a portable package, and the GUI as an MSI installer, an EXE installer and a ZIP folder. The CLI shares Linux's complete argument parser and five-option menu; double-clicking the EXE or running it without arguments opens the menu. See the [Windows CLI documentation](windows/README.md) for building, use and imported-key permissions, and the [filesystem design](windows/SECURITY-DESIGN.md) for its boundaries. Running the CLI requires no MSYS2 runtime or OpenSSL DLL; building uses MSYS2 UCRT64 and pinned OpenSSL 4.1.0.
 
 The GUI is a Compose Multiplatform app that looks like the Android app, in the MIUIX style (the default) or Material 3 Expressive. It calls the same C17 Core through the bridge library, with system file dialogs, progress and cancellation. It carries its own Java runtime and needs no WebView2 Runtime; see the [desktop GUI documentation](desktop/README.md). Since 6.0.0 releases also provide an EXE installer, `NekoKEM-Windows-GUI.exe`, that installs the same app as the MSI with a double click; CI installs it silently and starts the installed app. The CLI, the GUI and the MSI and EXE installers are not Authenticode signed.
 
@@ -279,7 +279,7 @@ Windows accepts local fixed NTFS only, checks ownership and ACLs, and rejects ne
 
 ## macOS Apple Silicon CLI and GUI
 
-v6.0.0 provides a native `arm64` CLI and a native SwiftUI GUI for M-series Apple Silicon Macs. Download `NekoKEM-macos-arm64.tar.gz`, `NekoKEM-macos-arm64-GUI.zip` (containing the `.app`) or `NekoKEM-macos-arm64-GUI.dmg` from this Release. See the [macOS build and usage guide](macos/README.md) and the [desktop GUI documentation](desktop/README.md). No Intel/Rosetta build is provided.
+v6.1.0 provides a native `arm64` CLI and a native SwiftUI GUI for M-series Apple Silicon Macs. Download `NekoKEM-macos-arm64.tar.gz`, `NekoKEM-macos-arm64-GUI.zip` (containing the `.app`) or `NekoKEM-macos-arm64-GUI.dmg` from this Release. See the [macOS build and usage guide](macos/README.md) and the [desktop GUI documentation](desktop/README.md). No Intel/Rosetta build is provided.
 
 The CLI shares Linux's argument parser, five-option menu and language catalogs. The GUI uses Apple's Liquid Glass design on macOS 26, runs on macOS 13 or newer, and has a fallback appearance on earlier systems. Both statically link pinned OpenSSL 4.1.0 and keep its arm64 assembly acceleration; they still depend on macOS system libraries and frameworks. The CLI is built with a macOS 11.0 deployment target and its native CI runs on `macos-15`; the GUI is built with the macOS 26 SDK and its CI runs on `macos-26`. This does not establish testing on real machines with earlier systems, or the compatibility and performance of every M-series generation.
 
@@ -295,7 +295,7 @@ The Linux GUI supports `x86_64` and `aarch64` (ARM64) and is the same Compose Mu
 
 Builds and native CI use Ubuntu 24.04, and CI also installs and starts the RPM in Fedora 44 containers of the same architecture. The app carries its own Java runtime; it requires glibc 2.39 or newer, and the DEB/RPM depend on Noto Sans CJK fonts and `curl` (for the update check). OpenSSL 4.1.0 is linked statically into the bridge library with hidden symbols, full RELRO, immediate binding and a non-executable stack. Linux file permissions, authenticated commit and cancellation cleanup follow the CLI/Core; NKEM, NKPR, KDF parameters and 64 KiB streaming are unchanged. See the [desktop GUI documentation](desktop/README.md).
 
-The v6.0.0 Release includes every Linux GUI installation package, portable package, AppImage and Flatpak bundle for both architectures, alongside the existing static CLI packages. Native window tests use X11 and do not establish testing on every Linux distribution or a physical Wayland session.
+The v6.1.0 Release includes every Linux GUI installation package, portable package, AppImage and Flatpak bundle for both architectures, alongside the existing static CLI packages. Native window tests use X11 and do not establish testing on every Linux distribution or a physical Wayland session.
 
 ### AppImage
 
