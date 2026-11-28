@@ -1,8 +1,10 @@
 import SwiftUI
+import UIKit
 
 /// The iOS app: the same pages, state and Rust bridge as the macOS app
 /// (macos/gui/Sources/NekoKEM), shown as tabs.
 ///   --demo <page>   fixed example data on one page, for the CI screenshots
+///   --landscape     with --demo: turns the window to landscape first (iPad)
 ///   --self-test     generates keys, encrypts and decrypts a file in a temporary
 ///                   folder through the bridge, prints the outcome and exits
 @main
@@ -30,6 +32,10 @@ struct NekoKEMApp: App {
                 // A sheet asked for before the window is up is not presented: the page comes first.
                 .task {
                     guard let demo else { return }
+                    if CommandLine.arguments.contains("--landscape"),
+                       let scene = UIApplication.shared.connectedScenes.first as? UIWindowScene {
+                        scene.requestGeometryUpdate(.iOS(interfaceOrientations: .landscapeRight)) { _ in }
+                    }
                     try? await Task.sleep(nanoseconds: 500_000_000)
                     state.showDemo(demo)
                 }

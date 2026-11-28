@@ -34,6 +34,8 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
@@ -83,23 +85,78 @@ fun PublicKeyContactsPage(
     onUse: (PublicKeyContact) -> Unit,
     onEncryptSelected: () -> Unit,
 ) {
-    // A small card per contact; tapping it opens the contact's own page.
+    // A small card per contact. On phones tapping it opens the contact's own
+    // page; on wide screens the contact opens beside the list, starting with
+    // the first one.
+    val twoPane = LocalWindowLayout.current.twoPane
     var openId by rememberSaveable { mutableStateOf<String?>(null) }
-    val open = openId?.let { id -> state.contactsState.contacts.firstOrNull { it.id == id } }
+    val contacts = state.contactsState.contacts
+    val open = openId?.let { id -> contacts.firstOrNull { it.id == id } }
+        ?: if (twoPane) contacts.firstOrNull { !it.archived } ?: contacts.firstOrNull() else null
     // Fingerprint verification is its own page under the contact.
     var verifying by rememberSaveable { mutableStateOf(false) }
-    BackHandler(enabled = open != null) { openId = null }
+    BackHandler(enabled = !twoPane && open != null) { openId = null }
     BackHandler(enabled = open != null && verifying) { verifying = false }
     var showArchived by rememberSaveable { mutableStateOf(false) }
-    if (open != null && verifying) {
-        PublicKeyContactVerify(open, state, actions, onBack = { verifying = false })
-        return
+
+    @Composable
+    fun ContactPane(contact: PublicKeyContact) {
+        ContentWidth {
+            if (verifying) {
+                PublicKeyContactVerify(contact, state, actions, onBack = { verifying = false })
+            } else {
+                // Beside the list there is nothing to go back to.
+                PublicKeyContactDetail(
+                    contact,
+                    state,
+                    actions,
+                    onUse,
+                    onVerify = { verifying = true },
+                    onBack = if (twoPane) null else ({ openId = null }),
+                )
+            }
+        }
     }
-    if (open != null) {
-        PublicKeyContactDetail(open, state, actions, onUse, onVerify = { verifying = true }, onBack = { openId = null })
-        return
+
+    @Composable
+    fun ListPane() {
+        ContactList(
+            state,
+            actions,
+            openId = if (twoPane) open?.id else null,
+            onOpen = {
+                verifying = false
+                openId = it.id
+            },
+            onEncryptSelected = onEncryptSelected,
+            showArchived = showArchived,
+            onToggleArchived = { showArchived = !showArchived },
+        )
     }
-    verifying = false
+
+    if (twoPane) {
+        Row(Modifier.fillMaxSize()) {
+            Box(Modifier.width(ListPaneWidth).fillMaxHeight()) { ListPane() }
+            Box(Modifier.weight(1f).fillMaxHeight()) { if (open != null) ContactPane(open) }
+        }
+    } else if (open != null) {
+        ContactPane(open)
+    } else {
+        verifying = false
+        ContentWidth { ListPane() }
+    }
+}
+
+@Composable
+private fun ContactList(
+    state: NekoKEMUiState,
+    actions: NekoKEMActions,
+    openId: String?,
+    onOpen: (PublicKeyContact) -> Unit,
+    onEncryptSelected: () -> Unit,
+    showArchived: Boolean,
+    onToggleArchived: () -> Unit,
+) {
     val selected = state.contactSelection
     val atLimit = selected.size >= NativeBridge.MAX_RECIPIENTS
     val canImport = state.nativeConnected && !state.running
@@ -164,13 +221,13 @@ fun PublicKeyContactsPage(
             val active = state.contactsState.contacts.filterNot { it.archived }
             val archived = state.contactsState.contacts.filter { it.archived }
             items(active, key = { it.id }) { contact ->
-                MaterialContactCard(contact, state, actions, atLimit, Modifier.animateItem()) { openId = contact.id }
+                MaterialContactCard(contact, state, actions, atLimit, contact.id == openId, Modifier.animateItem()) { onOpen(contact) }
             }
             if (archived.isNotEmpty()) {
                 item(key = "archived") {
                     Row(
                         Modifier.fillMaxWidth().animateItem()
-                            .clickable { showArchived = !showArchived }
+                            .clickable { onToggleArchived() }
                             .padding(vertical = 8.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
@@ -189,7 +246,7 @@ fun PublicKeyContactsPage(
                 }
                 if (showArchived) {
                     items(archived, key = { it.id }) { contact ->
-                        MaterialContactCard(contact, state, actions, atLimit, Modifier.animateItem()) { openId = contact.id }
+                        MaterialContactCard(contact, state, actions, atLimit, contact.id == openId, Modifier.animateItem()) { onOpen(contact) }
                     }
                 }
             }
@@ -217,6 +274,7 @@ private fun MaterialContactCard(
     state: NekoKEMUiState,
     actions: NekoKEMActions,
     atLimit: Boolean,
+    open: Boolean,
     modifier: Modifier,
     onOpen: () -> Unit,
 ) {
@@ -243,8 +301,13 @@ private fun MaterialContactCard(
             onClick = onOpen,
             modifier = Modifier.fillMaxWidth(),
             shape = shape,
+            // The contact open beside the list stands out by a shade.
             colors = CardDefaults.cardColors(
-                containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+                containerColor = if (open) {
+                    MaterialTheme.colorScheme.surfaceContainerHighest
+                } else {
+                    MaterialTheme.colorScheme.surfaceContainerHigh
+                },
             ),
             border = if (checked) BorderStroke(2.dp, MaterialTheme.colorScheme.primary) else null,
         ) {
@@ -268,12 +331,7 @@ private fun MaterialContactCard(
                             modifier = Modifier.weight(1f, fill = false),
                         )
                         if (contact.pinned) {
-                            Text(
-                                stringResource(R.string.contact_pinned_label),
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.primary,
-                                modifier = Modifier.padding(start = 8.dp),
-                            )
+                            PinnedMark(MaterialTheme.colorScheme.onSurfaceVariant, Modifier.padding(start = 8.dp))
                         }
                     }
                     Text(
@@ -323,18 +381,20 @@ private fun PublicKeyContactDetail(
     actions: NekoKEMActions,
     onUse: (PublicKeyContact) -> Unit,
     onVerify: () -> Unit,
-    onBack: () -> Unit,
+    onBack: (() -> Unit)?,
 ) {
     val checked = contact.id in state.contactSelection
     val canToggle = !state.running && (checked || state.contactSelection.size < NativeBridge.MAX_RECIPIENTS)
     val cardColors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh)
     LazyColumn(contentPadding = PaddingValues(20.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-        item {
-            ExpressiveButton(
-                text = stringResource(R.string.action_back_to_contacts),
-                onClick = onBack,
-                emphasis = ActionEmphasis.TEXT,
-            )
+        if (onBack != null) {
+            item {
+                ExpressiveButton(
+                    text = stringResource(R.string.action_back_to_contacts),
+                    onClick = onBack,
+                    emphasis = ActionEmphasis.TEXT,
+                )
+            }
         }
         item {
             Card(Modifier.fillMaxWidth(), shape = MaterialTheme.shapes.extraLarge, colors = cardColors) {
@@ -433,6 +493,35 @@ internal fun VerifiedMark(verified: Boolean, color: Color, modifier: Modifier = 
             lineTo(side * 0.67f, side * 0.39f)
         }
         drawPath(tick, color, style = stroke)
+    }
+}
+
+/**
+ * A pinned contact's mark: an outlined push pin drawn with the same stroke as
+ * [VerifiedMark], in place of a text badge.
+ */
+@Composable
+internal fun PinnedMark(color: Color, modifier: Modifier = Modifier, size: Dp = 16.dp) {
+    val description = stringResource(R.string.contact_pinned_label)
+    Canvas(modifier.size(size).semantics { contentDescription = description }) {
+        val side = this.size.minDimension
+        val stroke = Stroke(width = side * 0.09f, cap = StrokeCap.Round, join = StrokeJoin.Round)
+        val head = Path().apply {
+            moveTo(side * 0.34f, side * 0.1f)
+            lineTo(side * 0.66f, side * 0.1f)
+            moveTo(side * 0.4f, side * 0.1f)
+            lineTo(side * 0.4f, side * 0.38f)
+            lineTo(side * 0.24f, side * 0.58f)
+            lineTo(side * 0.76f, side * 0.58f)
+            lineTo(side * 0.6f, side * 0.38f)
+            lineTo(side * 0.6f, side * 0.1f)
+        }
+        drawPath(head, color, style = stroke)
+        val needle = Path().apply {
+            moveTo(side * 0.5f, side * 0.58f)
+            lineTo(side * 0.5f, side * 0.92f)
+        }
+        drawPath(needle, color, style = stroke)
     }
 }
 

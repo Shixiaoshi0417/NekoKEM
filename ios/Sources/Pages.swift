@@ -41,30 +41,22 @@ extension AppState {
 
 private func fileName(_ path: String) -> String { (path as NSString).lastPathComponent }
 
-/// The four pages are tabs, each with its own navigation stack.
+/// The four pages are tabs, each with its own navigation stack. On iPad
+/// (iPadOS 18 and newer) the tabs can open as a sidebar.
 struct ContentView: View {
     @ObservedObject var state: AppState
 
-    var body: some View {
-        TabView(selection: Binding<Destination>(get: { state.destination }, set: { destination in
+    private var selection: Binding<Destination> {
+        Binding(get: { state.destination }, set: { destination in
             guard state.editable else { return }
             state.open(destination)
             // Back on the Keys tab, the shared state follows the page still open there.
             if destination == .keys, let route = state.keysPath.last { state.openKeyTask(route) }
-        })) {
-            NavigationStack { PhoneFilesPage(state: state) }
-                .tabItem { Label(state.t(Destination.files.key), systemImage: Destination.files.symbol) }
-                .tag(Destination.files)
-            NavigationStack(path: $state.keysPath) { PhoneKeysPage(state: state) }
-                .tabItem { Label(state.t(Destination.keys.key), systemImage: Destination.keys.symbol) }
-                .tag(Destination.keys)
-            NavigationStack(path: $state.contactPath) { PhoneContactsPage(state: state) }
-                .tabItem { Label(state.t(Destination.contacts.key), systemImage: Destination.contacts.symbol) }
-                .tag(Destination.contacts)
-            NavigationStack { PhoneSettingsPage(state: state) }
-                .tabItem { Label(state.t(Destination.settings.key), systemImage: Destination.settings.symbol) }
-                .tag(Destination.settings)
-        }
+        })
+    }
+
+    var body: some View {
+        tabs
         // System sheets: half the screen, pulled up for more.
         .sheet(isPresented: Binding(get: { state.choosingRecipients || state.askingPassword }, set: { if !$0 { state.closeRecipients() } })) {
             Group { if state.askingPassword { PhonePasswordSheet(state: state) } else { PhoneRecipientSheet(state: state) } }
@@ -72,6 +64,63 @@ struct ContentView: View {
         }
         .sheet(isPresented: Binding(get: { !state.qrFingerprint.isEmpty }, set: { if !$0 { state.qrFingerprint = "" } })) {
             PhoneQrSheet(state: state).presentationDetents([.medium, .large]).presentationDragIndicator(.visible)
+        }
+    }
+
+    @ViewBuilder private var tabs: some View {
+        if #available(iOS 18.0, *) {
+            TabView(selection: selection) {
+                Tab(state.t(Destination.files.key), systemImage: Destination.files.symbol, value: Destination.files) {
+                    NavigationStack { PhoneFilesPage(state: state) }
+                }
+                Tab(state.t(Destination.keys.key), systemImage: Destination.keys.symbol, value: Destination.keys) {
+                    NavigationStack(path: $state.keysPath) { PhoneKeysPage(state: state) }
+                }
+                Tab(state.t(Destination.contacts.key), systemImage: Destination.contacts.symbol, value: Destination.contacts) {
+                    ContactsTab(state: state)
+                }
+                Tab(state.t(Destination.settings.key), systemImage: Destination.settings.symbol, value: Destination.settings) {
+                    NavigationStack { PhoneSettingsPage(state: state) }
+                }
+            }
+            .tabViewStyle(.sidebarAdaptable)
+        } else {
+            TabView(selection: selection) {
+                NavigationStack { PhoneFilesPage(state: state) }
+                    .tabItem { Label(state.t(Destination.files.key), systemImage: Destination.files.symbol) }
+                    .tag(Destination.files)
+                NavigationStack(path: $state.keysPath) { PhoneKeysPage(state: state) }
+                    .tabItem { Label(state.t(Destination.keys.key), systemImage: Destination.keys.symbol) }
+                    .tag(Destination.keys)
+                ContactsTab(state: state)
+                    .tabItem { Label(state.t(Destination.contacts.key), systemImage: Destination.contacts.symbol) }
+                    .tag(Destination.contacts)
+                NavigationStack { PhoneSettingsPage(state: state) }
+                    .tabItem { Label(state.t(Destination.settings.key), systemImage: Destination.settings.symbol) }
+                    .tag(Destination.settings)
+            }
+        }
+    }
+}
+
+/// Widest a page's rows grow: on iPad they keep to a centered column instead
+/// of stretching across the screen.
+let readableWidth: CGFloat = 640
+
+extension View {
+    /// Centers a page's list in a column no wider than [readableWidth] (iOS 17 and newer).
+    func readableColumn() -> some View { modifier(ReadableColumn()) }
+}
+
+private struct ReadableColumn: ViewModifier {
+    func body(content: Content) -> some View {
+        GeometryReader { proxy in
+            let side = (proxy.size.width - readableWidth) / 2
+            if #available(iOS 17.0, *), side > 0 {
+                content.contentMargins(.horizontal, side, for: .scrollContent)
+            } else {
+                content
+            }
         }
     }
 }
@@ -288,11 +337,16 @@ private struct PhoneFilesPage: View {
         let other = !state.otherPrivateKey.isEmpty
         Form {
             Section {
+                // In the order of use: the file, choosing it, then what to do with it.
                 VStack(alignment: .leading, spacing: 2) {
                     Text(chosen ? fileName(state.input) : state.t("noFileSelected")).font(.headline).lineLimit(2)
-                    Text(chosen ? shown(state.input) : state.t("selectedFile")).font(.subheadline).foregroundStyle(.secondary).lineLimit(2).truncationMode(.middle)
+                    if chosen {
+                        Text(shown(state.input)).font(.subheadline).foregroundStyle(.secondary).lineLimit(2).truncationMode(.middle)
+                    }
                 }
                 .padding(.vertical, 4)
+                ActionRow(title: state.t("selectFile")) { state.browse(.input) }.disabled(!state.editable)
+                if chosen { Button(state.t("clearSelection")) { state.clearFile() }.disabled(!state.editable) }
                 // Bordered buttons keep their own taps inside a list row.
                 HStack(spacing: 12) {
                     Button { state.encrypt() } label: { Text(state.t("encryptAction")).frame(maxWidth: .infinity) }
@@ -303,8 +357,6 @@ private struct PhoneFilesPage: View {
                 .controlSize(.large)
                 .padding(.vertical, 4)
                 if state.unsigned { Text(state.t("unsignedWarning")).font(.footnote).foregroundStyle(danger) }
-                ActionRow(title: state.t("selectFile")) { state.browse(.input) }.disabled(!state.editable)
-                if chosen { Button(state.t("clearSelection")) { state.clearFile() }.disabled(!state.editable) }
             }
             Section {
                 VStack(alignment: .leading, spacing: 2) {
@@ -322,6 +374,7 @@ private struct PhoneFilesPage: View {
             FeedbackSections(state: state)
             if state.unsaved { ActionSection(title: state.t("saveAs"), enabled: state.editable) { state.saveAgain() } }
         }
+        .readableColumn()
         .navigationTitle(state.t(Destination.files.key))
     }
 }
@@ -345,6 +398,7 @@ private struct PhoneKeysPage: View {
                 }
             }
         }
+        .readableColumn()
         .navigationTitle(state.t(Destination.keys.key))
         .navigationDestination(for: KeyRoute.self) { route in KeyTaskPage(state: state, route: route) }
     }
@@ -376,6 +430,7 @@ private struct KeyTaskPage: View {
             FeedbackSections(state: state)
             ActionSection(title: actionTitle, enabled: state.editable) { state.submit() }
         }
+        .readableColumn()
         .navigationTitle(state.t(route.key))
         .navigationBarTitleDisplayMode(.inline)
         .scrollDismissesKeyboard(.interactively)
@@ -501,6 +556,7 @@ private struct PhoneSettingsPage: View {
                 Button(state.t("openRelease")) { state.openLatestRelease() }
             } header: { Text(state.t("settingsUpdates")) }
         }
+        .readableColumn()
         .navigationTitle(state.t(Destination.settings.key))
         .alert(state.t("unsignedConfirmTitle"), isPresented: $state.confirmingUnsigned) {
             Button(state.t("unsignedConfirm"), role: .destructive) { state.confirmUnsigned(true) }

@@ -3,6 +3,7 @@ package com.shixiaoshi0417.nekokem.ui
 import android.app.Activity
 import android.content.Context
 import android.content.ContextWrapper
+import android.os.Build
 import android.view.WindowManager
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -17,15 +18,19 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.compositionLocalOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.DialogProperties
+import androidx.compose.ui.window.DialogWindowProvider
 import androidx.compose.ui.window.SecureFlagPolicy
 import top.yukonga.miuix.kmp.layout.DialogDefaults
 import top.yukonga.miuix.kmp.theme.MiuixTheme
@@ -82,11 +87,17 @@ internal fun AppAlertDialog(
     // it on every update, so the screen itself is secured first, before the
     // dialog window is created.
     if (properties.securePolicy == SecureFlagPolicy.SecureOn) SecureHostWindow()
+    // Where the system blurs behind windows (Android 12 and newer, when the
+    // device allows it), the dialog turns to frosted glass over the page.
+    val blur = rememberCrossWindowBlur()
+    val background = DialogDefaults.backgroundColor()
     WindowDialog(
         show = true,
         modifier = modifier,
+        backgroundColor = if (blur) background.copy(alpha = 0.8f) else background,
         onDismissRequest = if (dismissible) onDismissRequest else null,
     ) {
+        if (blur) BlurBehindDialog()
         val titleColor = DialogDefaults.titleColor()
         val summaryColor = DialogDefaults.summaryColor()
         Column(Modifier.fillMaxWidth()) {
@@ -129,6 +140,27 @@ internal fun AppAlertDialog(
                 }
             }
         }
+    }
+}
+
+/** Whether windows can blur what lies behind them on this device now. */
+@Composable
+private fun rememberCrossWindowBlur(): Boolean {
+    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) return false
+    val context = LocalContext.current
+    return remember(context) { context.getSystemService(WindowManager::class.java)?.isCrossWindowBlurEnabled == true }
+}
+
+/** Blurs the screen behind the dialog window that hosts this composable. */
+@Composable
+private fun BlurBehindDialog() {
+    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) return
+    val window = (LocalView.current.parent as? DialogWindowProvider)?.window ?: return
+    val radius = with(LocalDensity.current) { 24.dp.roundToPx() }
+    DisposableEffect(window, radius) {
+        window.addFlags(WindowManager.LayoutParams.FLAG_BLUR_BEHIND)
+        window.attributes = window.attributes.apply { blurBehindRadius = radius }
+        onDispose {}
     }
 }
 

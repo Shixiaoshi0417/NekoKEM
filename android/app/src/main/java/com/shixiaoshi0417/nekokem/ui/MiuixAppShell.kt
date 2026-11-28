@@ -5,6 +5,31 @@ import android.os.Build
 import androidx.activity.compose.BackHandler
 import androidx.annotation.StringRes
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.BoxScope
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.WindowInsetsSides
+import androidx.compose.foundation.layout.asPaddingValues
+import androidx.compose.foundation.layout.calculateStartPadding
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.layout.only
+import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.unit.Dp
+import com.shixiaoshi0417.nekokem.ui.miuix.liquid.LiquidGlassRail
+import com.shixiaoshi0417.nekokem.ui.miuix.liquid.RailWidth
+import com.shixiaoshi0417.nekokem.ui.miuix.liquid.frostedBar
+import com.shixiaoshi0417.nekokem.ui.miuix.liquid.liquidGlass
+import top.yukonga.miuix.kmp.basic.CardDefaults
+import top.yukonga.miuix.kmp.blur.LayerBackdrop
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -104,10 +129,11 @@ private val AppDestination.icon: ImageVector
     }
 
 /**
- * The MIUIX interface: each page has a large collapsing title, and the pages
- * scroll beneath a floating liquid glass tab bar. The bar refracts and blurs
- * the page on Android 13 and newer, where miuix-blur's shaders run; older
- * versions never call miuix-blur and get a solid floating bar instead.
+ * The MIUIX interface: each page has a large title that collapses into a
+ * frosted bar as it scrolls, and the pages scroll beneath a floating liquid
+ * glass tab bar, or on tablets beside a floating glass rail. The glass
+ * refracts and blurs the page on Android 13 and newer, where miuix-blur's
+ * shaders run; older versions never call miuix-blur and get solid surfaces.
  */
 @Composable
 internal fun MiuixAppShell(
@@ -133,144 +159,269 @@ internal fun MiuixAppShell(
     val items = BarDestinations.map {
         NavigationItem(label = stringResource(it.tabResource), icon = it.icon)
     }
-    Scaffold(
-        bottomBar = {
-            if (backdrop != null) {
-                LiquidGlassNavigationBar(
-                    items = items,
-                    selectedIndex = BarDestinations.indexOf(destination.barTab),
-                    onItemClick = { destination = BarDestinations[it] },
-                    backdrop = backdrop,
-                    isBlurActive = true,
-                )
-            } else {
-                FloatingNavigationBar {
-                    items.forEachIndexed { index, item ->
-                        FloatingNavigationBarItem(
-                            selected = destination.barTab == BarDestinations[index],
-                            onClick = { destination = BarDestinations[index] },
-                            icon = item.icon,
-                            label = item.label,
-                            // The floating bar draws icons only; name each tab for accessibility.
-                            modifier = Modifier.semantics { contentDescription = item.label },
-                        )
-                    }
-                }
-            }
-        },
-        snackbarHost = { androidx.compose.material3.SnackbarHost(snackbarHostState) },
-    ) { padding ->
-        Box(modifier = if (backdrop != null) Modifier.fillMaxSize().layerBackdrop(backdrop) else Modifier.fillMaxSize()) {
-            key(destination) {
-                val title = stringResource(destination.titleResource)
-                val bottom = padding.calculateBottomPadding()
-                when (destination) {
-                    AppDestination.FILES -> MiuixPage(title, bottom) { filesPage(state, actions) }
-                    AppDestination.KEYS -> MiuixPage(title, bottom) { keysPage(state, actions) }
-                    AppDestination.CONTACTS -> {
-                        // A small card per contact; tapping it opens the contact's own page.
-                        var openId by rememberSaveable { mutableStateOf<String?>(null) }
-                        var showArchived by rememberSaveable { mutableStateOf(false) }
-                        val open = openId?.let { id -> state.contactsState.contacts.firstOrNull { it.id == id } }
-                        // Fingerprint verification is its own page under the contact.
-                        var verifying by rememberSaveable { mutableStateOf(false) }
-                        BackHandler(enabled = open != null) { openId = null }
-                        BackHandler(enabled = open != null && verifying) { verifying = false }
-                        val onUse = { contact: PublicKeyContact ->
-                            actions.onSelectContact(contact) { destination = AppDestination.FILES }
+    val selectedIndex = BarDestinations.indexOf(destination.barTab)
+    val navigate = { index: Int -> destination = BarDestinations[index] }
+    BoxWithConstraints(Modifier.fillMaxSize()) {
+        val layout = WindowLayout.forWidth(maxWidth)
+        CompositionLocalProvider(LocalWindowLayout provides layout) {
+            if (layout.rail) {
+                // Tablets: a floating glass rail on the left; pages fill the rest.
+                val bottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+                val start = WindowInsets.safeDrawing.only(WindowInsetsSides.Start)
+                    .asPaddingValues().calculateStartPadding(LocalLayoutDirection.current)
+                Box(Modifier.fillMaxSize().background(surface)) {
+                    Box(if (backdrop != null) Modifier.fillMaxSize().layerBackdrop(backdrop) else Modifier.fillMaxSize()) {
+                        Box(Modifier.fillMaxSize().padding(start = start + RailSpace)) {
+                            MiuixPages(destination, { destination = it }, state, actions, bottom)
                         }
-                        key(open?.id) {
-                            if (open != null && verifying) {
-                                MiuixPage(
-                                    stringResource(R.string.contact_verify_title),
-                                    bottom,
-                                    onBack = { verifying = false },
-                                    backDescription = open.label,
-                                ) { contactVerifyPage(open, state, actions) }
-                            } else if (open != null) {
-                                MiuixPage(open.label, bottom, onBack = { openId = null }) {
-                                    contactDetailPage(open, state, actions, onUse, onVerify = { verifying = true })
-                                }
-                            } else {
-                                verifying = false
-                                Box(Modifier.fillMaxSize()) {
-                                    MiuixPage(title, bottom) {
-                                        contactsPage(
-                                            state,
-                                            actions,
-                                            onOpen = { openId = it.id },
-                                            onEncryptSelected = {
-                                                actions.onEncryptForSelectedContacts { destination = AppDestination.FILES }
-                                            },
-                                            showArchived = showArchived,
-                                            onToggleArchived = { showArchived = !showArchived },
-                                        )
-                                    }
-                                    // With contacts listed, adding another moves to a floating button.
-                                    if (state.contactsState.contacts.isNotEmpty()) {
-                                        val canImport = state.nativeConnected && !state.running
-                                        val addLabel = stringResource(R.string.action_import_contact)
-                                        FloatingActionButton(
-                                            onClick = { if (canImport) actions.onImportContact() },
-                                            modifier = Modifier
-                                                .align(Alignment.BottomEnd)
-                                                .padding(end = 20.dp, bottom = bottom + 20.dp)
-                                                .alpha(if (canImport) 1f else 0.38f)
-                                                .semantics { contentDescription = addLabel },
-                                        ) {
-                                            Icon(MiuixIcons.Add, contentDescription = null, tint = Color.White)
-                                        }
-                                    }
+                    }
+                    LiquidGlassRail(
+                        items = items,
+                        selectedIndex = selectedIndex,
+                        onItemClick = navigate,
+                        backdrop = backdrop,
+                        modifier = Modifier.align(Alignment.CenterStart).padding(start = start + 16.dp),
+                    )
+                    androidx.compose.material3.SnackbarHost(
+                        snackbarHostState,
+                        Modifier.align(Alignment.BottomCenter).padding(bottom = bottom),
+                    )
+                }
+            } else {
+                Scaffold(
+                    bottomBar = {
+                        if (backdrop != null) {
+                            LiquidGlassNavigationBar(
+                                items = items,
+                                selectedIndex = selectedIndex,
+                                onItemClick = navigate,
+                                backdrop = backdrop,
+                                isBlurActive = true,
+                            )
+                        } else {
+                            FloatingNavigationBar {
+                                items.forEachIndexed { index, item ->
+                                    FloatingNavigationBarItem(
+                                        selected = destination.barTab == BarDestinations[index],
+                                        onClick = { navigate(index) },
+                                        icon = item.icon,
+                                        label = item.label,
+                                        // The floating bar draws icons only; name each tab for accessibility.
+                                        modifier = Modifier.semantics { contentDescription = item.label },
+                                    )
                                 }
                             }
                         }
+                    },
+                    snackbarHost = { androidx.compose.material3.SnackbarHost(snackbarHostState) },
+                ) { padding ->
+                    Box(modifier = if (backdrop != null) Modifier.fillMaxSize().layerBackdrop(backdrop) else Modifier.fillMaxSize()) {
+                        MiuixPages(destination, { destination = it }, state, actions, padding.calculateBottomPadding())
                     }
-                    AppDestination.SETTINGS -> MiuixSettingsPage(title, bottom, state, actions) {
-                        destination = AppDestination.ABOUT
-                    }
-                    AppDestination.ABOUT -> MiuixPage(
-                        title,
-                        bottom,
-                        onBack = { destination = AppDestination.SETTINGS },
-                        backDescription = stringResource(R.string.tab_settings),
-                    ) { aboutPage(state, actions) }
                 }
             }
         }
     }
 }
 
-/** A page with a large title that collapses as its list scrolls. */
+/** Room the floating rail takes at the left: its width and both margins. */
+private val RailSpace = 16.dp + RailWidth + 8.dp
+
 @Composable
-private fun MiuixPage(
-    title: String,
-    bottomPadding: androidx.compose.ui.unit.Dp,
-    onBack: (() -> Unit)? = null,
-    backDescription: String? = null,
-    content: LazyListScope.() -> Unit,
+private fun MiuixPages(
+    destination: AppDestination,
+    onNavigate: (AppDestination) -> Unit,
+    state: NekoKEMUiState,
+    actions: NekoKEMActions,
+    bottom: Dp,
 ) {
-    val scrollBehavior = MiuixScrollBehavior()
-    Column(Modifier.fillMaxSize().background(MiuixTheme.colorScheme.surface)) {
-        TopAppBar(
-            title = title,
-            scrollBehavior = scrollBehavior,
-            navigationIcon = {
-                if (onBack != null) {
-                    IconButton(onClick = onBack, modifier = Modifier.padding(start = 16.dp)) {
-                        Icon(MiuixIcons.Back, contentDescription = backDescription ?: stringResource(R.string.action_back_to_contacts))
+    key(destination) {
+        val title = stringResource(destination.titleResource)
+        when (destination) {
+            AppDestination.FILES -> MiuixPage(title, bottom) { filesPage(state, actions) }
+            AppDestination.KEYS -> MiuixPage(title, bottom) { keysPage(state, actions) }
+            AppDestination.CONTACTS -> MiuixContacts(title, bottom, state, actions) { onNavigate(AppDestination.FILES) }
+            AppDestination.SETTINGS -> MiuixSettingsPage(title, bottom, state, actions) {
+                onNavigate(AppDestination.ABOUT)
+            }
+            AppDestination.ABOUT -> MiuixPage(
+                title,
+                bottom,
+                onBack = { onNavigate(AppDestination.SETTINGS) },
+                backDescription = stringResource(R.string.tab_settings),
+            ) { aboutPage(state, actions) }
+        }
+    }
+}
+
+/**
+ * Contacts: a small card per contact. On phones tapping a card opens the
+ * contact's own page; on wide screens the list stays on the left and the
+ * contact opens beside it, starting with the first one.
+ */
+@Composable
+private fun MiuixContacts(
+    title: String,
+    bottom: Dp,
+    state: NekoKEMUiState,
+    actions: NekoKEMActions,
+    onToFiles: () -> Unit,
+) {
+    val twoPane = LocalWindowLayout.current.twoPane
+    var openId by rememberSaveable { mutableStateOf<String?>(null) }
+    var showArchived by rememberSaveable { mutableStateOf(false) }
+    val contacts = state.contactsState.contacts
+    val open = openId?.let { id -> contacts.firstOrNull { it.id == id } }
+        ?: if (twoPane) contacts.firstOrNull { !it.archived } ?: contacts.firstOrNull() else null
+    // Fingerprint verification is its own page under the contact.
+    var verifying by rememberSaveable { mutableStateOf(false) }
+    BackHandler(enabled = open != null && verifying) { verifying = false }
+    BackHandler(enabled = !twoPane && open != null && !verifying) { openId = null }
+    val onUse = { contact: PublicKeyContact -> actions.onSelectContact(contact, onToFiles) }
+
+    @Composable
+    fun ContactPane(contact: PublicKeyContact) {
+        key(contact.id) {
+            if (verifying) {
+                MiuixPage(
+                    stringResource(R.string.contact_verify_title),
+                    bottom,
+                    onBack = { verifying = false },
+                    backDescription = contact.label,
+                ) { contactVerifyPage(contact, state, actions) }
+            } else {
+                // Beside the list there is nothing to go back to.
+                MiuixPage(contact.label, bottom, onBack = if (twoPane) null else ({ openId = null })) {
+                    contactDetailPage(contact, state, actions, onUse, onVerify = { verifying = true })
+                }
+            }
+        }
+    }
+
+    @Composable
+    fun ListPane() {
+        val canImport = state.nativeConnected && !state.running
+        val addLabel = stringResource(R.string.action_import_contact)
+        MiuixPage(
+            title,
+            bottom,
+            maxWidth = if (twoPane) ListPaneWidth else ContentMaxWidth,
+            overlay = { pageBackdrop ->
+                // With contacts listed, adding another moves to a floating glass button.
+                if (contacts.isNotEmpty()) {
+                    val dark = MiuixTheme.colorScheme.surface.luminance() < 0.5f
+                    Box(
+                        modifier = Modifier
+                            .align(Alignment.BottomEnd)
+                            .padding(end = 20.dp, bottom = bottom + 20.dp)
+                            .size(56.dp)
+                            .liquidGlass(pageBackdrop, CircleShape, MiuixTheme.colorScheme.surfaceContainerHigh, dark)
+                            .clip(CircleShape)
+                            .clickable(enabled = canImport, role = Role.Button) { actions.onImportContact() }
+                            .alpha(if (canImport) 1f else 0.38f)
+                            .semantics { contentDescription = addLabel },
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Icon(MiuixIcons.Add, contentDescription = null, tint = MiuixTheme.colorScheme.onSurface)
                     }
                 }
             },
-        )
+        ) {
+            contactsPage(
+                state,
+                actions,
+                openId = if (twoPane) open?.id else null,
+                onOpen = {
+                    verifying = false
+                    openId = it.id
+                },
+                onEncryptSelected = { actions.onEncryptForSelectedContacts(onToFiles) },
+                showArchived = showArchived,
+                onToggleArchived = { showArchived = !showArchived },
+            )
+        }
+    }
+
+    if (twoPane) {
+        Row(Modifier.fillMaxSize()) {
+            Box(Modifier.width(ListPaneWidth).fillMaxHeight()) { ListPane() }
+            Box(Modifier.weight(1f).fillMaxHeight()) { if (open != null) ContactPane(open) }
+        }
+    } else if (open != null) {
+        ContactPane(open)
+    } else {
+        verifying = false
+        ListPane()
+    }
+}
+
+/**
+ * A page with a large title that collapses into a frosted bar as its list
+ * scrolls beneath it. The page keeps to [maxWidth] in the middle of wide
+ * screens. [overlay] draws above the list and gets the list's backdrop, so
+ * floating controls can be glass too.
+ */
+@Composable
+private fun MiuixPage(
+    title: String,
+    bottomPadding: Dp,
+    onBack: (() -> Unit)? = null,
+    backDescription: String? = null,
+    maxWidth: Dp = ContentMaxWidth,
+    overlay: @Composable BoxScope.(LayerBackdrop?) -> Unit = {},
+    content: LazyListScope.() -> Unit,
+) {
+    val scrollBehavior = MiuixScrollBehavior()
+    val surface = MiuixTheme.colorScheme.surface
+    val pageBackdrop = if (liquidGlassSupported) {
+        rememberLayerBackdrop {
+            drawRect(surface)
+            drawContent()
+        }
+    } else {
+        null
+    }
+    val density = LocalDensity.current
+    var barHeight by remember { mutableStateOf(0.dp) }
+    BoxWithConstraints(Modifier.fillMaxSize().background(surface)) {
+        // The list spans the screen so it scrolls from anywhere; its rows keep
+        // to a column of maxWidth in the middle.
+        val side = ((this.maxWidth - maxWidth) / 2).coerceAtLeast(0.dp)
         LazyColumn(
             modifier = Modifier
-                .weight(1f)
+                .fillMaxSize()
+                .then(if (pageBackdrop != null) Modifier.layerBackdrop(pageBackdrop) else Modifier)
                 .overScrollVertical()
                 .nestedScroll(scrollBehavior.nestedScrollConnection),
-            contentPadding = PaddingValues(bottom = bottomPadding + 16.dp),
+            contentPadding = PaddingValues(start = side, top = barHeight, end = side, bottom = bottomPadding + 16.dp),
             overscrollEffect = null,
             content = content,
         )
+        // The frosted bar spans the screen; its title lines up with the rows.
+        Box(
+            Modifier
+                .fillMaxWidth()
+                .frostedBar(pageBackdrop, surface)
+                .onSizeChanged { barHeight = with(density) { it.height.toDp() } },
+        ) {
+            TopAppBar(
+                title = title,
+                color = Color.Transparent,
+                scrollBehavior = scrollBehavior,
+                navigationIcon = {
+                    if (onBack != null) {
+                        IconButton(onClick = onBack, modifier = Modifier.padding(start = 16.dp)) {
+                            Icon(
+                                MiuixIcons.Back,
+                                contentDescription = backDescription ?: stringResource(R.string.action_back_to_contacts),
+                            )
+                        }
+                    }
+                },
+                modifier = Modifier.fillMaxWidth().padding(horizontal = side),
+            )
+        }
+        ContentWidth(maxWidth = maxWidth) { overlay(pageBackdrop) }
     }
 }
 
@@ -332,7 +483,11 @@ private fun ButtonPair(
             onClick = onFirst,
             enabled = enabled,
             modifier = Modifier.weight(1f),
-            colors = ButtonDefaults.textButtonColorsPrimary(),
+            // Unavailable, both buttons look the same grey.
+            colors = ButtonDefaults.textButtonColorsPrimary(
+                disabledColor = MiuixTheme.colorScheme.disabledSecondaryVariant,
+                disabledTextColor = MiuixTheme.colorScheme.disabledOnSecondaryVariant,
+            ),
         )
         TextButton(
             text = second,
@@ -365,11 +520,13 @@ private fun KeyDetails(
 
 private fun LazyListScope.filesPage(state: NekoKEMUiState, actions: NekoKEMActions) {
     val canRun = state.nativeConnected && !state.running
+    // In the order of use: the file, choosing it, then what to do with it.
     section(key = "file") {
-        BasicComponent(
-            title = state.selectedFileName ?: stringResource(R.string.selected_file_none),
-            summary = stringResource(R.string.selected_file_label),
-        )
+        BasicComponent(title = state.selectedFileName ?: stringResource(R.string.selected_file_none))
+        Action(R.string.action_select_file, !state.running, actions.onSelectFile)
+        if (state.selectedFileName != null) {
+            Action(R.string.action_clear_selection, !state.running, actions.onClearSelectedFile)
+        }
         ButtonPair(
             first = stringResource(R.string.action_encrypt),
             second = stringResource(R.string.action_decrypt),
@@ -382,10 +539,6 @@ private fun LazyListScope.filesPage(state: NekoKEMUiState, actions: NekoKEMActio
                 title = stringResource(R.string.unsigned_warning),
                 titleColor = BasicComponentDefaults.titleColor(color = MiuixTheme.colorScheme.error),
             )
-        }
-        Action(R.string.action_select_file, !state.running, actions.onSelectFile)
-        if (state.selectedFileName != null) {
-            Action(R.string.action_clear_selection, !state.running, actions.onClearSelectedFile)
         }
     }
     section(R.string.decryption_private_key_title, key = "private") {
@@ -409,8 +562,7 @@ private fun LazyListScope.keysPage(state: NekoKEMUiState, actions: NekoKEMAction
                 if (state.privateKeyExists) R.string.private_key_exists else R.string.private_key_not_found,
             ),
             summary = buildList {
-                add(stringResource(R.string.fingerprint_label))
-                add(state.fingerprint ?: stringResource(R.string.not_available))
+                add(stringResource(R.string.key_fingerprint_line, state.fingerprint ?: stringResource(R.string.not_available)))
                 if (state.fingerprint != null && !state.canSign) add(stringResource(R.string.key_legacy_status))
             }.joinToString("\n"),
         )
@@ -464,6 +616,7 @@ private fun LazyListScope.keysPage(state: NekoKEMUiState, actions: NekoKEMAction
 private fun LazyListScope.contactsPage(
     state: NekoKEMUiState,
     actions: NekoKEMActions,
+    openId: String?,
     onOpen: (PublicKeyContact) -> Unit,
     onEncryptSelected: () -> Unit,
     showArchived: Boolean,
@@ -471,11 +624,15 @@ private fun LazyListScope.contactsPage(
 ) {
     val selected = state.contactSelection
     val atLimit = selected.size >= NativeBridge.MAX_RECIPIENTS
-    section(key = "intro") {
-        if (state.contactsState.contacts.isEmpty()) {
-            Action(R.string.action_import_contact, state.nativeConnected && !state.running, actions.onImportContact)
+    val contactsState = state.contactsState
+    // Only when there is something to say; otherwise the list starts at once.
+    if (contactsState.contacts.isEmpty() || contactsState.storageError || contactsState.unreadableEntries > 0) {
+        section(key = "intro") {
+            if (contactsState.contacts.isEmpty()) {
+                Action(R.string.action_import_contact, state.nativeConnected && !state.running, actions.onImportContact)
+            }
+            ContactStatus(contactsState)
         }
-        ContactStatus(state.contactsState)
     }
     if (selected.isNotEmpty()) {
         section(key = "selection") {
@@ -495,16 +652,21 @@ private fun LazyListScope.contactsPage(
     }
     val active = state.contactsState.contacts.filterNot { it.archived }
     val archived = state.contactsState.contacts.filter { it.archived }
-    items(active, key = { it.id }) { contact -> MiuixContactCard(contact, state, actions, atLimit) { onOpen(contact) } }
+    items(active, key = { it.id }) { contact ->
+        MiuixContactCard(contact, state, actions, atLimit, contact.id == openId) { onOpen(contact) }
+    }
     if (archived.isNotEmpty()) {
-        item(key = "archived") {
+        // A card like the others, so its left edge lines up with theirs.
+        section(key = "archived") {
             ArrowPreference(
                 title = stringResource(R.string.contact_archived_section, archived.size),
                 onClick = onToggleArchived,
             )
         }
         if (showArchived) {
-            items(archived, key = { it.id }) { contact -> MiuixContactCard(contact, state, actions, atLimit) { onOpen(contact) } }
+            items(archived, key = { it.id }) { contact ->
+                MiuixContactCard(contact, state, actions, atLimit, contact.id == openId) { onOpen(contact) }
+            }
         }
     }
     if (state.contactsState.contacts.isNotEmpty()) item(key = "fab-space") { Spacer(Modifier.height(80.dp)) }
@@ -517,6 +679,7 @@ private fun MiuixContactCard(
     state: NekoKEMUiState,
     actions: NekoKEMActions,
     atLimit: Boolean,
+    open: Boolean,
     onOpen: () -> Unit,
 ) {
     val checked = contact.id in state.contactSelection
@@ -531,8 +694,12 @@ private fun MiuixContactCard(
         onDelete = { actions.onDeleteContact(contact) },
         modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp).padding(bottom = 12.dp),
     ) {
+        // The contact open beside the list stands out by a shade.
         Card(
             modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.defaultColors(
+                color = if (open) MiuixTheme.colorScheme.surfaceContainerHigh else MiuixTheme.colorScheme.surfaceContainer,
+            ),
             pressFeedbackType = PressFeedbackType.Sink,
             onClick = onOpen,
         ) {
@@ -557,12 +724,7 @@ private fun MiuixContactCard(
                             modifier = Modifier.weight(1f, fill = false),
                         )
                         if (contact.pinned) {
-                            Text(
-                                text = stringResource(R.string.contact_pinned_label),
-                                style = MiuixTheme.textStyles.footnote1,
-                                color = MiuixTheme.colorScheme.primary,
-                                modifier = Modifier.padding(start = 8.dp),
-                            )
+                            PinnedMark(MiuixTheme.colorScheme.onSurfaceVariantSummary, Modifier.padding(start = 8.dp))
                         }
                     }
                     Text(
@@ -703,9 +865,16 @@ private fun MiuixSettingsPage(
                     }
                 },
             )
+            // One choice only, shown on the right like the rows above.
             BasicComponent(
                 title = stringResource(R.string.settings_theme_title),
-                summary = stringResource(R.string.settings_theme_system),
+                endActions = {
+                    Text(
+                        text = stringResource(R.string.settings_theme_system),
+                        style = MiuixTheme.textStyles.body2,
+                        color = MiuixTheme.colorScheme.onSurfaceVariantActions,
+                    )
+                },
             )
             // MIUIX keeps its own palette; wallpaper color is a Material setting.
         }

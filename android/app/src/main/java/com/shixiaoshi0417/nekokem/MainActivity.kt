@@ -80,6 +80,8 @@ import com.shixiaoshi0417.nekokem.ui.NekoKEMActions
 import com.shixiaoshi0417.nekokem.ui.NekoKEMAppShell
 import com.shixiaoshi0417.nekokem.ui.UiStyle
 import com.shixiaoshi0417.nekokem.ui.UiStyles
+import com.shixiaoshi0417.nekokem.ui.theme.ThemeColorSettings
+import com.shixiaoshi0417.nekokem.ui.theme.ThemeColors
 import com.shixiaoshi0417.nekokem.ui.NekoKEMUiState
 import com.shixiaoshi0417.nekokem.ui.OperationCompletedDialog
 import com.shixiaoshi0417.nekokem.ui.OperationErrorDialog
@@ -129,12 +131,21 @@ class MainActivity : ComponentActivity() {
 
         setContent {
             var uiStyle by remember { mutableStateOf(UiStyles.selection(this)) }
-            NekoKEMTheme(uiStyle = uiStyle) {
+            var themeColors by remember { mutableStateOf(ThemeColors.selection(this)) }
+            NekoKEMTheme(
+                uiStyle = uiStyle,
+                dynamicColor = themeColors.dynamic,
+                themeColor = themeColors.color,
+            ) {
                 val nativeStatus = remember { readNativeStatus() }
                 NekoKEMRoute(
                     uiStyle = uiStyle,
                     onUiStyleChange = { style ->
                         if (UiStyles.setSelection(this, style)) uiStyle = style
+                    },
+                    themeColors = themeColors,
+                    onThemeColorsChange = { settings ->
+                        if (ThemeColors.setSelection(this, settings)) themeColors = settings
                     },
                     nativeConnected = nativeStatus.connected,
                     nativeVersion = nativeStatus.version,
@@ -237,6 +248,8 @@ private fun readNativeStatus(): NativeStatus = try {
 private fun NekoKEMRoute(
     uiStyle: UiStyle,
     onUiStyleChange: (UiStyle) -> Unit,
+    themeColors: ThemeColorSettings,
+    onThemeColorsChange: (ThemeColorSettings) -> Unit,
     nativeConnected: Boolean,
     nativeVersion: String?,
     page: PageCache,
@@ -2223,6 +2236,7 @@ private fun NekoKEMRoute(
             publicKeyRecipientCount = selectedContactIds.size,
             contactSelection = contactSelection,
             uiStyle = uiStyle,
+            themeColors = themeColors,
             canSign = keyState.canSign,
             signatureSettings = signatureSettings,
             secureScreen = secureScreen,
@@ -2404,6 +2418,7 @@ private fun NekoKEMRoute(
                 ) { publicKeyContacts.setVerified(contact.id, contact.fingerprint, verified).code }
             },
             onUiStyleChange = onUiStyleChange,
+            onThemeColorsChange = onThemeColorsChange,
             onUpgradeKey = { passwordPrompt = PasswordPrompt.UPGRADE_KEY },
             onExportLegacyPublicKey = {
                 pendingOutputAction = PendingOutputAction.EXPORT_LEGACY_PUBLIC_KEY

@@ -19,7 +19,13 @@
     <string name="settings_theme_title">테마</string>
     <string name="settings_theme_system">시스템 설정 따르기</string>
     <string name="settings_dynamic_color_title">동적 색상</string>
-    <string name="settings_dynamic_color_system">지원하는 기기에서 사용</string>
+    <string name="settings_theme_color_title">테마 색상</string>
+    <string name="theme_color_blue">파랑</string>
+    <string name="theme_color_purple">보라</string>
+    <string name="theme_color_green">초록</string>
+    <string name="theme_color_teal">청록</string>
+    <string name="theme_color_orange">주황</string>
+    <string name="theme_color_red">빨강</string>
     <string name="settings_language_title">언어 / Language</string>
     <string name="settings_language_system">시스템 설정 따르기</string>
     <string name="settings_version_title">버전</string>

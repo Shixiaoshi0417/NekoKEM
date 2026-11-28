@@ -312,9 +312,16 @@ private struct FilesPage: View {
         let chosen = !state.input.isEmpty
         let other = !state.otherPrivateKey.isEmpty
         Card {
+            // In the order of use: the file, choosing it, then what to do with it.
             VStack(alignment: .leading, spacing: 2) {
                 Text(chosen ? fileName(state.input) : state.t("noFileSelected")).font(.title3).fontWeight(.semibold)
-                Text(chosen ? shown(state.input) : state.t("selectedFile")).font(.callout).foregroundStyle(.secondary).lineLimit(2).truncationMode(.middle)
+                if chosen {
+                    Text(shown(state.input)).font(.callout).foregroundStyle(.secondary).lineLimit(2).truncationMode(.middle)
+                }
+            }
+            HStack(spacing: 12) {
+                Button(state.t("selectFile")) { state.browse(.input) }.disabled(!state.editable)
+                if chosen { Button(state.t("clearSelection")) { state.clearFile() }.linkButton().disabled(!state.editable) }
             }
             HStack(spacing: 8) {
                 Button { state.encrypt() } label: { Text(state.t("encryptAction")).frame(maxWidth: .infinity) }
@@ -323,10 +330,6 @@ private struct FilesPage: View {
                     .controlSize(.large).disabled(!state.editable || !chosen)
             }
             if state.unsigned { Text(state.t("unsignedWarning")).font(.callout).foregroundStyle(danger) }
-            HStack(spacing: 12) {
-                Button(state.t("selectFile")) { state.browse(.input) }.disabled(!state.editable)
-                if chosen { Button(state.t("clearSelection")) { state.clearFile() }.linkButton().disabled(!state.editable) }
-            }
         }
         Text(state.t("decryptKeyTitle")).font(.headline).padding(.top, 8)
         Card {

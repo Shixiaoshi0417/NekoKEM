@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Runs the simulator build of NekoKEM.app on an iPhone simulator: the bridge
 # self-test, a normal start that reads the settings, and one screenshot of
-# every page in light and dark appearance.
+# every page in light and dark appearance; then the main pages on an iPad,
+# upright in light appearance and turned in dark.
 #   simulator-check.sh <NekoKEM.app for the simulator> <screenshot directory>
 set -Eeuo pipefail
 
@@ -68,4 +69,39 @@ for appearance in light dark; do
     done
 done
 xcrun simctl terminate "$udid" "$bundle" || true
+
+# An iPad: the tabs as a sidebar, pages in a centered column, contacts in two columns.
+readonly ipad_pages=(files keys contacts contact-verify settings)
+ipad=$(xcrun simctl list devices available -j | python3 -c '
+import json, sys
+devices = [d for runtime, items in json.load(sys.stdin)["devices"].items()
+           if "iOS" in runtime for d in items if d["name"].startswith("iPad")]
+for wanted in ("iPad Pro 13-inch (M4)", "iPad Pro 13-inch (M5)", "iPad Air 13-inch (M3)", "iPad Air 13-inch (M2)"):
+    for d in devices:
+        if d["name"] == wanted:
+            print(d["udid"], d["name"], sep="\t"); sys.exit()
+if devices:
+    print(devices[-1]["udid"], devices[-1]["name"], sep="\t")')
+if [[ -n $ipad ]]; then
+    ipad_udid=${ipad%%$'\t'*}
+    printf 'iPad simulator: %s\n' "${ipad#*$'\t'}"
+    xcrun simctl boot "$ipad_udid" 2>/dev/null || true
+    xcrun simctl bootstatus "$ipad_udid" -b
+    xcrun simctl status_bar "$ipad_udid" override --time 9:41 --dataNetwork wifi --wifiBars 3 \
+        --batteryState charged --batteryLevel 100 || true
+    xcrun simctl install "$ipad_udid" "$app"
+    for turn in portrait landscape; do
+        if [[ $turn == portrait ]]; then appearance=light extra=(); else appearance=dark extra=(--landscape); fi
+        xcrun simctl ui "$ipad_udid" appearance "$appearance"
+        for page in "${ipad_pages[@]}"; do
+            xcrun simctl launch --terminate-running-process "$ipad_udid" "$bundle" --demo "$page" ${extra[@]+"${extra[@]}"} >/dev/null
+            sleep 5
+            xcrun simctl io "$ipad_udid" screenshot --type=png "$screens/ipad-$turn-$appearance-$page.png" >/dev/null
+            test -s "$screens/ipad-$turn-$appearance-$page.png"
+        done
+    done
+    xcrun simctl terminate "$ipad_udid" "$bundle" || true
+else
+    printf 'No iPad simulator on this runner; iPad screenshots skipped\n'
+fi
 printf 'Screenshots in %s\n' "$screens"

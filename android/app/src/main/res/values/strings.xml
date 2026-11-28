@@ -23,7 +23,13 @@
     <string name="settings_theme_title">Theme</string>
     <string name="settings_theme_system">Follow system</string>
     <string name="settings_dynamic_color_title">Dynamic color</string>
-    <string name="settings_dynamic_color_system">Enabled when supported</string>
+    <string name="settings_theme_color_title">Theme color</string>
+    <string name="theme_color_blue">Blue</string>
+    <string name="theme_color_purple">Purple</string>
+    <string name="theme_color_green">Green</string>
+    <string name="theme_color_teal">Teal</string>
+    <string name="theme_color_orange">Orange</string>
+    <string name="theme_color_red">Red</string>
     <string name="settings_language_title">Language</string>
     <string name="settings_language_system">Follow system</string>
     <string name="settings_version_title">Version</string>

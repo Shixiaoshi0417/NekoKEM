@@ -10,7 +10,6 @@ import androidx.compose.material3.MotionScheme
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.dynamicDarkColorScheme
 import androidx.compose.material3.dynamicLightColorScheme
-import androidx.compose.material3.expressiveLightColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
@@ -23,21 +22,21 @@ import top.yukonga.miuix.kmp.theme.Colors
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 import top.yukonga.miuix.kmp.theme.ThemeController
 
-private val DarkColors = darkColorScheme()
-
 /**
  * Both interface styles run under the same theme tree, so switching style
  * keeps the content at one place in composition and none of its state is lost.
  * MIUIX always uses its own light or dark palette, as HyperOS apps do; only
  * the Material style follows wallpaper color. In the MIUIX style dialogs are
  * MIUIX dialogs, and the Material parts they still hold take a scheme built
- * from the MIUIX palette.
+ * from the MIUIX palette. The Material style uses the chosen [themeColor],
+ * blue unless changed, or wallpaper color when [dynamicColor] is on.
  */
 @Composable
 fun NekoKEMTheme(
     uiStyle: UiStyle = UiStyle.MATERIAL,
     darkTheme: Boolean = isSystemInDarkTheme(),
-    dynamicColor: Boolean = true,
+    dynamicColor: Boolean = false,
+    themeColor: ThemeColor = ThemeColor.BLUE,
     content: @Composable () -> Unit,
 ) {
     val context = LocalContext.current
@@ -57,8 +56,7 @@ fun NekoKEMTheme(
         val colorScheme = when {
             uiStyle == UiStyle.MIUIX -> MiuixTheme.colorScheme.toMaterial(darkTheme)
             dynamic -> if (darkTheme) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
-            darkTheme -> DarkColors
-            else -> expressiveLightColorScheme()
+            else -> themeColor.scheme(darkTheme)
         }
         MaterialExpressiveTheme(
             colorScheme = colorScheme,

@@ -5,6 +5,7 @@ import android.os.Build
 import androidx.activity.BackEventCompat
 import androidx.activity.compose.PredictiveBackHandler
 import androidx.compose.foundation.clickable
+import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.material3.IconButton
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -16,6 +17,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.material3.AlertDialog
@@ -29,6 +31,15 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import com.shixiaoshi0417.nekokem.i18n.AppLanguages
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.wrapContentWidth
+import androidx.compose.material3.NavigationRail
+import androidx.compose.material3.NavigationRailItem
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.FlowRow
@@ -96,6 +107,9 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.shixiaoshi0417.nekokem.R
+import com.shixiaoshi0417.nekokem.ui.theme.ThemeColor
+import com.shixiaoshi0417.nekokem.ui.theme.ThemeColorSettings
+import com.shixiaoshi0417.nekokem.ui.theme.ThemeColors
 import com.shixiaoshi0417.nekokem.keys.PublicKeyContact
 import com.shixiaoshi0417.nekokem.keys.PublicKeyContactsState
 import kotlinx.coroutines.CancellationException
@@ -123,6 +137,7 @@ data class NekoKEMUiState(
     // Checkbox selection on the contacts page, not yet applied to encryption.
     val contactSelection: List<String> = emptyList(),
     val uiStyle: UiStyle = UiStyles.default,
+    val themeColors: ThemeColorSettings = ThemeColorSettings(),
     /** This device's key is an identity key: files are signed with it. */
     val canSign: Boolean = false,
     val signatureSettings: SignatureSettings = SignatureSettings(),
@@ -167,6 +182,7 @@ data class NekoKEMActions(
     val onSetContactPinned: (PublicKeyContact, Boolean) -> Unit = { _, _ -> },
     val onSetContactArchived: (PublicKeyContact, Boolean) -> Unit = { _, _ -> },
     val onUiStyleChange: (UiStyle) -> Unit = {},
+    val onThemeColorsChange: (ThemeColorSettings) -> Unit = {},
     val onUpgradeKey: () -> Unit = {},
     val onExportLegacyPublicKey: () -> Unit = {},
     /** Asks for the password, then where to save the NKPR v2 copy. */
@@ -264,125 +280,164 @@ fun NekoKEMAppShell(
         destination = AppDestination.SETTINGS
     }
 
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                expandedHeight = (64f * fontScale).dp,
-                navigationIcon = {
-                    if (destination == AppDestination.ABOUT) {
-                        IconButton(onClick = {
-                            animateNavigation = true
-                            destination = AppDestination.SETTINGS
-                        }) {
-                            Icon(
-                                Icons.AutoMirrored.Filled.ArrowBack,
-                                contentDescription = stringResource(R.string.tab_settings),
+    BoxWithConstraints(Modifier.fillMaxSize()) {
+        val layout = WindowLayout.forWidth(maxWidth)
+        // Tablets: tabs move to a rail on the left, and the title lines up with
+        // the page's centered column.
+        val railWidth = if (layout.rail) 80.dp else 0.dp
+        // Contacts in two panes start at the left, like their list.
+        val titleInset = if (layout.twoPane && destination == AppDestination.CONTACTS) {
+            0.dp
+        } else {
+            ((maxWidth - railWidth - ContentMaxWidth) / 2).coerceAtLeast(0.dp)
+        }
+        val selectTab = { item: AppDestination ->
+            if (destination.barTab != item) {
+                animateNavigation = true
+                destination = item
+            }
+        }
+        CompositionLocalProvider(LocalWindowLayout provides layout) {
+            Scaffold(
+                topBar = {
+                    TopAppBar(
+                        modifier = Modifier.padding(start = railWidth),
+                        expandedHeight = (64f * fontScale).dp,
+                        navigationIcon = {
+                            if (destination == AppDestination.ABOUT) {
+                                IconButton(onClick = {
+                                    animateNavigation = true
+                                    destination = AppDestination.SETTINGS
+                                }) {
+                                    Icon(
+                                        Icons.AutoMirrored.Filled.ArrowBack,
+                                        contentDescription = stringResource(R.string.tab_settings),
+                                    )
+                                }
+                            }
+                        },
+                        title = {
+                            Text(
+                                text = stringResource(destination.titleResource),
+                                style = MaterialTheme.typography.titleLargeEmphasized,
+                                modifier = Modifier.padding(start = titleInset),
+                            )
+                        },
+                    )
+                },
+                // Material 3 Expressive short navigation bar, as in LunexSU: the
+                // selected tab's icon fills and sits in a pill indicator.
+                bottomBar = {
+                    if (!layout.rail) ShortNavigationBar(containerColor = MaterialTheme.colorScheme.surfaceContainer) {
+                        BarDestinations.forEach { item ->
+                            val selected = destination.barTab == item
+                            ShortNavigationBarItem(
+                                selected = selected,
+                                enabled = !state.running,
+                                onClick = { selectTab(item) },
+                                icon = {
+                                    Icon(
+                                        imageVector = if (selected) item.selectedIcon else item.unselectedIcon,
+                                        contentDescription = null,
+                                    )
+                                },
+                                label = {
+                                    Text(
+                                        stringResource(item.tabResource),
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
+                                    )
+                                },
                             )
                         }
                     }
                 },
-                title = {
-                    Text(
-                        text = stringResource(destination.titleResource),
-                        style = MaterialTheme.typography.titleLargeEmphasized,
-                    )
-                },
-            )
-        },
-        // Material 3 Expressive short navigation bar, as in LunexSU: the
-        // selected tab's icon fills and sits in a pill indicator.
-        bottomBar = {
-            ShortNavigationBar(containerColor = MaterialTheme.colorScheme.surfaceContainer) {
-                BarDestinations.forEach { item ->
-                    val selected = destination.barTab == item
-                    ShortNavigationBarItem(
-                        selected = selected,
-                        enabled = !state.running,
-                        onClick = {
-                            if (!selected) {
-                                animateNavigation = true
-                                destination = item
+                snackbarHost = { SnackbarHost(snackbarHostState) },
+            ) { padding ->
+                Row(Modifier.fillMaxSize()) {
+                    if (layout.rail) {
+                        NavigationRail(
+                            containerColor = MaterialTheme.colorScheme.surfaceContainer,
+                            modifier = Modifier.width(railWidth),
+                        ) {
+                            Spacer(Modifier.weight(1f))
+                            BarDestinations.forEach { item ->
+                                val selected = destination.barTab == item
+                                NavigationRailItem(
+                                    selected = selected,
+                                    enabled = !state.running,
+                                    onClick = { selectTab(item) },
+                                    icon = { Icon(item.selectedIcon, contentDescription = null) },
+                                    label = { Text(stringResource(item.tabResource), maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                                )
                             }
-                        },
-                        icon = {
-                            Icon(
-                                imageVector = if (selected) item.selectedIcon else item.unselectedIcon,
-                                contentDescription = null,
-                            )
-                        },
-                        label = {
-                            Text(
-                                stringResource(item.tabResource),
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                            )
-                        },
-                    )
-                }
-            }
-        },
-        snackbarHost = { SnackbarHost(snackbarHostState) },
-    ) { padding ->
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(padding),
-        ) {
-            if (previewingFiles && destination != AppDestination.FILES) {
-                // Visual preview only; the page being left keeps the semantics.
-                Box(modifier = Modifier.fillMaxSize().clearAndSetSemantics {}) {
-                    FileOperationsPage(state, actions)
-                }
-            }
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .graphicsLayer {
-                        // Material predictive back: shrink to 90%, shift away from the
-                        // swipe edge and round the corners as the finger moves.
-                        val progress = backProgress.value
-                        val scale = 1f - 0.1f * progress
-                        scaleX = scale
-                        scaleY = scale
-                        val direction = if (backEdge == BackEventCompat.EDGE_RIGHT) -1f else 1f
-                        translationX = direction * progress *
-                            (size.width / 20f - 8.dp.toPx()).coerceAtLeast(0f)
-                        shape = RoundedCornerShape(28.dp * progress)
-                        clip = progress > 0f
-                        shadowElevation = 6.dp.toPx() * progress
+                            Spacer(Modifier.weight(1f))
+                        }
                     }
-                    .background(MaterialTheme.colorScheme.background),
-            ) {
-                // A newly opened page fades in with the expressive motion scheme. The
-                // page being left goes at once, so its semantics never linger.
-                key(destination) {
-                    val pageAlpha = remember { Animatable(if (animateNavigation) 0f else 1f) }
-                    LaunchedEffect(Unit) { pageAlpha.animateTo(1f, motion.defaultEffectsSpec()) }
-                    Box(modifier = Modifier.fillMaxSize().graphicsLayer { alpha = pageAlpha.value }) {
-                        when (destination) {
-                            AppDestination.FILES -> FileOperationsPage(state, actions)
-                            AppDestination.KEYS -> KeyManagementPage(state, actions)
-                            AppDestination.CONTACTS -> PublicKeyContactsPage(
-                                state,
-                                actions,
-                                onUse = { contact ->
-                                    actions.onSelectContact(contact) {
-                                        animateNavigation = true
-                                        destination = AppDestination.FILES
-                                    }
-                                },
-                                onEncryptSelected = {
-                                    actions.onEncryptForSelectedContacts {
-                                        animateNavigation = true
-                                        destination = AppDestination.FILES
-                                    }
-                                },
-                            )
-                            AppDestination.SETTINGS -> SettingsPage(state, actions) {
-                                animateNavigation = true
-                                destination = AppDestination.ABOUT
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxHeight()
+                            .padding(padding),
+                    ) {
+                        if (previewingFiles && destination != AppDestination.FILES) {
+                            // Visual preview only; the page being left keeps the semantics.
+                            Box(modifier = Modifier.fillMaxSize().clearAndSetSemantics {}) {
+                                FileOperationsPage(state, actions)
                             }
-                            AppDestination.ABOUT -> AboutPage(state, actions)
+                        }
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .graphicsLayer {
+                                    // Material predictive back: shrink to 90%, shift away from the
+                                    // swipe edge and round the corners as the finger moves.
+                                    val progress = backProgress.value
+                                    val scale = 1f - 0.1f * progress
+                                    scaleX = scale
+                                    scaleY = scale
+                                    val direction = if (backEdge == BackEventCompat.EDGE_RIGHT) -1f else 1f
+                                    translationX = direction * progress *
+                                        (size.width / 20f - 8.dp.toPx()).coerceAtLeast(0f)
+                                    shape = RoundedCornerShape(28.dp * progress)
+                                    clip = progress > 0f
+                                    shadowElevation = 6.dp.toPx() * progress
+                                }
+                                .background(MaterialTheme.colorScheme.background),
+                        ) {
+                            // A newly opened page fades in with the expressive motion scheme. The
+                            // page being left goes at once, so its semantics never linger.
+                            key(destination) {
+                                val pageAlpha = remember { Animatable(if (animateNavigation) 0f else 1f) }
+                                LaunchedEffect(Unit) { pageAlpha.animateTo(1f, motion.defaultEffectsSpec()) }
+                                Box(modifier = Modifier.fillMaxSize().graphicsLayer { alpha = pageAlpha.value }) {
+                                    when (destination) {
+                                        AppDestination.FILES -> FileOperationsPage(state, actions)
+                                        AppDestination.KEYS -> KeyManagementPage(state, actions)
+                                        AppDestination.CONTACTS -> PublicKeyContactsPage(
+                                            state,
+                                            actions,
+                                            onUse = { contact ->
+                                                actions.onSelectContact(contact) {
+                                                    animateNavigation = true
+                                                    destination = AppDestination.FILES
+                                                }
+                                            },
+                                            onEncryptSelected = {
+                                                actions.onEncryptForSelectedContacts {
+                                                    animateNavigation = true
+                                                    destination = AppDestination.FILES
+                                                }
+                                            },
+                                        )
+                                        AppDestination.SETTINGS -> SettingsPage(state, actions) {
+                                            animateNavigation = true
+                                            destination = AppDestination.ABOUT
+                                        }
+                                        AppDestination.ABOUT -> AboutPage(state, actions)
+                                    }
+                                }
+                            }
                         }
                     }
                 }
@@ -678,6 +733,57 @@ private fun SettingsPage(state: NekoKEMUiState, actions: NekoKEMActions, onOpenA
     val context = LocalContext.current
     var showLanguages by remember { mutableStateOf(false) }
     var showUiStyles by remember { mutableStateOf(false) }
+    var showThemeColors by remember { mutableStateOf(false) }
+    if (showThemeColors) {
+        AlertDialog(
+            onDismissRequest = { showThemeColors = false },
+            title = { Text(stringResource(R.string.settings_theme_color_title)) },
+            text = {
+                val colors = state.themeColors
+                @Composable
+                fun Option(selected: Boolean, swatch: Color, label: String, onClick: () -> Unit) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth().selectable(
+                            selected = selected,
+                            role = Role.RadioButton,
+                            onClick = {
+                                showThemeColors = false
+                                onClick()
+                            },
+                        ).padding(vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        RadioButton(selected = selected, onClick = null)
+                        // The color itself, beside its name.
+                        Box(Modifier.padding(start = 12.dp).size(20.dp).background(swatch, CircleShape))
+                        Text(label, modifier = Modifier.padding(start = 12.dp).weight(1f))
+                    }
+                }
+                Column(Modifier.selectableGroup()) {
+                    if (Build.VERSION.SDK_INT >= 31) {
+                        // The swatch is the wallpaper color the switch would apply.
+                        Option(
+                            selected = colors.dynamic,
+                            swatch = dynamicLightColorScheme(context).primary,
+                            label = stringResource(R.string.settings_dynamic_color_title),
+                            onClick = { actions.onThemeColorsChange(colors.copy(dynamic = true)) },
+                        )
+                    }
+                    ThemeColor.entries.forEach { color ->
+                        Option(
+                            selected = !(colors.dynamic && ThemeColors.dynamicSupported) && colors.color == color,
+                            swatch = color.seed,
+                            label = stringResource(color.labelResource),
+                            onClick = { actions.onThemeColorsChange(ThemeColorSettings(color, dynamic = false)) },
+                        )
+                    }
+                }
+            },
+            confirmButton = {
+                DialogButton(stringResource(R.string.action_close), onClick = { showThemeColors = false })
+            },
+        )
+    }
     if (showUiStyles) {
         AlertDialog(
             onDismissRequest = { showUiStyles = false },
@@ -767,10 +873,6 @@ private fun SettingsPage(state: NekoKEMUiState, actions: NekoKEMActions, onOpenA
                 titleResource = R.string.settings_theme_title,
                 valueResource = R.string.settings_theme_system,
             )
-            SettingRow(
-                titleResource = R.string.settings_dynamic_color_title,
-                valueResource = R.string.settings_dynamic_color_system,
-            )
             ChoiceSetting(
                 title = stringResource(R.string.settings_ui_style_title),
                 running = running,
@@ -786,6 +888,26 @@ private fun SettingsPage(state: NekoKEMUiState, actions: NekoKEMActions, onOpenA
                     AppLanguages.names(context)[AppLanguages.tags.indexOf(selection)]
                 },
                 onClick = { showLanguages = true },
+            )
+            // Dynamic color is both a switch and the first choice in the color list.
+            val colors = state.themeColors
+            if (ThemeColors.dynamicSupported) {
+                SwitchSetting(
+                    title = stringResource(R.string.settings_dynamic_color_title),
+                    checked = colors.dynamic,
+                    running = running,
+                    onCheckedChange = { actions.onThemeColorsChange(colors.copy(dynamic = it)) },
+                )
+            }
+            ChoiceSetting(
+                title = stringResource(R.string.settings_theme_color_title),
+                running = running,
+                value = if (colors.dynamic && ThemeColors.dynamicSupported) {
+                    stringResource(R.string.settings_dynamic_color_title)
+                } else {
+                    stringResource(colors.color.labelResource)
+                },
+                onClick = { showThemeColors = true },
             )
             SettingRow(
                 titleResource = R.string.settings_version_title,
@@ -997,9 +1119,12 @@ private fun AboutPage(state: NekoKEMUiState, actions: NekoKEMActions) {
 
 @Composable
 private fun PageColumn(content: @Composable ColumnScope.() -> Unit) {
+    // On tablets the page keeps to a centered column instead of stretching.
     Column(
         modifier = Modifier
             .fillMaxSize()
+            .wrapContentWidth(Alignment.CenterHorizontally)
+            .widthIn(max = ContentMaxWidth)
             .verticalScroll(rememberScrollState())
             .padding(24.dp),
         verticalArrangement = Arrangement.Top,

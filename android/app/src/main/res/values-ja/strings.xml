@@ -19,7 +19,13 @@
     <string name="settings_theme_title">テーマ</string>
     <string name="settings_theme_system">システムに合わせる</string>
     <string name="settings_dynamic_color_title">ダイナミックカラー</string>
-    <string name="settings_dynamic_color_system">対応する端末で有効</string>
+    <string name="settings_theme_color_title">テーマカラー</string>
+    <string name="theme_color_blue">青</string>
+    <string name="theme_color_purple">紫</string>
+    <string name="theme_color_green">緑</string>
+    <string name="theme_color_teal">ティール</string>
+    <string name="theme_color_orange">オレンジ</string>
+    <string name="theme_color_red">赤</string>
     <string name="settings_language_title">言語 / Language</string>
     <string name="settings_language_system">システムに合わせる</string>
     <string name="settings_version_title">バージョン</string>
