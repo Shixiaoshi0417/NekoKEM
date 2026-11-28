@@ -6,6 +6,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.hasScrollAction
+import androidx.compose.ui.test.isDialog
+import androidx.compose.ui.test.swipeDown
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.swipeUp
 import androidx.compose.ui.test.junit4.createComposeRule
@@ -18,6 +20,8 @@ import com.shixiaoshi0417.nekokem.R
 import com.shixiaoshi0417.nekokem.keys.PublicKeyContact
 import com.shixiaoshi0417.nekokem.keys.PublicKeyContactsState
 import com.shixiaoshi0417.nekokem.ui.theme.NekoKEMTheme
+import com.shixiaoshi0417.nekokem.ui.theme.ThemeColor
+import com.shixiaoshi0417.nekokem.ui.theme.ThemeColorSettings
 import java.io.File
 import org.junit.Rule
 import org.junit.Test
@@ -64,7 +68,22 @@ class AdaptiveLayoutScreenshots {
     @Test @Config(qualifiers = TABLET_LANDSCAPE)
     fun tabletLandscapeMaterialLight() = tabs(UiStyle.MATERIAL, dark = false, "tablet-landscape")
 
-    private fun tabs(style: UiStyle, dark: Boolean, device: String) {
+    /** The Material style in another theme color, and the color picker. */
+    @Test @Config(qualifiers = PHONE)
+    fun phoneMaterialThemeColors() {
+        tabs(UiStyle.MATERIAL, dark = true, "phone", ThemeColor.GREEN)
+        compose.onAllNodes(hasScrollAction()).onFirst().performTouchInput {
+            swipeDown(startY = bottom * 0.3f, endY = bottom * 0.9f)
+        }
+        compose.onAllNodesWithText(string(R.string.settings_theme_color_title)).onFirst().performClick()
+        compose.waitForIdle()
+        val bitmap = compose.onNode(isDialog()).captureToImage().asAndroidBitmap()
+        File(directory, "phone-material-dark-green-theme-colors.png").outputStream().use {
+            check(bitmap.compress(Bitmap.CompressFormat.PNG, 100, it))
+        }
+    }
+
+    private fun tabs(style: UiStyle, dark: Boolean, device: String, color: ThemeColor = ThemeColor.BLUE) {
         val state = NekoKEMUiState(
             nativeConnected = true,
             nativeVersion = "6.0.0",
@@ -79,6 +98,7 @@ class AdaptiveLayoutScreenshots {
             privateKeyFingerprint = FINGERPRINT,
             running = false,
             uiStyle = style,
+            themeColors = ThemeColorSettings(color),
             canSign = true,
             contactsState = PublicKeyContactsState(
                 contacts = listOf(
@@ -98,11 +118,12 @@ class AdaptiveLayoutScreenshots {
             onSelectContact = { _, _ -> }, onEditContact = {}, onDeleteContact = {},
         )
         compose.setContent {
-            NekoKEMTheme(uiStyle = style, darkTheme = dark, dynamicColor = false) {
+            NekoKEMTheme(uiStyle = style, darkTheme = dark, themeColor = color) {
                 NekoKEMAppShell(state, actions, remember { SnackbarHostState() })
             }
         }
-        val prefix = "$device-${style.tag}-${if (dark) "dark" else "light"}"
+        val prefix = "$device-${style.tag}-${if (dark) "dark" else "light"}" +
+            if (color == ThemeColor.BLUE) "" else "-${color.tag}"
         capture("$prefix-files")
         for ((tab, name) in listOf(
             R.string.tab_keys to "keys",

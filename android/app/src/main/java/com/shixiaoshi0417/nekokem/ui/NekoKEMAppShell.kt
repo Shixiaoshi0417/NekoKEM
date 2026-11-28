@@ -29,6 +29,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import com.shixiaoshi0417.nekokem.i18n.AppLanguages
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.widthIn
@@ -104,6 +105,9 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.shixiaoshi0417.nekokem.R
+import com.shixiaoshi0417.nekokem.ui.theme.ThemeColor
+import com.shixiaoshi0417.nekokem.ui.theme.ThemeColorSettings
+import com.shixiaoshi0417.nekokem.ui.theme.ThemeColors
 import com.shixiaoshi0417.nekokem.keys.PublicKeyContact
 import com.shixiaoshi0417.nekokem.keys.PublicKeyContactsState
 import kotlinx.coroutines.CancellationException
@@ -131,6 +135,7 @@ data class NekoKEMUiState(
     // Checkbox selection on the contacts page, not yet applied to encryption.
     val contactSelection: List<String> = emptyList(),
     val uiStyle: UiStyle = UiStyles.default,
+    val themeColors: ThemeColorSettings = ThemeColorSettings(),
     /** This device's key is an identity key: files are signed with it. */
     val canSign: Boolean = false,
     val signatureSettings: SignatureSettings = SignatureSettings(),
@@ -175,6 +180,7 @@ data class NekoKEMActions(
     val onSetContactPinned: (PublicKeyContact, Boolean) -> Unit = { _, _ -> },
     val onSetContactArchived: (PublicKeyContact, Boolean) -> Unit = { _, _ -> },
     val onUiStyleChange: (UiStyle) -> Unit = {},
+    val onThemeColorsChange: (ThemeColorSettings) -> Unit = {},
     val onUpgradeKey: () -> Unit = {},
     val onExportLegacyPublicKey: () -> Unit = {},
     /** Asks for the password, then where to save the NKPR v2 copy. */
@@ -725,6 +731,45 @@ private fun SettingsPage(state: NekoKEMUiState, actions: NekoKEMActions, onOpenA
     val context = LocalContext.current
     var showLanguages by remember { mutableStateOf(false) }
     var showUiStyles by remember { mutableStateOf(false) }
+    var showThemeColors by remember { mutableStateOf(false) }
+    if (showThemeColors) {
+        AlertDialog(
+            onDismissRequest = { showThemeColors = false },
+            title = { Text(stringResource(R.string.settings_theme_color_title)) },
+            text = {
+                Column(Modifier.selectableGroup()) {
+                    ThemeColor.entries.forEach { color ->
+                        val selected = state.themeColors.color == color
+                        Row(
+                            modifier = Modifier.fillMaxWidth().selectable(
+                                selected = selected,
+                                role = Role.RadioButton,
+                                onClick = {
+                                    showThemeColors = false
+                                    actions.onThemeColorsChange(state.themeColors.copy(color = color))
+                                },
+                            ).padding(vertical = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            RadioButton(selected = selected, onClick = null)
+                            // The color itself, beside its name.
+                            Box(
+                                Modifier.padding(start = 12.dp).size(20.dp)
+                                    .background(color.seed, CircleShape),
+                            )
+                            Text(
+                                stringResource(color.labelResource),
+                                modifier = Modifier.padding(start = 12.dp).weight(1f),
+                            )
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                DialogButton(stringResource(R.string.action_close), onClick = { showThemeColors = false })
+            },
+        )
+    }
     if (showUiStyles) {
         AlertDialog(
             onDismissRequest = { showUiStyles = false },
@@ -814,9 +859,21 @@ private fun SettingsPage(state: NekoKEMUiState, actions: NekoKEMActions, onOpenA
                 titleResource = R.string.settings_theme_title,
                 valueResource = R.string.settings_theme_system,
             )
-            SettingRow(
-                titleResource = R.string.settings_dynamic_color_title,
-                valueResource = R.string.settings_dynamic_color_system,
+            // Wallpaper color replaces the chosen color, so the choice waits for it to be off.
+            val colors = state.themeColors
+            if (ThemeColors.dynamicSupported) {
+                SwitchSetting(
+                    title = stringResource(R.string.settings_dynamic_color_title),
+                    checked = colors.dynamic,
+                    running = running,
+                    onCheckedChange = { actions.onThemeColorsChange(colors.copy(dynamic = it)) },
+                )
+            }
+            ChoiceSetting(
+                title = stringResource(R.string.settings_theme_color_title),
+                running = running || (colors.dynamic && ThemeColors.dynamicSupported),
+                value = stringResource(colors.color.labelResource),
+                onClick = { showThemeColors = true },
             )
             ChoiceSetting(
                 title = stringResource(R.string.settings_ui_style_title),

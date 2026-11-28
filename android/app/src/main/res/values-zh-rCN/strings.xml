@@ -23,7 +23,13 @@
     <string name="settings_theme_title">主题</string>
     <string name="settings_theme_system">跟随系统</string>
     <string name="settings_dynamic_color_title">动态颜色</string>
-    <string name="settings_dynamic_color_system">设备支持时启用</string>
+    <string name="settings_theme_color_title">主题色</string>
+    <string name="theme_color_blue">蓝色</string>
+    <string name="theme_color_purple">紫色</string>
+    <string name="theme_color_green">绿色</string>
+    <string name="theme_color_teal">青色</string>
+    <string name="theme_color_orange">橙色</string>
+    <string name="theme_color_red">红色</string>
     <string name="settings_language_title">语言 / Language</string>
     <string name="settings_language_system">跟随系统</string>
     <string name="settings_version_title">版本</string>
