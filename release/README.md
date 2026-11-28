@@ -42,14 +42,14 @@ uploads artifacts to Actions. Publishing is a separate maintainer step:
    with the `<!-- RELEASE_ZH_METADATA -->` and `<!-- RELEASE_EN_METADATA -->`
    placeholders) into `main`, then wait for that commit's CI run.
 2. Run Release on `main` for the same commit.
-3. Run Publish: `gh workflow run publish.yml --ref main -f tag=v6.0.0 -f ci_run=<CI run ID> -f release_run=<Release run ID>`.
+3. Run Publish: `gh workflow run publish.yml --ref main -f tag=v6.1.0 -f ci_run=<CI run ID> -f release_run=<Release run ID>`.
 4. Point the Arch Linux package at the published release:
-   `python3 scripts/update_arch_package.py 6.0.0` reads that release's
+   `python3 scripts/update_arch_package.py 6.1.0` reads that release's
    `SHA256SUMS.txt` and rewrites `linux/arch/PKGBUILD` and `linux/arch/.SRCINFO`;
    commit the result. To publish on the AUR, copy `PKGBUILD`, `.SRCINFO` and
    `nekokem.desktop` into the `nekokem-bin` AUR repository and push.
 5. Point the Flatpak manifest at the same release:
-   `python3 scripts/update_flatpak_manifest.py 6.0.0` rewrites the archive URLs
+   `python3 scripts/update_flatpak_manifest.py 6.1.0` rewrites the archive URLs
    and checksums in `linux/flatpak/io.github.shixiaoshi0417.NekoKEM.json` and
    adds the release to the AppStream metadata; commit the result. A Flathub
    repository, once it exists, takes the same manifest (see
@@ -148,8 +148,8 @@ Releases up to v5.0.0 contain 14 packages, with the earlier Tauri desktop app.
 From v5.1.0, the desktop packages are the Compose (Windows, Linux) and
 SwiftUI (macOS) apps, and the Windows installer joins them, for 15 packages up
 to v5.2.0. From v6.0.0, releases add an AppImage and a Flatpak bundle for each Linux
-architecture and a Windows EXE installer, for 20 packages; the release after v6.0.0
-adds the unsigned iOS IPA, for 21:
+architecture and a Windows EXE installer, for 20 packages; from v6.1.0,
+releases add the unsigned iOS IPA, for 21:
 
 | Platform | Public assets |
 |---|---|
@@ -164,13 +164,13 @@ Publish only packages from the successful Release run for the exact CI-validated
 source; the Publish workflow enforces this. One more asset, top-level
 `SHA256SUMS.txt`, lists all the packages. The notes record the source commit,
 CI/Release run links, Android signer and public asset hashes, as in the
-[Chinese-then-English v6.0.0 notes](v6.0.0.md). Releases after v4.1.0 also carry
+[Chinese-then-English v6.1.0 notes](v6.1.0.md). Releases after v4.1.0 also carry
 build provenance attestations; v4.1.0 and earlier do not.
 A rotation's encrypted signing recovery envelope is never selected for
 publication; **do not attach it to the public GitHub Release**. Windows application EXEs and
 the installers are unsigned.
 
-Android v6.0.0 uses versionCode `18`, keeps the v3.2.0/v3.3.0 signing identity and
+Android v6.1.0 uses versionCode `19`, keeps the v3.2.0/v3.3.0 signing identity and
 supports an in-place update. Only old-signer v3.1.x installations need backup
 verification and uninstall/reinstall. Keep the existing square artwork for Android,
 use transparent outer white areas for Windows EXE icons, reuse those PNGs for

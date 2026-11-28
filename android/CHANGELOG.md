@@ -1,5 +1,15 @@
 # Changelog
 
+## 6.1.0
+
+- 全平台 6.1.0，Core 6.0，Android versionCode 19；沿用既有签名，可覆盖升级。NKEM、NKPR 格式与密码参数不变。
+- 平板布局：宽 600dp 起改为左侧导航，内容最宽 640dp 居中；宽 840dp 起通讯录分两栏。
+- MIUIX 液态玻璃：收起的标题栏为磨砂玻璃，平板侧栏和通讯录添加按钮为玻璃样式，Android 12 起弹窗模糊背后页面。
+- Material 3 新增「主题色」（蓝、紫、绿、青、橙、红，默认蓝色）；Android 12 起可选「动态颜色」，默认关闭。
+- 文件页只显示文件名或「尚未选择文件」，未选择时加密和解密按钮同为灰色；指纹写成「指纹：…」，置顶标记改为图钉图标。另提供 iOS 无签名 IPA。完整双语说明见 [v6.1.0](../release/v6.1.0.md)。
+
+Android 6.1.0 / versionCode 19 retains the existing signer; NKEM and NKPR formats and cryptographic parameters are unchanged. From 600dp wide the bottom navigation becomes a side rail and content is centred at up to 640dp, and from 840dp contacts show two panes. The MIUIX style gains a frosted-glass collapsed title bar, a glass tablet rail and add button, and dialogs that blur the page behind them on Android 12 and newer. Material 3 gains a Theme color setting (blue, purple, green, teal, orange or red, blue by default), and Dynamic color is available from Android 12, off by default. The Files page shows only the file name or "No file selected" with both buttons grey until a file is chosen, the fingerprint reads "Fingerprint: …", and the pin mark is a pin icon. This release also adds an unsigned iOS IPA. See the [bilingual notes](../release/v6.1.0.md).
+
 ## 6.0.0
 
 - 全平台 6.0.0，Core 6.0，Android versionCode 18；沿用既有签名，可覆盖升级。NKEM 文件格式与密码参数不变。
