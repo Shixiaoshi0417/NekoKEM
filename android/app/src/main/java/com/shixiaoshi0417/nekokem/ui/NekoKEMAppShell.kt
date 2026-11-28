@@ -859,22 +859,6 @@ private fun SettingsPage(state: NekoKEMUiState, actions: NekoKEMActions, onOpenA
                 titleResource = R.string.settings_theme_title,
                 valueResource = R.string.settings_theme_system,
             )
-            // Wallpaper color replaces the chosen color, so the choice waits for it to be off.
-            val colors = state.themeColors
-            if (ThemeColors.dynamicSupported) {
-                SwitchSetting(
-                    title = stringResource(R.string.settings_dynamic_color_title),
-                    checked = colors.dynamic,
-                    running = running,
-                    onCheckedChange = { actions.onThemeColorsChange(colors.copy(dynamic = it)) },
-                )
-            }
-            ChoiceSetting(
-                title = stringResource(R.string.settings_theme_color_title),
-                running = running || (colors.dynamic && ThemeColors.dynamicSupported),
-                value = stringResource(colors.color.labelResource),
-                onClick = { showThemeColors = true },
-            )
             ChoiceSetting(
                 title = stringResource(R.string.settings_ui_style_title),
                 running = running,
@@ -890,6 +874,22 @@ private fun SettingsPage(state: NekoKEMUiState, actions: NekoKEMActions, onOpenA
                     AppLanguages.names(context)[AppLanguages.tags.indexOf(selection)]
                 },
                 onClick = { showLanguages = true },
+            )
+            // Wallpaper color replaces the chosen color, so the choice waits for it to be off.
+            val colors = state.themeColors
+            if (ThemeColors.dynamicSupported) {
+                SwitchSetting(
+                    title = stringResource(R.string.settings_dynamic_color_title),
+                    checked = colors.dynamic,
+                    running = running,
+                    onCheckedChange = { actions.onThemeColorsChange(colors.copy(dynamic = it)) },
+                )
+            }
+            ChoiceSetting(
+                title = stringResource(R.string.settings_theme_color_title),
+                running = running || (colors.dynamic && ThemeColors.dynamicSupported),
+                value = stringResource(colors.color.labelResource),
+                onClick = { showThemeColors = true },
             )
             SettingRow(
                 titleResource = R.string.settings_version_title,
