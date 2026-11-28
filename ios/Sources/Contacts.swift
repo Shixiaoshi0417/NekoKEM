@@ -24,6 +24,65 @@ private func shortFingerprint(_ fingerprint: String) -> String {
     return groups.prefix(2).joined(separator: " ") + " … " + groups[groups.count - 1]
 }
 
+/// The Contacts tab. On iPhone, and on iPad in a narrow window, the list
+/// opens each contact as its own page. On iPad in a wide window the list
+/// stays on the left and the contact opens beside it, starting with the
+/// first one; verification is pushed over the contact.
+struct ContactsTab: View {
+    @ObservedObject var state: AppState
+    @Environment(\.horizontalSizeClass) private var sizeClass
+
+    var body: some View {
+        if sizeClass == .regular {
+            NavigationSplitView {
+                PhoneContactsPage(state: state).environment(\.contactsBeside, true)
+            } detail: {
+                NavigationStack(path: verifyPath) {
+                    if let id = openId {
+                        ContactDetailPage(state: state, id: id)
+                            .navigationDestination(for: ContactRoute.self) { route in
+                                if case .verify(let id) = route { ContactVerifyPage(state: state, id: id) }
+                            }
+                    }
+                }
+            }
+            .navigationSplitViewStyle(.balanced)
+        } else {
+            NavigationStack(path: $state.contactPath) { PhoneContactsPage(state: state) }
+        }
+    }
+
+    private var openId: String? { state.openContactId }
+
+    /// The pages pushed over the open contact; the contact itself stays the root.
+    private var verifyPath: Binding<[ContactRoute]> {
+        Binding(get: {
+            state.contactPath.filter { if case .verify = $0 { return true } else { return false } }
+        }, set: { pushed in
+            guard let id = openId else { state.contactPath = []; return }
+            state.contactPath = [.detail(id)] + pushed
+        })
+    }
+}
+
+extension AppState {
+    /// The contact open beside the list: the one chosen last, else the first.
+    var openContactId: String? {
+        for route in contactPath { if case .detail(let id) = route, contacts.contains(where: { $0.id == id }) { return id } }
+        return contacts.first?.id
+    }
+}
+
+private struct ContactsBesideKey: EnvironmentKey { static let defaultValue = false }
+
+extension EnvironmentValues {
+    /// The contact list shares the screen with the open contact.
+    var contactsBeside: Bool {
+        get { self[ContactsBesideKey.self] }
+        set { self[ContactsBesideKey.self] = newValue }
+    }
+}
+
 /// Saved contacts: one short row each, which opens the contact's page. Rows
 /// swipe to pin or delete; the selection for encrypting sits above the list.
 struct PhoneContactsPage: View {
@@ -59,6 +118,7 @@ struct PhoneContactsPage: View {
             }
         }
         .listStyle(.insetGrouped)
+        .readableColumn()
         .navigationTitle(state.t("navContacts"))
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
@@ -103,6 +163,7 @@ private struct ContactListStatus: View {
 private struct ContactListRow: View {
     @ObservedObject var state: AppState
     var contact: Contact
+    @Environment(\.contactsBeside) private var beside
 
     var body: some View {
         let chosen = state.selected.contains(contact.id)
@@ -111,20 +172,34 @@ private struct ContactListRow: View {
                 .checkbox().labelsHidden()
                 .disabled(state.locked || (!chosen && state.atRecipientLimit))
                 .accessibilityLabel("\(state.t("selectContact")) · \(state.label(contact))")
-            NavigationLink(value: ContactRoute.detail(contact.id)) {
-                HStack(spacing: 8) {
-                    VStack(alignment: .leading, spacing: 2) {
-                        HStack(spacing: 8) {
-                            Text(state.label(contact)).fontWeight(.semibold).lineLimit(1)
-                            if contact.pinned { Text(state.t("pinnedMark")).font(.caption).foregroundStyle(Color.accentColor) }
-                        }
-                        Text(shortFingerprint(contact.fingerprint)).font(.system(.caption, design: .monospaced)).foregroundStyle(.secondary).lineLimit(1)
-                    }
-                    Spacer(minLength: 0)
-                    VerifiedMark(verified: contact.verified)
-                }
+            if beside {
+                // Beside the list the contact opens in the detail column.
+                Button { state.contactPath = [.detail(contact.id)] } label: { summary.contentShape(Rectangle()) }
+                    .buttonStyle(.plain)
+                    .disabled(state.locked)
+            } else {
+                NavigationLink(value: ContactRoute.detail(contact.id)) { summary }
+                    .disabled(state.locked)
             }
-            .disabled(state.locked)
+        }
+        // The contact open beside the list stands out by a shade.
+        .listRowBackground(beside && state.openContactId == contact.id ? Color(uiColor: .systemGray5) : nil)
+    }
+
+    private var summary: some View {
+        HStack(spacing: 8) {
+            VStack(alignment: .leading, spacing: 2) {
+                HStack(spacing: 8) {
+                    Text(state.label(contact)).fontWeight(.semibold).lineLimit(1)
+                    if contact.pinned {
+                        Image(systemName: "pin").font(.caption).foregroundStyle(.secondary)
+                            .accessibilityLabel(state.t("pinnedMark"))
+                    }
+                }
+                Text(shortFingerprint(contact.fingerprint)).font(.system(.caption, design: .monospaced)).foregroundStyle(.secondary).lineLimit(1)
+            }
+            Spacer(minLength: 0)
+            VerifiedMark(verified: contact.verified)
         }
     }
 }
@@ -176,6 +251,7 @@ private struct ContactDetailPage: View {
                 }
             }
             .listStyle(.insetGrouped)
+            .readableColumn()
             .navigationTitle(state.label(contact))
             .navigationBarTitleDisplayMode(.inline)
             .alert(state.t("editNote"), isPresented: $editingNote) {
@@ -251,6 +327,9 @@ private struct ContactVerifyPage: View {
                 .padding(EdgeInsets(top: 24, leading: 24, bottom: 24, trailing: 24))
                 .background(Color.accentColor, in: RoundedRectangle(cornerRadius: 28, style: .continuous))
                 .padding(16)
+                // A phone-sized card in the middle of an iPad.
+                .frame(maxWidth: 480)
+                .frame(maxWidth: .infinity)
             }
             .navigationTitle(state.t("verifyFingerprint"))
             .navigationBarTitleDisplayMode(.inline)
