@@ -192,7 +192,12 @@ object MiuixKit : Kit {
 
     @Composable override fun ButtonPair(first: String, second: String, enabled: Boolean, onFirst: () -> Unit, onSecond: () -> Unit) {
         Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            TextButton(text = first, onClick = onFirst, enabled = enabled, colors = ButtonDefaults.textButtonColorsPrimary(), modifier = Modifier.weight(1f))
+            // Unavailable, both buttons look the same grey.
+            val primary = ButtonDefaults.textButtonColorsPrimary(
+                disabledColor = MiuixTheme.colorScheme.disabledSecondaryVariant,
+                disabledTextColor = MiuixTheme.colorScheme.disabledOnSecondaryVariant,
+            )
+            TextButton(text = first, onClick = onFirst, enabled = enabled, colors = primary, modifier = Modifier.weight(1f))
             TextButton(text = second, onClick = onSecond, enabled = enabled, modifier = Modifier.weight(1f))
         }
     }

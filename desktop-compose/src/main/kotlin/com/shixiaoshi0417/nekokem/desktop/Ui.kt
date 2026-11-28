@@ -267,11 +267,12 @@ private fun FilesPage(state: AppState) {
     val kit = LocalKit.current
     val chosen = state.input.isNotEmpty()
     kit.Section(padded = false) {
-        kit.InfoRow(if (chosen) fileName(state.input) else state.t("noFileSelected"), if (chosen) state.input else state.t("selectedFile"))
-        kit.ButtonPair(state.t("encryptAction"), state.t("decryptAction"), state.editable && chosen, state::encrypt, state::decrypt)
-        if (state.unsigned) kit.InfoRow(state.t("unsignedWarning"), "", danger = true)
+        // In the order of use: the file, choosing it, then what to do with it.
+        kit.InfoRow(if (chosen) fileName(state.input) else state.t("noFileSelected"), if (chosen) state.input else "")
         kit.ActionRow(state.t(if (state.choosing == PathField.Input) "choosing" else "selectFile"), "", state.editable) { state.browse(PathField.Input) }
         if (chosen) kit.ActionRow(state.t("clearSelection"), "", state.editable, state::clearFile)
+        kit.ButtonPair(state.t("encryptAction"), state.t("decryptAction"), state.editable && chosen, state::encrypt, state::decrypt)
+        if (state.unsigned) kit.InfoRow(state.t("unsignedWarning"), "", danger = true)
     }
     kit.SectionTitle(state.t("decryptKeyTitle"))
     kit.Section(padded = false) {
